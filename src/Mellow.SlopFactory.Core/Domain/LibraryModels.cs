@@ -155,6 +155,19 @@ public sealed record MetadataEntry(
     string SerializedValue,
     bool IsSensitive);
 
+public sealed record BulkFileOperationItemResult(
+    string FileId,
+    string DisplayName,
+    bool Succeeded,
+    string? Error);
+
+public sealed record BulkFileOperationResult(
+    IReadOnlyList<BulkFileOperationItemResult> Items)
+{
+    public int SucceededCount => Items.Count(item => item.Succeeded);
+    public int FailedCount => Items.Count - SucceededCount;
+}
+
 public sealed record FileLink(
     string Id,
     string SourceFileId,

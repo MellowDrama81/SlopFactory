@@ -955,7 +955,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - JSON structural equality ignores object-property order and insignificant serialization formatting, preserves array order, compares strings and property names case-sensitively, and compares numbers by exact numeric value rather than textual notation.
 - A stored JSON value may be `null`. **Exists** matches it because the metadata entry exists, while **Structurally Equals null** specifically matches that value; a missing metadata key remains a distinct state.
 - Provider moderation-category text is not indexed by or displayed through ordinary library search; safety state is discoverable only through the explicit filters and file details.
-- Multi-selection supports move, export, recycle and metadata operations.
+- Multi-selection additionally supports export.
 
 ## File Metadata
 
@@ -1005,17 +1005,8 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Before **Duplicate** commits, its review summarizes the number of sensitive metadata entries that will be copied without revealing their keys or values; a multi-file duplication uses one aggregate disclosure rather than per-file prompts.
 - Copied entries retain their **Sensitive** flags and start concealed with no inherited session reveal state.
 - Sensitive JSON validation shows the error kind and line/column and may highlight the location inside the secure editor, but summary messages and diagnostics never echo offending tokens, property names or value excerpts.
-- With multiple files selected, metadata editing shows keys common to all files and indicates mixed values.
-- Multi-selection and bulk metadata views never provide **Reveal All Sensitive Values**; they may show keys, types, sensitivity flags and mixed-value state while keeping every sensitive value masked.
-- A typed user-metadata key and value can be added to every selected file.
-- A bulk operation may replace a sensitive metadata value across selected files only after the user enters the new typed value and confirms the affected-file count; existing sensitive values remain masked throughout.
 - Bulk editing can mark or unmark a common metadata key as **Sensitive** across selected files after previewing and confirming the affected count.
 - Removing sensitivity warns that the values will become visible in ordinary file details and eligible for inclusion through the ordinary user-metadata sidecar opt-in rather than the additional sensitive-metadata opt-in.
-- Updating a key previews how many existing values will be replaced.
-- Removing a user-metadata key from every selected file requires confirmation.
-- System metadata is never editable through bulk metadata operations.
-- A bulk value is validated once and then applied transactionally per file.
-- A failure on one file does not roll back successful changes to unrelated files, and partial failures produce a per-file summary.
 - Copying a file within the library also copies its user metadata.
 - Metadata is not embedded into exported file bytes.
 

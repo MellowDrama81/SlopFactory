@@ -334,6 +334,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.MoveFileAsync(fileId, destinationFolderId, cancellationToken), cancellationToken);
     }
 
+    public Task<BulkFileOperationResult> MoveFilesAsync(IReadOnlyCollection<string> fileIds, string destinationFolderId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => ProcessFilesAsync(fileIds, fileId => _database.MoveFileAsync(fileId, destinationFolderId, cancellationToken), cancellationToken), cancellationToken);
+    }
+
     public Task<FileRecord> DuplicateFileAsync(string fileId, string destinationFolderId, string displayName, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -595,10 +601,25 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.SetMetadataAsync(fileId, key, kind, serializedValue, isSensitive, cancellationToken), cancellationToken);
     }
 
+    public Task<BulkFileOperationResult> SetMetadataForFilesAsync(IReadOnlyCollection<string> fileIds, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var normalizedKey = LibraryRules.NormalizeMetadataKey(key);
+        var validValue = LibraryRules.ValidateMetadataValue(kind, serializedValue);
+        return RunMutationAsync(() => ProcessFilesAsync(fileIds, fileId => _database.SetMetadataAsync(fileId, normalizedKey, kind, validValue, isSensitive, cancellationToken), cancellationToken), cancellationToken);
+    }
+
     public Task RemoveMetadataAsync(string fileId, string key, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         return RunMutationAsync(() => _database.RemoveMetadataAsync(fileId, key, cancellationToken), cancellationToken);
+    }
+
+    public Task<BulkFileOperationResult> RemoveMetadataFromFilesAsync(IReadOnlyCollection<string> fileIds, string key, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var normalizedKey = LibraryRules.NormalizeMetadataKey(key);
+        return RunMutationAsync(() => ProcessFilesAsync(fileIds, fileId => _database.RemoveMetadataAsync(fileId, normalizedKey, cancellationToken), cancellationToken), cancellationToken);
     }
 
     public Task<MetadataEntry> RenameMetadataAsync(string fileId, string currentKey, string newKey, CancellationToken cancellationToken = default)
@@ -659,6 +680,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         ThrowIfDisposed();
         return RunMutationAsync(() => _database.RecycleFileAsync(fileId, cancellationToken), cancellationToken);
+    }
+
+    public Task<BulkFileOperationResult> RecycleFilesAsync(IReadOnlyCollection<string> fileIds, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => ProcessFilesAsync(fileIds, fileId => _database.RecycleFileAsync(fileId, cancellationToken), cancellationToken), cancellationToken);
     }
 
     public Task RecycleFolderAsync(string folderId, CancellationToken cancellationToken = default)
@@ -1040,6 +1067,33 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    private async Task<BulkFileOperationResult> ProcessFilesAsync(IReadOnlyCollection<string> fileIds, Func<string, Task> operation, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fileIds);
+        if (fileIds.Count == 0) throw new LibraryValidationException("Select at least one file.");
+        var distinctIds = fileIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToArray();
+        if (distinctIds.Length != fileIds.Count) throw new LibraryValidationException("The file selection contains an invalid or duplicate item.");
+
+        var results = new List<BulkFileOperationItemResult>(distinctIds.Length);
+        foreach (var fileId in distinctIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            FileRecord? file = null;
+            try
+            {
+                file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+                if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Bulk actions require active files.");
+                await operation(fileId).ConfigureAwait(false);
+                results.Add(new BulkFileOperationItemResult(file.Id, file.DisplayName, true, null));
+            }
+            catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException)
+            {
+                results.Add(new BulkFileOperationItemResult(fileId, file?.DisplayName ?? "Unavailable file", false, exception.Message));
+            }
+        }
+        return new BulkFileOperationResult(results);
+    }
 
     private async Task RunMutationAsync(Func<Task> operation, CancellationToken cancellationToken)
     {

@@ -251,10 +251,94 @@ else
         else
         {
             <p class="muted browser-summary" role="status">Showing @(_browseResult.Offset + 1)–@(_browseResult.Offset + _browseResult.Items.Count) of @_browseResult.TotalCount active file(s)@(_browser.Scope == LibraryBrowseScope.EntireLibrary ? " across the library" : " in this folder").</p>
+            <div class="selection-bar" aria-label="File selection actions">
+                <div class="actions">
+                    <button class="secondary" @onclick="SelectCurrentPage">Select this page</button>
+                    @if (_selectedFileIds.Count > 0) { <button class="secondary" @onclick="ClearBulkSelection">Clear selection</button> }
+                </div>
+                <span>@_selectedFileIds.Count file(s) selected across result pages</span>
+                @if (_selectedFileIds.Count > 0)
+                {
+                    <div class="actions">
+                        <button class="secondary" @onclick="BeginBulkMove">Move</button>
+                        <button class="secondary" @onclick="BeginBulkMetadataAsync">Metadata</button>
+                        <button class="danger" @onclick="BeginBulkRecycle">Recycle</button>
+                    </div>
+                }
+            </div>
+
+            @if (_bulkAction != BulkAction.None)
+            {
+                <section class="panel confirmation-panel" aria-labelledby="bulk-action-title">
+                    <div class="section-heading"><h2 id="bulk-action-title">@BulkActionTitle()</h2><button class="ghost" @onclick="CancelBulkAction">Cancel</button></div>
+                    <p>This action applies to @_selectedFileIds.Count selected active file(s). Each file commits independently; any failure is reported without rolling back unrelated successes.</p>
+                    @if (_bulkAction == BulkAction.Move)
+                    {
+                        <label for="bulk-destination">Destination folder
+                            <select id="bulk-destination" @bind="_bulkDestinationFolderId">
+                                @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
+                            </select>
+                        </label>
+                        <div class="actions"><button disabled="@_busy" @onclick="ConfirmBulkMoveAsync">Confirm move</button></div>
+                    }
+                    else if (_bulkAction == BulkAction.Recycle)
+                    {
+                        <p>Files, their user metadata, and endpoint-owned links will move to the recycle bin together. They can be restored until permanently deleted.</p>
+                        <div class="actions"><button class="danger" disabled="@_busy" @onclick="ConfirmBulkRecycleAsync">Confirm recycle</button></div>
+                    }
+                    else
+                    {
+                        @if (_commonMetadata.Count > 0)
+                        {
+                            <h3>Metadata keys common to every selected file</h3>
+                            <ul class="metadata-list">
+                                @foreach (var item in _commonMetadata)
+                                {
+                                    <li><strong>@item.Key</strong><small>@item.TypeLabel · @item.ValueLabel</small></li>
+                                }
+                            </ul>
+                        }
+                        else { <p class="muted">The selected files have no user-metadata key in common.</p> }
+                        <div class="bulk-metadata-form">
+                            <label for="bulk-metadata-key">Key<input id="bulk-metadata-key" maxlength="200" @bind="_bulkMetadata.Key" /></label>
+                            <label for="bulk-metadata-kind">Type
+                                <select id="bulk-metadata-kind" @bind="_bulkMetadata.Kind">@foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@kind</option> }</select>
+                            </label>
+                            <label class="bulk-metadata-value" for="bulk-metadata-value">New value<textarea id="bulk-metadata-value" @bind="_bulkMetadata.Value"></textarea></label>
+                            <label class="check"><input type="checkbox" @bind="_bulkMetadata.IsSensitive" /> Sensitive</label>
+                        </div>
+                        <div class="actions">
+                            <button disabled="@_busy" @onclick="ReviewBulkMetadataSetAsync">Review add or replace</button>
+                            <button class="danger ghost" disabled="@_busy" @onclick="ReviewBulkMetadataRemovalAsync">Review removal</button>
+                        </div>
+                        @if (_bulkMetadataPreview is not null)
+                        {
+                            <div class="notice" role="status">
+                                <p>@_bulkMetadataPreview.Summary</p>
+                                @if (_bulkMetadataPreview.ExistingSensitiveCount > 0) { <p>@_bulkMetadataPreview.ExistingSensitiveCount existing sensitive value(s) remain concealed in this preview.</p> }
+                                <button class="@(_bulkMetadataPreview.Remove ? "danger" : string.Empty)" disabled="@_busy" @onclick="ConfirmBulkMetadataAsync">@(_bulkMetadataPreview.Remove ? "Confirm removal" : "Confirm metadata change")</button>
+                            </div>
+                        }
+                    }
+                </section>
+            }
+
+            @if (_bulkResult is not null)
+            {
+                <section class="panel" aria-labelledby="bulk-result-title">
+                    <div class="section-heading"><h2 id="bulk-result-title">Bulk action result</h2><button class="ghost" @onclick="() => _bulkResult = null">Dismiss</button></div>
+                    <p>@_bulkResult.SucceededCount succeeded; @_bulkResult.FailedCount failed.</p>
+                    @if (_bulkResult.FailedCount > 0)
+                    {
+                        <ul class="metadata-list">@foreach (var item in _bulkResult.Items.Where(item => !item.Succeeded)) { <li><strong>@item.DisplayName</strong><small>@item.Error</small></li> }</ul>
+                    }
+                </section>
+            }
             <div class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? "file-grid" : "file-list")">
                 @foreach (var item in _browseResult.Items)
                 {
                     <article class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? "file-card" : "file-row")">
+                        <label class="file-select"><input type="checkbox" checked="@_selectedFileIds.Contains(item.File.Id)" @onchange="args => SetFileSelected(item.File.Id, args)" /><span class="visually-hidden">Select @item.File.DisplayName</span></label>
                         <button class="file-main" @onclick="() => OpenFile(item.File.Id)">
                             @if (CanShowThumbnail(item.File))
                             {
@@ -330,6 +414,13 @@ else
     private CancellationTokenSource? _importCancellation;
     private readonly HashSet<string> _activeImportPaths = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private IReadOnlyList<IncomingImportFailure> _incomingFailures = [];
+    private readonly HashSet<string> _selectedFileIds = new(StringComparer.Ordinal);
+    private BulkAction _bulkAction;
+    private string _bulkDestinationFolderId = string.Empty;
+    private BulkMetadataForm _bulkMetadata = new();
+    private IReadOnlyList<CommonMetadataSummary> _commonMetadata = [];
+    private BulkMetadataPreview? _bulkMetadataPreview;
+    private BulkFileOperationResult? _bulkResult;
     private LibraryBrowserSession _browser => LibraryState.BrowserSession;
     private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null;
     private int CurrentPage => _browseResult is null ? 1 : (_browseResult.Offset / PageSize) + 1;
@@ -418,6 +509,161 @@ else
         _browser.Offset += PageSize;
         return LoadBrowseAsync();
     }
+
+    private void SetFileSelected(string fileId, ChangeEventArgs args)
+    {
+        if (args.Value is true) _selectedFileIds.Add(fileId);
+        else _selectedFileIds.Remove(fileId);
+        CancelBulkAction();
+    }
+
+    private void SelectCurrentPage()
+    {
+        if (_browseResult is not null) foreach (var item in _browseResult.Items) _selectedFileIds.Add(item.File.Id);
+        CancelBulkAction();
+    }
+
+    private void ClearBulkSelection()
+    {
+        _selectedFileIds.Clear();
+        CancelBulkAction();
+    }
+
+    private void BeginBulkMove()
+    {
+        _bulkAction = BulkAction.Move;
+        _bulkDestinationFolderId = _contents?.Folder.Id ?? _activeFolders.FirstOrDefault()?.Id ?? string.Empty;
+        _bulkMetadataPreview = null;
+    }
+
+    private void BeginBulkRecycle()
+    {
+        _bulkAction = BulkAction.Recycle;
+        _bulkMetadataPreview = null;
+    }
+
+    private async Task BeginBulkMetadataAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        _bulkAction = BulkAction.Metadata;
+        _bulkMetadataPreview = null;
+        var selectedMetadata = new List<IReadOnlyList<MetadataEntry>>(_selectedFileIds.Count);
+        foreach (var fileId in _selectedFileIds) selectedMetadata.Add(await LibraryState.Workspace.GetMetadataAsync(fileId));
+        if (selectedMetadata.Count == 0) { _commonMetadata = []; return; }
+        _commonMetadata = selectedMetadata[0]
+            .Where(entry => selectedMetadata.All(items => items.Any(candidate => LibraryRules.ComparisonKey(candidate.Key) == LibraryRules.ComparisonKey(entry.Key))))
+            .Select(entry => SummarizeCommonMetadata(entry.Key, selectedMetadata))
+            .OrderBy(item => item.Key, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
+    private static CommonMetadataSummary SummarizeCommonMetadata(string key, IReadOnlyList<IReadOnlyList<MetadataEntry>> selectedMetadata)
+    {
+        var entries = selectedMetadata.Select(items => items.Single(item => LibraryRules.ComparisonKey(item.Key) == LibraryRules.ComparisonKey(key))).ToArray();
+        var kinds = entries.Select(item => item.Kind).Distinct().ToArray();
+        var mixedSensitivity = entries.Select(item => item.IsSensitive).Distinct().Count() > 1;
+        var typeLabel = kinds.Length == 1 ? kinds[0].ToString() : "Mixed Types";
+        string valueLabel;
+        if (entries.Any(item => item.IsSensitive)) valueLabel = mixedSensitivity ? "Mixed sensitivity; values concealed" : "Sensitive values concealed";
+        else if (kinds.Length > 1) valueLabel = "Mixed values";
+        else if (entries.Select(item => item.SerializedValue).Distinct(StringComparer.Ordinal).Count() > 1) valueLabel = "Mixed values";
+        else valueLabel = $"Same value: {TruncateMetadataValue(entries[0].SerializedValue)}";
+        return new CommonMetadataSummary(entries[0].Key, typeLabel, valueLabel);
+    }
+
+    private async Task ReviewBulkMetadataSetAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            var key = LibraryRules.NormalizeMetadataKey(_bulkMetadata.Key);
+            _ = LibraryRules.ValidateMetadataValue(_bulkMetadata.Kind, _bulkMetadata.Value);
+            var entries = await GetSelectedMetadataKeyAsync(key);
+            _bulkMetadataPreview = new BulkMetadataPreview(false, entries.Count, entries.Count(item => item.IsSensitive),
+                $"Set '{key}' as {_bulkMetadata.Kind} on {_selectedFileIds.Count} file(s), replacing {entries.Count} existing entr{(entries.Count == 1 ? "y" : "ies")}.");
+            _message = null;
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; _bulkMetadataPreview = null; }
+    }
+
+    private async Task ReviewBulkMetadataRemovalAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            var key = LibraryRules.NormalizeMetadataKey(_bulkMetadata.Key);
+            var entries = await GetSelectedMetadataKeyAsync(key);
+            _bulkMetadataPreview = new BulkMetadataPreview(true, entries.Count, entries.Count(item => item.IsSensitive),
+                $"Remove '{key}' from {entries.Count} of the {_selectedFileIds.Count} selected file(s). Files without that key remain unchanged.");
+            _message = null;
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; _bulkMetadataPreview = null; }
+    }
+
+    private async Task<IReadOnlyList<MetadataEntry>> GetSelectedMetadataKeyAsync(string key)
+    {
+        if (LibraryState.Workspace is null) return [];
+        var entries = new List<MetadataEntry>();
+        foreach (var fileId in _selectedFileIds)
+        {
+            var match = (await LibraryState.Workspace.GetMetadataAsync(fileId)).FirstOrDefault(item => LibraryRules.ComparisonKey(item.Key) == LibraryRules.ComparisonKey(key));
+            if (match is not null) entries.Add(match);
+        }
+        return entries;
+    }
+
+    private async Task ConfirmBulkMoveAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        await RunBulkActionAsync(() => LibraryState.Workspace.MoveFilesAsync(_selectedFileIds.ToArray(), _bulkDestinationFolderId));
+    }
+
+    private async Task ConfirmBulkRecycleAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        await RunBulkActionAsync(() => LibraryState.Workspace.RecycleFilesAsync(_selectedFileIds.ToArray()));
+    }
+
+    private async Task ConfirmBulkMetadataAsync()
+    {
+        if (LibraryState.Workspace is null || _bulkMetadataPreview is null) return;
+        var workspace = LibraryState.Workspace;
+        await RunBulkActionAsync(() => _bulkMetadataPreview.Remove
+            ? workspace.RemoveMetadataFromFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key)
+            : workspace.SetMetadataForFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key, _bulkMetadata.Kind, _bulkMetadata.Value, _bulkMetadata.IsSensitive));
+    }
+
+    private async Task RunBulkActionAsync(Func<Task<BulkFileOperationResult>> action)
+    {
+        if (_contents is null) return;
+        _busy = true;
+        try
+        {
+            _bulkResult = await action();
+            _message = $"Bulk action complete: {_bulkResult.SucceededCount} succeeded; {_bulkResult.FailedCount} failed.";
+            _selectedFileIds.Clear();
+            CancelBulkAction();
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
+        }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
+        finally { _busy = false; }
+    }
+
+    private void CancelBulkAction()
+    {
+        _bulkAction = BulkAction.None;
+        _bulkMetadataPreview = null;
+        _commonMetadata = [];
+    }
+
+    private string BulkActionTitle() => _bulkAction switch
+    {
+        BulkAction.Move => "Review bulk move",
+        BulkAction.Recycle => "Review bulk recycle",
+        _ => "Review bulk metadata"
+    };
+
+    private static string TruncateMetadataValue(string value) => value.Length <= 80 ? value : $"{value[..80]}…";
 
     private void QueueThumbnails()
     {
@@ -797,7 +1043,11 @@ else
     }
 
     private void OpenFile(string id) => Navigation.NavigateTo($"/file/{id}");
-    private void OnLibraryChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+    private void OnLibraryChanged(object? sender, EventArgs args)
+    {
+        ClearBulkSelection();
+        _ = InvokeAsync(StateHasChanged);
+    }
     public void Dispose()
     {
         LibraryState.Changed -= OnLibraryChanged;
@@ -868,4 +1118,14 @@ else
         public string DestinationFolderId { get; set; } = string.Empty;
         public bool ImportDuplicates { get; set; }
     }
+    private enum BulkAction { None, Move, Recycle, Metadata }
+    private sealed class BulkMetadataForm
+    {
+        public string Key { get; set; } = string.Empty;
+        public MetadataValueKind Kind { get; set; } = MetadataValueKind.Text;
+        public string Value { get; set; } = string.Empty;
+        public bool IsSensitive { get; set; }
+    }
+    private sealed record CommonMetadataSummary(string Key, string TypeLabel, string ValueLabel);
+    private sealed record BulkMetadataPreview(bool Remove, int ExistingCount, int ExistingSensitiveCount, string Summary);
 }

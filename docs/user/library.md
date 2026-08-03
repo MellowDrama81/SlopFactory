@@ -16,6 +16,10 @@ Choose **Manage** beside a file or non-permanent folder to change its display na
 
 Choose **Duplicate** beside an active file to create an independent copy in a selected library folder. The copy receives a new identity and managed file, retains the source's user metadata, and does not inherit its editable file links. Name conflicts must be resolved before the copy is created.
 
+Select files on any result page to build one selection across pages. The selection bar can select the current page, clear the selection, or open a review for moving, recycling, or changing user metadata. A move review shows the destination and affected count. A recycle review explains that each file's metadata and owned links follow it into the recycle bin.
+
+Bulk metadata review lists keys common to every selected file, identifies mixed types or values, and never reveals an existing sensitive value. Adding or replacing a typed key shows how many existing entries will be overwritten; removal shows how many files currently contain the key. Confirmation processes each file independently and reports any failures by file, so one conflict or unavailable record does not undo successful changes to the others.
+
 ## File details and metadata
 
 Open a file to view its immutable system information, including its SHA-256 content hash, media type, origin, import time, and current state.

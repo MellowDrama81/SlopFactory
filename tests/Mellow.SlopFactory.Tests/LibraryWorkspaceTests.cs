@@ -197,6 +197,45 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task BulkFileActionsCommitIndependentlyAndReportFailures()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var paths = new[] { temporary.Child("alpha.txt"), temporary.Child("beta.txt"), temporary.Child("gamma.txt") };
+        foreach (var path in paths) await File.WriteAllTextAsync(path, Path.GetFileName(path));
+        var files = (await workspace.ImportAsync(paths, workspace.Descriptor.RootFolderId)).Select(result => result.File!).ToArray();
+        await workspace.RecycleFileAsync(files[2].Id);
+
+        var set = await workspace.SetMetadataForFilesAsync(files.Select(file => file.Id).ToArray(), "Reviewed", MetadataValueKind.Boolean, "true", true);
+
+        Assert.Equal(2, set.SucceededCount);
+        Assert.Equal(1, set.FailedCount);
+        foreach (var file in files[..2]) Assert.Equal("true", Assert.Single(await workspace.GetMetadataAsync(file.Id)).SerializedValue);
+        Assert.Empty(await workspace.GetMetadataAsync(files[2].Id));
+
+        var removed = await workspace.RemoveMetadataFromFilesAsync(files[..2].Select(file => file.Id).ToArray(), "Reviewed");
+        Assert.Equal(2, removed.SucceededCount);
+        foreach (var file in files[..2]) Assert.Empty(await workspace.GetMetadataAsync(file.Id));
+
+        var destination = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Destination");
+        var conflictPath = temporary.Child("conflict-alpha.txt");
+        await File.WriteAllTextAsync(conflictPath, "conflict");
+        var conflict = Assert.Single(await workspace.ImportAsync([conflictPath], destination.Id)).File!;
+        await workspace.RenameFileAsync(conflict.Id, files[0].DisplayName);
+        var moved = await workspace.MoveFilesAsync(files[..2].Select(file => file.Id).ToArray(), destination.Id);
+
+        Assert.Equal(1, moved.SucceededCount);
+        Assert.Equal(files[0].Id, Assert.Single(moved.Items, item => !item.Succeeded).FileId);
+        Assert.Equal(workspace.Descriptor.RootFolderId, (await workspace.GetFileAsync(files[0].Id)).FolderId);
+        Assert.Equal(destination.Id, (await workspace.GetFileAsync(files[1].Id)).FolderId);
+
+        var recycled = await workspace.RecycleFilesAsync(files[..2].Select(file => file.Id).ToArray());
+        Assert.Equal(2, recycled.SucceededCount);
+        foreach (var file in files[..2]) Assert.Equal(LibraryRecordState.Recycled, (await workspace.GetFileAsync(file.Id)).State);
+    }
+
+    [Fact]
     public async Task RecyclingFolderIncludesDescendantsAndPermanentDeletionRemovesBytes()
     {
         using var temporary = new TemporaryDirectory();
