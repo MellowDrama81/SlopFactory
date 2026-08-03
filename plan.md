@@ -521,7 +521,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The application does not attempt automatic destructive database repair and preserves the original database and managed files unchanged.
 - A crash, unsafe volume removal or detected storage inconsistency marks a full scan as recommended and prompts the user to start or defer it rather than silently beginning an expensive scan.
 - Full scans can resume from a device-local checkpoint which contains no file content or user metadata.
-- Mutating library operations pause during a full scan so its findings remain coherent, while verified read-only browsing and viewing can continue.
 - First-release scan actions are limited to retrying validation, clearing or rebuilding derived previews, exporting the findings and opening the library location on Windows.
 - Integrity findings export as a versioned JSON report.
 - The default report contains the library ID, schema version, internal record IDs, issue categories, byte sizes, scan start and completion timestamps, and whether the scan was complete or cancelled.

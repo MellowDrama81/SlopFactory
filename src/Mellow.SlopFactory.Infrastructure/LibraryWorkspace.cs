@@ -14,6 +14,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     private readonly LibraryLayout _layout;
     private readonly SqliteLibraryDatabase _database;
     private readonly FileStream _libraryLock;
+    private readonly SemaphoreSlim _mutationGate = new(1, 1);
     private LibraryManifest _manifest;
     private bool _disposed;
 
@@ -148,36 +149,41 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public Task<FolderRecord> CreateFolderAsync(string parentFolderId, string name, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.CreateFolderAsync(parentFolderId, name, cancellationToken);
+        return RunMutationAsync(() => _database.CreateFolderAsync(parentFolderId, name, cancellationToken), cancellationToken);
     }
 
     public Task<FolderRecord> RenameFolderAsync(string folderId, string name, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RenameFolderAsync(folderId, name, Descriptor.RootFolderId, Descriptor.GeneratedFolderId, cancellationToken);
+        return RunMutationAsync(() => _database.RenameFolderAsync(folderId, name, Descriptor.RootFolderId, Descriptor.GeneratedFolderId, cancellationToken), cancellationToken);
     }
 
     public Task<FolderRecord> MoveFolderAsync(string folderId, string destinationFolderId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.MoveFolderAsync(folderId, destinationFolderId, Descriptor.RootFolderId, Descriptor.GeneratedFolderId, cancellationToken);
+        return RunMutationAsync(() => _database.MoveFolderAsync(folderId, destinationFolderId, Descriptor.RootFolderId, Descriptor.GeneratedFolderId, cancellationToken), cancellationToken);
     }
 
     public Task<FileRecord> RenameFileAsync(string fileId, string displayName, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RenameFileAsync(fileId, displayName, cancellationToken);
+        return RunMutationAsync(() => _database.RenameFileAsync(fileId, displayName, cancellationToken), cancellationToken);
     }
 
     public Task<FileRecord> MoveFileAsync(string fileId, string destinationFolderId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.MoveFileAsync(fileId, destinationFolderId, cancellationToken);
+        return RunMutationAsync(() => _database.MoveFileAsync(fileId, destinationFolderId, cancellationToken), cancellationToken);
     }
 
-    public async Task<FileRecord> DuplicateFileAsync(string fileId, string destinationFolderId, string displayName, CancellationToken cancellationToken = default)
+    public Task<FileRecord> DuplicateFileAsync(string fileId, string destinationFolderId, string displayName, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => DuplicateFileCoreAsync(fileId, destinationFolderId, displayName, cancellationToken), cancellationToken);
+    }
+
+    private async Task<FileRecord> DuplicateFileCoreAsync(string fileId, string destinationFolderId, string displayName, CancellationToken cancellationToken)
+    {
         var normalizedName = LibraryRules.NormalizeDisplayName(displayName, "File name");
         var source = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
         if (source.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active, healthy file can be duplicated.");
@@ -219,7 +225,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
     }
 
-    public async Task<FileRecord> CreateEditedTextCopyAsync(
+    public Task<FileRecord> CreateEditedTextCopyAsync(
         string fileId,
         string destinationFolderId,
         string displayName,
@@ -230,6 +236,19 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => CreateEditedTextCopyCoreAsync(fileId, destinationFolderId, displayName, content, format, copyUserMetadata, includeSensitiveMetadata, cancellationToken), cancellationToken);
+    }
+
+    private async Task<FileRecord> CreateEditedTextCopyCoreAsync(
+        string fileId,
+        string destinationFolderId,
+        string displayName,
+        string content,
+        TextCopyFormat format,
+        bool copyUserMetadata,
+        bool includeSensitiveMetadata,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(content);
         if (includeSensitiveMetadata && !copyUserMetadata) throw new LibraryValidationException("Sensitive metadata can be included only when user metadata copying is enabled.");
         var normalizedName = LibraryRules.NormalizeDisplayName(displayName, "File name");
@@ -312,9 +331,14 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         catch (XmlException exception) { throw new LibraryValidationException($"The edited XML is invalid: {exception.Message}"); }
     }
 
-    public async Task<IReadOnlyList<ImportResult>> ImportAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates = false, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ImportResult>> ImportAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates = false, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => ImportCoreAsync(sourcePaths, destinationFolderId, importDuplicates, cancellationToken), cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ImportResult>> ImportCoreAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates, CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(sourcePaths);
         _ = await _database.GetFolderContentsAsync(destinationFolderId, cancellationToken).ConfigureAwait(false);
         var results = new List<ImportResult>();
@@ -392,19 +416,19 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public Task<MetadataEntry> SetMetadataAsync(string fileId, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.SetMetadataAsync(fileId, key, kind, serializedValue, isSensitive, cancellationToken);
+        return RunMutationAsync(() => _database.SetMetadataAsync(fileId, key, kind, serializedValue, isSensitive, cancellationToken), cancellationToken);
     }
 
     public Task RemoveMetadataAsync(string fileId, string key, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RemoveMetadataAsync(fileId, key, cancellationToken);
+        return RunMutationAsync(() => _database.RemoveMetadataAsync(fileId, key, cancellationToken), cancellationToken);
     }
 
     public Task<MetadataEntry> RenameMetadataAsync(string fileId, string currentKey, string newKey, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RenameMetadataAsync(fileId, currentKey, newKey, cancellationToken);
+        return RunMutationAsync(() => _database.RenameMetadataAsync(fileId, currentKey, newKey, cancellationToken), cancellationToken);
     }
 
     public Task<IReadOnlyList<FileLink>> GetLinksAsync(string fileId, CancellationToken cancellationToken = default)
@@ -422,70 +446,85 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public Task<FileLink> CreateLinkAsync(string sourceFileId, string targetFileId, string label, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.CreateLinkAsync(sourceFileId, targetFileId, label, cancellationToken);
+        return RunMutationAsync(() => _database.CreateLinkAsync(sourceFileId, targetFileId, label, cancellationToken), cancellationToken);
     }
 
     public Task<FileLink> RelabelLinkAsync(string linkId, string label, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RelabelLinkAsync(linkId, label, cancellationToken);
+        return RunMutationAsync(() => _database.RelabelLinkAsync(linkId, label, cancellationToken), cancellationToken);
     }
 
     public Task<FileLink> ReverseLinkAsync(string linkId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.ReverseLinkAsync(linkId, cancellationToken);
+        return RunMutationAsync(() => _database.ReverseLinkAsync(linkId, cancellationToken), cancellationToken);
     }
 
     public Task RecycleLinkAsync(string linkId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RecycleLinkAsync(linkId, cancellationToken);
+        return RunMutationAsync(() => _database.RecycleLinkAsync(linkId, cancellationToken), cancellationToken);
     }
 
     public Task RestoreLinkAsync(string linkId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RestoreLinkAsync(linkId, cancellationToken);
+        return RunMutationAsync(() => _database.RestoreLinkAsync(linkId, cancellationToken), cancellationToken);
     }
 
     public Task PermanentlyDeleteLinkAsync(string linkId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.PermanentlyDeleteLinkAsync(linkId, cancellationToken);
+        return RunMutationAsync(() => _database.PermanentlyDeleteLinkAsync(linkId, cancellationToken), cancellationToken);
     }
 
     public Task RecycleFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RecycleFileAsync(fileId, cancellationToken);
+        return RunMutationAsync(() => _database.RecycleFileAsync(fileId, cancellationToken), cancellationToken);
     }
 
     public Task RecycleFolderAsync(string folderId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RecycleFolderAsync(folderId, Descriptor.RootFolderId, Descriptor.GeneratedFolderId, cancellationToken);
+        return RunMutationAsync(() => _database.RecycleFolderAsync(folderId, Descriptor.RootFolderId, Descriptor.GeneratedFolderId, cancellationToken), cancellationToken);
     }
 
-    public async Task RestoreFileAsync(string fileId, CancellationToken cancellationToken = default)
+    public Task RestoreFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => RestoreFileCoreAsync(fileId, cancellationToken), cancellationToken);
+    }
+
+    private async Task RestoreFileCoreAsync(string fileId, CancellationToken cancellationToken)
+    {
         var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
         ValidateManagedFilesForRestore([file]);
         await _database.RestoreFileAsync(fileId, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task RestoreFolderAsync(string folderId, CancellationToken cancellationToken = default)
+    public Task RestoreFolderAsync(string folderId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => RestoreFolderCoreAsync(folderId, cancellationToken), cancellationToken);
+    }
+
+    private async Task RestoreFolderCoreAsync(string folderId, CancellationToken cancellationToken)
+    {
         var files = await _database.GetFilesOwnedByRecycleBinItemAsync(new RecycleBinItemReference(RecycleBinItemKind.Folder, folderId), cancellationToken).ConfigureAwait(false);
         ValidateManagedFilesForRestore(files);
         await _database.RestoreFolderAsync(folderId, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task PermanentlyDeleteFileAsync(string fileId, CancellationToken cancellationToken = default)
+    public Task PermanentlyDeleteFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => PermanentlyDeleteFileCoreAsync(fileId, cancellationToken), cancellationToken);
+    }
+
+    private async Task PermanentlyDeleteFileCoreAsync(string fileId, CancellationToken cancellationToken)
+    {
         var file = await _database.PrepareFileDeletionAsync(fileId, cancellationToken).ConfigureAwait(false);
         try
         {
@@ -502,9 +541,14 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
     }
 
-    public async Task PermanentlyDeleteFolderAsync(string folderId, CancellationToken cancellationToken = default)
+    public Task PermanentlyDeleteFolderAsync(string folderId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => PermanentlyDeleteFolderCoreAsync(folderId, cancellationToken), cancellationToken);
+    }
+
+    private async Task PermanentlyDeleteFolderCoreAsync(string folderId, CancellationToken cancellationToken)
+    {
         if (folderId == Descriptor.RootFolderId || folderId == Descriptor.GeneratedFolderId) throw new LibraryValidationException("Permanent library folders cannot be deleted.");
         var files = await _database.PrepareFolderDeletionAsync(folderId, cancellationToken).ConfigureAwait(false);
         try
@@ -528,7 +572,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public Task<RecycleBinOperationResult> RestoreRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return ProcessRecycleBinItemsAsync(items, restore: true, cancellationToken);
+        return RunMutationAsync(() => ProcessRecycleBinItemsAsync(items, restore: true, cancellationToken), cancellationToken);
     }
 
     public async Task<RecycleBinRestorePreview> GetRecycleBinRestorePreviewAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default)
@@ -584,12 +628,17 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public Task<RecycleBinOperationResult> PermanentlyDeleteRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return ProcessRecycleBinItemsAsync(items, restore: false, cancellationToken);
+        return RunMutationAsync(() => ProcessRecycleBinItemsAsync(items, restore: false, cancellationToken), cancellationToken);
     }
 
-    public async Task<RecycleBinOperationResult> EmptyRecycleBinAsync(CancellationToken cancellationToken = default)
+    public Task<RecycleBinOperationResult> EmptyRecycleBinAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => EmptyRecycleBinCoreAsync(cancellationToken), cancellationToken);
+    }
+
+    private async Task<RecycleBinOperationResult> EmptyRecycleBinCoreAsync(CancellationToken cancellationToken)
+    {
         var entries = await GetRecycleBinEntriesAsync(cancellationToken).ConfigureAwait(false);
         return await ProcessRecycleBinItemsAsync(entries.Select(entry => entry.Reference).ToArray(), restore: false, cancellationToken).ConfigureAwait(false);
     }
@@ -603,9 +652,13 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         var total = 4;
         var complete = true;
         var cancelled = false;
+        var mutationGateHeld = false;
 
         try
         {
+            progress?.Report(new LibraryIntegrityScanProgress(processed, total, "Waiting for active library changes"));
+            await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            mutationGateHeld = true;
             progress?.Report(new LibraryIntegrityScanProgress(processed, total, "Validating manifest"));
             try
             {
@@ -751,14 +804,23 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             complete = false;
             cancelled = true;
         }
+        finally
+        {
+            if (mutationGateHeld) _mutationGate.Release();
+        }
 
         progress?.Report(new LibraryIntegrityScanProgress(processed, Math.Max(total, processed), cancelled ? "Scan cancelled" : "Scan finished"));
         return new LibraryIntegrityReport(Descriptor.LibraryId, Descriptor.SchemaVersion, startedAt, DateTimeOffset.UtcNow, complete && !cancelled, cancelled, findings);
     }
 
-    public async Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default)
+    public Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        return RunMutationAsync(() => RenameLibraryCoreAsync(displayName, cancellationToken), cancellationToken);
+    }
+
+    private async Task RenameLibraryCoreAsync(string displayName, CancellationToken cancellationToken)
+    {
         var normalized = LibraryRules.NormalizeDisplayName(displayName, "Library name");
         var updatedManifest = _manifest with { DisplayName = normalized };
         await _database.RenameLibraryAsync(normalized, cancellationToken).ConfigureAwait(false);
@@ -783,16 +845,38 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return path;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        if (_disposed) return ValueTask.CompletedTask;
+        if (_disposed) return;
         _disposed = true;
-        _libraryLock.Dispose();
-        TryDelete(_layout.LockPath);
-        return ValueTask.CompletedTask;
+        await _mutationGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            _libraryLock.Dispose();
+            TryDelete(_layout.LockPath);
+        }
+        finally
+        {
+            _mutationGate.Release();
+            _mutationGate.Dispose();
+        }
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    private async Task RunMutationAsync(Func<Task> operation, CancellationToken cancellationToken)
+    {
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { await operation().ConfigureAwait(false); }
+        finally { _mutationGate.Release(); }
+    }
+
+    private async Task<T> RunMutationAsync<T>(Func<Task<T>> operation, CancellationToken cancellationToken)
+    {
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { return await operation().ConfigureAwait(false); }
+        finally { _mutationGate.Release(); }
+    }
 
     private static void TryDelete(string? path)
     {
@@ -856,9 +940,9 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 {
                     switch (reference.Kind)
                     {
-                        case RecycleBinItemKind.Folder: await RestoreFolderAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
-                        case RecycleBinItemKind.File: await RestoreFileAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
-                        case RecycleBinItemKind.FileLink: await RestoreLinkAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.Folder: await RestoreFolderCoreAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.File: await RestoreFileCoreAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.FileLink: await _database.RestoreLinkAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         default: throw new LibraryValidationException("The recycle-bin item type is not supported.");
                     }
                 }
@@ -866,9 +950,9 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 {
                     switch (reference.Kind)
                     {
-                        case RecycleBinItemKind.Folder: await PermanentlyDeleteFolderAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
-                        case RecycleBinItemKind.File: await PermanentlyDeleteFileAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
-                        case RecycleBinItemKind.FileLink: await PermanentlyDeleteLinkAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.Folder: await PermanentlyDeleteFolderCoreAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.File: await PermanentlyDeleteFileCoreAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.FileLink: await _database.PermanentlyDeleteLinkAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         default: throw new LibraryValidationException("The recycle-bin item type is not supported.");
                     }
                 }

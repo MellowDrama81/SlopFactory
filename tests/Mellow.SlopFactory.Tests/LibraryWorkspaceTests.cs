@@ -697,6 +697,51 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task IntegrityScanAllowsReadsWhileMutationsWaitAndRemainCancellable()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("integrity-gate.txt");
+        await File.WriteAllTextAsync(source, new string('g', 100_000));
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        _ = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var scanHoldingGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseScan = new ManualResetEventSlim(false);
+        var paused = 0;
+        var progress = new InlineProgress<LibraryIntegrityScanProgress>(value =>
+        {
+            if (value.Stage == "Hashing managed files" && Interlocked.Exchange(ref paused, 1) == 0)
+            {
+                scanHoldingGate.TrySetResult();
+                releaseScan.Wait();
+            }
+        });
+        var scanTask = Task.Run(() => workspace.RunIntegrityScanAsync(progress));
+        await scanHoldingGate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        try
+        {
+            var waitingMutation = workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "After scan");
+            await Task.Delay(100);
+            Assert.False(waitingMutation.IsCompleted);
+            Assert.Single(await workspace.GetActiveFilesAsync());
+
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Cancelled", cancellation.Token));
+
+            releaseScan.Set();
+            var report = await scanTask.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(report.IsComplete);
+            var created = await waitingMutation.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal("After scan", created.Name);
+        }
+        finally
+        {
+            releaseScan.Set();
+        }
+    }
+
+    [Fact]
     public async Task OpeningVersionOneLibraryUpgradesDatabaseAndManifestWithRollbackCleanup()
     {
         using var temporary = new TemporaryDirectory();
