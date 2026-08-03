@@ -14,11 +14,22 @@ Open a file to view its immutable system information, including its SHA-256 cont
 
 Supported UTF-8 text, Markdown, JSON, XML, CSV, and common source-code files open in a read-only, wrapping text viewer. Text can be selected and copied normally. To keep the interface responsive, the viewer displays at most the first 1,048,576 characters and identifies a truncated display; the complete managed file remains unchanged.
 
+For a text file that fits in the built-in editor, choose **Edit as Copy** to change its content without modifying the original. Choose the new display name and destination, and either preserve the detected source format or explicitly save plain text or Markdown. Preserved JSON and XML are validated before saving. The new managed file is UTF-8 without a byte-order mark and has origin **Edited Copy**.
+
+User metadata is not copied by default. **Copy user metadata** includes non-sensitive entries; when sensitive entries exist, a separate unchecked option shows their count and must be selected to include them. Sensitive values are never displayed by that option, and reveal state is not transferred.
+
+PNG, JPEG, WebP, and GIF files up to 32 MiB open in the built-in raster image viewer. Controls switch between fit and actual size, zoom from 25% to 400%, pan oversized images, and rotate the view in 90-degree steps. Rotation and other viewing controls never rewrite the managed bytes. The viewer verifies the current byte size and SHA-256 hash before display.
+
+SVG files use the same viewing controls only after SlopFactory parses and sanitizes them. The sanitizer removes scripts, event handlers, foreign elements and namespaces, embedded styles, and non-local references before the image enters the WebView. Sanitization changes only the temporary viewing representation, not the original managed SVG.
+
 You can attach typed user metadata as text, number, Boolean, date, date-time, or JSON. Metadata keys are case-insensitively unique per file. The `slopfactory.` prefix is reserved for system data.
 
 Mark an entry **Sensitive** to conceal its value in the interface. **Reveal for session** reveals only that entry in the running application session. This flag is a display safeguard, not encryption.
 
 Metadata keys can be renamed without changing their stored type, sensitivity flag, or value.
+
+Changing a display name or user metadata never creates a content copy.
+Metadata additions, updates, renames, and removals advance the file's **Library modified** time without changing its authoritative import time or original bytes.
 
 ## File links
 

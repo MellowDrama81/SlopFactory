@@ -420,6 +420,33 @@ internal sealed class SqliteLibraryDatabase
         return duplicate;
     }
 
+    public async Task<FileRecord> InsertEditedTextCopyAsync(string sourceFileId, FileRecord copy, bool copyUserMetadata, bool includeSensitiveMetadata, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var source = await GetFileAsync(connection, sourceFileId, cancellationToken, transaction).ConfigureAwait(false);
+        var destination = await GetFolderAsync(connection, copy.FolderId, cancellationToken, transaction).ConfigureAwait(false);
+        if (source.State != LibraryRecordState.Active || destination.State != LibraryRecordState.Active)
+        {
+            throw new LibraryValidationException("The source file and destination folder must be active.");
+        }
+        await EnsureNameAvailableAsync(connection, copy.FolderId, LibraryRules.ComparisonKey(copy.DisplayName), null, null, cancellationToken, transaction).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO files(id,folder_id,display_name,name_key,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at) VALUES($id,$folder,$name,$key,$managed,$hash,$size,$media,$origin,0,$imported,$modified,NULL,NULL);",
+            cancellationToken, transaction,
+            ("$id", copy.Id), ("$folder", copy.FolderId), ("$name", copy.DisplayName), ("$key", LibraryRules.ComparisonKey(copy.DisplayName)),
+            ("$managed", copy.ManagedName), ("$hash", copy.ContentHash), ("$size", copy.ByteSize), ("$media", copy.MediaType),
+            ("$origin", (int)copy.Origin), ("$imported", Format(copy.ImportedAt)), ("$modified", Format(copy.ModifiedAt))).ConfigureAwait(false);
+        if (copyUserMetadata)
+        {
+            await ExecuteNonQueryAsync(connection,
+                "INSERT INTO metadata_entries(id,file_id,key,key_key,kind,serialized_value,is_sensitive) SELECT lower(hex(randomblob(16))),$copy,key,key_key,kind,serialized_value,is_sensitive FROM metadata_entries WHERE file_id=$source AND ($includeSensitive=1 OR is_sensitive=0);",
+                cancellationToken, transaction, ("$copy", copy.Id), ("$source", sourceFileId), ("$includeSensitive", includeSensitiveMetadata ? 1 : 0)).ConfigureAwait(false);
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return copy;
+    }
+
     public async Task<FileRecord> GetFileAsync(string fileId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -447,9 +474,11 @@ internal sealed class SqliteLibraryDatabase
         var normalizedKey = LibraryRules.NormalizeMetadataKey(key);
         var validValue = LibraryRules.ValidateMetadataValue(kind, serializedValue);
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
-        _ = await GetFileAsync(connection, fileId, cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        _ = await GetFileAsync(connection, fileId, cancellationToken, transaction).ConfigureAwait(false);
         await using (var countCommand = connection.CreateCommand())
         {
+            countCommand.Transaction = transaction;
             countCommand.CommandText = "SELECT COUNT(*) FROM metadata_entries WHERE file_id=$file AND key_key<>$key;";
             countCommand.Parameters.AddWithValue("$file", fileId);
             countCommand.Parameters.AddWithValue("$key", LibraryRules.ComparisonKey(normalizedKey));
@@ -459,22 +488,32 @@ internal sealed class SqliteLibraryDatabase
         var id = LibraryRules.NewId();
         await ExecuteNonQueryAsync(connection,
             "INSERT INTO metadata_entries(id,file_id,key,key_key,kind,serialized_value,is_sensitive) VALUES($id,$file,$key,$keyKey,$kind,$value,$sensitive) ON CONFLICT(file_id,key_key) DO UPDATE SET key=excluded.key,kind=excluded.kind,serialized_value=excluded.serialized_value,is_sensitive=excluded.is_sensitive;",
-            cancellationToken, null,
+            cancellationToken, transaction,
             ("$id", id), ("$file", fileId), ("$key", normalizedKey), ("$keyKey", LibraryRules.ComparisonKey(normalizedKey)), ("$kind", (int)kind), ("$value", validValue), ("$sensitive", isSensitive ? 1 : 0)).ConfigureAwait(false);
+        await TouchFileAsync(connection, transaction, fileId, cancellationToken).ConfigureAwait(false);
         await using var query = connection.CreateCommand();
+        query.Transaction = transaction;
         query.CommandText = "SELECT id,file_id,key,kind,serialized_value,is_sensitive FROM metadata_entries WHERE file_id=$file AND key_key=$key;";
         query.Parameters.AddWithValue("$file", fileId);
         query.Parameters.AddWithValue("$key", LibraryRules.ComparisonKey(normalizedKey));
-        await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
-        return new MetadataEntry(reader.GetString(0), reader.GetString(1), reader.GetString(2), (MetadataValueKind)reader.GetInt32(3), reader.GetString(4), reader.GetBoolean(5));
+        MetadataEntry result;
+        await using (var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            result = new MetadataEntry(reader.GetString(0), reader.GetString(1), reader.GetString(2), (MetadataValueKind)reader.GetInt32(3), reader.GetString(4), reader.GetBoolean(5));
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
     }
 
     public async Task RemoveMetadataAsync(string fileId, string key, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
-        await ExecuteNonQueryAsync(connection, "DELETE FROM metadata_entries WHERE file_id=$file AND key_key=$key;", cancellationToken, null,
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var removed = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM metadata_entries WHERE file_id=$file AND key_key=$key;", cancellationToken, transaction,
             ("$file", fileId), ("$key", LibraryRules.ComparisonKey(LibraryRules.NormalizeMetadataKey(key)))).ConfigureAwait(false);
+        if (removed > 0) await TouchFileAsync(connection, transaction, fileId, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<MetadataEntry> RenameMetadataAsync(string fileId, string currentKey, string newKey, CancellationToken cancellationToken)
@@ -494,6 +533,7 @@ internal sealed class SqliteLibraryDatabase
         try
         {
             if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0) throw new RecordNotFoundException("Metadata entry not found.");
+            await TouchFileAsync(connection, transaction, fileId, cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
@@ -736,6 +776,10 @@ internal sealed class SqliteLibraryDatabase
             throw new NameConflictException("An active item with that name already exists in the destination folder.");
         }
     }
+
+    private static Task TouchFileAsync(SqliteConnection connection, SqliteTransaction transaction, string fileId, CancellationToken cancellationToken) =>
+        ExecuteNonQueryAsync(connection, "UPDATE files SET modified_at=$modified WHERE id=$id;", cancellationToken, transaction,
+            ("$modified", Format(DateTimeOffset.UtcNow)), ("$id", fileId));
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
     {

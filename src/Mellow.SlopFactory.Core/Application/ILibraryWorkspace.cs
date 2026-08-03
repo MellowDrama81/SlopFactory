@@ -10,6 +10,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<FolderRecord>> GetActiveFoldersAsync(CancellationToken cancellationToken = default);
     Task<FileRecord> GetFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<TextFileContent> ReadTextFileAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<ImageFileContent> ReadImageFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileRecord>> GetActiveFilesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileRecord>> GetRecycledFilesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FolderRecord>> GetRecycledFoldersAsync(CancellationToken cancellationToken = default);
@@ -19,6 +20,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<FileRecord> RenameFileAsync(string fileId, string displayName, CancellationToken cancellationToken = default);
     Task<FileRecord> MoveFileAsync(string fileId, string destinationFolderId, CancellationToken cancellationToken = default);
     Task<FileRecord> DuplicateFileAsync(string fileId, string destinationFolderId, string displayName, CancellationToken cancellationToken = default);
+    Task<FileRecord> CreateEditedTextCopyAsync(string fileId, string destinationFolderId, string displayName, string content, TextCopyFormat format, bool copyUserMetadata, bool includeSensitiveMetadata, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ImportResult>> ImportAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates = false, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default);
     Task<MetadataEntry> SetMetadataAsync(string fileId, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default);

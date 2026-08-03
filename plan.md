@@ -649,7 +649,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## Library File Formats
 
 - The library can store any file type, including files which the application cannot preview.
-- Built-in image viewing supports PNG, JPEG, WebP, GIF and SVG.
 - Built-in audio playback supports MP3, WAV and AAC/M4A. FLAC and Opus are supported when the platform codec can play them.
 - Built-in video playback guarantees support for MP4 containing H.264 video and AAC audio.
 - File types are detected using available provider content types, file signatures and filename extensions rather than trusting the extension alone.
@@ -880,8 +879,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Every library file is treated as untrusted content.
 - The text viewer supports rendered-Markdown mode and in-file search.
 - Rendered Markdown is sanitized and cannot execute scripts or load remote images, fonts, stylesheets, frames or other resources automatically.
-- The image viewer supports fit-to-window, actual size, zoom, pan and non-destructive viewing rotation.
-- SVG is rendered through a sandboxed or sanitized viewer which blocks scripts and external resources.
 - Library content cannot access application APIs through the Blazor WebView.
 - External links show their destination and require confirmation before opening in the operating-system browser.
 - Local-resource access is restricted to the specific managed file or derived preview being displayed.
@@ -1100,7 +1097,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - System metadata is never editable through bulk metadata operations.
 - A bulk value is validated once and then applied transactionally per file.
 - A failure on one file does not roll back successful changes to unrelated files, and partial failures produce a per-file summary.
-- Metadata changes update modification timestamps but do not create generation-history records.
 - Copying a file within the library also copies its user metadata.
 - Metadata is not embedded into exported file bytes.
 
@@ -1123,14 +1119,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Text Content Editing
 
-- **Edit as Copy** opens an editor and saves the result as a new user-added UTF-8 text file.
-- It preserves the source's supported text format and safe extension by default, while allowing the user to choose **Plain Text** or **Markdown** explicitly; applicable format-specific validation completes before saving.
-- The original file remains unchanged.
-- The user chooses the edited copy's display name and destination folder.
-- **Edit as Copy** does not copy user metadata by default because the new file contains changed content.
-- Its review offers an unchecked **Copy User Metadata** option which copies ordinary user metadata when selected.
-- Sensitive entries require a second, separately unchecked **Include Sensitive Metadata** option which shows only their count; copied entries retain their types and sensitivity flags, and no reveal state carries into the new file.
-- Editing user metadata or a display name does not create a content copy.
 - Intentional managed-content replacement is reserved for repairing externally changed files rather than routine text editing.
 
 ## Connections and Models

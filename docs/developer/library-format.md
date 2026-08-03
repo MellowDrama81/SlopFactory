@@ -51,6 +51,14 @@ Files are never loaded completely into memory by the import or hashing implement
 
 Duplication streams the managed source through a staging file while calculating SHA-256 again. The calculated digest and byte count must match the source record before the staged bytes are committed under a new opaque managed name. The new `UserCopy` file row and copied user-metadata rows commit in one database transaction; failure removes the new managed bytes. User-created links are not copied.
 
+## Edited text copies
+
+`CreateEditedTextCopyAsync` encodes edited content as strict UTF-8 without a byte-order mark and enforces a 4 MiB UTF-8 editor boundary. Preserved JSON and XML content passes bounded structured validation before any file is written; DTD processing and external XML resolution are disabled. Plain-text and Markdown choices assign controlled `.txt` and `.md` managed extensions.
+
+The bytes are written under `.staging`, hashed, and moved to a new opaque managed name. The `EditedCopy` file row and any explicitly selected metadata rows commit together. Ordinary metadata copying excludes sensitive entries unless the caller supplies the separate sensitive-metadata consent. A failed database commit removes the new managed bytes, and the original source is never opened for writing.
+
+Metadata mutations and the owning file's `modified_at` update share one SQLite transaction. They do not rewrite `imported_at`, `source_last_modified`, or managed content.
+
 ## Recycle semantics implemented so far
 
 File and folder recycling is a logical state change. Folder recycling uses recursive SQLite CTEs so the subtree changes in one transaction. Link state is recalculated atomically: an endpoint-owned link is active only when both endpoints are active and returns automatically when both endpoints are restored. Explicit link recycling is tracked separately so endpoint restoration cannot undo the user's deletion; those links support restore and permanent deletion from the recycle bin.

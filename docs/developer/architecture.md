@@ -24,6 +24,10 @@ The development package identifier is `com.mellow.slopfactory.dev`, keeping deve
 
 `ILibraryWorkspaceFactory.CreateAsync` initializes an empty directory. `OpenAsync` accepts only a manifest/database pair with matching identity and schema information. Both return an `ILibraryWorkspace`, which owns an exclusive lock for its lifetime and must be asynchronously disposed.
 
-The workspace is the atomic application boundary for folder browsing, imports, file and folder rename/move operations, bounded text reads, metadata, link creation/relabel/reversal, recycle/restore, and permanent file deletion. Folder moves validate the complete descendant chain before updating the parent identifier; display-only organization never changes a file's internal managed name or byte location.
+The workspace is the atomic application boundary for folder browsing, imports, file and folder rename/move operations, bounded text and verified image reads, edited-copy commits, metadata, link creation/relabel/reversal, recycle/restore, and permanent file deletion. Folder moves validate the complete descendant chain before updating the parent identifier; display-only organization never changes a file's internal managed name or byte location.
 
 The built-in text reader accepts strict UTF-8 with or without its byte-order mark. Invalid UTF-8 and UTF-16 byte-order marks are rejected with a user-facing validation error. UI display is capped at 1,048,576 characters as a memory-safety boundary, not as a library storage limit.
+
+The inline raster reader accepts PNG, JPEG, WebP, and GIF records up to 32 MiB. It reads only an active managed file and verifies its byte count and SHA-256 digest against the database before returning bytes to the WebView. The size boundary limits transient base64 and WebView memory; it is not a library storage quota.
+
+SVG uses the same raw-byte verification before a strict XML sanitizer creates the viewing representation. DTDs and external XML resolution are prohibited. A small allowlist retains passive SVG geometry, text, definitions, gradients, masks, patterns, markers, symbols, and local fragment reuse; active elements, foreign namespaces, event attributes, style attributes, external links, and external CSS URLs are removed. The unsanitized SVG is never sent to the WebView.

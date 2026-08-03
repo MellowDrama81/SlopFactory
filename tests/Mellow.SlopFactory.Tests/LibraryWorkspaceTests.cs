@@ -113,8 +113,18 @@ public sealed class LibraryWorkspaceTests
         var fileA = imports[0].File!;
         var fileB = imports[1].File!;
 
+        var importedModifiedAt = fileA.ModifiedAt;
+        await Task.Delay(5);
         var metadata = await workspace.SetMetadataAsync(fileA.Id, "Rating", MetadataValueKind.Number, "4.5", false);
+        var setModifiedAt = (await workspace.GetFileAsync(fileA.Id)).ModifiedAt;
+        await Task.Delay(5);
         var renamedMetadata = await workspace.RenameMetadataAsync(fileA.Id, "Rating", "Score");
+        var renamedModifiedAt = (await workspace.GetFileAsync(fileA.Id)).ModifiedAt;
+        await workspace.SetMetadataAsync(fileA.Id, "Temporary", MetadataValueKind.Boolean, "true", false);
+        await Task.Delay(5);
+        var beforeRemove = (await workspace.GetFileAsync(fileA.Id)).ModifiedAt;
+        await workspace.RemoveMetadataAsync(fileA.Id, "Temporary");
+        var removedModifiedAt = (await workspace.GetFileAsync(fileA.Id)).ModifiedAt;
         var link = await workspace.CreateLinkAsync(fileA.Id, fileB.Id, "variation of");
         var relabelled = await workspace.RelabelLinkAsync(link.Id, "source for");
         var reversed = await workspace.ReverseLinkAsync(link.Id);
@@ -127,6 +137,9 @@ public sealed class LibraryWorkspaceTests
 
         Assert.Equal("Rating", metadata.Key);
         Assert.Equal("Score", renamedMetadata.Key);
+        Assert.True(setModifiedAt > importedModifiedAt);
+        Assert.True(renamedModifiedAt > setModifiedAt);
+        Assert.True(removedModifiedAt > beforeRemove);
         Assert.Equal("source for", relabelled.Label);
         Assert.Equal(fileB.Id, reversed.SourceFileId);
         Assert.Equal(fileA.Id, reversed.TargetFileId);
@@ -247,6 +260,98 @@ public sealed class LibraryWorkspaceTests
         Assert.True(content.IsTruncated);
         Assert.Equal("UTF-8", content.EncodingName);
         await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReadTextFileAsync(imports[1].File!.Id));
+    }
+
+    [Fact]
+    public async Task EditAsCopyWritesUtf8WithoutChangingOriginalAndHonorsMetadataChoices()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("note.md");
+        await File.WriteAllTextAsync(sourcePath, "# Original", new UTF8Encoding(false));
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var destination = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Edited");
+        var source = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.SetMetadataAsync(source.Id, "Category", MetadataValueKind.Text, "draft", false);
+        await workspace.SetMetadataAsync(source.Id, "Private", MetadataValueKind.Text, "secret", true);
+        var originalBytes = await File.ReadAllBytesAsync(workspace.GetManagedFilePath(source));
+
+        var ordinaryCopy = await workspace.CreateEditedTextCopyAsync(source.Id, destination.Id, "note edited.md", "# Edited\n", TextCopyFormat.PreserveSourceFormat, true, false);
+        var sensitiveCopy = await workspace.CreateEditedTextCopyAsync(source.Id, destination.Id, "note private.md", "# Private\n", TextCopyFormat.Markdown, true, true);
+        var cleanCopy = await workspace.CreateEditedTextCopyAsync(source.Id, destination.Id, "note clean.txt", "Plain\n", TextCopyFormat.PlainText, false, false);
+
+        Assert.Equal(FileOrigin.EditedCopy, ordinaryCopy.Origin);
+        Assert.Equal("text/markdown", ordinaryCopy.MediaType);
+        Assert.Equal("# Edited\n", Encoding.UTF8.GetString(await File.ReadAllBytesAsync(workspace.GetManagedFilePath(ordinaryCopy))));
+        Assert.Equal(originalBytes, await File.ReadAllBytesAsync(workspace.GetManagedFilePath(source)));
+        Assert.Equal("Category", Assert.Single(await workspace.GetMetadataAsync(ordinaryCopy.Id)).Key);
+        Assert.Equal(2, (await workspace.GetMetadataAsync(sensitiveCopy.Id)).Count);
+        Assert.Empty(await workspace.GetMetadataAsync(cleanCopy.Id));
+        Assert.Equal("text/plain", cleanCopy.MediaType);
+        Assert.EndsWith(".txt", cleanCopy.ManagedName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EditAsCopyValidatesPreservedStructuredFormatsBeforeWriting()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("data.json");
+        await File.WriteAllTextAsync(sourcePath, "{\"valid\":true}");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var source = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateEditedTextCopyAsync(
+            source.Id, workspace.Descriptor.RootFolderId, "invalid.json", "{", TextCopyFormat.PreserveSourceFormat, false, false));
+
+        Assert.DoesNotContain((await workspace.GetFolderContentsAsync(workspace.Descriptor.RootFolderId)).Files, file => file.DisplayName == "invalid.json");
+    }
+
+    [Fact]
+    public async Task RasterImageViewerReturnsVerifiedManagedBytes()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("pixel.png");
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        await File.WriteAllBytesAsync(sourcePath, png);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        var image = await workspace.ReadImageFileAsync(file.Id);
+
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal(png, image.Bytes);
+        await File.WriteAllBytesAsync(workspace.GetManagedFilePath(file), [0x89, 0x50, 0x4E, 0x47]);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReadImageFileAsync(file.Id));
+    }
+
+    [Fact]
+    public async Task SvgViewerRemovesActiveContentAndExternalReferences()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("unsafe.svg");
+        await File.WriteAllTextAsync(sourcePath, """
+            <svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)" viewBox="0 0 10 10">
+              <script>alert(2)</script>
+              <image href="https://example.com/tracker.png" />
+              <path d="M0 0L10 10" style="filter:url(https://example.com/x)" fill="url(https://example.com/y)" />
+              <use href="#local" />
+            </svg>
+            """);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        var image = await workspace.ReadImageFileAsync(file.Id);
+        var sanitized = Encoding.UTF8.GetString(image.Bytes);
+
+        Assert.Equal("image/svg+xml", image.MediaType);
+        Assert.DoesNotContain("script", sanitized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("onload", sanitized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("https:", sanitized, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<path", sanitized, StringComparison.Ordinal);
+        Assert.Contains("href=\"#local\"", sanitized, StringComparison.Ordinal);
     }
 
     [Fact]

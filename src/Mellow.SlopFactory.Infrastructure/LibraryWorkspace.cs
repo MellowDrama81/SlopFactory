@@ -2,7 +2,10 @@ using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure.Persistence;
 using Mellow.SlopFactory.Infrastructure.Storage;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Xml;
 
 namespace Mellow.SlopFactory.Infrastructure;
 
@@ -79,9 +82,32 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
     }
 
+    public async Task<ImageFileContent> ReadImageFileAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be viewed.");
+        if (!IsImageMediaType(file.MediaType)) throw new LibraryValidationException("This file is not a supported built-in image format.");
+        if (file.ByteSize > LibraryRules.MaximumInlineImageBytes)
+        {
+            throw new LibraryValidationException($"Images larger than {LibraryRules.MaximumInlineImageBytes / 1_048_576} MiB cannot be displayed inline.");
+        }
+        var path = GetManagedFilePath(file);
+        var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        if (bytes.LongLength != file.ByteSize || !string.Equals(hash, file.ContentHash, StringComparison.Ordinal))
+        {
+            throw new LibraryValidationException("The managed image bytes no longer match the library record.");
+        }
+        return new ImageFileContent(file.MediaType, file.MediaType == "image/svg+xml" ? SvgSanitizer.Sanitize(bytes) : bytes);
+    }
+
     private static bool IsTextMediaType(string mediaType) =>
         mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase)
         || mediaType is "application/json" or "application/xml";
+
+    private static bool IsImageMediaType(string mediaType) =>
+        mediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif" or "image/svg+xml";
 
     public Task<IReadOnlyList<FileRecord>> GetActiveFilesAsync(CancellationToken cancellationToken = default)
     {
@@ -173,6 +199,99 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             TryDelete(stagingPath);
             TryDelete(managedPath);
         }
+    }
+
+    public async Task<FileRecord> CreateEditedTextCopyAsync(
+        string fileId,
+        string destinationFolderId,
+        string displayName,
+        string content,
+        TextCopyFormat format,
+        bool copyUserMetadata,
+        bool includeSensitiveMetadata,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(content);
+        if (includeSensitiveMetadata && !copyUserMetadata) throw new LibraryValidationException("Sensitive metadata can be included only when user metadata copying is enabled.");
+        var normalizedName = LibraryRules.NormalizeDisplayName(displayName, "File name");
+        var source = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (source.State != LibraryRecordState.Active || !IsTextMediaType(source.MediaType))
+        {
+            throw new LibraryValidationException("Edit as Copy is available only for active supported text files.");
+        }
+
+        var (mediaType, extension) = format switch
+        {
+            TextCopyFormat.PlainText => ("text/plain", ".txt"),
+            TextCopyFormat.Markdown => ("text/markdown", ".md"),
+            TextCopyFormat.PreserveSourceFormat => (source.MediaType, Path.GetExtension(source.ManagedName)),
+            _ => throw new LibraryValidationException("The selected text-copy format is unsupported.")
+        };
+
+        var utf8 = new UTF8Encoding(false, true);
+        byte[] bytes;
+        try { bytes = utf8.GetBytes(content); }
+        catch (EncoderFallbackException) { throw new LibraryValidationException("The edited text contains an invalid Unicode sequence."); }
+        if (bytes.Length > LibraryRules.MaximumEditableTextUtf8Bytes)
+        {
+            throw new LibraryValidationException($"Edited text cannot exceed {LibraryRules.MaximumEditableTextUtf8Bytes:N0} UTF-8 bytes.");
+        }
+        ValidateStructuredText(mediaType, content);
+
+        var copyId = LibraryRules.NewId();
+        var managedName = copyId + extension;
+        var stagingPath = _layout.StagingFilePath(copyId + ".editing");
+        var managedPath = _layout.ManagedFilePath(managedName);
+        try
+        {
+            await using (var stream = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65_536, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+            var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+            File.Move(stagingPath, managedPath, false);
+            stagingPath = string.Empty;
+            var now = DateTimeOffset.UtcNow;
+            var copy = new FileRecord(copyId, destinationFolderId, normalizedName, managedName, hash, bytes.LongLength, mediaType,
+                FileOrigin.EditedCopy, LibraryRecordState.Active, now, now, null, null);
+            try
+            {
+                await _database.InsertEditedTextCopyAsync(source.Id, copy, copyUserMetadata, includeSensitiveMetadata, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                TryDelete(managedPath);
+                throw;
+            }
+            managedPath = string.Empty;
+            return copy;
+        }
+        finally
+        {
+            TryDelete(stagingPath);
+            TryDelete(managedPath);
+        }
+    }
+
+    private static void ValidateStructuredText(string mediaType, string content)
+    {
+        try
+        {
+            if (mediaType == "application/json")
+            {
+                using var _ = JsonDocument.Parse(content, new JsonDocumentOptions { AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow, MaxDepth = 64 });
+            }
+            else if (mediaType == "application/xml")
+            {
+                var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = LibraryRules.MaximumEditableTextUtf8Bytes };
+                using var reader = XmlReader.Create(new StringReader(content), settings);
+                while (reader.Read()) { }
+            }
+        }
+        catch (JsonException exception) { throw new LibraryValidationException($"The edited JSON is invalid: {exception.Message}"); }
+        catch (XmlException exception) { throw new LibraryValidationException($"The edited XML is invalid: {exception.Message}"); }
     }
 
     public async Task<IReadOnlyList<ImportResult>> ImportAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates = false, CancellationToken cancellationToken = default)

@@ -29,6 +29,13 @@ public enum FileOrigin
     RecoveredProviderOutput = 4
 }
 
+public enum TextCopyFormat
+{
+    PreserveSourceFormat = 0,
+    PlainText = 1,
+    Markdown = 2
+}
+
 public sealed record LibraryManifest(
     string FormatIdentity,
     int ManifestVersion,
@@ -108,6 +115,10 @@ public sealed record TextFileContent(
     string Content,
     bool IsTruncated,
     string EncodingName);
+
+public sealed record ImageFileContent(
+    string MediaType,
+    byte[] Bytes);
 
 public enum ImportOutcome
 {

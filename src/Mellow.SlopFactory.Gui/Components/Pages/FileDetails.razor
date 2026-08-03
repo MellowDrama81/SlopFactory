@@ -21,6 +21,30 @@ else
     }
 
     <section class="detail-grid">
+        @if (_imageDataUri is not null || _imageError is not null)
+        {
+            <article class="panel image-panel">
+                <h2>Image viewer</h2>
+                @if (_imageError is not null)
+                {
+                    <p class="error">@_imageError</p>
+                }
+                else
+                {
+                    <div class="image-tools" aria-label="Image view controls">
+                        <button class="ghost" @onclick="FitImage">Fit</button>
+                        <button class="ghost" @onclick="ActualImageSize">Actual size</button>
+                        <label>Zoom <input type="range" min="25" max="400" step="25" @bind="_imageZoom" @bind:event="oninput" /> @_imageZoom%</label>
+                        <button class="ghost" @onclick="RotateImage">Rotate 90°</button>
+                    </div>
+                    <div class="image-viewport">
+                        <img src="@_imageDataUri" alt="Preview of @_file.DisplayName" class="@(_fitImage ? "fit-image" : "actual-image")" style="transform: rotate(@(_imageRotation)deg) scale(@(_imageZoom / 100d));" />
+                    </div>
+                    <p class="muted">Viewing controls do not modify the managed image.</p>
+                }
+            </article>
+        }
+
         @if (_textContent is not null || _textError is not null)
         {
             <article class="panel text-panel">
@@ -33,6 +57,36 @@ else
                 {
                     <p class="muted">Read-only · @_textContent!.EncodingName@(_textContent.IsTruncated ? " · Showing the first 1,048,576 characters" : string.Empty)</p>
                     <pre class="text-viewer">@_textContent.Content</pre>
+                    @if (!_showTextEditor)
+                    {
+                        <button @onclick="BeginTextEdit" disabled="@_textContent.IsTruncated">Edit as Copy</button>
+                        @if (_textContent.IsTruncated) { <p class="muted">This file is too large to open in the built-in editor.</p> }
+                    }
+                    else
+                    {
+                        <EditForm Model="_textCopyForm" OnValidSubmit="SaveTextCopyAsync" class="stack-form text-editor">
+                            <label for="edited-content">Edited content</label>
+                            <InputTextArea id="edited-content" @bind-Value="_textCopyForm.Content" />
+                            <label for="edited-name">New file name</label>
+                            <InputText id="edited-name" @bind-Value="_textCopyForm.DisplayName" maxlength="255" />
+                            <label for="edited-folder">Destination folder</label>
+                            <InputSelect id="edited-folder" @bind-Value="_textCopyForm.DestinationFolderId">
+                                @foreach (var folder in _availableFolders) { <option value="@folder.Id">@folder.Name</option> }
+                            </InputSelect>
+                            <label for="edited-format">Format</label>
+                            <InputSelect id="edited-format" @bind-Value="_textCopyForm.Format">
+                                <option value="@TextCopyFormat.PreserveSourceFormat">Preserve source format</option>
+                                <option value="@TextCopyFormat.PlainText">Plain text</option>
+                                <option value="@TextCopyFormat.Markdown">Markdown</option>
+                            </InputSelect>
+                            <label class="check"><InputCheckbox @bind-Value="_textCopyForm.CopyUserMetadata" /> Copy user metadata</label>
+                            @if (_textCopyForm.CopyUserMetadata && SensitiveMetadataCount > 0)
+                            {
+                                <label class="check"><InputCheckbox @bind-Value="_textCopyForm.IncludeSensitiveMetadata" /> Include @SensitiveMetadataCount sensitive metadata entr@(SensitiveMetadataCount == 1 ? "y" : "ies")</label>
+                            }
+                            <div class="actions"><button type="submit">Save edited copy</button><button type="button" class="secondary" @onclick="CancelTextEdit">Cancel</button></div>
+                        </EditForm>
+                    }
                 }
             </article>
         }
@@ -42,6 +96,8 @@ else
             <dl>
                 <dt>Content hash</dt><dd class="mono">SHA-256 @_file.ContentHash</dd>
                 <dt>Imported</dt><dd>@_file.ImportedAt.ToLocalTime().ToString("g")</dd>
+                <dt>Library modified</dt><dd>@_file.ModifiedAt.ToLocalTime().ToString("g")</dd>
+                @if (_file.SourceLastModified is not null) { <dt>Source last modified</dt><dd>@_file.SourceLastModified.Value.ToLocalTime().ToString("g")</dd> }
                 <dt>Origin</dt><dd>@_file.Origin</dd>
                 <dt>State</dt><dd>@_file.State</dd>
             </dl>
@@ -151,8 +207,14 @@ else
     private IReadOnlyList<MetadataEntry> _metadata = [];
     private IReadOnlyList<FileLink> _links = [];
     private IReadOnlyList<FileRecord> _availableFiles = [];
+    private IReadOnlyList<FolderRecord> _availableFolders = [];
     private TextFileContent? _textContent;
     private string? _textError;
+    private string? _imageDataUri;
+    private string? _imageError;
+    private int _imageZoom = 100;
+    private int _imageRotation;
+    private bool _fitImage = true;
     private readonly HashSet<string> _revealed = new(StringComparer.Ordinal);
     private MetadataForm _metadataForm = new();
     private LinkForm _linkForm = new();
@@ -161,6 +223,9 @@ else
     private string _renameKey = string.Empty;
     private string? _renamingLinkId;
     private string _renamedLinkLabel = string.Empty;
+    private bool _showTextEditor;
+    private TextCopyForm _textCopyForm = new();
+    private int SensitiveMetadataCount => _metadata.Count(item => item.IsSensitive);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -174,6 +239,20 @@ else
         try
         {
             _file = await LibraryState.Workspace.GetFileAsync(Id);
+            _imageDataUri = null;
+            _imageError = null;
+            _imageZoom = 100;
+            _imageRotation = 0;
+            _fitImage = true;
+            if (IsImageMediaType(_file.MediaType))
+            {
+                try
+                {
+                    var image = await LibraryState.Workspace.ReadImageFileAsync(Id);
+                    _imageDataUri = $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}";
+                }
+                catch (SlopFactoryException exception) { _imageError = exception.Message; }
+            }
             _textContent = null;
             _textError = null;
             if (IsTextMediaType(_file.MediaType))
@@ -184,6 +263,7 @@ else
             _metadata = await LibraryState.Workspace.GetMetadataAsync(Id);
             _links = await LibraryState.Workspace.GetLinksAsync(Id);
             _availableFiles = (await LibraryState.Workspace.GetActiveFilesAsync()).Where(file => file.Id != Id).ToArray();
+            _availableFolders = await LibraryState.Workspace.GetActiveFoldersAsync();
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
     }
@@ -295,9 +375,52 @@ else
         catch (SlopFactoryException exception) { _message = exception.Message; }
     }
 
+    private void BeginTextEdit()
+    {
+        if (_file is null || _textContent is null || _textContent.IsTruncated) return;
+        var extension = Path.GetExtension(_file.DisplayName);
+        var stem = Path.GetFileNameWithoutExtension(_file.DisplayName);
+        _textCopyForm = new TextCopyForm
+        {
+            Content = _textContent.Content,
+            DisplayName = $"{stem} edited{extension}",
+            DestinationFolderId = _file.FolderId,
+            Format = TextCopyFormat.PreserveSourceFormat
+        };
+        _showTextEditor = true;
+    }
+
+    private void CancelTextEdit()
+    {
+        _showTextEditor = false;
+        _textCopyForm = new();
+    }
+
+    private async Task SaveTextCopyAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            var copy = await LibraryState.Workspace.CreateEditedTextCopyAsync(
+                Id,
+                _textCopyForm.DestinationFolderId,
+                _textCopyForm.DisplayName,
+                _textCopyForm.Content,
+                _textCopyForm.Format,
+                _textCopyForm.CopyUserMetadata,
+                _textCopyForm.CopyUserMetadata && _textCopyForm.IncludeSensitiveMetadata);
+            Navigation.NavigateTo($"/file/{copy.Id}");
+        }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
+    }
+
     private void ToggleReveal(string id) { if (!_revealed.Add(id)) _revealed.Remove(id); }
+    private void FitImage() { _fitImage = true; _imageZoom = 100; }
+    private void ActualImageSize() { _fitImage = false; _imageZoom = 100; }
+    private void RotateImage() => _imageRotation = (_imageRotation + 90) % 360;
     private void Back() => Navigation.NavigateTo("/");
     private static bool IsTextMediaType(string mediaType) => mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || mediaType is "application/json" or "application/xml";
+    private static bool IsImageMediaType(string mediaType) => mediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif" or "image/svg+xml";
     private string FileName(string fileId) => fileId == _file?.Id ? _file.DisplayName : _availableFiles.FirstOrDefault(file => file.Id == fileId)?.DisplayName ?? $"Unavailable file {fileId[..Math.Min(8, fileId.Length)]}";
 
     private sealed class MetadataForm
@@ -312,5 +435,15 @@ else
     {
         public string TargetFileId { get; set; } = string.Empty;
         public string Label { get; set; } = string.Empty;
+    }
+
+    private sealed class TextCopyForm
+    {
+        public string Content { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string DestinationFolderId { get; set; } = string.Empty;
+        public TextCopyFormat Format { get; set; }
+        public bool CopyUserMetadata { get; set; }
+        public bool IncludeSensitiveMetadata { get; set; }
     }
 }
