@@ -60,6 +60,22 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task OpeningRejectsManagedDirectoryReplacedByARegularFile()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        var mediaPath = Path.Combine(root, "media");
+        Directory.Delete(mediaPath);
+        await File.WriteAllTextAsync(mediaPath, "not a directory");
+
+        var exception = await Assert.ThrowsAsync<LibraryValidationException>(() => factory.OpenAsync(root));
+
+        Assert.Contains("managed-media directory", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ImportCopiesBytesAndSkipsDuplicateByDefault()
     {
         using var temporary = new TemporaryDirectory();

@@ -15,6 +15,10 @@ Open **Library settings** to see the active library's name and location or chang
 
 An empty selected directory becomes a new library. A location containing a valid SlopFactory library is opened, while a non-empty unrelated directory is rejected. Switching remembers the new active location for the next launch and never copies, moves, or deletes the previous library.
 
+Library settings keeps a device-local **Recent libraries** list showing each library's display name, storage path, last-opened time, and current availability. An available remembered library can be opened directly. Selecting a new path for the same library ID relinks it when the former path is unavailable; if both copies are available, SlopFactory rejects the duplicate-ID conflict rather than treating them as independent libraries. A location inside or containing another known library is also rejected.
+
+**Forget** removes an inactive library from this device's recent list and clears its regenerable preview-cache namespace. It does not modify or delete the library directory, its records, or its managed files. Opening the valid directory again registers it again.
+
 ## Importing files
 
 1. Open **Library**.

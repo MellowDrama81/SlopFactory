@@ -3,6 +3,7 @@
 @inject AppLibraryState LibraryState
 @inject ILibraryLocationService Locations
 @inject PreviewCacheService PreviewCache
+@inject IRecentLibraryService RecentLibraries
 
 <PageTitle>Library settings · SlopFactory</PageTitle>
 
@@ -47,6 +48,42 @@
         <p class="muted">An empty location becomes a new library. A valid existing SlopFactory library is opened. A non-empty unrelated directory is rejected. Existing data is never moved or copied.</p>
         <button type="submit" disabled="@(_busy || _scanning)">@(_busy ? "Switching…" : "Open this library")</button>
     </EditForm>
+</section>
+
+<section class="panel">
+    <h2>Recent libraries</h2>
+    <p class="muted">Libraries are independent. Opening another location never moves or copies data.</p>
+    @if (_recentLibraries.Count == 0)
+    {
+        <p class="empty">No remembered libraries.</p>
+    }
+    else
+    {
+        <ul class="metadata-list">
+            @foreach (var library in _recentLibraries)
+            {
+                var active = IsActive(library);
+                var available = IsAvailable(library);
+                <li>
+                    <div>
+                        <strong>@library.DisplayName @(active ? "(active)" : string.Empty)</strong>
+                        <small>@(available ? "Available" : "Unavailable") Â· Last opened @library.LastOpenedAt.ToLocalTime().ToString("g")</small>
+                    </div>
+                    <code>@library.Path</code>
+                    <button class="ghost" disabled="@(active || !available || _busy || _scanning)" @onclick="() => OpenRecentAsync(library)">Open</button>
+                    <button class="ghost danger" disabled="@(active || _busy || _scanning)" @onclick="() => _forgetCandidate = library">Forget</button>
+                </li>
+            }
+        </ul>
+    }
+    @if (_forgetCandidate is not null)
+    {
+        <div class="inline-form" role="group" aria-label="Confirm forgetting library">
+            <span>Forget @_forgetCandidate.DisplayName on this device? Its library data and future credentials remain untouched; regenerable previews for it will be removed.</span>
+            <button class="danger" @onclick="ForgetRecentAsync">Forget library</button>
+            <button class="secondary" @onclick="() => _forgetCandidate = null">Cancel</button>
+        </div>
+    }
 </section>
 
 <section class="panel">
@@ -129,6 +166,8 @@
     private PreviewCacheStatus? _cacheStatus;
     private CacheForm _cacheForm = new();
     private bool _confirmClearCache;
+    private IReadOnlyList<RecentLibrary> _recentLibraries = [];
+    private RecentLibrary? _forgetCandidate;
 
     private string IntegrityHeading => _scanReport switch
     {
@@ -144,6 +183,7 @@
         _availableLocations = Locations.GetAvailableLocations();
         _form.Path = LibraryState.ActivePath ?? _availableLocations.FirstOrDefault()?.Path ?? Locations.DefaultPath;
         _nameForm.Name = LibraryState.Workspace?.Descriptor.DisplayName ?? string.Empty;
+        ReloadRecentLibraries();
         await ReloadCacheStatusAsync();
     }
 
@@ -155,6 +195,7 @@
             await LibraryState.SwitchAsync(_form.Path);
             _nameForm.Name = LibraryState.Workspace!.Descriptor.DisplayName;
             _message = $"Opened {LibraryState.Workspace!.Descriptor.DisplayName}.";
+            ReloadRecentLibraries();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
@@ -170,6 +211,8 @@
         {
             await LibraryState.Workspace.RenameLibraryAsync(_nameForm.Name);
             _nameForm.Name = LibraryState.Workspace.Descriptor.DisplayName;
+            RecentLibraries.RecordOpened(LibraryState.Workspace.Descriptor);
+            ReloadRecentLibraries();
             _message = "Library renamed.";
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
@@ -205,6 +248,33 @@
     }
 
     private void CancelIntegrityScan() => _scanCancellation?.Cancel();
+
+    private void ReloadRecentLibraries() => _recentLibraries = RecentLibraries.GetAll();
+
+    private bool IsActive(RecentLibrary library) => LibraryState.Workspace is not null
+        && string.Equals(library.LibraryId, LibraryState.Workspace.Descriptor.LibraryId, StringComparison.Ordinal)
+        && SamePath(library.Path, LibraryState.ActivePath);
+
+    private static bool IsAvailable(RecentLibrary library) => Directory.Exists(library.Path) && File.Exists(Path.Combine(library.Path, "slopfactory-library.json"));
+
+    private static bool SamePath(string left, string? right) => right is not null && string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private async Task OpenRecentAsync(RecentLibrary library)
+    {
+        _form.Path = library.Path;
+        await SwitchAsync();
+    }
+
+    private async Task ForgetRecentAsync()
+    {
+        if (_forgetCandidate is null || IsActive(_forgetCandidate)) return;
+        RecentLibraries.Forget(_forgetCandidate.LibraryId, _forgetCandidate.Path);
+        await PreviewCache.ForgetLibraryAsync(_forgetCandidate.LibraryId);
+        _message = $"Forgot {_forgetCandidate.DisplayName} on this device. Its library data was not changed.";
+        _forgetCandidate = null;
+        ReloadRecentLibraries();
+        await ReloadCacheStatusAsync();
+    }
 
     private async Task ReloadCacheStatusAsync()
     {

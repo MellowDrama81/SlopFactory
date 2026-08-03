@@ -16,6 +16,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<AppLibraryState>();
         builder.Services.AddSingleton<ManagedMediaResourceService>();
         builder.Services.AddSingleton<PreviewCacheService>();
+        builder.Services.AddSingleton<IRecentLibraryService, RecentLibraryService>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif

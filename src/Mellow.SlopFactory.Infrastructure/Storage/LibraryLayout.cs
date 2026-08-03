@@ -45,6 +45,20 @@ internal sealed class LibraryLayout
         }
     }
 
+    public void ValidateRequiredEntries()
+    {
+        ValidateRegularFile(ManifestPath, "library manifest");
+        ValidateRegularFile(DatabasePath, "library database");
+        ValidateDirectory(ManagedPath, "managed-media directory");
+        if (Directory.Exists(StagingPath)) ValidateDirectory(StagingPath, "staging directory");
+    }
+
+    public void ValidateManagedDirectories()
+    {
+        ValidateDirectory(ManagedPath, "managed-media directory");
+        ValidateDirectory(StagingPath, "staging directory");
+    }
+
     public void EnsureManagedPath(string path)
     {
         var fullPath = Path.GetFullPath(path);
@@ -61,5 +75,18 @@ internal sealed class LibraryLayout
         EnsureManagedPath(path);
         return path;
     }
-}
 
+    private static void ValidateDirectory(string path, string label)
+    {
+        if (!Directory.Exists(path)) throw new LibraryValidationException($"The {label} is missing.");
+        var info = new DirectoryInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException($"The {label} cannot be a symbolic link or reparse-point redirection.");
+    }
+
+    private static void ValidateRegularFile(string path, string label)
+    {
+        if (Directory.Exists(path) || !File.Exists(path)) throw new LibraryValidationException($"The {label} is missing or is not a regular file.");
+        var info = new FileInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException($"The {label} cannot be a symbolic link or reparse-point redirection.");
+    }
+}

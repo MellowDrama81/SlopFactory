@@ -7,6 +7,7 @@ Imported files are copied into application-managed storage. Library records, fol
 The current development build implements the local-library foundation, including:
 
 - configurable local libraries and persistent library identity;
+- remembered-library discovery with availability, duplicate-ID and nested-location safeguards, switching, relinking, and non-destructive forgetting;
 - managed file import, hashing, duplication, rename, and move operations;
 - virtual folders and breadcrumbs, plus paged library-wide search, filters, stable sorting, and list/grid views;
 - retained original filenames and privacy-safe typed-metadata match explanations;

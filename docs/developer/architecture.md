@@ -20,9 +20,13 @@ The development package identifier is `com.mellow.slopfactory.dev`, keeping deve
 
 `LibraryLocationService` supplies the platform storage policy. Windows accepts absolute paths on non-network drives. Android enumerates only the process's internal and external app-specific directories. `AppLibraryState` persists the last successfully opened path in device preferences and swaps workspaces only after the replacement library has opened successfully.
 
+The recent-library registry is device-local Preferences JSON, not part of any library. Entries contain only persistent library ID, display name, absolute platform location, and last-opened UTC time. A successful validated open replaces stale path/name data for that ID. Switching rejects known ancestor/descendant ownership overlaps. If another registered path with the same ID remains available, opening the copy is rejected; if the old path is unavailable, selecting the new path relinks the registry without modifying the library ID. Forgetting removes the registry entry and that ID's preview cache only.
+
 ## Library workspace lifecycle
 
 `ILibraryWorkspaceFactory.CreateAsync` initializes an empty directory. `OpenAsync` accepts only a manifest/database pair with matching identity and schema information. Both return an `ILibraryWorkspace`, which owns an exclusive lock for its lifetime and must be asynchronously disposed.
+
+Opening validates that the root, manifest, database, managed-media directory, and staging directory are the required regular entry types and are not reparse-point redirections. The root is checked before manifest access, required entries are checked before locking/database work, and managed directories are checked again after obtaining the exclusive lock. Individual managed-path access also rejects directories and reparse points.
 
 The workspace is the atomic application boundary for folder browsing, imports, file and folder rename/move operations, bounded text and verified image reads, edited-copy commits, metadata, link creation/relabel/reversal, recycle/restore, and permanent file deletion. Folder moves validate the complete descendant chain before updating the parent identifier; display-only organization never changes a file's internal managed name or byte location.
 

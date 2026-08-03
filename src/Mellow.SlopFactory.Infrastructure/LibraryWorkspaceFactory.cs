@@ -37,6 +37,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             var manifest = new LibraryManifest(LibraryRules.FormatIdentity, LibraryRules.ManifestVersion, libraryId, normalizedName, LibraryRules.SchemaVersion);
             await SqliteLibraryDatabase.InitializeAsync(layout.DatabasePath, manifest, rootFolderId, generatedFolderId, cancellationToken).ConfigureAwait(false);
             await LibraryManifestStore.WriteAsync(layout, manifest, cancellationToken).ConfigureAwait(false);
+            layout.ValidateRequiredEntries();
             var database = new SqliteLibraryDatabase(layout.DatabasePath);
             var descriptor = await database.ValidateAndDescribeAsync(manifest, layout.RootPath, cancellationToken).ConfigureAwait(false);
             return new LibraryWorkspace(layout, descriptor, manifest, database, libraryLock);
@@ -63,6 +64,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         {
             throw new LibraryValidationException("The manifest, database and managed-media directory do not form a complete library.");
         }
+        layout.ValidateRequiredEntries();
 
         var libraryLock = AcquireLock(layout);
         try
@@ -73,6 +75,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
                 throw new LibraryValidationException("The library manifest changed while the library was opening.");
             }
             Directory.CreateDirectory(layout.StagingPath);
+            layout.ValidateManagedDirectories();
             var currentManifest = await UpgradeIfRequiredAsync(layout, lockedManifest, cancellationToken).ConfigureAwait(false);
             var database = new SqliteLibraryDatabase(layout.DatabasePath);
             var descriptor = await database.ValidateAndDescribeAsync(currentManifest, layout.RootPath, cancellationToken).ConfigureAwait(false);

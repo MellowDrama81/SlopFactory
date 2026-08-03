@@ -999,7 +999,8 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         ThrowIfDisposed();
         var path = _layout.ManagedFilePath(file.ManagedName);
-        if (!File.Exists(path)) throw new FileNotFoundException("The managed file is missing.", path);
+        if (Directory.Exists(path) || !File.Exists(path)) throw new FileNotFoundException("The managed file is missing or is not a regular file.", path);
+        if ((new FileInfo(path).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("The managed file path is a symbolic link or reparse point.");
         return path;
     }
 
