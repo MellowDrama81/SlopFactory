@@ -116,6 +116,26 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetActiveFilesAsync(cancellationToken);
     }
 
+    public Task<LibraryFileBrowseResult> BrowseFilesAsync(LibraryFileBrowseQuery query, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(query);
+        if (string.IsNullOrWhiteSpace(query.FolderId)) throw new LibraryValidationException("A current folder is required.");
+        var searchText = query.SearchText ?? string.Empty;
+        if (searchText.Length > 256) throw new LibraryValidationException("Library search text cannot exceed 256 characters.");
+        if (!Enum.IsDefined(query.Scope) || !Enum.IsDefined(query.MediaKind) || !Enum.IsDefined(query.Sort) || (query.Origin is not null && !Enum.IsDefined(query.Origin.Value)))
+        {
+            throw new LibraryValidationException("The library browser contains an unsupported filter or sort value.");
+        }
+        if (query.Offset < 0) throw new LibraryValidationException("The result offset cannot be negative.");
+        if (query.PageSize is < 1 or > 200) throw new LibraryValidationException("The page size must be between 1 and 200.");
+        if (query.ImportedFromInclusive is not null && query.ImportedBeforeExclusive is not null && query.ImportedFromInclusive >= query.ImportedBeforeExclusive)
+        {
+            throw new LibraryValidationException("The imported-from date must be earlier than the imported-through date.");
+        }
+        return _database.BrowseFilesAsync(query with { SearchText = searchText.Trim() }, cancellationToken);
+    }
+
     public Task<IReadOnlyList<FileRecord>> GetRecycledFilesAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -204,7 +224,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             File.Move(stagingPath, managedPath, false);
             stagingPath = string.Empty;
             var now = DateTimeOffset.UtcNow;
-            var duplicate = new FileRecord(duplicateId, destinationFolderId, normalizedName, managedName, copied.Hash, copied.Bytes, source.MediaType,
+            var duplicate = new FileRecord(duplicateId, destinationFolderId, normalizedName, source.OriginalFileName, managedName, copied.Hash, copied.Bytes, source.MediaType,
                 FileOrigin.UserCopy, LibraryRecordState.Active, now, now, null, null);
             try
             {
@@ -291,7 +311,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             File.Move(stagingPath, managedPath, false);
             stagingPath = string.Empty;
             var now = DateTimeOffset.UtcNow;
-            var copy = new FileRecord(copyId, destinationFolderId, normalizedName, managedName, hash, bytes.LongLength, mediaType,
+            var copy = new FileRecord(copyId, destinationFolderId, normalizedName, normalizedName, managedName, hash, bytes.LongLength, mediaType,
                 FileOrigin.EditedCopy, LibraryRecordState.Active, now, now, null, null);
             try
             {
@@ -377,7 +397,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 stagingPath = null;
                 var resolvedName = await _database.ResolveAvailableFileNameAsync(destinationFolderId, displayName, cancellationToken).ConfigureAwait(false);
                 var now = DateTimeOffset.UtcNow;
-                var record = new FileRecord(fileId, destinationFolderId, resolvedName, managedName, hash, copied.Bytes, mediaType, FileOrigin.Imported, LibraryRecordState.Active, now, now, candidate.SourceLastModified, null);
+                var record = new FileRecord(fileId, destinationFolderId, resolvedName, displayName, managedName, hash, copied.Bytes, mediaType, FileOrigin.Imported, LibraryRecordState.Active, now, now, candidate.SourceLastModified, null);
                 try
                 {
                     await _database.InsertImportedFileAsync(record, cancellationToken).ConfigureAwait(false);

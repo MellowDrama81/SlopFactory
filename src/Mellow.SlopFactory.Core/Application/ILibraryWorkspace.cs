@@ -11,6 +11,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<FileRecord> GetFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<TextFileContent> ReadTextFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<ImageFileContent> ReadImageFileAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<LibraryFileBrowseResult> BrowseFilesAsync(LibraryFileBrowseQuery query, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileRecord>> GetActiveFilesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileRecord>> GetRecycledFilesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FolderRecord>> GetRecycledFoldersAsync(CancellationToken cancellationToken = default);

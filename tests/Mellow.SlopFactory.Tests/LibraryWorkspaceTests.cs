@@ -755,20 +755,20 @@ public sealed class LibraryWorkspaceTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "ALTER TABLE file_links DROP COLUMN explicitly_recycled; DROP TABLE permanent_deletion_failures; UPDATE library_info SET schema_version=1 WHERE singleton=1;";
+            command.CommandText = "ALTER TABLE file_links DROP COLUMN explicitly_recycled; DROP TABLE permanent_deletion_failures; ALTER TABLE files DROP COLUMN original_name; UPDATE library_info SET schema_version=1 WHERE singleton=1;";
             await command.ExecuteNonQueryAsync();
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 3", "\"schemaVersion\": 1", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 4", "\"schemaVersion\": 1", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(3, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(4, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycledLinksAsync());
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
         Assert.False(File.Exists(databasePath + ".upgrade-backup"));
-        Assert.Contains("\"schemaVersion\": 3", await File.ReadAllTextAsync(manifestPath));
+        Assert.Contains("\"schemaVersion\": 4", await File.ReadAllTextAsync(manifestPath));
     }
 
     [Fact]
@@ -784,17 +784,123 @@ public sealed class LibraryWorkspaceTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "DROP TABLE permanent_deletion_failures; UPDATE library_info SET schema_version=2 WHERE singleton=1;";
+            command.CommandText = "DROP TABLE permanent_deletion_failures; ALTER TABLE files DROP COLUMN original_name; UPDATE library_info SET schema_version=2 WHERE singleton=1;";
             await command.ExecuteNonQueryAsync();
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 3", "\"schemaVersion\": 2", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 4", "\"schemaVersion\": 2", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(3, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(4, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
+    }
+
+    [Fact]
+    public async Task OpeningVersionThreeLibraryAddsOriginalFilenameFromDisplayName()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var source = temporary.Child("before-upgrade.txt");
+        await File.WriteAllTextAsync(source, "content");
+        var factory = new LibraryWorkspaceFactory();
+        string fileId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            fileId = Assert.Single(await created.ImportAsync([source], created.Descriptor.RootFolderId)).File!.Id;
+            await created.RenameFileAsync(fileId, "current-name.txt");
+        }
+
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "ALTER TABLE files DROP COLUMN original_name; UPDATE library_info SET schema_version=3 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 4", "\"schemaVersion\": 3", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        var file = await upgraded.GetFileAsync(fileId);
+        Assert.Equal(4, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal("current-name.txt", file.OriginalFileName);
+    }
+
+    [Fact]
+    public async Task LibraryBrowserSearchesNamesAndTypedMetadataWithoutDisclosingSensitiveKeys()
+    {
+        using var temporary = new TemporaryDirectory();
+        var alphaPath = temporary.Child("alpha-original.txt");
+        var betaPath = temporary.Child("beta.txt");
+        await File.WriteAllTextAsync(alphaPath, "alpha");
+        await File.WriteAllTextAsync(betaPath, "beta");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var nested = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Nested");
+        var alpha = Assert.Single(await workspace.ImportAsync([alphaPath], workspace.Descriptor.RootFolderId)).File!;
+        var beta = Assert.Single(await workspace.ImportAsync([betaPath], nested.Id)).File!;
+        await workspace.RenameFileAsync(alpha.Id, "renamed.txt");
+        await workspace.SetMetadataAsync(alpha.Id, "Category", MetadataValueKind.Text, "Landscape", false);
+        await workspace.SetMetadataAsync(beta.Id, "PrivateCode", MetadataValueKind.Text, "Needle", true);
+        await workspace.SetMetadataAsync(beta.Id, "Profile", MetadataValueKind.Json, "{\"subject\":\"Sunset\",\"count\":4,\"ready\":true}", false);
+
+        LibraryFileBrowseQuery Query(string search, LibraryBrowseScope scope = LibraryBrowseScope.EntireLibrary) =>
+            new(workspace.Descriptor.RootFolderId, scope, search, LibraryMediaKind.Any, null, null, null, LibraryFileSort.Name, 0, 20);
+
+        var original = Assert.Single((await workspace.BrowseFilesAsync(Query("alpha-original"))).Items);
+        Assert.Equal(alpha.Id, original.File.Id);
+        Assert.Contains("Matched original filename", original.MatchReasons);
+        Assert.Equal("alpha-original.txt", original.File.OriginalFileName);
+
+        var ordinary = Assert.Single((await workspace.BrowseFilesAsync(Query("Landscape"))).Items);
+        Assert.Contains("Matched user metadata: Category", ordinary.MatchReasons);
+
+        var jsonScalar = Assert.Single((await workspace.BrowseFilesAsync(Query("Sunset"))).Items);
+        Assert.Equal(beta.Id, jsonScalar.File.Id);
+        Assert.Contains("Matched user metadata: Profile", jsonScalar.MatchReasons);
+        Assert.Single((await workspace.BrowseFilesAsync(Query("subject"))).Items);
+        Assert.Empty((await workspace.BrowseFilesAsync(Query("{\"subject\""))).Items);
+        Assert.Empty((await workspace.BrowseFilesAsync(Query("%"))).Items);
+        Assert.Empty((await workspace.BrowseFilesAsync(Query("_"))).Items);
+
+        var sensitive = Assert.Single((await workspace.BrowseFilesAsync(Query("Needle"))).Items);
+        Assert.Equal(["Matched user metadata"], sensitive.MatchReasons);
+        Assert.DoesNotContain("PrivateCode", string.Join(' ', sensitive.MatchReasons), StringComparison.Ordinal);
+        Assert.Empty((await workspace.BrowseFilesAsync(Query("Needle", LibraryBrowseScope.CurrentFolder))).Items);
+    }
+
+    [Fact]
+    public async Task LibraryBrowserAppliesFiltersAndStablePaging()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        foreach (var name in new[] { "charlie.txt", "alpha.txt", "bravo.txt" })
+        {
+            var path = temporary.Child(name);
+            await File.WriteAllTextAsync(path, name);
+            _ = await workspace.ImportAsync([path], workspace.Descriptor.RootFolderId);
+        }
+
+        var first = await workspace.BrowseFilesAsync(new LibraryFileBrowseQuery(workspace.Descriptor.RootFolderId, LibraryBrowseScope.CurrentFolder, string.Empty,
+            LibraryMediaKind.Text, FileOrigin.Imported, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1), LibraryFileSort.Name, 0, 2));
+        var second = await workspace.BrowseFilesAsync(new LibraryFileBrowseQuery(workspace.Descriptor.RootFolderId, LibraryBrowseScope.CurrentFolder, string.Empty,
+            LibraryMediaKind.Text, FileOrigin.Imported, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1), LibraryFileSort.Name, 2, 2));
+
+        Assert.Equal(3, first.TotalCount);
+        Assert.Equal(["alpha.txt", "bravo.txt"], first.Items.Select(item => item.File.DisplayName));
+        Assert.True(first.HasNextPage);
+        Assert.Equal("charlie.txt", Assert.Single(second.Items).File.DisplayName);
+        Assert.True(second.HasPreviousPage);
+        var future = await workspace.BrowseFilesAsync(new LibraryFileBrowseQuery(workspace.Descriptor.RootFolderId, LibraryBrowseScope.EntireLibrary, string.Empty,
+            LibraryMediaKind.Any, null, DateTimeOffset.UtcNow.AddDays(1), null, LibraryFileSort.Name));
+        Assert.Empty(future.Items);
     }
 
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>

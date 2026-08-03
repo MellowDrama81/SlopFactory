@@ -1007,22 +1007,17 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Library Browsing
 
-- Files can be displayed in grid or list view.
 - Images and videos display thumbnails. Other files display type-specific icons where a preview is unavailable.
-- Search includes display name, original filename, user metadata and generation prompts.
+- Search also includes generation prompts after generation records are implemented.
 - System instructions are excluded from ordinary search unless **Search System Instructions** is explicitly enabled for the current library session.
 - That scope is off by default, produces only **Matched system instructions** without snippets, and makes the query memory-only until the library is closed, switched, locked or unavailable or the application exits.
-- JSON user metadata contributes property names and scalar string, finite-number and Boolean values to search; raw serialization punctuation, whitespace and container formatting are not indexed.
 - Prompt matches never display raw or improved prompt snippets in library results; ordinary records show only **Matched generation prompt**, with full prompt text available in generation details.
-- User-metadata matches never display the matching value in library results; they show the metadata key when it is eligible for ordinary display, or the generic label **Matched user metadata** when the key itself is hidden or sensitive.
-- The first release does not index or search the body content of stored text, Markdown, JSON, XML, CSV or source-code files.
 - Individual-file search remains available in the read-only text viewer. Any later library-wide content index must be an explicit per-library opt-in with visible indexing status and controls, rather than an undisclosed device cache.
-- Library search does not generate snippets from file contents.
 - When a generation-prompt match belongs to a currently concealed safety-marked file, the record may appear as a concealed result but the search result does not display a raw or improved prompt excerpt.
 - Such a result uses the generic explanation **Matched generation metadata** without identifying the exact field or exposing matching text.
 - Prompt and safety-category details remain available only through the file or history detail actions governed by their normal disclosure behavior.
 - Text-content search remains available within the individual read-only text viewer.
-- Results can be filtered by media type, origin, date, generation model, active or recycled status, **Provider Safety Warning**, **Provider Blocked After Delivery**, and **Has Provider Safety History**.
+- Results can additionally be filtered by generation model, active or recycled status, **Provider Safety Warning**, **Provider Blocked After Delivery**, and **Has Provider Safety History** as those records are implemented.
 - **Has Provider Safety History** matches any file retaining a provider classification revision, including currently cleared files, without indexing or displaying its category text in ordinary results.
 - A user-metadata filter selects a key, target type, type-appropriate operator and comparison value.
 - It applies only to entries of the selected type and reports separate counts for records excluded because the key is missing or has an incompatible type; it never coerces mixed types implicitly.
@@ -1031,8 +1026,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - A stored JSON value may be `null`. **Exists** matches it because the metadata entry exists, while **Structurally Equals null** specifically matches that value; a missing metadata key remains a distinct state.
 - Provider moderation-category text is not indexed by or displayed through ordinary library search; safety state is discoverable only through the explicit filters and file details.
 - Multi-selection supports move, export, recycle and metadata operations.
-- Results are virtualized or paginated so large libraries remain responsive.
-- When returning from a file, the application preserves the current folder, search, filters, sort and view mode.
 
 ## File Metadata
 

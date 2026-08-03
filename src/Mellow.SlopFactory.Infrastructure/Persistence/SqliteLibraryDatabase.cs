@@ -66,6 +66,7 @@ internal sealed class SqliteLibraryDatabase
                 id TEXT PRIMARY KEY,
                 folder_id TEXT NOT NULL REFERENCES folders(id),
                 display_name TEXT NOT NULL,
+                original_name TEXT NOT NULL,
                 name_key TEXT NOT NULL,
                 managed_name TEXT NOT NULL UNIQUE,
                 content_hash TEXT NOT NULL,
@@ -176,6 +177,10 @@ internal sealed class SqliteLibraryDatabase
         {
             await ExecuteNonQueryAsync(connection, "CREATE TABLE permanent_deletion_failures (record_kind INTEGER NOT NULL CHECK(record_kind IN (0,1)),record_id TEXT NOT NULL,sanitized_error TEXT NOT NULL,failed_at TEXT NOT NULL,PRIMARY KEY(record_kind,record_id));", cancellationToken, transaction).ConfigureAwait(false);
         }
+        if (fromVersion < 4)
+        {
+            await ExecuteNonQueryAsync(connection, "ALTER TABLE files ADD COLUMN original_name TEXT NOT NULL DEFAULT ''; UPDATE files SET original_name=display_name WHERE original_name='';", cancellationToken, transaction).ConfigureAwait(false);
+        }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -224,7 +229,7 @@ internal sealed class SqliteLibraryDatabase
         var files = new List<FileRecord>();
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT id,folder_id,display_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE folder_id=$folder AND state=0 ORDER BY name_key;";
+            command.CommandText = "SELECT id,folder_id,display_name,original_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE folder_id=$folder AND state=0 ORDER BY name_key;";
             command.Parameters.AddWithValue("$folder", folderId);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -240,7 +245,7 @@ internal sealed class SqliteLibraryDatabase
         var results = new List<FileRecord>();
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id,folder_id,display_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE state=$state ORDER BY recycled_at DESC,name_key;";
+        command.CommandText = "SELECT id,folder_id,display_name,original_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE state=$state ORDER BY recycled_at DESC,name_key;";
         command.Parameters.AddWithValue("$state", (int)state);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadFile(reader));
@@ -249,12 +254,119 @@ internal sealed class SqliteLibraryDatabase
 
     public Task<IReadOnlyList<FileRecord>> GetActiveFilesAsync(CancellationToken cancellationToken) => GetFilesByStateAsync(LibraryRecordState.Active, cancellationToken);
 
+    public async Task<LibraryFileBrowseResult> BrowseFilesAsync(LibraryFileBrowseQuery query, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var folder = await GetFolderAsync(connection, query.FolderId, cancellationToken, transaction).ConfigureAwait(false);
+        if (folder.State != LibraryRecordState.Active) throw new RecordNotFoundException("The current folder is not active.");
+
+        var hasSearch = !string.IsNullOrWhiteSpace(query.SearchText);
+        var searchPattern = hasSearch ? $"%{EscapeLikePattern(query.SearchText)}%" : string.Empty;
+        const string metadataMatch = """
+            (m.key LIKE $search ESCAPE '\' COLLATE NOCASE
+             OR (m.kind<>5 AND m.serialized_value LIKE $search ESCAPE '\' COLLATE NOCASE)
+             OR (m.kind=5 AND EXISTS (
+                 SELECT 1 FROM json_tree(m.serialized_value) node
+                 WHERE (typeof(node.key)='text' AND CAST(node.key AS TEXT) LIKE $search ESCAPE '\' COLLATE NOCASE)
+                    OR (node.type IN ('text','integer','real','true','false')
+                        AND (CASE node.type WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ELSE CAST(node.atom AS TEXT) END)
+                            LIKE $search ESCAPE '\' COLLATE NOCASE)
+             )))
+            """;
+
+        var conditions = new List<string> { "f.state=0" };
+        if (query.Scope == LibraryBrowseScope.CurrentFolder) conditions.Add("f.folder_id=$folder");
+        if (hasSearch)
+        {
+            conditions.Add($"(f.display_name LIKE $search ESCAPE '\\' COLLATE NOCASE OR f.original_name LIKE $search ESCAPE '\\' COLLATE NOCASE OR EXISTS (SELECT 1 FROM metadata_entries m WHERE m.file_id=f.id AND {metadataMatch}))");
+        }
+        conditions.Add(query.MediaKind switch
+        {
+            LibraryMediaKind.Text => "(f.media_type LIKE 'text/%' OR f.media_type IN ('application/json','application/xml'))",
+            LibraryMediaKind.Image => "f.media_type LIKE 'image/%'",
+            LibraryMediaKind.Audio => "f.media_type LIKE 'audio/%'",
+            LibraryMediaKind.Video => "f.media_type LIKE 'video/%'",
+            LibraryMediaKind.Other => "(f.media_type NOT LIKE 'text/%' AND f.media_type NOT LIKE 'image/%' AND f.media_type NOT LIKE 'audio/%' AND f.media_type NOT LIKE 'video/%' AND f.media_type NOT IN ('application/json','application/xml'))",
+            _ => "1=1"
+        });
+        if (query.Origin is not null) conditions.Add("f.origin=$origin");
+        if (query.ImportedFromInclusive is not null) conditions.Add("f.imported_at>=$from");
+        if (query.ImportedBeforeExclusive is not null) conditions.Add("f.imported_at<$before");
+        var where = string.Join(" AND ", conditions);
+
+        void AddParameters(SqliteCommand command)
+        {
+            command.Parameters.AddWithValue("$folder", query.FolderId);
+            command.Parameters.AddWithValue("$search", searchPattern);
+            if (query.Origin is not null) command.Parameters.AddWithValue("$origin", (int)query.Origin.Value);
+            if (query.ImportedFromInclusive is not null) command.Parameters.AddWithValue("$from", Format(query.ImportedFromInclusive.Value));
+            if (query.ImportedBeforeExclusive is not null) command.Parameters.AddWithValue("$before", Format(query.ImportedBeforeExclusive.Value));
+        }
+
+        int totalCount;
+        await using (var countCommand = connection.CreateCommand())
+        {
+            countCommand.Transaction = transaction;
+            countCommand.CommandText = $"SELECT COUNT(*) FROM files f WHERE {where};";
+            AddParameters(countCommand);
+            totalCount = Convert.ToInt32(await countCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
+        }
+
+        var orderBy = query.Sort switch
+        {
+            LibraryFileSort.ImportedNewest => "f.imported_at DESC,f.name_key,f.id",
+            LibraryFileSort.ModifiedNewest => "f.modified_at DESC,f.name_key,f.id",
+            LibraryFileSort.SizeLargest => "f.byte_size DESC,f.name_key,f.id",
+            LibraryFileSort.MediaType => "f.media_type COLLATE NOCASE,f.name_key,f.id",
+            _ => "f.name_key,f.id"
+        };
+        var items = new List<LibraryFileBrowseItem>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            var matchProjection = hasSearch
+                ? $"""
+                    CASE WHEN f.display_name LIKE $search ESCAPE '\' COLLATE NOCASE THEN 1 ELSE 0 END,
+                    CASE WHEN f.original_name LIKE $search ESCAPE '\' COLLATE NOCASE THEN 1 ELSE 0 END,
+                    COALESCE((SELECT m.key FROM metadata_entries m WHERE m.file_id=f.id AND m.is_sensitive=0 AND {metadataMatch} ORDER BY m.key_key LIMIT 1),''),
+                    CASE WHEN EXISTS (SELECT 1 FROM metadata_entries m WHERE m.file_id=f.id AND m.is_sensitive=1 AND {metadataMatch}) THEN 1 ELSE 0 END
+                    """
+                : "0,0,'',0";
+            command.CommandText = $"""
+                SELECT f.id,f.folder_id,f.display_name,f.original_name,f.managed_name,f.content_hash,f.byte_size,f.media_type,f.origin,f.state,
+                       f.imported_at,f.modified_at,f.source_last_modified,f.recycled_at,{matchProjection}
+                FROM files f
+                WHERE {where}
+                ORDER BY {orderBy}
+                LIMIT $limit OFFSET $offset;
+                """;
+            AddParameters(command);
+            command.Parameters.AddWithValue("$limit", query.PageSize);
+            command.Parameters.AddWithValue("$offset", query.Offset);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var file = ReadFile(reader);
+                var reasons = new List<string>(3);
+                if (reader.GetBoolean(14)) reasons.Add("Matched display name");
+                if (reader.GetBoolean(15) && !string.Equals(file.DisplayName, file.OriginalFileName, StringComparison.OrdinalIgnoreCase)) reasons.Add("Matched original filename");
+                var metadataKey = reader.GetString(16);
+                if (metadataKey.Length > 0) reasons.Add($"Matched user metadata: {metadataKey}");
+                else if (reader.GetBoolean(17)) reasons.Add("Matched user metadata");
+                items.Add(new LibraryFileBrowseItem(file, reasons));
+            }
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new LibraryFileBrowseResult(items, totalCount, query.Offset, query.PageSize);
+    }
+
     public async Task<IReadOnlyList<FileRecord>> GetFilesForIntegrityScanAsync(CancellationToken cancellationToken)
     {
         var results = new List<FileRecord>();
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id,folder_id,display_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE state<>2 ORDER BY id;";
+        command.CommandText = "SELECT id,folder_id,display_name,original_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE state<>2 ORDER BY id;";
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadFile(reader));
         return results;
@@ -281,7 +393,7 @@ internal sealed class SqliteLibraryDatabase
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT f.id,f.folder_id,f.display_name,f.managed_name,f.content_hash,f.byte_size,f.media_type,f.origin,f.state,f.imported_at,f.modified_at,f.source_last_modified,f.recycled_at
+            SELECT f.id,f.folder_id,f.display_name,f.original_name,f.managed_name,f.content_hash,f.byte_size,f.media_type,f.origin,f.state,f.imported_at,f.modified_at,f.source_last_modified,f.recycled_at
             FROM files f
             WHERE f.state IN (1,2)
               AND NOT EXISTS (
@@ -442,7 +554,7 @@ internal sealed class SqliteLibraryDatabase
             WITH RECURSIVE descendants(id) AS (
                 SELECT $id UNION ALL SELECT child.id FROM folders child JOIN descendants ON child.parent_id=descendants.id
             )
-            SELECT file.id,file.folder_id,file.display_name,file.managed_name,file.content_hash,file.byte_size,file.media_type,file.origin,file.state,file.imported_at,file.modified_at,file.source_last_modified,file.recycled_at
+            SELECT file.id,file.folder_id,file.display_name,file.original_name,file.managed_name,file.content_hash,file.byte_size,file.media_type,file.origin,file.state,file.imported_at,file.modified_at,file.source_last_modified,file.recycled_at
             FROM files file WHERE file.folder_id IN (SELECT id FROM descendants) ORDER BY file.id;
             """;
         command.Parameters.AddWithValue("$id", reference.Id);
@@ -639,7 +751,7 @@ internal sealed class SqliteLibraryDatabase
         var results = new List<FileRecord>();
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id,folder_id,display_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE content_hash=$hash AND byte_size=$size ORDER BY state, imported_at;";
+        command.CommandText = "SELECT id,folder_id,display_name,original_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE content_hash=$hash AND byte_size=$size ORDER BY state, imported_at;";
         command.Parameters.AddWithValue("$hash", hash);
         command.Parameters.AddWithValue("$size", byteSize);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -672,9 +784,9 @@ internal sealed class SqliteLibraryDatabase
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await ExecuteNonQueryAsync(connection,
-            "INSERT INTO files(id,folder_id,display_name,name_key,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at) VALUES($id,$folder,$name,$key,$managed,$hash,$size,$media,$origin,$state,$imported,$modified,$source,$recycled);",
+            "INSERT INTO files(id,folder_id,display_name,original_name,name_key,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at) VALUES($id,$folder,$name,$original,$key,$managed,$hash,$size,$media,$origin,$state,$imported,$modified,$source,$recycled);",
             cancellationToken, null,
-            ("$id", file.Id), ("$folder", file.FolderId), ("$name", file.DisplayName), ("$key", LibraryRules.ComparisonKey(file.DisplayName)),
+            ("$id", file.Id), ("$folder", file.FolderId), ("$name", file.DisplayName), ("$original", file.OriginalFileName), ("$key", LibraryRules.ComparisonKey(file.DisplayName)),
             ("$managed", file.ManagedName), ("$hash", file.ContentHash), ("$size", file.ByteSize), ("$media", file.MediaType),
             ("$origin", (int)file.Origin), ("$state", (int)file.State), ("$imported", Format(file.ImportedAt)), ("$modified", Format(file.ModifiedAt)),
             ("$source", file.SourceLastModified is null ? DBNull.Value : Format(file.SourceLastModified.Value)), ("$recycled", DBNull.Value)).ConfigureAwait(false);
@@ -693,9 +805,9 @@ internal sealed class SqliteLibraryDatabase
         }
         await EnsureNameAvailableAsync(connection, duplicate.FolderId, LibraryRules.ComparisonKey(duplicate.DisplayName), null, null, cancellationToken, transaction).ConfigureAwait(false);
         await ExecuteNonQueryAsync(connection,
-            "INSERT INTO files(id,folder_id,display_name,name_key,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at) VALUES($id,$folder,$name,$key,$managed,$hash,$size,$media,$origin,0,$imported,$modified,NULL,NULL);",
+            "INSERT INTO files(id,folder_id,display_name,original_name,name_key,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at) VALUES($id,$folder,$name,$original,$key,$managed,$hash,$size,$media,$origin,0,$imported,$modified,NULL,NULL);",
             cancellationToken, transaction,
-            ("$id", duplicate.Id), ("$folder", duplicate.FolderId), ("$name", duplicate.DisplayName), ("$key", LibraryRules.ComparisonKey(duplicate.DisplayName)),
+            ("$id", duplicate.Id), ("$folder", duplicate.FolderId), ("$name", duplicate.DisplayName), ("$original", duplicate.OriginalFileName), ("$key", LibraryRules.ComparisonKey(duplicate.DisplayName)),
             ("$managed", duplicate.ManagedName), ("$hash", duplicate.ContentHash), ("$size", duplicate.ByteSize), ("$media", duplicate.MediaType),
             ("$origin", (int)duplicate.Origin), ("$imported", Format(duplicate.ImportedAt)), ("$modified", Format(duplicate.ModifiedAt))).ConfigureAwait(false);
         await ExecuteNonQueryAsync(connection,
@@ -717,9 +829,9 @@ internal sealed class SqliteLibraryDatabase
         }
         await EnsureNameAvailableAsync(connection, copy.FolderId, LibraryRules.ComparisonKey(copy.DisplayName), null, null, cancellationToken, transaction).ConfigureAwait(false);
         await ExecuteNonQueryAsync(connection,
-            "INSERT INTO files(id,folder_id,display_name,name_key,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at) VALUES($id,$folder,$name,$key,$managed,$hash,$size,$media,$origin,0,$imported,$modified,NULL,NULL);",
+            "INSERT INTO files(id,folder_id,display_name,original_name,name_key,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at) VALUES($id,$folder,$name,$original,$key,$managed,$hash,$size,$media,$origin,0,$imported,$modified,NULL,NULL);",
             cancellationToken, transaction,
-            ("$id", copy.Id), ("$folder", copy.FolderId), ("$name", copy.DisplayName), ("$key", LibraryRules.ComparisonKey(copy.DisplayName)),
+            ("$id", copy.Id), ("$folder", copy.FolderId), ("$name", copy.DisplayName), ("$original", copy.OriginalFileName), ("$key", LibraryRules.ComparisonKey(copy.DisplayName)),
             ("$managed", copy.ManagedName), ("$hash", copy.ContentHash), ("$size", copy.ByteSize), ("$media", copy.MediaType),
             ("$origin", (int)copy.Origin), ("$imported", Format(copy.ImportedAt)), ("$modified", Format(copy.ModifiedAt))).ConfigureAwait(false);
         if (copyUserMetadata)
@@ -1035,7 +1147,7 @@ internal sealed class SqliteLibraryDatabase
         await using (var command = connection.CreateCommand())
         {
             command.Transaction = transaction;
-            command.CommandText = descendants + "SELECT f.id,f.folder_id,f.display_name,f.managed_name,f.content_hash,f.byte_size,f.media_type,f.origin,f.state,f.imported_at,f.modified_at,f.source_last_modified,f.recycled_at FROM files f WHERE f.folder_id IN (SELECT id FROM descendants) ORDER BY f.id;";
+            command.CommandText = descendants + "SELECT f.id,f.folder_id,f.display_name,f.original_name,f.managed_name,f.content_hash,f.byte_size,f.media_type,f.origin,f.state,f.imported_at,f.modified_at,f.source_last_modified,f.recycled_at FROM files f WHERE f.folder_id IN (SELECT id FROM descendants) ORDER BY f.id;";
             command.Parameters.AddWithValue("$id", folderId);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) files.Add(ReadFile(reader));
@@ -1145,7 +1257,7 @@ internal sealed class SqliteLibraryDatabase
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "SELECT id,folder_id,display_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE id=$id;";
+        command.CommandText = "SELECT id,folder_id,display_name,original_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE id=$id;";
         command.Parameters.AddWithValue("$id", fileId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("File not found.");
@@ -1168,15 +1280,16 @@ internal sealed class SqliteLibraryDatabase
         Parse(reader.GetString(4)), Parse(reader.GetString(5)), reader.IsDBNull(6) ? null : Parse(reader.GetString(6)));
 
     private static FileRecord ReadFile(SqliteDataReader reader) => new(
-        reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetInt64(5), reader.GetString(6),
-        (FileOrigin)reader.GetInt32(7), (LibraryRecordState)reader.GetInt32(8), Parse(reader.GetString(9)), Parse(reader.GetString(10)),
-        reader.IsDBNull(11) ? null : Parse(reader.GetString(11)), reader.IsDBNull(12) ? null : Parse(reader.GetString(12)));
+        reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetInt64(6), reader.GetString(7),
+        (FileOrigin)reader.GetInt32(8), (LibraryRecordState)reader.GetInt32(9), Parse(reader.GetString(10)), Parse(reader.GetString(11)),
+        reader.IsDBNull(12) ? null : Parse(reader.GetString(12)), reader.IsDBNull(13) ? null : Parse(reader.GetString(13)));
 
     private static FileLink ReadLink(SqliteDataReader reader) => new(
         reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), (LibraryRecordState)reader.GetInt32(4), Parse(reader.GetString(5)), reader.IsDBNull(6) ? null : Parse(reader.GetString(6)), reader.GetBoolean(7));
 
     private static string Format(DateTimeOffset value) => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
     private static DateTimeOffset Parse(string value) => DateTimeOffset.ParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+    private static string EscapeLikePattern(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
 
     private static async Task ExecuteNonQueryAsync(SqliteConnection connection, string sql, CancellationToken cancellationToken, SqliteTransaction? transaction = null, params (string Name, object Value)[] parameters)
     {

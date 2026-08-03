@@ -17,13 +17,13 @@ The manifest contains the format identity `mellow.slopfactory.library`, manifest
 
 The lock file is opened with exclusive sharing while a workspace is active. Its mere presence is not treated as an active lock, so a stale file after a crash can be reopened when no process holds it.
 
-## SQLite schema version 3
+## SQLite schema version 4
 
 The schema contains:
 
 - `library_info`: library identity, display name, schema version, and permanent folder IDs;
 - `folders`: the virtual folder tree and recycle state;
-- `files`: display identity, managed filename, SHA-256 hash, byte size, detected type, provenance, timestamps, and recycle state;
+- `files`: editable display identity, retained original filename, managed filename, SHA-256 hash, byte size, detected type, provenance, timestamps, and recycle state;
 - `metadata_entries`: typed user metadata owned by a file;
 - `file_links`: directed, labelled file relationships, including whether recycling was an explicit user action or was inherited from an endpoint;
 - `permanent_deletion_failures`: the most recent sanitized failure and UTC timestamp for a pending file or folder aggregate.
@@ -34,7 +34,15 @@ Active file and folder names are unique within their parent using normalized inv
 
 ## Schema upgrades
 
-Opening a version 1 or version 2 library upgrades it to version 3 before normal access. Version 2 introduced explicit-link recycling ownership; version 3 adds permanent-deletion failure records. After obtaining the exclusive lock, SlopFactory checkpoints SQLite, creates `library.sqlite3.upgrade-backup`, applies every required database change in one transaction, and atomically updates the manifest. Success removes the rollback copy. Failure restores the original database and manifest and leaves the library closed. Media bytes are not copied during a schema upgrade, and libraries declaring a newer schema are rejected.
+Opening an older library upgrades it to version 4 before normal access. Version 2 introduced explicit-link recycling ownership; version 3 added permanent-deletion failure records; version 4 adds the retained original filename used by library search. Libraries upgraded from version 3 backfill that field from the display name because the earlier format did not retain a distinct imported name. After obtaining the exclusive lock, SlopFactory checkpoints SQLite, creates `library.sqlite3.upgrade-backup`, applies every required database change in one transaction, and atomically updates the manifest. Success removes the rollback copy. Failure restores the original database and manifest and leaves the library closed. Media bytes are not copied during a schema upgrade, and libraries declaring a newer schema are rejected.
+
+## Library browsing queries
+
+`BrowseFilesAsync` validates a page size of 1–200 records and queries only active file rows. Callers choose current-folder or entire-library scope, a detected media category, optional origin and UTC import boundaries, a stable sort, and an offset. Every sort ends with normalized name and opaque ID tie-breakers so adjacent pages cannot reorder equal values.
+
+Name and metadata search uses escaped parameterized `LIKE` expressions; `%`, `_`, and backslash in user input remain literal characters. JSON metadata is traversed with SQLite JSON functions and contributes only property names and scalar string, finite-number, and Boolean values. The query never reads managed file bodies. Its projection returns safe match reasons rather than snippets: a non-sensitive metadata match may return one key, while a sensitive match returns only a generic reason.
+
+The GUI retains folder, query, filters, sort, offset, and view mode in the active library-state service. That state survives component navigation during the application session and is reset when the active library changes.
 
 ## Import commit protocol
 

@@ -115,40 +115,114 @@ else
     <section aria-labelledby="files-title">
         <div class="section-heading">
             <h2 id="files-title">Files</h2>
-            <label>Sort
-                <select @bind="_sort">
-                    <option value="name">Name</option>
-                    <option value="created">Imported (newest)</option>
-                    <option value="modified">Modified (newest)</option>
-                    <option value="size">Size (largest)</option>
-                    <option value="media">Media type</option>
-                </select>
-            </label>
+            <div class="view-toggle" aria-label="File view">
+                <button class="@(_browser.ViewMode == LibraryBrowserViewMode.List ? string.Empty : "secondary")" aria-pressed="@(_browser.ViewMode == LibraryBrowserViewMode.List)" @onclick="() => SetViewMode(LibraryBrowserViewMode.List)">List</button>
+                <button class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? string.Empty : "secondary")" aria-pressed="@(_browser.ViewMode == LibraryBrowserViewMode.Grid)" @onclick="() => SetViewMode(LibraryBrowserViewMode.Grid)">Grid</button>
+            </div>
         </div>
-        @if (_contents.Files.Count == 0)
+
+        <EditForm Model="_browser" OnValidSubmit="ApplyBrowserAsync" class="browser-controls">
+            <label class="browser-search" for="library-search">Search names and user metadata
+                <input id="library-search" type="search" maxlength="256" @bind="_browser.SearchText" placeholder="Search library files" />
+            </label>
+            <label for="browse-scope">Scope
+                <InputSelect id="browse-scope" @bind-Value="_browser.Scope">
+                    <option value="@LibraryBrowseScope.CurrentFolder">Current folder</option>
+                    <option value="@LibraryBrowseScope.EntireLibrary">Entire library</option>
+                </InputSelect>
+            </label>
+            <label for="media-filter">Media
+                <InputSelect id="media-filter" @bind-Value="_browser.MediaKind">
+                    @foreach (var kind in Enum.GetValues<LibraryMediaKind>()) { <option value="@kind">@kind</option> }
+                </InputSelect>
+            </label>
+            <label for="origin-filter">Origin
+                <InputSelect id="origin-filter" @bind-Value="_browser.Origin">
+                    <option value="">Any</option>
+                    @foreach (var origin in Enum.GetValues<FileOrigin>()) { <option value="@origin">@FormatOrigin(origin)</option> }
+                </InputSelect>
+            </label>
+            <label for="imported-from">Imported from
+                <InputDate id="imported-from" @bind-Value="_browser.ImportedFrom" />
+            </label>
+            <label for="imported-through">Imported through
+                <InputDate id="imported-through" @bind-Value="_browser.ImportedThrough" />
+            </label>
+            <label for="file-sort">Sort
+                <InputSelect id="file-sort" @bind-Value="_browser.Sort">
+                    <option value="@LibraryFileSort.Name">Name</option>
+                    <option value="@LibraryFileSort.ImportedNewest">Imported (newest)</option>
+                    <option value="@LibraryFileSort.ModifiedNewest">Modified (newest)</option>
+                    <option value="@LibraryFileSort.SizeLargest">Size (largest)</option>
+                    <option value="@LibraryFileSort.MediaType">Media type</option>
+                </InputSelect>
+            </label>
+            <div class="actions browser-actions">
+                <button type="submit" disabled="@_loadingBrowse">Apply</button>
+                <button type="button" class="secondary" @onclick="ClearBrowserAsync" disabled="@_loadingBrowse">Clear search and filters</button>
+            </div>
+        </EditForm>
+
+        @if (_browseResult is null)
         {
-            <div class="empty-panel"><p>There are no files in this folder.</p><button @onclick="ImportAsync">Import files</button></div>
+            <p class="muted" aria-live="polite">Loading files…</p>
+        }
+        else if (_browseResult.TotalCount == 0)
+        {
+            <div class="empty-panel">
+                <p>@(HasBrowserCriteria ? "No files match the current search and filters." : "There are no files in this folder.")</p>
+                @if (HasBrowserCriteria) { <button class="secondary" @onclick="ClearBrowserAsync">Clear search and filters</button> }
+                else { <button @onclick="ImportAsync">Import files</button> }
+            </div>
         }
         else
         {
-            <div class="file-list">
-                @foreach (var file in SortedFiles())
+            <p class="muted browser-summary" role="status">Showing @(_browseResult.Offset + 1)–@(_browseResult.Offset + _browseResult.Items.Count) of @_browseResult.TotalCount active file(s)@(_browser.Scope == LibraryBrowseScope.EntireLibrary ? " across the library" : " in this folder").</p>
+            <div class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? "file-grid" : "file-list")">
+                @foreach (var item in _browseResult.Items)
                 {
-                    <article class="file-row">
-                        <button class="file-main" @onclick="() => OpenFile(file.Id)"><strong>@file.DisplayName</strong><span>@file.MediaType · @FormatBytes(file.ByteSize)</span></button>
-                        <button class="ghost" @onclick="() => BeginFileEdit(file)">Manage</button>
-                        <button class="ghost" @onclick="() => BeginDuplicate(file)">Duplicate</button>
-                        <button class="danger ghost" @onclick="() => RecycleFileAsync(file.Id)">Recycle</button>
+                    <article class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? "file-card" : "file-row")">
+                        <button class="file-main" @onclick="() => OpenFile(item.File.Id)">
+                            <span class="file-type-icon" aria-hidden="true">@MediaIcon(item.File.MediaType)</span>
+                            <span class="file-identity"><strong>@item.File.DisplayName</strong><span>@item.File.MediaType · @FormatBytes(item.File.ByteSize)</span></span>
+                        </button>
+                        @if (_browser.Scope == LibraryBrowseScope.EntireLibrary)
+                        {
+                            <span class="file-location">@FolderPath(item.File.FolderId)</span>
+                        }
+                        @if (!string.Equals(item.File.DisplayName, item.File.OriginalFileName, StringComparison.Ordinal))
+                        {
+                            <span class="original-name">Original: @item.File.OriginalFileName</span>
+                        }
+                        @if (item.MatchReasons.Count > 0)
+                        {
+                            <ul class="match-reasons" aria-label="Why this file matched">
+                                @foreach (var reason in item.MatchReasons) { <li>@reason</li> }
+                            </ul>
+                        }
+                        <div class="file-actions">
+                            <button class="ghost" @onclick="() => BeginFileEdit(item.File)">Manage</button>
+                            <button class="ghost" @onclick="() => BeginDuplicate(item.File)">Duplicate</button>
+                            <button class="danger ghost" @onclick="() => RecycleFileAsync(item.File.Id)">Recycle</button>
+                        </div>
                     </article>
                 }
             </div>
+            <nav class="pagination" aria-label="File result pages">
+                <button class="secondary" @onclick="PreviousPageAsync" disabled="@(!_browseResult.HasPreviousPage || _loadingBrowse)">Previous</button>
+                <span>Page @CurrentPage of @PageCount</span>
+                <button class="secondary" @onclick="NextPageAsync" disabled="@(!_browseResult.HasNextPage || _loadingBrowse)">Next</button>
+            </nav>
         }
     </section>
 }
 
 @code {
+    private const int PageSize = 48;
     private LibraryFolderContents? _contents;
+    private LibraryFileBrowseResult? _browseResult;
     private bool _busy;
+    private bool _loadingBrowse;
     private bool _showFolderForm;
     private string? _message;
     private string? _editingFileId;
@@ -158,28 +232,100 @@ else
     private ItemForm _itemForm = new();
     private DuplicateForm _duplicateForm = new();
     private IReadOnlyList<FolderRecord> _activeFolders = [];
-    private string _sort = "name";
+    private LibraryBrowserSession _browser => LibraryState.BrowserSession;
+    private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null;
+    private int CurrentPage => _browseResult is null ? 1 : (_browseResult.Offset / PageSize) + 1;
+    private int PageCount => _browseResult is null ? 1 : Math.Max(1, (int)Math.Ceiling(_browseResult.TotalCount / (double)PageSize));
 
     protected override async Task OnInitializedAsync()
     {
         LibraryState.Changed += OnLibraryChanged;
         await LibraryState.InitializeAsync();
-        await LoadRootAsync();
+        if (LibraryState.Workspace is null) return;
+        var desiredFolder = _browser.FolderId ?? LibraryState.Workspace.Descriptor.RootFolderId;
+        try { await LoadFolderAsync(desiredFolder, preserveOffset: true); }
+        catch (SlopFactoryException)
+        {
+            await LoadFolderAsync(LibraryState.Workspace.Descriptor.RootFolderId);
+        }
     }
 
-    private async Task LoadRootAsync()
-    {
-        if (LibraryState.Workspace is not null) await LoadFolderAsync(LibraryState.Workspace.Descriptor.RootFolderId);
-    }
-
-    private async Task LoadFolderAsync(string folderId)
+    private async Task LoadFolderAsync(string folderId, bool preserveOffset = false)
     {
         if (LibraryState.Workspace is null) return;
         _contents = await LibraryState.Workspace.GetFolderContentsAsync(folderId);
         _activeFolders = await LibraryState.Workspace.GetActiveFoldersAsync();
+        if (!preserveOffset || !string.Equals(_browser.FolderId, folderId, StringComparison.Ordinal)) _browser.Offset = 0;
+        _browser.FolderId = folderId;
+        await LoadBrowseAsync();
     }
 
     private Task OpenFolderAsync(string folderId) => LoadFolderAsync(folderId);
+
+    private async Task LoadBrowseAsync()
+    {
+        if (LibraryState.Workspace is null || _contents is null) return;
+        _loadingBrowse = true;
+        try
+        {
+            var from = ParseLocalDate(_browser.ImportedFrom, inclusiveThrough: false);
+            var before = ParseLocalDate(_browser.ImportedThrough, inclusiveThrough: true);
+            var query = new LibraryFileBrowseQuery(_contents.Folder.Id, _browser.Scope, _browser.SearchText, _browser.MediaKind, _browser.Origin, from, before, _browser.Sort, _browser.Offset, PageSize);
+            _browseResult = await LibraryState.Workspace.BrowseFilesAsync(query);
+            if (_browseResult.TotalCount > 0 && _browser.Offset >= _browseResult.TotalCount)
+            {
+                _browser.Offset = ((_browseResult.TotalCount - 1) / PageSize) * PageSize;
+                _browseResult = await LibraryState.Workspace.BrowseFilesAsync(query with { Offset = _browser.Offset });
+            }
+            _message = null;
+        }
+        catch (Exception exception) when (exception is SlopFactoryException or FormatException or ArgumentException)
+        {
+            _message = exception.Message;
+        }
+        finally { _loadingBrowse = false; }
+    }
+
+    private Task ApplyBrowserAsync()
+    {
+        _browser.Offset = 0;
+        return LoadBrowseAsync();
+    }
+
+    private Task ClearBrowserAsync()
+    {
+        _browser.SearchText = string.Empty;
+        _browser.Scope = LibraryBrowseScope.CurrentFolder;
+        _browser.MediaKind = LibraryMediaKind.Any;
+        _browser.Origin = null;
+        _browser.ImportedFrom = null;
+        _browser.ImportedThrough = null;
+        _browser.Offset = 0;
+        return LoadBrowseAsync();
+    }
+
+    private Task PreviousPageAsync()
+    {
+        _browser.Offset = Math.Max(0, _browser.Offset - PageSize);
+        return LoadBrowseAsync();
+    }
+
+    private Task NextPageAsync()
+    {
+        _browser.Offset += PageSize;
+        return LoadBrowseAsync();
+    }
+
+    private static DateTimeOffset? ParseLocalDate(DateTime? value, bool inclusiveThrough)
+    {
+        if (value is null) return null;
+        var date = DateOnly.FromDateTime(value.Value);
+        if (inclusiveThrough) date = date.AddDays(1);
+        var local = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local), TimeSpan.Zero);
+    }
+
+    private void SetViewMode(LibraryBrowserViewMode mode) => _browser.ViewMode = mode;
 
     private IEnumerable<FolderRecord> Breadcrumbs()
     {
@@ -194,14 +340,17 @@ else
         return result;
     }
 
-    private IEnumerable<FileRecord> SortedFiles() => _sort switch
+    private string FolderPath(string folderId)
     {
-        "created" => _contents!.Files.OrderByDescending(file => file.ImportedAt).ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase),
-        "modified" => _contents!.Files.OrderByDescending(file => file.ModifiedAt).ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase),
-        "size" => _contents!.Files.OrderByDescending(file => file.ByteSize).ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase),
-        "media" => _contents!.Files.OrderBy(file => file.MediaType, StringComparer.OrdinalIgnoreCase).ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase),
-        _ => _contents!.Files.OrderBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase)
-    };
+        var names = new Stack<string>();
+        var current = _activeFolders.FirstOrDefault(folder => folder.Id == folderId);
+        while (current is not null)
+        {
+            names.Push(current.Name);
+            current = current.ParentId is { } parentId ? _activeFolders.FirstOrDefault(folder => folder.Id == parentId) : null;
+        }
+        return names.Count == 0 ? "Unknown folder" : string.Join(" / ", names);
+    }
 
     private async Task ImportAsync()
     {
@@ -214,7 +363,7 @@ else
         {
             var results = await LibraryState.Workspace.ImportAsync(paths, _contents.Folder.Id);
             _message = $"Imported {results.Count(item => item.Outcome == ImportOutcome.Imported)}; skipped {results.Count(item => item.Outcome == ImportOutcome.DuplicateSkipped)} duplicate(s); {results.Count(item => item.Outcome == ImportOutcome.Failed)} failed.";
-            await OpenFolderAsync(_contents.Folder.Id);
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
         finally { _busy = false; }
     }
@@ -270,7 +419,7 @@ else
                 await LibraryState.Workspace.MoveFolderAsync(folderId, _itemForm.DestinationFolderId);
             }
             CancelItemEdit();
-            await LoadFolderAsync(_contents.Folder.Id);
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
     }
@@ -299,7 +448,7 @@ else
             await LibraryState.Workspace.DuplicateFileAsync(_duplicatingFileId, _duplicateForm.DestinationFolderId, _duplicateForm.Name);
             CancelDuplicate();
             _message = "File duplicated.";
-            await LoadFolderAsync(_contents.Folder.Id);
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
         catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
     }
@@ -318,7 +467,7 @@ else
             await LibraryState.Workspace.CreateFolderAsync(_contents.Folder.Id, _newFolder.Name);
             _newFolder = new();
             _showFolderForm = false;
-            await OpenFolderAsync(_contents.Folder.Id);
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
     }
@@ -326,20 +475,46 @@ else
     private async Task RecycleFileAsync(string id)
     {
         if (LibraryState.Workspace is null || _contents is null) return;
-        await LibraryState.Workspace.RecycleFileAsync(id);
-        await OpenFolderAsync(_contents.Folder.Id);
+        try
+        {
+            await LibraryState.Workspace.RecycleFileAsync(id);
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
     }
 
     private async Task RecycleFolderAsync(string id)
     {
         if (LibraryState.Workspace is null || _contents is null) return;
-        await LibraryState.Workspace.RecycleFolderAsync(id);
-        await OpenFolderAsync(_contents.Folder.Id);
+        try
+        {
+            await LibraryState.Workspace.RecycleFolderAsync(id);
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
     }
 
     private void OpenFile(string id) => Navigation.NavigateTo($"/file/{id}");
     private void OnLibraryChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
     public void Dispose() => LibraryState.Changed -= OnLibraryChanged;
+
+    private static string MediaIcon(string mediaType) => mediaType.Split('/')[0] switch
+    {
+        "text" => "TXT",
+        "image" => "IMG",
+        "audio" => "AUD",
+        "video" => "VID",
+        _ when mediaType is "application/json" or "application/xml" => "TXT",
+        _ => "FILE"
+    };
+
+    private static string FormatOrigin(FileOrigin origin) => origin switch
+    {
+        FileOrigin.UserCopy => "User copy",
+        FileOrigin.EditedCopy => "Edited copy",
+        FileOrigin.RecoveredProviderOutput => "Recovered provider output",
+        _ => origin.ToString()
+    };
 
     private static string FormatBytes(long bytes) => bytes switch
     {

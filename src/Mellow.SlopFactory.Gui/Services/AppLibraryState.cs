@@ -19,6 +19,7 @@ public sealed class AppLibraryState : IAsyncDisposable
     public string? Error { get; private set; }
     public bool IsInitialized { get; private set; }
     public string? ActivePath { get; private set; }
+    public LibraryBrowserSession BrowserSession { get; private set; } = new();
     public event EventHandler? Changed;
 
     public async Task InitializeAsync()
@@ -65,6 +66,7 @@ public sealed class AppLibraryState : IAsyncDisposable
             Workspace = replacement;
             ActivePath = fullPath;
             Error = null;
+            BrowserSession = new LibraryBrowserSession();
             Preferences.Default.Set("active_library_path", fullPath);
             if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
         }
@@ -81,4 +83,24 @@ public sealed class AppLibraryState : IAsyncDisposable
         _gate.Dispose();
     }
 
+}
+
+public enum LibraryBrowserViewMode
+{
+    List = 0,
+    Grid = 1
+}
+
+public sealed class LibraryBrowserSession
+{
+    public string? FolderId { get; set; }
+    public string SearchText { get; set; } = string.Empty;
+    public LibraryBrowseScope Scope { get; set; } = LibraryBrowseScope.CurrentFolder;
+    public LibraryMediaKind MediaKind { get; set; } = LibraryMediaKind.Any;
+    public FileOrigin? Origin { get; set; }
+    public DateTime? ImportedFrom { get; set; }
+    public DateTime? ImportedThrough { get; set; }
+    public LibraryFileSort Sort { get; set; } = LibraryFileSort.Name;
+    public LibraryBrowserViewMode ViewMode { get; set; } = LibraryBrowserViewMode.List;
+    public int Offset { get; set; }
 }

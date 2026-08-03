@@ -36,6 +36,31 @@ public enum TextCopyFormat
     Markdown = 2
 }
 
+public enum LibraryBrowseScope
+{
+    CurrentFolder = 0,
+    EntireLibrary = 1
+}
+
+public enum LibraryFileSort
+{
+    Name = 0,
+    ImportedNewest = 1,
+    ModifiedNewest = 2,
+    SizeLargest = 3,
+    MediaType = 4
+}
+
+public enum LibraryMediaKind
+{
+    Any = 0,
+    Text = 1,
+    Image = 2,
+    Audio = 3,
+    Video = 4,
+    Other = 5
+}
+
 public enum RecycleBinItemKind
 {
     Folder = 0,
@@ -84,6 +109,7 @@ public sealed record FileRecord(
     string Id,
     string FolderId,
     string DisplayName,
+    string OriginalFileName,
     string ManagedName,
     string ContentHash,
     long ByteSize,
@@ -94,6 +120,32 @@ public sealed record FileRecord(
     DateTimeOffset ModifiedAt,
     DateTimeOffset? SourceLastModified,
     DateTimeOffset? RecycledAt);
+
+public sealed record LibraryFileBrowseQuery(
+    string FolderId,
+    LibraryBrowseScope Scope,
+    string SearchText,
+    LibraryMediaKind MediaKind,
+    FileOrigin? Origin,
+    DateTimeOffset? ImportedFromInclusive,
+    DateTimeOffset? ImportedBeforeExclusive,
+    LibraryFileSort Sort,
+    int Offset = 0,
+    int PageSize = 48);
+
+public sealed record LibraryFileBrowseItem(
+    FileRecord File,
+    IReadOnlyList<string> MatchReasons);
+
+public sealed record LibraryFileBrowseResult(
+    IReadOnlyList<LibraryFileBrowseItem> Items,
+    int TotalCount,
+    int Offset,
+    int PageSize)
+{
+    public bool HasPreviousPage => Offset > 0;
+    public bool HasNextPage => Offset + Items.Count < TotalCount;
+}
 
 public sealed record MetadataEntry(
     string Id,

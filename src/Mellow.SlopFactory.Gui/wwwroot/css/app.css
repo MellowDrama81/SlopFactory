@@ -32,10 +32,28 @@ h2 { margin-top: 2rem; font-size: 1.15rem; }
 .card { padding: .75rem; }
 .folder-card { display: flex; align-items: center; gap: .5rem; }
 .card-link, .file-main { flex: 1; min-width: 0; background: transparent; color: inherit; text-align: left; display: flex; gap: .65rem; }
-.file-main { flex-direction: column; padding: .25rem; }
-.file-main span { color: #9ea5b3; font-size: .85rem; }
+.file-main { align-items: center; padding: .25rem; }
+.file-identity { min-width: 0; display: flex; flex-direction: column; gap: .25rem; }
+.file-identity strong { overflow-wrap: anywhere; }
+.file-identity > span { color: #9ea5b3; font-size: .85rem; }
+.file-type-icon { display: grid; place-items: center; flex: 0 0 3rem; height: 3rem; border-radius: .55rem; background: #11141a; color: #e7b15b; font-size: .7rem; font-weight: 900; letter-spacing: .04em; }
 .file-list { display: grid; gap: .55rem; }
 .file-row { padding: .75rem; display: flex; align-items: center; gap: .75rem; }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .8rem; }
+.file-card { min-width: 0; padding: .9rem; display: flex; flex-direction: column; gap: .7rem; background: #20252e; border: 1px solid #343b48; border-radius: .9rem; }
+.file-card .file-main { align-items: flex-start; }
+.file-actions, .view-toggle, .pagination { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.file-actions { margin-left: auto; }
+.file-card .file-actions { margin: auto 0 0; }
+.file-location, .original-name { color: #9ea5b3; font-size: .8rem; overflow-wrap: anywhere; }
+.match-reasons { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.match-reasons li { padding: .25rem .45rem; border-radius: 999px; background: #1c303c; color: #bfe8ff; font-size: .75rem; }
+.browser-controls { display: grid; grid-template-columns: minmax(16rem, 2fr) repeat(3, minmax(9rem, 1fr)); gap: .75rem; align-items: end; margin: 1rem 0; padding: 1rem; border: 1px solid #343b48; border-radius: .9rem; background: #20252e; }
+.browser-controls label { display: grid; gap: .4rem; }
+.browser-search { grid-column: span 2; }
+.browser-actions { align-self: end; }
+.browser-summary { margin: 1rem 0; }
+.pagination { justify-content: center; margin-top: 1rem; }
 .empty-panel, .panel, .notice, .inline-form { padding: 1rem 1.2rem; }
 .notice { border-color: #5c86a1; background: #1c303c; margin: 1rem 0; }
 .center-state { display: grid; place-content: center; min-height: 70vh; text-align: center; }
@@ -87,5 +105,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .boot { min-height: 100vh; display: grid; place-content: center; }
 #blazor-error-ui { display: none; position: fixed; inset: auto 0 0; padding: 1rem; background: #7d2525; color: white; }
-@media (max-width: 720px) { .app-shell { grid-template-columns: 1fr; } .sidebar { position: sticky; top: 0; z-index: 10; border-right: 0; border-bottom: 1px solid #323846; padding: .75rem; } .brand { margin: 0 0 .5rem; } .sidebar nav { display: flex; overflow-x: auto; } .content { padding: 1rem; } .page-header { flex-direction: column; } .file-row { align-items: stretch; flex-direction: column; } .recycle-controls { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .browser-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } .browser-search { grid-column: span 2; } }
+@media (max-width: 720px) { .app-shell { grid-template-columns: 1fr; } .sidebar { position: sticky; top: 0; z-index: 10; border-right: 0; border-bottom: 1px solid #323846; padding: .75rem; } .brand { margin: 0 0 .5rem; } .sidebar nav { display: flex; overflow-x: auto; } .content { padding: 1rem; } .page-header { flex-direction: column; } .file-row { align-items: stretch; flex-direction: column; } .file-row .file-actions { margin-left: 0; } .browser-controls { grid-template-columns: 1fr; } .browser-search { grid-column: auto; } .recycle-controls { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

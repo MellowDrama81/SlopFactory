@@ -8,7 +8,8 @@ The current development build implements the local-library foundation, including
 
 - configurable local libraries and persistent library identity;
 - managed file import, hashing, duplication, rename, and move operations;
-- virtual folders, breadcrumbs, and file sorting;
+- virtual folders and breadcrumbs, plus paged library-wide search, filters, stable sorting, and list/grid views;
+- retained original filenames and privacy-safe typed-metadata match explanations;
 - a read-only UTF-8 text viewer and non-destructive **Edit as Copy** workflow;
 - a verified image viewer with fit, zoom, pan, viewing rotation, and sanitized SVG;
 - typed user metadata and sensitive-value concealment;
@@ -18,7 +19,7 @@ The current development build implements the local-library foundation, including
 - transactional SQLite schema upgrades; and
 - shared .NET MAUI application projects for Windows and Android.
 
-AI-provider connections, generation workflows, additional media viewers, advanced search, export, and release-resilience features remain under development. The outstanding product requirements are tracked in [plan.md](plan.md).
+AI-provider connections, generation workflows, additional media viewers, generation-aware and typed-comparison filters, export, and release-resilience features remain under development. The outstanding product requirements are tracked in [plan.md](plan.md).
 
 ## Documentation
 

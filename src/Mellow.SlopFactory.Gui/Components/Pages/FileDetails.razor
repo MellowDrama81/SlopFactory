@@ -95,6 +95,7 @@ else
             <h2>System information</h2>
             <dl>
                 <dt>Content hash</dt><dd class="mono">SHA-256 @_file.ContentHash</dd>
+                <dt>Original filename</dt><dd>@_file.OriginalFileName</dd>
                 <dt>Imported</dt><dd>@_file.ImportedAt.ToLocalTime().ToString("g")</dd>
                 <dt>Library modified</dt><dd>@_file.ModifiedAt.ToLocalTime().ToString("g")</dd>
                 @if (_file.SourceLastModified is not null) { <dt>Source last modified</dt><dd>@_file.SourceLastModified.Value.ToLocalTime().ToString("g")</dd> }

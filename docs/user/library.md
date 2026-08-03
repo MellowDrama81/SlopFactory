@@ -2,7 +2,13 @@
 
 ## Browsing
 
-The Library page lists child folders and files in the current folder. The breadcrumb path moves directly to any ancestor. Each file row shows its detected media type and byte size, and the file list can be sorted by name, import date, modification date, size, or media type.
+The Library page lists child folders and active files in the current folder. The breadcrumb path moves directly to any ancestor. Each file shows its detected media type and byte size. Choose **List** or **Grid** without changing any files.
+
+The file browser searches display names, retained original filenames, and typed user metadata. Choose whether the query covers only the current folder or the entire library. JSON metadata search considers property names and scalar string, finite-number, and Boolean values; JSON punctuation and formatting are not search terms. SlopFactory does not search file bodies or show file-content snippets.
+
+Results can be filtered by detected media category, origin, and an inclusive local import-date range, then sorted by name, newest import, newest library modification, largest size, or media type. Results are shown in pages of 48 files. A match label explains whether a name or metadata caused a hit. Non-sensitive metadata may identify its matching key, while a sensitive entry uses only **Matched user metadata** and never exposes the key or value.
+
+Opening a file and returning to the Library page restores the current folder, query, scope, filters, sort, page, and list/grid choice for the current application session. Switching libraries starts a separate default browser state.
 
 Choose **Manage** beside a file or non-permanent folder to change its display name or move it to another folder. Moving or renaming a library item does not move or rename the application-managed bytes. A folder cannot be moved into itself or below one of its descendants, and an existing active name is never silently replaced.
 
@@ -11,6 +17,8 @@ Choose **Duplicate** beside an active file to create an independent copy in a se
 ## File details and metadata
 
 Open a file to view its immutable system information, including its SHA-256 content hash, media type, origin, import time, and current state.
+
+SlopFactory retains the filename supplied at import separately from the editable display name. Renaming a file does not change that original filename, and either name can locate the file through Library search. Copies retain the imported ancestor's original filename; an edited text copy starts with its own chosen filename.
 
 Supported UTF-8 text, Markdown, JSON, XML, CSV, and common source-code files open in a read-only, wrapping text viewer. Text can be selected and copied normally. To keep the interface responsive, the viewer displays at most the first 1,048,576 characters and identifies a truncated display; the complete managed file remains unchanged.
 
