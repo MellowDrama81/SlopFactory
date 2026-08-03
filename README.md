@@ -9,6 +9,7 @@ The current development build implements the local-library foundation, including
 - configurable local libraries and persistent library identity;
 - remembered-library discovery with availability, duplicate-ID and nested-location safeguards, switching, relinking, and non-destructive forgetting;
 - reviewed managed-file import with hashing/copy progress, cancellation, duplicate choices, per-file outcomes, plus duplication, rename, and move operations;
+- Android share intents and Windows file activation/drag-and-drop routed through private staging and the same explicit import review;
 - virtual folders and breadcrumbs, plus paged library-wide search, filters, stable sorting, and list/grid views;
 - retained original filenames and privacy-safe typed-metadata match explanations;
 - a read-only UTF-8 viewer with full-file search, sanitized rendered Markdown, confirmed external links, and a non-destructive **Edit as Copy** workflow;

@@ -3,6 +3,8 @@
 @inject AppLibraryState LibraryState
 @inject NavigationManager Navigation
 @inject PreviewCacheService PreviewCache
+@inject IncomingImportService IncomingImports
+@inject IRecentLibraryService RecentLibraries
 
 <PageTitle>Library · SlopFactory</PageTitle>
 
@@ -51,7 +53,10 @@ else
     {
         <section class="panel import-review" aria-labelledby="import-review-title">
             <h2 id="import-review-title">Review import</h2>
-            <p>Target library: <strong>@LibraryState.Workspace.Descriptor.DisplayName</strong></p>
+            <label for="import-library">Target library</label>
+            <select id="import-library" value="@_importForm.TargetLibraryPath" @onchange="ChangeImportTargetAsync" disabled="@_busy">
+                @foreach (var library in AvailableImportLibraries()) { <option value="@library.Path">@library.DisplayName Â· @library.Path</option> }
+            </select>
             <label for="import-folder">Destination folder</label>
             <InputSelect id="import-folder" @bind-Value="_importForm.DestinationFolderId" disabled="@_busy">
                 @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
@@ -78,6 +83,16 @@ else
                 @if (_busy) { <button class="secondary" @onclick="CancelImport">Cancel remaining import</button> }
                 else { <button class="secondary" @onclick="CancelImportReview">Cancel</button> }
             </div>
+        </section>
+    }
+
+    @if (_incomingFailures.Count > 0)
+    {
+        <section class="panel" aria-labelledby="incoming-failures-title">
+            <div class="section-heading"><h2 id="incoming-failures-title">Incoming items not added to review</h2><button class="ghost" @onclick="() => _incomingFailures = []">Dismiss</button></div>
+            <ul class="metadata-list">
+                @foreach (var failure in _incomingFailures) { <li><div><strong>@failure.DisplayName</strong><small>@failure.Message</small></div></li> }
+            </ul>
         </section>
     }
 
@@ -313,6 +328,8 @@ else
     private ImportForm _importForm = new();
     private ImportProgress? _importProgress;
     private CancellationTokenSource? _importCancellation;
+    private readonly HashSet<string> _activeImportPaths = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private IReadOnlyList<IncomingImportFailure> _incomingFailures = [];
     private LibraryBrowserSession _browser => LibraryState.BrowserSession;
     private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null;
     private int CurrentPage => _browseResult is null ? 1 : (_browseResult.Offset / PageSize) + 1;
@@ -321,6 +338,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         LibraryState.Changed += OnLibraryChanged;
+        IncomingImports.PendingChanged += OnIncomingImportsChanged;
+        DrainIncomingImports();
         await LibraryState.InitializeAsync();
         if (LibraryState.Workspace is null) return;
         var desiredFolder = _browser.FolderId ?? LibraryState.Workspace.Descriptor.RootFolderId;
@@ -336,6 +355,8 @@ else
         if (LibraryState.Workspace is null) return;
         _contents = await LibraryState.Workspace.GetFolderContentsAsync(folderId);
         _activeFolders = await LibraryState.Workspace.GetActiveFoldersAsync();
+        if (_pendingImports.Count > 0 && string.IsNullOrWhiteSpace(_importForm.DestinationFolderId)) _importForm.DestinationFolderId = folderId;
+        if (_pendingImports.Count > 0 && string.IsNullOrWhiteSpace(_importForm.TargetLibraryPath)) _importForm.TargetLibraryPath = LibraryState.ActivePath ?? LibraryState.Workspace.Descriptor.RootPath;
         if (!preserveOffset || !string.Equals(_browser.FolderId, folderId, StringComparison.Ordinal)) _browser.Offset = 0;
         _browser.FolderId = folderId;
         await LoadBrowseAsync();
@@ -402,8 +423,6 @@ else
     {
         _thumbnailCancellation?.Cancel();
         _thumbnailCancellation?.Dispose();
-        _importCancellation?.Cancel();
-        _importCancellation?.Dispose();
         _thumbnailCancellation = new CancellationTokenSource();
         _thumbnails.Clear();
         if (_browseResult is null || LibraryState.Workspace is null) return;
@@ -468,14 +487,15 @@ else
         var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = "Import files into SlopFactory" });
         var files = picked?.OfType<FileResult>().Where(item => !string.IsNullOrWhiteSpace(item.FullPath)).ToArray() ?? [];
         if (files.Length == 0) return;
-        _pendingImports = files.Select(item =>
+        var selected = files.Select(item =>
         {
             long? size = null;
             try { var info = new FileInfo(item.FullPath); if (info.Exists) size = info.Length; }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) { }
-            return new PendingImport(item.FullPath, string.IsNullOrWhiteSpace(item.FileName) ? Path.GetFileName(item.FullPath) : item.FileName, size);
+            return new PendingImport(item.FullPath, string.IsNullOrWhiteSpace(item.FileName) ? Path.GetFileName(item.FullPath) : item.FileName, size, false);
         }).GroupBy(item => item.Path, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).Select(group => group.First()).ToList();
-        _importForm = new ImportForm { DestinationFolderId = _contents.Folder.Id };
+        AddPendingImports(selected);
+        _importForm = new ImportForm { TargetLibraryPath = LibraryState.ActivePath ?? string.Empty, DestinationFolderId = _contents.Folder.Id };
         _lastImportResults = [];
         _importProgress = null;
     }
@@ -483,6 +503,9 @@ else
     private async Task ConfirmImportAsync()
     {
         if (_pendingImports.Count == 0 || LibraryState.Workspace is null) return;
+        var runItems = _pendingImports.ToArray();
+        _activeImportPaths.Clear();
+        foreach (var item in runItems) _activeImportPaths.Add(item.Path);
         _busy = true;
         _importCancellation?.Dispose();
         _importCancellation = new CancellationTokenSource();
@@ -493,18 +516,89 @@ else
         });
         try
         {
-            _lastImportResults = await LibraryState.Workspace.ImportWithProgressAsync(_pendingImports.Select(item => item.Path), _importForm.DestinationFolderId, _importForm.ImportDuplicates, progress, _importCancellation.Token);
+            _lastImportResults = await LibraryState.Workspace.ImportWithProgressAsync(runItems.Select(item => item.Path), _importForm.DestinationFolderId, _importForm.ImportDuplicates, progress, _importCancellation.Token);
             _message = $"Imported {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Imported)}; skipped {_lastImportResults.Count(item => item.Outcome == ImportOutcome.DuplicateSkipped)} duplicate(s); {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Failed)} failed; {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Cancelled)} cancelled.";
-            _pendingImports = [];
+            foreach (var item in runItems)
+            {
+                _pendingImports.RemoveAll(candidate => SameSourcePath(candidate.Path, item.Path));
+                if (item.IsTemporary) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true));
+            }
             _importProgress = null;
             if (_contents is not null) await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
-        finally { _busy = false; }
+        finally { _activeImportPaths.Clear(); _busy = false; }
     }
 
-    private void RemovePendingImport(string path) => _pendingImports.RemoveAll(item => string.Equals(item.Path, path, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+    private async Task RemovePendingImport(string path)
+    {
+        var item = _pendingImports.FirstOrDefault(candidate => SameSourcePath(candidate.Path, path));
+        _pendingImports.RemoveAll(candidate => SameSourcePath(candidate.Path, path));
+        if (item?.IsTemporary == true) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true));
+    }
     private void CancelImport() => _importCancellation?.Cancel();
-    private void CancelImportReview() { _pendingImports = []; _importProgress = null; }
+    private async Task CancelImportReview()
+    {
+        var discarded = _pendingImports.Where(item => item.IsTemporary).ToArray();
+        _pendingImports = [];
+        _importProgress = null;
+        foreach (var item in discarded) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true));
+    }
+
+    private void DrainIncomingImports()
+    {
+        var incoming = IncomingImports.TakePending().Select(item => new PendingImport(item.Path, item.DisplayName, item.ByteSize, item.IsTemporary));
+        AddPendingImports(incoming);
+        var failures = IncomingImports.TakeFailures();
+        if (failures.Count > 0) _incomingFailures = _incomingFailures.Concat(failures).ToArray();
+        if (_contents is not null && string.IsNullOrWhiteSpace(_importForm.DestinationFolderId)) _importForm.DestinationFolderId = _contents.Folder.Id;
+        if (string.IsNullOrWhiteSpace(_importForm.TargetLibraryPath)) _importForm.TargetLibraryPath = LibraryState.ActivePath ?? string.Empty;
+    }
+
+    private void AddPendingImports(IEnumerable<PendingImport> items)
+    {
+        foreach (var item in items)
+        {
+            if (!_pendingImports.Any(candidate => SameSourcePath(candidate.Path, item.Path))) _pendingImports.Add(item);
+        }
+    }
+
+    private void OnIncomingImportsChanged(object? sender, EventArgs args) => _ = InvokeAsync(() =>
+    {
+        DrainIncomingImports();
+        StateHasChanged();
+    });
+
+    private static bool SameSourcePath(string left, string right) => string.Equals(left, right, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private IReadOnlyList<RecentLibrary> AvailableImportLibraries()
+    {
+        var recent = RecentLibraries.GetAll().Where(library => Directory.Exists(library.Path) && File.Exists(Path.Combine(library.Path, "slopfactory-library.json"))).ToList();
+        if (LibraryState.Workspace is not null && recent.All(library => !SameSourcePath(library.Path, LibraryState.Workspace.Descriptor.RootPath)))
+        {
+            recent.Insert(0, new RecentLibrary(LibraryState.Workspace.Descriptor.LibraryId, LibraryState.Workspace.Descriptor.DisplayName, LibraryState.Workspace.Descriptor.RootPath, DateTimeOffset.UtcNow));
+        }
+        return recent;
+    }
+
+    private async Task ChangeImportTargetAsync(ChangeEventArgs args)
+    {
+        var path = args.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(path) || SameSourcePath(path, LibraryState.ActivePath ?? string.Empty)) return;
+        try
+        {
+            await LibraryState.SwitchAsync(path);
+            if (LibraryState.Workspace is null) return;
+            _importForm.TargetLibraryPath = LibraryState.ActivePath ?? path;
+            _importForm.DestinationFolderId = LibraryState.Workspace.Descriptor.RootFolderId;
+            await LoadFolderAsync(LibraryState.Workspace.Descriptor.RootFolderId);
+            _message = $"Import target changed to {LibraryState.Workspace.Descriptor.DisplayName}.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _importForm.TargetLibraryPath = LibraryState.ActivePath ?? string.Empty;
+            _message = exception.Message;
+        }
+    }
 
     private void ToggleFolderForm() => _showFolderForm = !_showFolderForm;
 
@@ -637,8 +731,12 @@ else
     public void Dispose()
     {
         LibraryState.Changed -= OnLibraryChanged;
+        IncomingImports.PendingChanged -= OnIncomingImportsChanged;
         _thumbnailCancellation?.Cancel();
         _thumbnailCancellation?.Dispose();
+        _importCancellation?.Cancel();
+        _importCancellation?.Dispose();
+        IncomingImports.ReturnPending(_pendingImports.Where(item => !_activeImportPaths.Contains(item.Path)).Select(item => new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, item.IsTemporary)));
     }
 
     private static string MediaIcon(string mediaType) => mediaType.Split('/')[0] switch
@@ -689,9 +787,10 @@ else
         public string Name { get; set; } = string.Empty;
         public string DestinationFolderId { get; set; } = string.Empty;
     }
-    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize);
+    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize, bool IsTemporary);
     private sealed class ImportForm
     {
+        public string TargetLibraryPath { get; set; } = string.Empty;
         public string DestinationFolderId { get; set; } = string.Empty;
         public bool ImportDuplicates { get; set; }
     }

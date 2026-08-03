@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject IncomingImportService IncomingImports
 
 <div class="app-shell">
     <aside class="sidebar" aria-label="Primary navigation">
@@ -11,6 +13,18 @@
         </nav>
     </aside>
     <main class="content">
+        @if (IncomingImports.PendingCount > 0)
+        {
+            <div class="notice incoming-import-notice" role="status">
+                @IncomingImports.PendingCount shared or dropped item(s) are waiting for review. <a href="/">Review in Library</a>
+            </div>
+        }
         @Body
     </main>
 </div>
+
+@code {
+    protected override void OnInitialized() => IncomingImports.PendingChanged += OnPendingChanged;
+    private void OnPendingChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => IncomingImports.PendingChanged -= OnPendingChanged;
+}

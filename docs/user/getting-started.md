@@ -26,13 +26,15 @@ Library settings keeps a device-local **Recent libraries** list showing each lib
 3. Select **Import files**.
 4. Choose one or more files in the operating-system picker.
 
-SlopFactory then opens **Review import** without copying anything into the library. Confirm the active target library, choose any active destination folder, remove unwanted selections, and decide whether byte-identical files should be skipped or imported as independent records. **Import files** begins only after this review.
+SlopFactory then opens **Review import** without copying anything into the library. Choose any available recent library as the target, choose an active destination folder within it, remove unwanted selections, and decide whether byte-identical files should be skipped or imported as independent records. Changing the target opens that library normally without moving data. **Import files** begins only after this review.
 
 SlopFactory copies every successful import into managed storage and calculates a SHA-256 content hash. It never treats the selected external file as its managed copy.
 
 When the same bytes already exist in the library, the default import skips the duplicate and reports it in the completion summary. A failed file does not undo files that already imported successfully.
 
 Hashing and managed copying show the current file, item count, stage, and byte progress. **Cancel remaining import** removes the active staging copy, keeps files which already committed, and marks the active and not-yet-started items cancelled. The per-file results distinguish imported, duplicate-skipped, failed, and cancelled items. Imported records and skipped matches provide direct open actions.
+
+On Android, **Share to SlopFactory** accepts one or several files. On Windows, supported local file types can use **Open with SlopFactory**, and files can be dragged onto the application. Incoming provider streams are first copied into a private device-cache staging area so SlopFactory does not need a long-lived external permission. This does not create a library record: a banner points to the same **Review import** screen, and removing or cancelling a staged item deletes its temporary copy. Successfully processed and failed staged items are also cleaned after the reviewed operation. An expired permission or unreadable provider item is reported without exposing its external URI.
 
 ## Creating folders
 

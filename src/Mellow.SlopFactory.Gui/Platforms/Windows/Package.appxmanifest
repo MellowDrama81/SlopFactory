@@ -20,8 +20,20 @@
         <uap:DefaultTile Wide310x150Logo="appicon.png" />
         <uap:SplashScreen Image="appicon.png" BackgroundColor="#171A21" />
       </uap:VisualElements>
+      <Extensions>
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="slopfactory-import">
+            <uap:DisplayName>Import into SlopFactory</uap:DisplayName>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.txt</uap:FileType><uap:FileType>.md</uap:FileType><uap:FileType>.json</uap:FileType><uap:FileType>.xml</uap:FileType><uap:FileType>.csv</uap:FileType>
+              <uap:FileType>.png</uap:FileType><uap:FileType>.jpg</uap:FileType><uap:FileType>.jpeg</uap:FileType><uap:FileType>.webp</uap:FileType><uap:FileType>.gif</uap:FileType><uap:FileType>.svg</uap:FileType>
+              <uap:FileType>.mp3</uap:FileType><uap:FileType>.wav</uap:FileType><uap:FileType>.aac</uap:FileType><uap:FileType>.m4a</uap:FileType><uap:FileType>.flac</uap:FileType><uap:FileType>.opus</uap:FileType><uap:FileType>.ogg</uap:FileType>
+              <uap:FileType>.mp4</uap:FileType><uap:FileType>.pdf</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
   <Capabilities><rescap:Capability Name="runFullTrust" /></Capabilities>
 </Package>
-
