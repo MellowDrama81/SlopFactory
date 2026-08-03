@@ -127,6 +127,21 @@ public sealed record RecycleBinOperationResult(
     public int FailedCount => Items.Count - SucceededCount;
 }
 
+public sealed record RecycleBinRestorePreviewItem(
+    RecycleBinEntry Entry,
+    IReadOnlyList<string> BlockingReasons,
+    IReadOnlyList<string> Effects)
+{
+    public bool CanRestore => BlockingReasons.Count == 0;
+}
+
+public sealed record RecycleBinRestorePreview(
+    IReadOnlyList<RecycleBinRestorePreviewItem> Items)
+{
+    public int RestorableCount => Items.Count(item => item.CanRestore);
+    public int BlockedCount => Items.Count - RestorableCount;
+}
+
 public sealed record LibraryFolderContents(
     FolderRecord Folder,
     IReadOnlyList<FolderRecord> Folders,

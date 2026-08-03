@@ -1530,11 +1530,9 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 - Deleting a record or file moves it to the recycle bin.
 - The recycle bin covers durable user-managed library aggregates and managed files, including folders, files with owned metadata, user links, connections, models, saved generation settings and submitted generation-history records.
-- When connections, models, saved generation settings and generation-history records are implemented, their recycle entries must extend the existing unified category, search, sort, selection, confirmation and independent batch-operation workflows.
+- When connections, models, saved generation settings and generation-history records are implemented, their recycle entries and dependency-aware restore previews must extend the existing unified category, search, sort, selection, confirmation and independent batch-operation workflows.
 - Generation-tab drafts are transient working state and do not enter the recycle bin when the user confirms **Discard and Close**.
 - Device preferences, diagnostic logs, credential-index entries, queues, temporary files and regenerable preview caches are operational state rather than recyclable library records.
-- Before restoration, the application previews additional parents, descendants, models, saved settings or linked files which may also be restored.
-- Name conflicts and missing dependencies are shown before restoration is committed.
 - Integrity checks include recycled managed files.
 - Regenerable preview-cache entries can be removed when a file is recycled.
 - Secure-storage credentials are removed before their database records are finalized.

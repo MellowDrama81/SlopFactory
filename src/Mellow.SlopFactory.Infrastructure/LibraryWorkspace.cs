@@ -467,16 +467,20 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.RecycleFolderAsync(folderId, Descriptor.RootFolderId, Descriptor.GeneratedFolderId, cancellationToken);
     }
 
-    public Task RestoreFileAsync(string fileId, CancellationToken cancellationToken = default)
+    public async Task RestoreFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RestoreFileAsync(fileId, cancellationToken);
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        ValidateManagedFilesForRestore([file]);
+        await _database.RestoreFileAsync(fileId, cancellationToken).ConfigureAwait(false);
     }
 
-    public Task RestoreFolderAsync(string folderId, CancellationToken cancellationToken = default)
+    public async Task RestoreFolderAsync(string folderId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.RestoreFolderAsync(folderId, cancellationToken);
+        var files = await _database.GetFilesOwnedByRecycleBinItemAsync(new RecycleBinItemReference(RecycleBinItemKind.Folder, folderId), cancellationToken).ConfigureAwait(false);
+        ValidateManagedFilesForRestore(files);
+        await _database.RestoreFolderAsync(folderId, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PermanentlyDeleteFileAsync(string fileId, CancellationToken cancellationToken = default)
@@ -505,6 +509,56 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         ThrowIfDisposed();
         return ProcessRecycleBinItemsAsync(items, restore: true, cancellationToken);
+    }
+
+    public async Task<RecycleBinRestorePreview> GetRecycleBinRestorePreviewAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(items);
+        var references = items.Distinct().ToArray();
+        var entries = (await GetRecycleBinEntriesAsync(cancellationToken).ConfigureAwait(false)).ToDictionary(entry => entry.Reference);
+        var ownedFiles = new Dictionary<RecycleBinItemReference, IReadOnlyList<FileRecord>>();
+        foreach (var reference in references)
+        {
+            if (!entries.ContainsKey(reference)) throw new RecordNotFoundException("The selected recycle-bin item is no longer available.");
+            ownedFiles[reference] = await _database.GetFilesOwnedByRecycleBinItemAsync(reference, cancellationToken).ConfigureAwait(false);
+        }
+
+        var blockers = new Dictionary<RecycleBinItemReference, List<string>>();
+        var restorableSelectedFileIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var reference in references.Where(reference => reference.Kind != RecycleBinItemKind.FileLink))
+        {
+            var reasons = (await _database.GetRestoreBlockersAsync(reference, new HashSet<string>(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false)).ToList();
+            foreach (var file in ownedFiles[reference])
+            {
+                var fileBlocker = GetManagedFileRestoreBlocker(file);
+                if (fileBlocker is not null) reasons.Add(fileBlocker);
+            }
+            blockers[reference] = reasons;
+            if (reasons.Count == 0) restorableSelectedFileIds.UnionWith(ownedFiles[reference].Select(file => file.Id));
+        }
+        foreach (var reference in references.Where(reference => reference.Kind == RecycleBinItemKind.FileLink))
+        {
+            blockers[reference] = (await _database.GetRestoreBlockersAsync(reference, restorableSelectedFileIds, cancellationToken).ConfigureAwait(false)).ToList();
+        }
+
+        var previews = references.Select(reference =>
+        {
+            var entry = entries[reference];
+            var effects = new List<string>();
+            effects.Add(reference.Kind switch
+            {
+                RecycleBinItemKind.Folder => $"Restores {entry.OwnedFolderCount} folder(s) and {entry.OwnedFileCount} file(s) at their original locations.",
+                RecycleBinItemKind.File => "Restores the file and its attached metadata at the original location.",
+                _ => "Restores the directed file link after both endpoint files are active."
+            });
+            if (reference.Kind != RecycleBinItemKind.FileLink && entry.OwnedLinkCount > 0)
+            {
+                effects.Add($"Up to {entry.OwnedLinkCount} endpoint-owned link(s) may reactivate when both endpoints are available; explicitly recycled links remain recycled.");
+            }
+            return new RecycleBinRestorePreviewItem(entry, blockers.GetValueOrDefault(reference, []), effects);
+        }).ToArray();
+        return new RecycleBinRestorePreview(previews);
     }
 
     public Task<RecycleBinOperationResult> PermanentlyDeleteRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default)
@@ -571,6 +625,36 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         var info = new FileInfo(path);
         if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("The managed file path is a symbolic link or reparse point; deletion is paused for review.");
         File.Delete(path);
+    }
+
+    private void ValidateManagedFilesForRestore(IEnumerable<FileRecord> files)
+    {
+        foreach (var file in files)
+        {
+            var blocker = GetManagedFileRestoreBlocker(file);
+            if (blocker is not null) throw new LibraryValidationException(blocker);
+        }
+    }
+
+    private string? GetManagedFileRestoreBlocker(FileRecord file)
+    {
+        try
+        {
+            var path = _layout.ManagedFilePath(file.ManagedName);
+            if (Directory.Exists(path)) return $"Managed content for '{file.DisplayName}' was replaced by a directory and cannot be restored.";
+            if (!File.Exists(path)) return $"Managed content for '{file.DisplayName}' is missing and cannot be restored.";
+            var info = new FileInfo(path);
+            if ((info.Attributes & FileAttributes.ReparsePoint) != 0) return $"Managed content for '{file.DisplayName}' is a symbolic link or reparse point and cannot be restored.";
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return $"Managed content for '{file.DisplayName}' cannot be accessed and cannot be restored.";
+        }
+        catch (IOException)
+        {
+            return $"Managed content for '{file.DisplayName}' is unavailable and cannot be restored.";
+        }
     }
 
     private async Task<RecycleBinOperationResult> ProcessRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, bool restore, CancellationToken cancellationToken)

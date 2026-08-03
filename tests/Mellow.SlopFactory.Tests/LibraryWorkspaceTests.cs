@@ -364,6 +364,69 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task RestorePreviewReportsFileAndFolderNameConflictsBeforeMutation()
+    {
+        using var temporary = new TemporaryDirectory();
+        var originalSource = temporary.Child("conflict.txt");
+        await File.WriteAllTextAsync(originalSource, "original");
+        var replacementDirectory = temporary.Child("replacement");
+        Directory.CreateDirectory(replacementDirectory);
+        var replacementSource = Path.Combine(replacementDirectory, "conflict.txt");
+        await File.WriteAllTextAsync(replacementSource, "replacement");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var original = Assert.Single(await workspace.ImportAsync([originalSource], workspace.Descriptor.RootFolderId)).File!;
+        var recycledFolder = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Conflicting folder");
+        await workspace.RecycleFileAsync(original.Id);
+        await workspace.RecycleFolderAsync(recycledFolder.Id);
+        _ = Assert.Single(await workspace.ImportAsync([replacementSource], workspace.Descriptor.RootFolderId)).File!;
+        _ = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Conflicting folder");
+
+        var preview = await workspace.GetRecycleBinRestorePreviewAsync([
+            new RecycleBinItemReference(RecycleBinItemKind.File, original.Id),
+            new RecycleBinItemReference(RecycleBinItemKind.Folder, recycledFolder.Id)]);
+
+        Assert.Equal(0, preview.RestorableCount);
+        Assert.Equal(2, preview.BlockedCount);
+        Assert.All(preview.Items, item => Assert.Contains(item.BlockingReasons, reason => reason.Contains("conflict", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(LibraryRecordState.Recycled, (await workspace.GetFileAsync(original.Id)).State);
+        await Assert.ThrowsAsync<NameConflictException>(() => workspace.RestoreFileAsync(original.Id));
+        Assert.Equal(LibraryRecordState.Recycled, (await workspace.GetFileAsync(original.Id)).State);
+    }
+
+    [Fact]
+    public async Task RestorePreviewResolvesSelectedLinkEndpointsAndBlocksMissingManagedContent()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourceA = temporary.Child("restore-a.txt");
+        var sourceB = temporary.Child("restore-b.txt");
+        await File.WriteAllTextAsync(sourceA, "a");
+        await File.WriteAllTextAsync(sourceB, "b");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var fileA = Assert.Single(await workspace.ImportAsync([sourceA], workspace.Descriptor.RootFolderId)).File!;
+        var fileB = Assert.Single(await workspace.ImportAsync([sourceB], workspace.Descriptor.RootFolderId)).File!;
+        var link = await workspace.CreateLinkAsync(fileA.Id, fileB.Id, "restore dependency");
+        await workspace.RecycleLinkAsync(link.Id);
+        await workspace.RecycleFileAsync(fileA.Id);
+        var fileReference = new RecycleBinItemReference(RecycleBinItemKind.File, fileA.Id);
+        var linkReference = new RecycleBinItemReference(RecycleBinItemKind.FileLink, link.Id);
+
+        var linkOnly = await workspace.GetRecycleBinRestorePreviewAsync([linkReference]);
+        Assert.False(Assert.Single(linkOnly.Items).CanRestore);
+
+        var together = await workspace.GetRecycleBinRestorePreviewAsync([fileReference, linkReference]);
+        Assert.All(together.Items, item => Assert.True(item.CanRestore));
+
+        File.Delete(workspace.GetManagedFilePath(fileA));
+        var missing = await workspace.GetRecycleBinRestorePreviewAsync([fileReference, linkReference]);
+        Assert.Equal(2, missing.BlockedCount);
+        Assert.Contains(missing.Items.Single(item => item.Entry.Reference == fileReference).BlockingReasons, reason => reason.Contains("missing", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(missing.Items.Single(item => item.Entry.Reference == linkReference).BlockingReasons, reason => reason.Contains("included", StringComparison.OrdinalIgnoreCase));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RestoreFileAsync(fileA.Id));
+    }
+
+    [Fact]
     public async Task FilesAndFolderSubtreesCanBeRenamedAndMovedWithoutMovingManagedBytes()
     {
         using var temporary = new TemporaryDirectory();

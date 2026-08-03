@@ -383,6 +383,113 @@ internal sealed class SqliteLibraryDatabase
         return results.OrderByDescending(item => item.RecycledAt).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    public async Task<IReadOnlyList<FileRecord>> GetFilesOwnedByRecycleBinItemAsync(RecycleBinItemReference reference, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        if (reference.Kind == RecycleBinItemKind.File)
+        {
+            return [await GetFileAsync(connection, reference.Id, cancellationToken).ConfigureAwait(false)];
+        }
+        if (reference.Kind != RecycleBinItemKind.Folder) return [];
+
+        var results = new List<FileRecord>();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            WITH RECURSIVE descendants(id) AS (
+                SELECT $id UNION ALL SELECT child.id FROM folders child JOIN descendants ON child.parent_id=descendants.id
+            )
+            SELECT file.id,file.folder_id,file.display_name,file.managed_name,file.content_hash,file.byte_size,file.media_type,file.origin,file.state,file.imported_at,file.modified_at,file.source_last_modified,file.recycled_at
+            FROM files file WHERE file.folder_id IN (SELECT id FROM descendants) ORDER BY file.id;
+            """;
+        command.Parameters.AddWithValue("$id", reference.Id);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadFile(reader));
+        return results;
+    }
+
+    public async Task<IReadOnlyList<string>> GetRestoreBlockersAsync(RecycleBinItemReference reference, IReadOnlySet<string> selectedFileIds, CancellationToken cancellationToken)
+    {
+        var blockers = new List<string>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        switch (reference.Kind)
+        {
+            case RecycleBinItemKind.File:
+            {
+                var file = await GetFileAsync(connection, reference.Id, cancellationToken).ConfigureAwait(false);
+                if (file.State != LibraryRecordState.Recycled) blockers.Add("Only a recycled file can be restored.");
+                var parent = await GetFolderAsync(connection, file.FolderId, cancellationToken).ConfigureAwait(false);
+                if (parent.State != LibraryRecordState.Active) blockers.Add($"Its original folder '{parent.Name}' must be restored first.");
+                await using var conflict = connection.CreateCommand();
+                conflict.CommandText = """
+                    SELECT EXISTS(
+                        SELECT 1 FROM files candidate JOIN files restoring ON restoring.id=$id
+                        WHERE candidate.folder_id=restoring.folder_id AND candidate.name_key=restoring.name_key AND candidate.state=0 AND candidate.id<>restoring.id
+                        UNION ALL
+                        SELECT 1 FROM folders candidate JOIN files restoring ON restoring.id=$id
+                        WHERE candidate.parent_id=restoring.folder_id AND candidate.name_key=restoring.name_key AND candidate.state=0);
+                    """;
+                conflict.Parameters.AddWithValue("$id", reference.Id);
+                if (Convert.ToInt32(await conflict.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) != 0)
+                {
+                    blockers.Add($"An active item named '{file.DisplayName}' already exists in the original folder.");
+                }
+                break;
+            }
+            case RecycleBinItemKind.Folder:
+            {
+                var folder = await GetFolderAsync(connection, reference.Id, cancellationToken).ConfigureAwait(false);
+                if (folder.State != LibraryRecordState.Recycled) blockers.Add("Only a recycled folder can be restored.");
+                if (folder.ParentId is not null)
+                {
+                    var parent = await GetFolderAsync(connection, folder.ParentId, cancellationToken).ConfigureAwait(false);
+                    if (parent.State != LibraryRecordState.Active) blockers.Add($"Its original parent folder '{parent.Name}' must be restored first.");
+                }
+                await using var conflict = connection.CreateCommand();
+                conflict.CommandText = """
+                    WITH RECURSIVE descendants(id) AS (
+                        SELECT $id UNION ALL SELECT child.id FROM folders child JOIN descendants ON child.parent_id=descendants.id
+                    )
+                    SELECT EXISTS(
+                        SELECT 1 FROM folders restoring JOIN folders candidate
+                          ON candidate.parent_id=restoring.parent_id AND candidate.name_key=restoring.name_key
+                        WHERE restoring.id IN (SELECT id FROM descendants) AND candidate.state=0 AND candidate.id<>restoring.id
+                        UNION ALL
+                        SELECT 1 FROM folders restoring JOIN files candidate
+                          ON candidate.folder_id=restoring.parent_id AND candidate.name_key=restoring.name_key
+                        WHERE restoring.id IN (SELECT id FROM descendants) AND candidate.state=0
+                        UNION ALL
+                        SELECT 1 FROM files restoring JOIN files candidate
+                          ON candidate.folder_id=restoring.folder_id AND candidate.name_key=restoring.name_key
+                        WHERE restoring.folder_id IN (SELECT id FROM descendants) AND candidate.state=0 AND candidate.id<>restoring.id
+                        UNION ALL
+                        SELECT 1 FROM files restoring JOIN folders candidate
+                          ON candidate.parent_id=restoring.folder_id AND candidate.name_key=restoring.name_key
+                        WHERE restoring.folder_id IN (SELECT id FROM descendants) AND candidate.state=0);
+                    """;
+                conflict.Parameters.AddWithValue("$id", reference.Id);
+                if (Convert.ToInt32(await conflict.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) != 0)
+                {
+                    blockers.Add("One or more names in this folder hierarchy conflict with active items at their original locations.");
+                }
+                break;
+            }
+            case RecycleBinItemKind.FileLink:
+            {
+                var link = await GetLinkAsync(connection, reference.Id, cancellationToken).ConfigureAwait(false);
+                if (!link.ExplicitlyRecycled) blockers.Add("Only an explicitly recycled link can be restored.");
+                var source = await GetFileAsync(connection, link.SourceFileId, cancellationToken).ConfigureAwait(false);
+                var target = await GetFileAsync(connection, link.TargetFileId, cancellationToken).ConfigureAwait(false);
+                if (source.State != LibraryRecordState.Active && !selectedFileIds.Contains(source.Id)) blockers.Add($"Source file '{source.DisplayName}' must be restored first or included in this selection.");
+                if (target.State != LibraryRecordState.Active && !selectedFileIds.Contains(target.Id)) blockers.Add($"Target file '{target.DisplayName}' must be restored first or included in this selection.");
+                break;
+            }
+            default:
+                blockers.Add("The recycle-bin item type is not supported.");
+                break;
+        }
+        return blockers;
+    }
+
     public async Task<FolderRecord> CreateFolderAsync(string parentId, string name, CancellationToken cancellationToken)
     {
         var normalized = LibraryRules.NormalizeDisplayName(name, "Folder name");
@@ -904,14 +1011,14 @@ internal sealed class SqliteLibraryDatabase
         if (state == LibraryRecordState.Active && file.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled file can be restored.");
         if (state == LibraryRecordState.Recycled && file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be recycled.");
         var now = Format(DateTimeOffset.UtcNow);
-        await ExecuteNonQueryAsync(connection,
-            state == LibraryRecordState.Active
-                ? "UPDATE files SET state=0,recycled_at=NULL,modified_at=$now WHERE id=$id;"
-                : "UPDATE files SET state=1,recycled_at=$now,modified_at=$now WHERE id=$id;",
-            cancellationToken, transaction, ("$id", fileId), ("$now", now)).ConfigureAwait(false);
-        await RefreshLinkStatesAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
         try
         {
+            await ExecuteNonQueryAsync(connection,
+                state == LibraryRecordState.Active
+                    ? "UPDATE files SET state=0,recycled_at=NULL,modified_at=$now WHERE id=$id;"
+                    : "UPDATE files SET state=1,recycled_at=$now,modified_at=$now WHERE id=$id;",
+                cancellationToken, transaction, ("$id", fileId), ("$now", now)).ConfigureAwait(false);
+            await RefreshLinkStatesAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)

@@ -36,8 +36,27 @@
             }
             @if (_pendingEntries.Count > 6) { <li>And @(_pendingEntries.Count - 6) more item(s).</li> }
         </ul>
+        @if (_pendingAction == RecycleBinAction.Restore)
+        {
+            <div class="restore-review">
+                @foreach (var preview in _restorePreview.Items)
+                {
+                    <div class="restore-review-item">
+                        <strong>@preview.Entry.Name</strong>
+                        <ul>
+                            @foreach (var effect in preview.Effects) { <li>@effect</li> }
+                            @foreach (var blocker in preview.BlockingReasons) { <li class="error">Blocked: @blocker</li> }
+                        </ul>
+                    </div>
+                }
+                @if (_restorePreview.BlockedCount > 0)
+                {
+                    <p class="error"><strong>@_restorePreview.BlockedCount item(s) will remain unchanged.</strong> Resolve the listed conflicts or dependencies, then retry them.</p>
+                }
+            </div>
+        }
         <div class="actions">
-            <button class="@(_pendingAction == RecycleBinAction.Restore ? string.Empty : "danger")" disabled="@_isBusy" @onclick="ConfirmPendingActionAsync">@ConfirmationButtonLabel</button>
+            <button class="@(_pendingAction == RecycleBinAction.Restore ? string.Empty : "danger")" disabled="@(_isBusy || (_pendingAction == RecycleBinAction.Restore && _restorePreview.RestorableCount == 0))" @onclick="ConfirmPendingActionAsync">@ConfirmationButtonLabel</button>
             <button class="secondary" disabled="@_isBusy" @onclick="CancelPendingAction">Cancel</button>
         </div>
     </section>
@@ -116,6 +135,7 @@ else
     private readonly HashSet<RecycleBinItemReference> _selected = [];
     private IReadOnlyList<RecycleBinEntry> _pendingEntries = [];
     private IReadOnlyList<RecycleBinOperationItemResult> _failures = [];
+    private RecycleBinRestorePreview _restorePreview = new([]);
     private RecycleBinAction? _pendingAction;
     private string _search = string.Empty;
     private string _category = "all";
@@ -156,9 +176,9 @@ else
     private int SelectedRestorableCount => _entries.Count(entry => _selected.Contains(entry.Reference) && entry.State == LibraryRecordState.Recycled);
     private string ConfirmationTitle => _pendingAction switch { RecycleBinAction.Restore => "Restore selected items?", RecycleBinAction.Empty => "Empty the recycle bin?", _ => "Permanently delete selected items?" };
     private string ConfirmationMessage => _pendingAction == RecycleBinAction.Restore
-        ? "Folders restore their complete descendant hierarchy. File links are restored only after their endpoint files are available."
+        ? "Review every affected aggregate, name conflict, managed file, and link dependency before restoration. Only unblocked items will be changed."
         : "Permanent deletion cannot be undone. Managed files, metadata, and affected file links will be removed.";
-    private string ConfirmationButtonLabel => _pendingAction switch { RecycleBinAction.Restore => "Restore", RecycleBinAction.Empty => "Empty recycle bin", _ => "Delete permanently" };
+    private string ConfirmationButtonLabel => _pendingAction switch { RecycleBinAction.Restore => $"Restore {_restorePreview.RestorableCount} item(s)", RecycleBinAction.Empty => "Empty recycle bin", _ => "Delete permanently" };
 
     protected override async Task OnInitializedAsync()
     {
@@ -180,14 +200,29 @@ else
 
     private void SelectVisible() => _selected.UnionWith(VisibleEntries.Select(entry => entry.Reference));
     private void ClearSelection() => _selected.Clear();
-    private void BeginRestoreSelected() => BeginRestore(_selected);
+    private Task BeginRestoreSelected() => BeginRestore(_selected);
     private void BeginDeleteSelected() => BeginDelete(_selected);
     private void BeginEmpty() => BeginAction(RecycleBinAction.Empty, _entries);
 
-    private void BeginRestore(IEnumerable<RecycleBinItemReference> references)
+    private async Task BeginRestore(IEnumerable<RecycleBinItemReference> references)
     {
         var selected = references.ToHashSet();
-        BeginAction(RecycleBinAction.Restore, _entries.Where(entry => selected.Contains(entry.Reference) && entry.State == LibraryRecordState.Recycled));
+        var entries = _entries.Where(entry => selected.Contains(entry.Reference) && entry.State == LibraryRecordState.Recycled).ToArray();
+        if (entries.Length == 0 || LibraryState.Workspace is null) return;
+        _isBusy = true;
+        try
+        {
+            _restorePreview = await LibraryState.Workspace.GetRecycleBinRestorePreviewAsync(entries.Select(entry => entry.Reference).ToArray());
+            BeginAction(RecycleBinAction.Restore, entries);
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
     }
 
     private void BeginDelete(IEnumerable<RecycleBinItemReference> references)
@@ -210,6 +245,7 @@ else
     {
         _pendingAction = null;
         _pendingEntries = [];
+        _restorePreview = new([]);
     }
 
     private async Task ConfirmPendingActionAsync()
@@ -220,7 +256,7 @@ else
         {
             var result = _pendingAction switch
             {
-                RecycleBinAction.Restore => await LibraryState.Workspace.RestoreRecycleBinItemsAsync(_pendingEntries.Select(entry => entry.Reference).ToArray()),
+                RecycleBinAction.Restore => await LibraryState.Workspace.RestoreRecycleBinItemsAsync(_restorePreview.Items.Where(item => item.CanRestore).Select(item => item.Entry.Reference).ToArray()),
                 RecycleBinAction.Empty => await LibraryState.Workspace.EmptyRecycleBinAsync(),
                 _ => await LibraryState.Workspace.PermanentlyDeleteRecycleBinItemsAsync(_pendingEntries.Select(entry => entry.Reference).ToArray())
             };
@@ -235,6 +271,7 @@ else
             _isBusy = false;
             _pendingAction = null;
             _pendingEntries = [];
+            _restorePreview = new([]);
             await ReloadAsync();
         }
     }

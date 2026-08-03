@@ -44,6 +44,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task PermanentlyDeleteFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteFolderAsync(string folderId, CancellationToken cancellationToken = default);
     Task<RecycleBinOperationResult> RestoreRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default);
+    Task<RecycleBinRestorePreview> GetRecycleBinRestorePreviewAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default);
     Task<RecycleBinOperationResult> PermanentlyDeleteRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default);
     Task<RecycleBinOperationResult> EmptyRecycleBinAsync(CancellationToken cancellationToken = default);
     Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default);
