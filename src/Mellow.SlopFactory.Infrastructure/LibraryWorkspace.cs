@@ -492,17 +492,24 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public Task<IReadOnlyList<ImportResult>> ImportAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates = false, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => ImportCoreAsync(sourcePaths, destinationFolderId, importDuplicates, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => ImportCoreAsync(sourcePaths, destinationFolderId, importDuplicates, null, returnCancellationResults: false, cancellationToken: cancellationToken), cancellationToken);
     }
 
-    private async Task<IReadOnlyList<ImportResult>> ImportCoreAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ImportResult>> ImportWithProgressAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates, IProgress<ImportProgress>? progress, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => ImportCoreAsync(sourcePaths, destinationFolderId, importDuplicates, progress, returnCancellationResults: true, cancellationToken: cancellationToken), cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ImportResult>> ImportCoreAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates, IProgress<ImportProgress>? progress, bool returnCancellationResults, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sourcePaths);
         _ = await _database.GetFolderContentsAsync(destinationFolderId, cancellationToken).ConfigureAwait(false);
+        var paths = sourcePaths.ToArray();
         var results = new List<ImportResult>();
-        foreach (var sourcePath in sourcePaths)
+        for (var itemIndex = 0; itemIndex < paths.Length; itemIndex++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var sourcePath = paths[itemIndex];
             ImportCandidate? candidate = null;
             string? stagingPath = null;
             string? managedPath = null;
@@ -512,11 +519,13 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 if (!info.Exists) throw new FileNotFoundException("The selected source file no longer exists.", sourcePath);
                 var displayName = LibraryRules.NormalizeDisplayName(info.Name, "File name");
                 candidate = new ImportCandidate(info.FullName, displayName, info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero));
-                var hash = await Hashing.Sha256Async(info.FullName, cancellationToken).ConfigureAwait(false);
+                progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Hashing source", 0, info.Length));
+                var hash = await Hashing.Sha256Async(info.FullName, cancellationToken, bytes => progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Hashing source", bytes, info.Length))).ConfigureAwait(false);
                 var matches = await _database.FindByHashAsync(hash, info.Length, cancellationToken).ConfigureAwait(false);
                 if (matches.Count > 0 && !importDuplicates)
                 {
                     results.Add(new ImportResult(candidate, null, ImportOutcome.DuplicateSkipped, matches, null));
+                    progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Duplicate skipped", info.Length, info.Length));
                     continue;
                 }
 
@@ -525,7 +534,8 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 var managedName = fileId + safeExtension;
                 stagingPath = _layout.StagingFilePath(fileId + ".importing");
                 managedPath = _layout.ManagedFilePath(managedName);
-                var copied = await Hashing.CopyAndHashAsync(info.FullName, stagingPath, cancellationToken).ConfigureAwait(false);
+                progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Copying into managed storage", 0, info.Length));
+                var copied = await Hashing.CopyAndHashAsync(info.FullName, stagingPath, cancellationToken, bytes => progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Copying into managed storage", bytes, info.Length))).ConfigureAwait(false);
                 if (!string.Equals(copied.Hash, hash, StringComparison.Ordinal) || copied.Bytes != info.Length)
                 {
                     throw new IOException("The source file changed while it was being imported.");
@@ -547,12 +557,20 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 }
                 managedPath = null;
                 results.Add(new ImportResult(candidate, record, ImportOutcome.Imported, matches, null));
+                progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Completed", info.Length, info.Length));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 TryDelete(stagingPath);
                 TryDelete(managedPath);
-                throw;
+                if (!returnCancellationResults) throw;
+                candidate ??= new ImportCandidate(sourcePath, Path.GetFileName(sourcePath), 0, null);
+                results.Add(new ImportResult(candidate, null, ImportOutcome.Cancelled, [], null));
+                for (var remaining = itemIndex + 1; remaining < paths.Length; remaining++)
+                {
+                    results.Add(new ImportResult(new ImportCandidate(paths[remaining], Path.GetFileName(paths[remaining]), 0, null), null, ImportOutcome.Cancelled, [], null));
+                }
+                break;
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
             {

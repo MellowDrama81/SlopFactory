@@ -26,9 +26,13 @@ Library settings keeps a device-local **Recent libraries** list showing each lib
 3. Select **Import files**.
 4. Choose one or more files in the operating-system picker.
 
+SlopFactory then opens **Review import** without copying anything into the library. Confirm the active target library, choose any active destination folder, remove unwanted selections, and decide whether byte-identical files should be skipped or imported as independent records. **Import files** begins only after this review.
+
 SlopFactory copies every successful import into managed storage and calculates a SHA-256 content hash. It never treats the selected external file as its managed copy.
 
 When the same bytes already exist in the library, the default import skips the duplicate and reports it in the completion summary. A failed file does not undo files that already imported successfully.
+
+Hashing and managed copying show the current file, item count, stage, and byte progress. **Cancel remaining import** removes the active staging copy, keeps files which already committed, and marks the active and not-yet-started items cancelled. The per-file results distinguish imported, duplicate-skipped, failed, and cancelled items. Imported records and skipped matches provide direct open actions.
 
 ## Creating folders
 

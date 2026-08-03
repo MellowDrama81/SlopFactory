@@ -28,7 +28,7 @@ else
         </div>
         <div class="actions">
             <button class="secondary" @onclick="ToggleFolderForm">New folder</button>
-            <button @onclick="ImportAsync" disabled="@_busy">@(_busy ? "Importing…" : "Import files")</button>
+            <button @onclick="ChooseImportFilesAsync" disabled="@_busy">Import files</button>
         </div>
     </header>
 
@@ -45,6 +45,63 @@ else
     @if (!string.IsNullOrEmpty(_message))
     {
         <div class="notice" role="status">@_message</div>
+    }
+
+    @if (_pendingImports.Count > 0)
+    {
+        <section class="panel import-review" aria-labelledby="import-review-title">
+            <h2 id="import-review-title">Review import</h2>
+            <p>Target library: <strong>@LibraryState.Workspace.Descriptor.DisplayName</strong></p>
+            <label for="import-folder">Destination folder</label>
+            <InputSelect id="import-folder" @bind-Value="_importForm.DestinationFolderId" disabled="@_busy">
+                @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
+            </InputSelect>
+            <label class="check"><InputCheckbox @bind-Value="_importForm.ImportDuplicates" disabled="@_busy" /> Import byte-identical files as separate records instead of skipping them</label>
+            <ul class="metadata-list">
+                @foreach (var candidate in _pendingImports)
+                {
+                    <li>
+                        <div><strong>@candidate.DisplayName</strong><small>@(candidate.ByteSize is null ? "Size unavailable until import" : FormatBytes(candidate.ByteSize.Value))</small></div>
+                        <button class="ghost danger" disabled="@_busy" @onclick="() => RemovePendingImport(candidate.Path)">Remove</button>
+                    </li>
+                }
+            </ul>
+            @if (_importProgress is not null)
+            {
+                <div class="scan-progress" role="status" aria-live="polite">
+                    <progress max="@Math.Max(_importProgress.TotalBytes, 1)" value="@_importProgress.BytesProcessed"></progress>
+                    <span>@_importProgress.Stage: @_importProgress.DisplayName Â· item @_importProgress.ItemIndex of @_importProgress.TotalItems</span>
+                </div>
+            }
+            <div class="actions">
+                <button disabled="@_busy" @onclick="ConfirmImportAsync">@(_busy ? "Importing..." : $"Import {_pendingImports.Count} file(s)")</button>
+                @if (_busy) { <button class="secondary" @onclick="CancelImport">Cancel remaining import</button> }
+                else { <button class="secondary" @onclick="CancelImportReview">Cancel</button> }
+            </div>
+        </section>
+    }
+
+    @if (_lastImportResults.Count > 0)
+    {
+        <section class="panel import-results" aria-labelledby="import-results-title">
+            <div class="section-heading"><h2 id="import-results-title">Import results</h2><button class="ghost" @onclick="() => _lastImportResults = []">Dismiss</button></div>
+            <ul class="metadata-list">
+                @foreach (var result in _lastImportResults)
+                {
+                    <li>
+                        <div><strong>@result.Candidate.DisplayName</strong><small>@ImportOutcomeLabel(result.Outcome)@(!string.IsNullOrWhiteSpace(result.Error) ? $" Â· {result.Error}" : string.Empty)</small></div>
+                        @if (result.Outcome == ImportOutcome.DuplicateSkipped)
+                        {
+                            @foreach (var match in result.Matches.Take(3)) { <button class="ghost" @onclick="() => OpenFile(match.Id)">Open existing @match.DisplayName</button> }
+                        }
+                        else if (result.File is not null)
+                        {
+                            <button class="ghost" @onclick="() => OpenFile(result.File.Id)">Open imported file</button>
+                        }
+                    </li>
+                }
+            </ul>
+        </section>
     }
 
     @if (_editingFileId is not null || _editingFolderId is not null)
@@ -173,7 +230,7 @@ else
             <div class="empty-panel">
                 <p>@(HasBrowserCriteria ? "No files match the current search and filters." : "There are no files in this folder.")</p>
                 @if (HasBrowserCriteria) { <button class="secondary" @onclick="ClearBrowserAsync">Clear search and filters</button> }
-                else { <button @onclick="ImportAsync">Import files</button> }
+                else { <button @onclick="ChooseImportFilesAsync">Import files</button> }
             </div>
         }
         else
@@ -251,6 +308,11 @@ else
     private IReadOnlyList<FolderRecord> _activeFolders = [];
     private readonly Dictionary<string, PreviewThumbnail> _thumbnails = new(StringComparer.Ordinal);
     private CancellationTokenSource? _thumbnailCancellation;
+    private List<PendingImport> _pendingImports = [];
+    private IReadOnlyList<ImportResult> _lastImportResults = [];
+    private ImportForm _importForm = new();
+    private ImportProgress? _importProgress;
+    private CancellationTokenSource? _importCancellation;
     private LibraryBrowserSession _browser => LibraryState.BrowserSession;
     private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null;
     private int CurrentPage => _browseResult is null ? 1 : (_browseResult.Offset / PageSize) + 1;
@@ -340,6 +402,8 @@ else
     {
         _thumbnailCancellation?.Cancel();
         _thumbnailCancellation?.Dispose();
+        _importCancellation?.Cancel();
+        _importCancellation?.Dispose();
         _thumbnailCancellation = new CancellationTokenSource();
         _thumbnails.Clear();
         if (_browseResult is null || LibraryState.Workspace is null) return;
@@ -398,21 +462,49 @@ else
         return names.Count == 0 ? "Unknown folder" : string.Join(" / ", names);
     }
 
-    private async Task ImportAsync()
+    private async Task ChooseImportFilesAsync()
     {
         if (_contents is null || LibraryState.Workspace is null) return;
         var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = "Import files into SlopFactory" });
-        var paths = picked?.OfType<FileResult>().Select(item => item.FullPath).OfType<string>().Where(path => !string.IsNullOrWhiteSpace(path)).ToArray() ?? [];
-        if (paths.Length == 0) return;
+        var files = picked?.OfType<FileResult>().Where(item => !string.IsNullOrWhiteSpace(item.FullPath)).ToArray() ?? [];
+        if (files.Length == 0) return;
+        _pendingImports = files.Select(item =>
+        {
+            long? size = null;
+            try { var info = new FileInfo(item.FullPath); if (info.Exists) size = info.Length; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) { }
+            return new PendingImport(item.FullPath, string.IsNullOrWhiteSpace(item.FileName) ? Path.GetFileName(item.FullPath) : item.FileName, size);
+        }).GroupBy(item => item.Path, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).Select(group => group.First()).ToList();
+        _importForm = new ImportForm { DestinationFolderId = _contents.Folder.Id };
+        _lastImportResults = [];
+        _importProgress = null;
+    }
+
+    private async Task ConfirmImportAsync()
+    {
+        if (_pendingImports.Count == 0 || LibraryState.Workspace is null) return;
         _busy = true;
+        _importCancellation?.Dispose();
+        _importCancellation = new CancellationTokenSource();
+        var progress = new Progress<ImportProgress>(value =>
+        {
+            _importProgress = value;
+            _ = InvokeAsync(StateHasChanged);
+        });
         try
         {
-            var results = await LibraryState.Workspace.ImportAsync(paths, _contents.Folder.Id);
-            _message = $"Imported {results.Count(item => item.Outcome == ImportOutcome.Imported)}; skipped {results.Count(item => item.Outcome == ImportOutcome.DuplicateSkipped)} duplicate(s); {results.Count(item => item.Outcome == ImportOutcome.Failed)} failed.";
-            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
+            _lastImportResults = await LibraryState.Workspace.ImportWithProgressAsync(_pendingImports.Select(item => item.Path), _importForm.DestinationFolderId, _importForm.ImportDuplicates, progress, _importCancellation.Token);
+            _message = $"Imported {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Imported)}; skipped {_lastImportResults.Count(item => item.Outcome == ImportOutcome.DuplicateSkipped)} duplicate(s); {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Failed)} failed; {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Cancelled)} cancelled.";
+            _pendingImports = [];
+            _importProgress = null;
+            if (_contents is not null) await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
         finally { _busy = false; }
     }
+
+    private void RemovePendingImport(string path) => _pendingImports.RemoveAll(item => string.Equals(item.Path, path, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+    private void CancelImport() => _importCancellation?.Cancel();
+    private void CancelImportReview() { _pendingImports = []; _importProgress = null; }
 
     private void ToggleFolderForm() => _showFolderForm = !_showFolderForm;
 
@@ -578,6 +670,14 @@ else
         _ => $"{bytes} B"
     };
 
+    private static string ImportOutcomeLabel(ImportOutcome outcome) => outcome switch
+    {
+        ImportOutcome.Imported => "Imported",
+        ImportOutcome.DuplicateSkipped => "Duplicate skipped",
+        ImportOutcome.Cancelled => "Cancelled",
+        _ => "Failed"
+    };
+
     private sealed class FolderForm { public string Name { get; set; } = string.Empty; }
     private sealed class ItemForm
     {
@@ -588,5 +688,11 @@ else
     {
         public string Name { get; set; } = string.Empty;
         public string DestinationFolderId { get; set; } = string.Empty;
+    }
+    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize);
+    private sealed class ImportForm
+    {
+        public string DestinationFolderId { get; set; } = string.Empty;
+        public bool ImportDuplicates { get; set; }
     }
 }

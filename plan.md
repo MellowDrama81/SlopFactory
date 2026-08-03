@@ -878,6 +878,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Before import, the user can explicitly enable **Include Hidden Files**; the choice applies only to that reviewed import operation.
 - The completion summary reports hidden items skipped by policy.
 - Protected system files, filesystem metadata, symbolic links, junctions, reparse-point redirections and other non-regular entries are always excluded even when hidden files are included.
+- Windows recursive import does not follow symbolic links or junctions.
 - Before recursive copying starts, SlopFactory performs a cancellable, non-mutating preflight inventory.
 - The preflight shows eligible file count, total known byte size, proposed virtual-folder hierarchy, detected duplicate content, name conflicts and counts grouped by skipped-item reason.
 - When a picker, document provider or permission prevents complete enumeration or reliable sizing, the preflight labels its totals incomplete and explains that additional per-file failures may occur.
@@ -889,34 +890,21 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - A missing, inaccessible or content-changed candidate is skipped and reported for re-review rather than silently importing bytes different from those reviewed.
 - Revalidation failure for one candidate does not stop unrelated validated files from importing.
 - An imported directory hierarchy is recreated as virtual library folders.
-- Every imported file is copied into managed storage and no external file reference is retained.
 - Import copies only the selected regular file's primary byte stream and assigns SlopFactory-controlled permissions in managed storage.
 - Source ACLs, ownership, hidden or read-only attributes, executable flags, alternate data streams and extended attributes are not applied to the managed copy or exposed as editable library metadata.
 - On Windows, SlopFactory reads a source Mark-of-the-Web zone when available and retains only a normalized read-only security-zone classification as system metadata.
 - Source and referrer URLs from zone metadata are not retained.
 - Files downloaded from an AI provider are classified as internet-origin content for Windows export protection even when no raw zone stream exists in managed storage.
 - Failure to read the primary stream fails that file's import; SlopFactory does not fall back to copying a different stream or filesystem object.
-- Each file is an independent import, so one failure does not roll back successfully imported files.
-- Bulk import displays progress, supports cancellation and shows a completion summary.
-- Cancelling stops files which have not started and retains completed imports.
-- Windows recursive import does not follow symbolic links or junctions.
-- Duplicate detection and naming-conflict rules are applied to every imported file.
 - After its SHA-256 digest and byte size are verified, a newly imported file inherits any existing shared provider safety classification for the same bytes in the active library.
 - Import review identifies a known classification when preflight has already verified the bytes; otherwise the completion summary reports the inherited classification after copying and hashing finishes.
 - Bulk-import preflight groups candidates whose content hashes match existing library files.
 - **Skip Duplicates** is the default bulk choice, with **Import All Anyway** and per-file overrides available before confirmation.
 - The running copy phase does not interrupt the user with a separate modal for each duplicate already resolved during preflight.
-- Skipped duplicates identify all matching existing records in the completion summary and provide navigation actions.
-- A candidate intentionally imported despite a match receives a new stable file ID, separate managed bytes and the normal numeric-suffix display name.
 - Duplicate detection includes matching files in the recycle bin and labels them **Recycled Match** rather than treating them as active existing content.
 - A recycled match offers **Restore Existing**, **Import Anyway**, and **Skip** and is never restored automatically.
 - **Restore Existing** runs the normal restoration preview for folder, name and dependency effects before the import operation is confirmed.
 - A matching record in **Pending Permanent Deletion** or failed permanent-deletion cleanup is not restorable; preflight identifies that state and permits only **Import Anyway** or **Skip**.
-- Per-file failures are recorded without exposing external paths in ordinary diagnostic logs.
-- Exported SlopFactory JSON sidecars are documentation-only in the first release and have no privileged import behavior.
-- Importing a media file alongside a sidecar imports each selected item as an independent ordinary file.
-- Sidecar contents are not automatically applied as metadata and do not recreate identifiers, folders, links, models or generation provenance.
-- A JSON file which happens to match the sidecar schema is still treated as untrusted library content.
 
 ## Library Organization
 

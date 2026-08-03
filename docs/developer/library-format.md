@@ -56,6 +56,8 @@ The GUI retains folder, query, filters, sort, offset, and view mode in the activ
 
 Files are never loaded completely into memory by the import or hashing implementation.
 
+`ImportWithProgressAsync` reports item/stage and byte progress during both the initial source digest and the independent copy-and-hash pass. Cancellation during a file deletes its unique staging and not-yet-committed managed paths, returns that item and all remaining candidates as `Cancelled`, and retains earlier committed imports. Duplicate skips and ordinary failures remain independent results. The GUI freezes the selected path set behind a review, destination, and duplicate-policy choice before calling this operation.
+
 ## In-library duplication
 
 Duplication streams the managed source through a staging file while calculating SHA-256 again. The calculated digest and byte count must match the source record before the staged bytes are committed under a new opaque managed name. The new `UserCopy` file row and copied user-metadata rows commit in one database transaction; failure removes the new managed bytes. User-created links are not copied.

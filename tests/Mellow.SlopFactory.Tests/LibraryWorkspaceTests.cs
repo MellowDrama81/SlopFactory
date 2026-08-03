@@ -116,6 +116,31 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task ProgressImportCancellationCleansActiveStagingAndReportsRemainingItems()
+    {
+        using var temporary = new TemporaryDirectory();
+        var firstPath = temporary.Child("first.bin");
+        var secondPath = temporary.Child("second.bin");
+        await File.WriteAllBytesAsync(firstPath, new byte[2_500_000]);
+        await File.WriteAllBytesAsync(secondPath, new byte[32]);
+        var factory = new LibraryWorkspaceFactory();
+        var root = temporary.Child("library");
+        await using var workspace = await factory.CreateAsync(root);
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<ImportProgress>(value =>
+        {
+            if (value.Stage == "Copying into managed storage" && value.BytesProcessed > 0) cancellation.Cancel();
+        });
+
+        var results = await workspace.ImportWithProgressAsync([firstPath, secondPath], workspace.Descriptor.RootFolderId, false, progress, cancellation.Token);
+
+        Assert.Equal([ImportOutcome.Cancelled, ImportOutcome.Cancelled], results.Select(result => result.Outcome));
+        Assert.Empty(await workspace.GetActiveFilesAsync());
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(root, ".staging")));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(root, "media")));
+    }
+
+    [Fact]
     public async Task MetadataLinksAndRecycleStateRemainConsistent()
     {
         using var temporary = new TemporaryDirectory();

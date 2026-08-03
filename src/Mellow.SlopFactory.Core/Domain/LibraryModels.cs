@@ -251,6 +251,14 @@ public sealed record ImportResult(
     IReadOnlyList<FileRecord> Matches,
     string? Error);
 
+public sealed record ImportProgress(
+    int ItemIndex,
+    int TotalItems,
+    string DisplayName,
+    string Stage,
+    long BytesProcessed,
+    long TotalBytes);
+
 public sealed record TextFileContent(
     string Content,
     bool IsTruncated,
