@@ -1,0 +1,84 @@
+using Mellow.SlopFactory.Application;
+using Mellow.SlopFactory.Domain;
+
+namespace Mellow.SlopFactory.Gui.Services;
+
+public sealed class AppLibraryState : IAsyncDisposable
+{
+    private readonly ILibraryWorkspaceFactory _factory;
+    private readonly ILibraryLocationService _locations;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    public AppLibraryState(ILibraryWorkspaceFactory factory, ILibraryLocationService locations)
+    {
+        _factory = factory;
+        _locations = locations;
+    }
+
+    public ILibraryWorkspace? Workspace { get; private set; }
+    public string? Error { get; private set; }
+    public bool IsInitialized { get; private set; }
+    public string? ActivePath { get; private set; }
+    public event EventHandler? Changed;
+
+    public async Task InitializeAsync()
+    {
+        if (IsInitialized) return;
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (IsInitialized) return;
+            var path = Preferences.Default.Get("active_library_path", _locations.DefaultPath);
+            try
+            {
+                if (!_locations.IsAllowedPath(path)) throw new LibraryValidationException("The saved library location is not an available application storage location.");
+                Workspace = File.Exists(Path.Combine(path, "slopfactory-library.json"))
+                    ? await _factory.OpenAsync(path).ConfigureAwait(false)
+                    : await _factory.CreateAsync(path).ConfigureAwait(false);
+                ActivePath = Path.GetFullPath(path);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+            {
+                Error = exception.Message;
+            }
+            IsInitialized = true;
+        }
+        finally
+        {
+            _gate.Release();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public async Task SwitchAsync(string path)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!_locations.IsAllowedPath(path)) throw new LibraryValidationException("That location is not an allowed application library location.");
+            var fullPath = Path.GetFullPath(path);
+            if (string.Equals(fullPath, ActivePath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
+            var replacement = File.Exists(Path.Combine(fullPath, "slopfactory-library.json"))
+                ? await _factory.OpenAsync(fullPath).ConfigureAwait(false)
+                : await _factory.CreateAsync(fullPath).ConfigureAwait(false);
+            var previous = Workspace;
+            Workspace = replacement;
+            ActivePath = fullPath;
+            Error = null;
+            Preferences.Default.Set("active_library_path", fullPath);
+            if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Workspace is not null) await Workspace.DisposeAsync().ConfigureAwait(false);
+        _gate.Dispose();
+    }
+
+}

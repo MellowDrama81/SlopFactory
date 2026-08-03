@@ -1,0 +1,95 @@
+@page "/library-settings"
+@inject AppLibraryState LibraryState
+@inject ILibraryLocationService Locations
+
+<PageTitle>Library settings · SlopFactory</PageTitle>
+
+<header class="page-header">
+    <div><p class="eyebrow">Local storage</p><h1>Library settings</h1><p class="muted">Open or create an independent local library.</p></div>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice" role="status">@_message</div>
+}
+
+<section class="panel">
+    <h2>Active library</h2>
+    <dl>
+        <dt>Name</dt><dd>@(LibraryState.Workspace?.Descriptor.DisplayName ?? "Unavailable")</dd>
+        <dt>Location</dt><dd class="mono">@(LibraryState.ActivePath ?? "No location is open")</dd>
+    </dl>
+
+    @if (LibraryState.Workspace is not null)
+    {
+        <EditForm Model="_nameForm" OnValidSubmit="RenameAsync" class="inline-form">
+            <label for="library-name">Library name</label>
+            <InputText id="library-name" @bind-Value="_nameForm.Name" maxlength="255" />
+            <button type="submit">Rename library</button>
+        </EditForm>
+    }
+
+    <EditForm Model="_form" OnValidSubmit="SwitchAsync" class="stack-form">
+#if ANDROID
+        <label for="library-location">App-specific storage location</label>
+        <InputSelect id="library-location" @bind-Value="_form.Path">
+            @foreach (var location in _availableLocations)
+            {
+                <option value="@location.Path">@location.Label</option>
+            }
+        </InputSelect>
+#else
+        <label for="library-location">Absolute local directory</label>
+        <InputText id="library-location" @bind-Value="_form.Path" />
+#endif
+        <p class="muted">An empty location becomes a new library. A valid existing SlopFactory library is opened. A non-empty unrelated directory is rejected. Existing data is never moved or copied.</p>
+        <button type="submit" disabled="@_busy">@(_busy ? "Switching…" : "Open this library")</button>
+    </EditForm>
+</section>
+
+@code {
+    private IReadOnlyList<AppLibraryLocation> _availableLocations = [];
+    private LocationForm _form = new();
+    private NameForm _nameForm = new();
+    private bool _busy;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        _availableLocations = Locations.GetAvailableLocations();
+        _form.Path = LibraryState.ActivePath ?? _availableLocations.FirstOrDefault()?.Path ?? Locations.DefaultPath;
+        _nameForm.Name = LibraryState.Workspace?.Descriptor.DisplayName ?? string.Empty;
+    }
+
+    private async Task SwitchAsync()
+    {
+        _busy = true;
+        try
+        {
+            await LibraryState.SwitchAsync(_form.Path);
+            _nameForm.Name = LibraryState.Workspace!.Descriptor.DisplayName;
+            _message = $"Opened {LibraryState.Workspace!.Descriptor.DisplayName}.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RenameAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.RenameLibraryAsync(_nameForm.Name);
+            _nameForm.Name = LibraryState.Workspace.Descriptor.DisplayName;
+            _message = "Library renamed.";
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private sealed class LocationForm { public string Path { get; set; } = string.Empty; }
+    private sealed class NameForm { public string Name { get; set; } = string.Empty; }
+}

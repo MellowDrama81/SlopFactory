@@ -1,0 +1,112 @@
+@page "/recycle-bin"
+@inject AppLibraryState LibraryState
+
+<PageTitle>Recycle bin · SlopFactory</PageTitle>
+
+<header class="page-header"><div><p class="eyebrow">Recovery</p><h1>Recycle bin</h1><p class="muted">Restore items or permanently delete individual files.</p></div></header>
+
+@if (!string.IsNullOrWhiteSpace(_message)) { <div class="notice" role="status">@_message</div> }
+
+<section>
+    <h2>Folders</h2>
+    @if (_folders.Count == 0) { <p class="empty">No recycled folders.</p> }
+    else
+    {
+        <div class="file-list">
+            @foreach (var folder in _folders)
+            {
+                <article class="file-row"><div class="file-main"><strong>@folder.Name</strong><span>Folder and its contents</span></div><button @onclick="() => RestoreFolderAsync(folder.Id)">Restore</button></article>
+            }
+        </div>
+    }
+</section>
+
+<section>
+    <h2>Files</h2>
+    @if (_files.Count == 0) { <p class="empty">No recycled files.</p> }
+    else
+    {
+        <div class="file-list">
+            @foreach (var file in _files)
+            {
+                <article class="file-row">
+                    <div class="file-main"><strong>@file.DisplayName</strong><span>@file.MediaType · @file.ByteSize bytes</span></div>
+                    <div class="actions"><button @onclick="() => RestoreFileAsync(file.Id)">Restore</button><button class="danger" @onclick="() => DeleteFileAsync(file.Id)">Delete permanently</button></div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+<section>
+    <h2>File links</h2>
+    @if (_links.Count == 0) { <p class="empty">No explicitly recycled links.</p> }
+    else
+    {
+        <div class="file-list">
+            @foreach (var link in _links)
+            {
+                <article class="file-row">
+                    <div class="file-main"><strong>@link.Label</strong><span>Directed file link</span></div>
+                    <div class="actions"><button @onclick="() => RestoreLinkAsync(link.Id)">Restore</button><button class="danger" @onclick="() => DeleteLinkAsync(link.Id)">Delete permanently</button></div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<FileRecord> _files = [];
+    private IReadOnlyList<FolderRecord> _folders = [];
+    private IReadOnlyList<FileLink> _links = [];
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        _files = await LibraryState.Workspace.GetRecycledFilesAsync();
+        _folders = await LibraryState.Workspace.GetRecycledFoldersAsync();
+        _links = await LibraryState.Workspace.GetRecycledLinksAsync();
+    }
+
+    private async Task RestoreFileAsync(string id)
+    {
+        try { await LibraryState.Workspace!.RestoreFileAsync(id); _message = "File restored."; }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+        await ReloadAsync();
+    }
+
+    private async Task RestoreFolderAsync(string id)
+    {
+        try { await LibraryState.Workspace!.RestoreFolderAsync(id); _message = "Folder restored."; }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+        await ReloadAsync();
+    }
+
+    private async Task DeleteFileAsync(string id)
+    {
+        try { await LibraryState.Workspace!.PermanentlyDeleteFileAsync(id); _message = "File permanently deleted."; }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
+        await ReloadAsync();
+    }
+
+    private async Task RestoreLinkAsync(string id)
+    {
+        try { await LibraryState.Workspace!.RestoreLinkAsync(id); _message = "Link restored."; }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+        await ReloadAsync();
+    }
+
+    private async Task DeleteLinkAsync(string id)
+    {
+        try { await LibraryState.Workspace!.PermanentlyDeleteLinkAsync(id); _message = "Link permanently deleted."; }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+        await ReloadAsync();
+    }
+}

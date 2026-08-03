@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Mellow.SlopFactory</RootNamespace>
+    <AssemblyName>Mellow.SlopFactory.Core</AssemblyName>
+  </PropertyGroup>
+</Project>
+

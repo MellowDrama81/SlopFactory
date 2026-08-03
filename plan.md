@@ -1,5 +1,7 @@
 # Mellow SlopFactory
 
+> This file contains only unimplemented or incomplete requirements. Verified behavior is moved to `docs/user/` and `docs/developer/` as it is completed.
+
 ## Description
 
 A MAUI Blazor Hybrid application for using AI media generation APIs. It maintains a library of media files which have been generated or added by the user. It provides an interface to manage the library and view the files (text, images, audio, video). It provides an interface to create and manage a collection API connections (Base URL and API key). It provides an interface to create and manage a collection of models (connection and model). It provides an interface to generate text, images, audio or video, allowing a prompt, model settings and source files (chosen from the library). The user can select the number of results to generate. Each result is added to the library and the generation details are saved against it.
@@ -452,20 +454,10 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Library Storage
 
-- On first launch, Android creates the initial library in internal app-specific storage.
 - On first launch, Windows proposes a location under the user's local application-data directory and lets the user choose another empty location before creation.
 - First-run guidance explains that libraries are local and independent and that changing location does not move data.
-- Library creation assigns its persistent library ID and creates the permanent root and **Generated** folders.
-- After creation, the application opens directly into the empty library.
-- First-run onboarding does not require a provider connection.
 - The empty-library interface offers **Add Connection**, **Import Files** and **Generate** as next actions. **Generate** explains that a configured connection and model are required.
-- Imported files are copied into an application-managed directory.
-- Each application data location represents an independent SlopFactory library and has a persistent unique library ID.
-- Each library also has an editable display name stored inside the library.
-- A new library defaults to **SlopFactory Library**, with a numeric suffix when useful for disambiguation.
-- Library display names do not need to be globally unique.
 - The library switcher shows display name, platform storage location, last-opened time and availability.
-- Changing a library display name does not change its ID or storage location.
 - Duplicate-library detection uses the persistent library ID rather than the display name.
 - The complete library ID is available in diagnostics but is not shown in ordinary UI.
 - **Forget Library** removes a library from the device's recent-library list without deleting its data.
@@ -494,10 +486,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Failed reconciliation cleanup remains indexed and is retried on a later valid open.
 - The first release does not provide whole-library permanent deletion. Content is removed through the normal recycle-bin workflow.
 - Any future whole-library deletion feature requires typed confirmation of the library name, credential cleanup, exclusive locking and explicit acknowledgement that recovery is impossible.
-- Selecting an empty location initializes a new, empty library.
-- Selecting a location containing a valid SlopFactory library opens that library.
-- A non-empty location which is not a valid SlopFactory library is rejected.
-- Changing the active data location does not copy, move or delete the previously active library.
 - The first release does not move or copy managed files directly between SlopFactory libraries.
 - To transfer file bytes, the user explicitly exports from one library and imports into the other.
 - The receiving import creates new file identities and does not carry library metadata, links, recycle state or generation-history relationships.
@@ -505,37 +493,17 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - API keys are stored using OS secure storage. Secure-storage keys are namespaced by both the library ID and connection ID.
 - If a credential is missing or can no longer be decrypted, the connection and all dependent library records remain intact and the connection is marked **Credentials Required**; if the credential store itself is temporarily inaccessible, it is marked **Secure Storage Unavailable** instead.
 - Either state blocks generation and authenticated remote-cleanup attempts but does not block unrelated local library use. Re-entering a key replaces an unusable credential only after the new value has been stored successfully; a failed write leaves the prior state and library records unchanged.
-- A library permits only one active writer and must be opened under an exclusive operating-system lock.
-- When another application instance holds the lock, opening is blocked and the user can retry or choose another library.
-- The application cannot force-unlock a library while its operating-system lock remains active.
-- Stale lock metadata is recovered automatically after a crash once no process holds the actual lock.
-- Database changes use transactions and managed-file changes use atomic operations so interrupted writes do not leave partial library records or files.
 - When the same library ID is registered at more than one Windows location, the copied location cannot be opened as an independent library until the conflict is resolved.
 - The user can adopt the copied location as a new library, which assigns it a new library ID without modifying the original.
 - Adopting a copy preserves its media, metadata, folders, generation-tab drafts, saved settings and generation history.
 - Adoption also preserves provider safety classifications, concealment state requirements and their immutable provenance; assigning a new library ID does not clear existing warnings.
 - Secure-storage credentials are not copied during adoption. Connections in the adopted library are marked **Credentials Required** until their API keys are re-entered under the new library ID.
 - Before adoption, the application warns that the new library is independent and will diverge permanently from the original.
-- The absence of user-facing migration features does not prevent internal database-schema upgrades between SlopFactory versions.
-- Every library stores its database schema version.
-- Schema upgrades run transactionally before normal library access.
-- Before an upgrade, the application creates a temporary database rollback copy and removes it after a successful upgrade. Media files are not copied.
-- If an upgrade fails, the original database is restored and the library remains closed.
-- A library created by a newer, unsupported SlopFactory version is not opened, and the user is told that the application must be updated.
 - Schema-upgrade diagnostics do not include API keys, prompts or other generated content.
-- Structured library records are stored in one SQLite database within the library location.
-- Media is stored as separate managed files and never as database blobs.
-- A small library manifest contains the format identity, persistent library ID, display name and schema version.
-- Windows and Android use the same versioned logical manifest schema, SQLite schema, stable identifier formats and managed-file naming conventions.
-- Persistent database and manifest records use library-relative identifiers and never store platform-specific absolute paths.
 - Platform-specific location handles, volume identities, lock implementation details, temporary files and preview-cache records remain outside the shared logical library format.
 - Schema migrations and integrity validation use the same shared core implementation and are tested against libraries created on both platforms.
 - A shared logical format is an implementation consistency guarantee, not a supported Windows-to-Android transfer, migration or synchronization feature.
-- SQLite foreign-key enforcement is enabled and aggregate changes use transactions.
-- Timestamps are stored in UTC and converted for display using the device locale.
-- Database relationships use stable opaque IDs rather than names or paths.
 - Provider response snapshots use structured JSON only when their provider-specific shape cannot be normalized.
-- A non-empty location is considered a valid library only when its manifest and database validate together.
 - A selected library location which is an ancestor or descendant of another known or detectable SlopFactory library is rejected; libraries cannot be nested or have overlapping ownership boundaries.
 - Selecting the exact location of an existing valid library opens that library normally. Windows resolved-path and filesystem-identity checks and Android document-tree identities are used where available rather than relying only on display paths.
 - Every library open performs fast manifest, schema, database-header, lock and required-directory validation before normal access.
@@ -571,7 +539,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ### Windows
 
-- The user can configure the application data location.
 - Healthy libraries provide **Open Library Location** from the advanced storage and diagnostics interface.
 - Before opening Explorer, SlopFactory warns that the directory is application-managed, internal filenames may not match display names, and external modification is unsupported.
 - Opening Explorer does not release the library's exclusive lock or grant an external application permission to edit through SlopFactory.
@@ -597,13 +564,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ### Android
 
-- Libraries use Android app-specific storage. Arbitrary shared-storage folders cannot be selected.
-- The user can select among available app-specific storage locations, including internal storage and app-specific directories on available external volumes.
-- Selecting another location opens its existing SlopFactory library or creates a new, empty library. Data is not moved automatically.
-- Files selected from outside the application are copied into the active library.
 - If the active external volume becomes unavailable, the library is closed and shown as unavailable.
-- The application must not silently create a replacement library in internal storage when an external volume becomes unavailable.
-- The user can select another available library location while the previous location is unavailable.
 - The original library is reopened when its external volume becomes available again.
 - External storage locations are identified by a stable volume identifier rather than a display path.
 - The user is warned that Android removes app-specific storage when the application is uninstalled.
@@ -673,7 +634,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## Large File Handling
 
 - The application does not impose a storage quota; capacity is limited only by available device storage.
-- File copy, hashing, export, upload and download operations use streams rather than loading complete files into memory.
 - Long file operations display progress and support cancellation.
 - Thumbnail generation and media metadata extraction run in background tasks.
 - Audio and video are streamed from local managed storage.
@@ -689,7 +649,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## Library File Formats
 
 - The library can store any file type, including files which the application cannot preview.
-- Built-in text viewing supports UTF-8 plain text, Markdown, JSON, XML, CSV and common source-code formats.
 - Built-in image viewing supports PNG, JPEG, WebP, GIF and SVG.
 - Built-in audio playback supports MP3, WAV and AAC/M4A. FLAC and Opus are supported when the platform codec can play them.
 - Built-in video playback guarantees support for MP4 containing H.264 video and AAC audio.
@@ -919,7 +878,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## File Viewers
 
 - Every library file is treated as untrusted content.
-- The text viewer supports read-only plain-text and rendered-Markdown modes, in-file search, line wrapping and copying selected text.
+- The text viewer supports rendered-Markdown mode and in-file search.
 - Rendered Markdown is sanitized and cannot execute scripts or load remote images, fonts, stylesheets, frames or other resources automatically.
 - The image viewer supports fit-to-window, actual size, zoom, pan and non-destructive viewing rotation.
 - SVG is rendered through a sandboxed or sanitized viewer which blocks scripts and external resources.
@@ -1016,24 +975,8 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Library Organization
 
-- Library folders are virtual database records and do not mirror physical directories in managed storage.
-- Managed files remain in their internal storage locations when library items are moved or renamed.
-- Each file belongs to exactly one folder.
-- Folders form a tree beneath a permanent library root.
-- Folder names are unique within their parent.
-- Users can create, rename and move files and folder subtrees.
-- A folder cannot be moved into itself or one of its descendants.
-- Recycling a folder recycles its complete subtree.
-- Restoring a folder restores the same hierarchy, subject to the library's name-conflict rules.
-- An active, healthy library file provides **Duplicate** within the same library.
-- The user chooses the duplicate's destination folder and display name before copying starts.
-- Duplication streams the source into new managed storage, calculates and verifies its hash, assigns a new stable file ID and commits the new record atomically.
-- The duplicate has system origin **User Copy**, newly calculated system metadata and copied user metadata.
-- A duplicate does not copy the source's generation-history relationship or user-created links.
+- A duplicate does not copy the source's generation-history relationship.
 - A read-only provenance relationship identifies the source file from which the duplicate was made.
-- Intentional duplication does not show the ordinary duplicate-import warning even though the content hashes match.
-- Missing or unresolved **Content Changed** files must be repaired before they can be duplicated.
-- The first release does not duplicate virtual folders or recursively duplicate folder subtrees.
 - Multi-selection can duplicate a group of eligible active files into one selected destination folder.
 - Each selected file is duplicated as an independent atomic operation and uses the normal numeric-suffix rule for name conflicts.
 - Bulk-duplicate progress identifies the current file and overall completion count.
@@ -1071,7 +1014,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Library Browsing
 
-- The library provides folder-tree navigation with breadcrumbs.
 - Files can be displayed in grid or list view.
 - Images and videos display thumbnails. Other files display type-specific icons where a preview is unavailable.
 - Search includes display name, original filename, user metadata and generation prompts.
@@ -1095,7 +1037,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - JSON structural equality ignores object-property order and insignificant serialization formatting, preserves array order, compares strings and property names case-sensitively, and compares numbers by exact numeric value rather than textual notation.
 - A stored JSON value may be `null`. **Exists** matches it because the metadata entry exists, while **Structurally Equals null** specifically matches that value; a missing metadata key remains a distinct state.
 - Provider moderation-category text is not indexed by or displayed through ordinary library search; safety state is discoverable only through the explicit filters and file details.
-- Results can be sorted by name, creation date, modification date, size and media type.
 - Multi-selection supports move, export, recycle and metadata operations.
 - Results are virtualized or paginated so large libraries remain responsive.
 - When returning from a file, the application preserves the current folder, search, filters, sort and view mode.
@@ -1125,17 +1066,11 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The combined serialized keys, type markers, sensitivity flags and values of all user metadata on one file are limited to 16 MiB.
 - Numeric metadata accepts only finite values within the persisted numeric representation; NaN and positive or negative infinity are rejected.
 - These per-value parsing and interface safety bounds are not a quota on total library storage or managed file sizes.
-- Metadata keys are required, trimmed, limited to 100 Unicode scalar values after normalization and unique per file using case-insensitive comparison.
-- Keys are stored and displayed in the user's NFC-normalized casing, while uniqueness uses an invariant Unicode case-folded comparison key rather than device-locale rules.
 - Metadata keys do not have a library-wide schema in the first release, so the same case-insensitive key may use different value types on different files.
 - Multi-selection displays **Mixed Types** for such a key and requires an explicit target type plus a conversion preview before any bulk normalization.
 - The conversion preview groups selected files into convertible and incompatible outcomes before confirmation.
 - For sensitive entries, that preview shows only the file identity, source type, target type and a sanitized incompatibility reason; it never displays the original value.
 - Confirmed normalization preserves each entry's **Sensitive** flag, converts valid entries transactionally per file, leaves incompatible entries unchanged and reports every per-file result rather than failing or rolling back unrelated conversions.
-- Each file can contain at most 1,000 user-metadata entries; single-file and bulk operations validate projected counts before mutation and reject only affected files which would exceed the bound.
-- The `slopfactory.` prefix is reserved for system-defined metadata keys.
-- Users can add, edit, rename and delete user metadata.
-- Deleting an individual user-metadata entry is an immediate metadata edit and never creates a standalone recycle-bin item or retained historical value.
 - File-level recycle and restore preserve the metadata attached at the time the file aggregate was recycled, but do not provide version history for earlier metadata edits.
 - Each user-metadata entry can be marked **Sensitive** independently of its value type.
 - The first use of **Sensitive** explains that it controls SlopFactory display, search-state and export behavior but does not encrypt the stored value.
@@ -1153,7 +1088,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The sensitive flag is stored with the metadata entry, participates in bulk metadata previews and is copied with the entry when a file is duplicated.
 - Before **Duplicate** commits, its review summarizes the number of sensitive metadata entries that will be copied without revealing their keys or values; a multi-file duplication uses one aggregate disclosure rather than per-file prompts.
 - Copied entries retain their **Sensitive** flags and start concealed with no inherited session reveal state.
-- Invalid typed values must be corrected before metadata can be saved.
 - Sensitive JSON validation shows the error kind and line/column and may highlight the location inside the secure editor, but summary messages and diagnostics never echo offending tokens, property names or value excerpts.
 - With multiple files selected, metadata editing shows keys common to all files and indicates mixed values.
 - Multi-selection and bulk metadata views never provide **Reveal All Sensitive Values**; they may show keys, types, sensitivity flags and mixed-value state while keeping every sensitive value masked.
@@ -1172,13 +1106,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## File Links
 
-- User-created file links are directed and require a non-empty label.
 - Link labels are trimmed, normalized to Unicode NFC, limited to 200 Unicode scalar values, and cannot contain control characters or line breaks.
-- Self-links are not allowed.
-- Multiple links can connect the same two files when their labels differ.
-- The combination of source file, target file and invariant-case-folded label is unique, while the user's normalized casing is preserved for display.
-- Users can create, relabel, reverse and delete user-created links.
-- If relabelling or reversing would duplicate an existing directed link, the change is blocked and the user can open the existing link, choose another label or cancel; links are never silently merged.
 - Generation source/output relationships are stored in structured generation history rather than as editable user-created links.
 - A text file created through **Edit as Copy** has a read-only provenance relationship to its source file.
 - A file created through **Duplicate** has a read-only provenance relationship to its source file.
@@ -1195,7 +1123,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Text Content Editing
 
-- Imported and generated file content is immutable by default, and the normal text viewer is read-only.
 - **Edit as Copy** opens an editor and saves the result as a new user-added UTF-8 text file.
 - It preserves the source's supported text format and safe extension by default, while allowing the user to choose **Plain Text** or **Markdown** explicitly; applicable format-specific validation completes before saving.
 - The original file remains unchanged.
@@ -1626,17 +1553,9 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Each selected aggregate is restored transactionally.
 - If part of a multi-selection fails, failed items remain in the recycle bin and a per-item summary is shown.
 - Pending and failed permanent deletions remain visible with status and retry actions.
-- Recycling a file is a logical database state change. Its managed bytes remain in their existing internal location.
 - Recycling records the deletion timestamp and deleted aggregate ownership without copying or moving media.
-- Active library views exclude recycled records.
-- Restoring changes record state and resolves hierarchy or name conflicts without moving managed bytes.
-- Permanently deleting a file removes its managed bytes and finalizes its records.
 - Integrity checks include recycled managed files.
 - Regenerable preview-cache entries can be removed when a file is recycled.
-- Parent entities and their owned children are recycled atomically. Owned children, such as file metadata, are not exposed as unrelated recycle-bin items.
-- Deleting a folder recycles the folder and all of its descendants.
-- Restoring a folder restores its descendant hierarchy.
-- File metadata is restored with its file and cannot be restored independently.
 - The user can permanently delete an individual item or a selected group of items from the recycle bin.
 - The user can empty the recycle bin to permanently delete all of its contents.
 - Before permanent deletion, the application shows a confirmation summarizing all items which will be deleted through dependency cascades.
@@ -1665,11 +1584,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Permanently deleting a connection or model permanently deletes the dependent models and saved generation settings which were recycled with it.
 - Files generated with a recycled or permanently deleted model remain in the library.
 - Generated files do not retain an active database reference to a recycled or permanently deleted model, but retain a plain-text snapshot of the original provider and model ID as provenance.
-- A link can be active only while both endpoint files are active.
-- If either endpoint file is recycled, the link is also recycled.
-- A recycled link is automatically restored as soon as both endpoint files are active.
 - When restoring a file whose linked file remains recycled, the user is prompted to restore the linked file.
-- If either endpoint file is permanently deleted, the link is permanently deleted.
 
 ## Generation Lifecycle
 

@@ -1,0 +1,16 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+        <a class="brand" href="/">SlopFactory</a>
+        <nav>
+            <NavLink href="/" Match="NavLinkMatch.All">Library</NavLink>
+            <NavLink href="/recycle-bin">Recycle bin</NavLink>
+            <NavLink href="/library-settings">Library settings</NavLink>
+            <NavLink href="/about">About</NavLink>
+        </nav>
+    </aside>
+    <main class="content">
+        @Body
+    </main>
+</div>

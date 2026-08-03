@@ -1,0 +1,29 @@
+# Build and test
+
+## Prerequisites
+
+- .NET SDK 10.0.302 or a compatible latest patch selected by `global.json`
+- .NET MAUI Windows and Android workloads
+- Windows SDK for the Windows target
+- Android SDK for the Android target
+
+## Restore
+
+```powershell
+dotnet restore SlopFactory.slnx --configfile NuGet.Config
+```
+
+## Tests
+
+```powershell
+dotnet test tests\Mellow.SlopFactory.Tests\Mellow.SlopFactory.Tests.csproj --no-restore
+```
+
+The current tests cover library initialization, manifest/database creation, exclusive locking, invalid non-empty directory rejection, managed import and hashing, duplicate-import handling, streamed in-library duplication and metadata ownership, file and folder rename/move invariants, strict and bounded UTF-8 viewing, metadata rename, complete editable-link lifecycle and endpoint ownership, file and folder recycle/restore, permanent managed-file deletion, and v1-to-v2 schema upgrade cleanup.
+
+## Platform builds
+
+```powershell
+dotnet build src\Mellow.SlopFactory.Gui\Mellow.SlopFactory.Gui.csproj --no-restore -f net10.0-windows10.0.19041.0
+dotnet build src\Mellow.SlopFactory.Gui\Mellow.SlopFactory.Gui.csproj --no-restore -f net10.0-android
+```

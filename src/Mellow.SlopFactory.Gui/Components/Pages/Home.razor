@@ -1,0 +1,363 @@
+@page "/"
+@implements IDisposable
+@inject AppLibraryState LibraryState
+@inject NavigationManager Navigation
+
+<PageTitle>Library · SlopFactory</PageTitle>
+
+@if (!LibraryState.IsInitialized)
+{
+    <section class="center-state" aria-live="polite"><h1>Opening your library</h1><p>Validating local storage…</p></section>
+}
+else if (LibraryState.Workspace is null)
+{
+    <section class="center-state error" role="alert"><h1>Library unavailable</h1><p>@LibraryState.Error</p></section>
+}
+else if (_contents is null)
+{
+    <section class="center-state" aria-live="polite"><h1>Loading library</h1></section>
+}
+else
+{
+    <header class="page-header">
+        <div>
+            <p class="eyebrow">Local library</p>
+            <h1>@LibraryState.Workspace.Descriptor.DisplayName</h1>
+            <p class="muted">@_contents.Folder.Name · @_contents.Folders.Count folder(s) · @_contents.Files.Count file(s)</p>
+        </div>
+        <div class="actions">
+            <button class="secondary" @onclick="ToggleFolderForm">New folder</button>
+            <button @onclick="ImportAsync" disabled="@_busy">@(_busy ? "Importing…" : "Import files")</button>
+        </div>
+    </header>
+
+    @if (_showFolderForm)
+    {
+        <EditForm Model="_newFolder" OnValidSubmit="CreateFolderAsync" class="inline-form">
+            <label for="folder-name">Folder name</label>
+            <InputText id="folder-name" @bind-Value="_newFolder.Name" maxlength="255" />
+            <button type="submit">Create</button>
+            <button type="button" class="secondary" @onclick="ToggleFolderForm">Cancel</button>
+        </EditForm>
+    }
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="notice" role="status">@_message</div>
+    }
+
+    @if (_editingFileId is not null || _editingFolderId is not null)
+    {
+        <EditForm Model="_itemForm" OnValidSubmit="SaveItemAsync" class="inline-form">
+            <label for="item-name">Display name</label>
+            <InputText id="item-name" @bind-Value="_itemForm.Name" maxlength="255" />
+            <label for="item-folder">Location</label>
+            <InputSelect id="item-folder" @bind-Value="_itemForm.DestinationFolderId">
+                @foreach (var destination in AvailableDestinations())
+                {
+                    <option value="@destination.Id">@destination.Name</option>
+                }
+            </InputSelect>
+            <button type="submit">Save changes</button>
+            <button type="button" class="secondary" @onclick="CancelItemEdit">Cancel</button>
+        </EditForm>
+    }
+
+    @if (_duplicatingFileId is not null)
+    {
+        <EditForm Model="_duplicateForm" OnValidSubmit="DuplicateFileAsync" class="inline-form">
+            <label for="duplicate-name">Copy name</label>
+            <InputText id="duplicate-name" @bind-Value="_duplicateForm.Name" maxlength="255" />
+            <label for="duplicate-folder">Destination</label>
+            <InputSelect id="duplicate-folder" @bind-Value="_duplicateForm.DestinationFolderId">
+                @foreach (var destination in _activeFolders)
+                {
+                    <option value="@destination.Id">@destination.Name</option>
+                }
+            </InputSelect>
+            <button type="submit">Create copy</button>
+            <button type="button" class="secondary" @onclick="CancelDuplicate">Cancel</button>
+        </EditForm>
+    }
+
+    <nav class="breadcrumbs" aria-label="Folder path">
+        @foreach (var folder in Breadcrumbs())
+        {
+            <button class="text-button" @onclick="() => OpenFolderAsync(folder.Id)" disabled="@(folder.Id == _contents.Folder.Id)">@folder.Name</button>
+            @if (folder.Id != _contents.Folder.Id) { <span aria-hidden="true">/</span> }
+        }
+    </nav>
+
+    <section aria-labelledby="folders-title">
+        <h2 id="folders-title">Folders</h2>
+        @if (_contents.Folders.Count == 0)
+        {
+            <p class="empty">No folders here.</p>
+        }
+        else
+        {
+            <div class="grid">
+                @foreach (var folder in _contents.Folders)
+                {
+                    <article class="card folder-card">
+                        <button class="card-link" @onclick="() => OpenFolderAsync(folder.Id)"><span aria-hidden="true">▰</span><strong>@folder.Name</strong></button>
+                        @if (folder.Id != LibraryState.Workspace.Descriptor.GeneratedFolderId)
+                        {
+                            <button class="ghost" @onclick="() => BeginFolderEdit(folder)">Manage</button>
+                            <button class="danger ghost" @onclick="() => RecycleFolderAsync(folder.Id)">Recycle</button>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <section aria-labelledby="files-title">
+        <div class="section-heading">
+            <h2 id="files-title">Files</h2>
+            <label>Sort
+                <select @bind="_sort">
+                    <option value="name">Name</option>
+                    <option value="created">Imported (newest)</option>
+                    <option value="modified">Modified (newest)</option>
+                    <option value="size">Size (largest)</option>
+                    <option value="media">Media type</option>
+                </select>
+            </label>
+        </div>
+        @if (_contents.Files.Count == 0)
+        {
+            <div class="empty-panel"><p>There are no files in this folder.</p><button @onclick="ImportAsync">Import files</button></div>
+        }
+        else
+        {
+            <div class="file-list">
+                @foreach (var file in SortedFiles())
+                {
+                    <article class="file-row">
+                        <button class="file-main" @onclick="() => OpenFile(file.Id)"><strong>@file.DisplayName</strong><span>@file.MediaType · @FormatBytes(file.ByteSize)</span></button>
+                        <button class="ghost" @onclick="() => BeginFileEdit(file)">Manage</button>
+                        <button class="ghost" @onclick="() => BeginDuplicate(file)">Duplicate</button>
+                        <button class="danger ghost" @onclick="() => RecycleFileAsync(file.Id)">Recycle</button>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    private LibraryFolderContents? _contents;
+    private bool _busy;
+    private bool _showFolderForm;
+    private string? _message;
+    private string? _editingFileId;
+    private string? _editingFolderId;
+    private string? _duplicatingFileId;
+    private FolderForm _newFolder = new();
+    private ItemForm _itemForm = new();
+    private DuplicateForm _duplicateForm = new();
+    private IReadOnlyList<FolderRecord> _activeFolders = [];
+    private string _sort = "name";
+
+    protected override async Task OnInitializedAsync()
+    {
+        LibraryState.Changed += OnLibraryChanged;
+        await LibraryState.InitializeAsync();
+        await LoadRootAsync();
+    }
+
+    private async Task LoadRootAsync()
+    {
+        if (LibraryState.Workspace is not null) await LoadFolderAsync(LibraryState.Workspace.Descriptor.RootFolderId);
+    }
+
+    private async Task LoadFolderAsync(string folderId)
+    {
+        if (LibraryState.Workspace is null) return;
+        _contents = await LibraryState.Workspace.GetFolderContentsAsync(folderId);
+        _activeFolders = await LibraryState.Workspace.GetActiveFoldersAsync();
+    }
+
+    private Task OpenFolderAsync(string folderId) => LoadFolderAsync(folderId);
+
+    private IEnumerable<FolderRecord> Breadcrumbs()
+    {
+        if (_contents is null) return [];
+        var result = new Stack<FolderRecord>();
+        FolderRecord? current = _contents.Folder;
+        while (current is not null)
+        {
+            result.Push(current);
+            current = current.ParentId is { } parentId ? _activeFolders.FirstOrDefault(folder => folder.Id == parentId) : null;
+        }
+        return result;
+    }
+
+    private IEnumerable<FileRecord> SortedFiles() => _sort switch
+    {
+        "created" => _contents!.Files.OrderByDescending(file => file.ImportedAt).ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase),
+        "modified" => _contents!.Files.OrderByDescending(file => file.ModifiedAt).ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase),
+        "size" => _contents!.Files.OrderByDescending(file => file.ByteSize).ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase),
+        "media" => _contents!.Files.OrderBy(file => file.MediaType, StringComparer.OrdinalIgnoreCase).ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase),
+        _ => _contents!.Files.OrderBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase)
+    };
+
+    private async Task ImportAsync()
+    {
+        if (_contents is null || LibraryState.Workspace is null) return;
+        var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = "Import files into SlopFactory" });
+        var paths = picked?.OfType<FileResult>().Select(item => item.FullPath).OfType<string>().Where(path => !string.IsNullOrWhiteSpace(path)).ToArray() ?? [];
+        if (paths.Length == 0) return;
+        _busy = true;
+        try
+        {
+            var results = await LibraryState.Workspace.ImportAsync(paths, _contents.Folder.Id);
+            _message = $"Imported {results.Count(item => item.Outcome == ImportOutcome.Imported)}; skipped {results.Count(item => item.Outcome == ImportOutcome.DuplicateSkipped)} duplicate(s); {results.Count(item => item.Outcome == ImportOutcome.Failed)} failed.";
+            await OpenFolderAsync(_contents.Folder.Id);
+        }
+        finally { _busy = false; }
+    }
+
+    private void ToggleFolderForm() => _showFolderForm = !_showFolderForm;
+
+    private void BeginFileEdit(FileRecord file)
+    {
+        CancelDuplicate();
+        _editingFolderId = null;
+        _editingFileId = file.Id;
+        _itemForm = new ItemForm { Name = file.DisplayName, DestinationFolderId = file.FolderId };
+    }
+
+    private void BeginFolderEdit(FolderRecord folder)
+    {
+        CancelDuplicate();
+        _editingFileId = null;
+        _editingFolderId = folder.Id;
+        _itemForm = new ItemForm { Name = folder.Name, DestinationFolderId = folder.ParentId ?? string.Empty };
+    }
+
+    private IEnumerable<FolderRecord> AvailableDestinations()
+    {
+        if (_editingFolderId is null) return _activeFolders;
+        return _activeFolders.Where(folder => CanMoveFolderTo(_editingFolderId, folder.Id));
+    }
+
+    private bool CanMoveFolderTo(string movingFolderId, string candidateId)
+    {
+        var current = candidateId;
+        while (!string.IsNullOrEmpty(current))
+        {
+            if (current == movingFolderId) return false;
+            current = _activeFolders.FirstOrDefault(folder => folder.Id == current)?.ParentId ?? string.Empty;
+        }
+        return true;
+    }
+
+    private async Task SaveItemAsync()
+    {
+        if (LibraryState.Workspace is null || _contents is null) return;
+        try
+        {
+            if (_editingFileId is { } fileId)
+            {
+                await LibraryState.Workspace.RenameFileAsync(fileId, _itemForm.Name);
+                await LibraryState.Workspace.MoveFileAsync(fileId, _itemForm.DestinationFolderId);
+            }
+            else if (_editingFolderId is { } folderId)
+            {
+                await LibraryState.Workspace.RenameFolderAsync(folderId, _itemForm.Name);
+                await LibraryState.Workspace.MoveFolderAsync(folderId, _itemForm.DestinationFolderId);
+            }
+            CancelItemEdit();
+            await LoadFolderAsync(_contents.Folder.Id);
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private void CancelItemEdit()
+    {
+        _editingFileId = null;
+        _editingFolderId = null;
+        _itemForm = new();
+    }
+
+    private void BeginDuplicate(FileRecord file)
+    {
+        CancelItemEdit();
+        _duplicatingFileId = file.Id;
+        var extension = Path.GetExtension(file.DisplayName);
+        var stem = Path.GetFileNameWithoutExtension(file.DisplayName);
+        _duplicateForm = new DuplicateForm { Name = $"{stem} copy{extension}", DestinationFolderId = file.FolderId };
+    }
+
+    private async Task DuplicateFileAsync()
+    {
+        if (LibraryState.Workspace is null || _contents is null || _duplicatingFileId is null) return;
+        try
+        {
+            await LibraryState.Workspace.DuplicateFileAsync(_duplicatingFileId, _duplicateForm.DestinationFolderId, _duplicateForm.Name);
+            CancelDuplicate();
+            _message = "File duplicated.";
+            await LoadFolderAsync(_contents.Folder.Id);
+        }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
+    }
+
+    private void CancelDuplicate()
+    {
+        _duplicatingFileId = null;
+        _duplicateForm = new();
+    }
+
+    private async Task CreateFolderAsync()
+    {
+        if (_contents is null || LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.CreateFolderAsync(_contents.Folder.Id, _newFolder.Name);
+            _newFolder = new();
+            _showFolderForm = false;
+            await OpenFolderAsync(_contents.Folder.Id);
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private async Task RecycleFileAsync(string id)
+    {
+        if (LibraryState.Workspace is null || _contents is null) return;
+        await LibraryState.Workspace.RecycleFileAsync(id);
+        await OpenFolderAsync(_contents.Folder.Id);
+    }
+
+    private async Task RecycleFolderAsync(string id)
+    {
+        if (LibraryState.Workspace is null || _contents is null) return;
+        await LibraryState.Workspace.RecycleFolderAsync(id);
+        await OpenFolderAsync(_contents.Folder.Id);
+    }
+
+    private void OpenFile(string id) => Navigation.NavigateTo($"/file/{id}");
+    private void OnLibraryChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => LibraryState.Changed -= OnLibraryChanged;
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1_073_741_824 => $"{bytes / 1_073_741_824d:0.##} GB",
+        >= 1_048_576 => $"{bytes / 1_048_576d:0.##} MB",
+        >= 1_024 => $"{bytes / 1_024d:0.##} KB",
+        _ => $"{bytes} B"
+    };
+
+    private sealed class FolderForm { public string Name { get; set; } = string.Empty; }
+    private sealed class ItemForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string DestinationFolderId { get; set; } = string.Empty;
+    }
+    private sealed class DuplicateForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string DestinationFolderId { get; set; } = string.Empty;
+    }
+}

@@ -1,0 +1,316 @@
+@page "/file/{Id}"
+@inject AppLibraryState LibraryState
+@inject NavigationManager Navigation
+
+<PageTitle>File details · SlopFactory</PageTitle>
+
+@if (_file is null)
+{
+    <section class="center-state"><h1>Loading file</h1></section>
+}
+else
+{
+    <header class="page-header">
+        <div><p class="eyebrow">File details</p><h1>@_file.DisplayName</h1><p class="muted">@_file.MediaType · @_file.ByteSize bytes</p></div>
+        <button class="secondary" @onclick="Back">Back to library</button>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="notice" role="status">@_message</div>
+    }
+
+    <section class="detail-grid">
+        @if (_textContent is not null || _textError is not null)
+        {
+            <article class="panel text-panel">
+                <h2>Text viewer</h2>
+                @if (_textError is not null)
+                {
+                    <p class="error">@_textError</p>
+                }
+                else
+                {
+                    <p class="muted">Read-only · @_textContent!.EncodingName@(_textContent.IsTruncated ? " · Showing the first 1,048,576 characters" : string.Empty)</p>
+                    <pre class="text-viewer">@_textContent.Content</pre>
+                }
+            </article>
+        }
+
+        <article class="panel">
+            <h2>System information</h2>
+            <dl>
+                <dt>Content hash</dt><dd class="mono">SHA-256 @_file.ContentHash</dd>
+                <dt>Imported</dt><dd>@_file.ImportedAt.ToLocalTime().ToString("g")</dd>
+                <dt>Origin</dt><dd>@_file.Origin</dd>
+                <dt>State</dt><dd>@_file.State</dd>
+            </dl>
+        </article>
+
+        <article class="panel">
+            <h2>User metadata</h2>
+            @if (_metadata.Count == 0)
+            {
+                <p class="empty">No user metadata.</p>
+            }
+            else
+            {
+                <ul class="metadata-list">
+                    @foreach (var item in _metadata)
+                    {
+                        <li>
+                            <div><strong>@item.Key</strong><small>@item.Kind @(item.IsSensitive ? "· Sensitive" : string.Empty)</small></div>
+                            <code>@(item.IsSensitive && !_revealed.Contains(item.Id) ? "••••••" : item.SerializedValue)</code>
+                            @if (item.IsSensitive)
+                            {
+                                <button class="ghost" @onclick="() => ToggleReveal(item.Id)">@(_revealed.Contains(item.Id) ? "Conceal" : "Reveal for session")</button>
+                            }
+                            <button class="ghost" @onclick="() => BeginRename(item)">Rename key</button>
+                            <button class="danger ghost" @onclick="() => RemoveMetadataAsync(item.Key)">Remove</button>
+                            @if (_renamingMetadataId == item.Id)
+                            {
+                                <div class="inline-form">
+                                    <label for="rename-key-@item.Id">New key</label>
+                                    <input id="rename-key-@item.Id" @bind="_renameKey" maxlength="100" />
+                                    <button @onclick="() => RenameMetadataAsync(item.Key)">Save key</button>
+                                    <button class="secondary" @onclick="CancelRename">Cancel</button>
+                                </div>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+
+            <EditForm Model="_metadataForm" OnValidSubmit="SaveMetadataAsync" class="stack-form">
+                <label for="metadata-key">Key</label>
+                <InputText id="metadata-key" @bind-Value="_metadataForm.Key" maxlength="100" />
+                <label for="metadata-kind">Type</label>
+                <InputSelect id="metadata-kind" @bind-Value="_metadataForm.Kind">
+                    @foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@kind</option> }
+                </InputSelect>
+                <label for="metadata-value">Value</label>
+                <InputTextArea id="metadata-value" @bind-Value="_metadataForm.Value" />
+                <label class="check"><InputCheckbox @bind-Value="_metadataForm.IsSensitive" /> Sensitive</label>
+                <button type="submit">Add or update metadata</button>
+            </EditForm>
+        </article>
+
+        <article class="panel">
+            <h2>Links</h2>
+            @if (_links.Count == 0) { <p class="empty">No file links.</p> }
+            else
+            {
+                <ul class="metadata-list">
+                    @foreach (var link in _links)
+                    {
+                        <li>
+                            <div><strong>@link.Label</strong><small>@FileName(link.SourceFileId) → @FileName(link.TargetFileId) · @link.State</small></div>
+                            @if (link.State == LibraryRecordState.Active)
+                            {
+                                <button class="ghost" @onclick="() => BeginLinkRename(link)">Relabel</button>
+                                <button class="ghost" @onclick="() => ReverseLinkAsync(link.Id)">Reverse direction</button>
+                                <button class="danger ghost" @onclick="() => RecycleLinkAsync(link.Id)">Recycle link</button>
+                            }
+                            @if (_renamingLinkId == link.Id)
+                            {
+                                <div class="inline-form">
+                                    <label for="link-rename-@link.Id">New label</label>
+                                    <input id="link-rename-@link.Id" @bind="_renamedLinkLabel" maxlength="200" />
+                                    <button @onclick="() => RelabelLinkAsync(link.Id)">Save label</button>
+                                    <button class="secondary" @onclick="CancelLinkRename">Cancel</button>
+                                </div>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+            @if (_availableFiles.Count == 0)
+            {
+                <p class="empty">Import another file before creating a link.</p>
+            }
+            else
+            {
+                <EditForm Model="_linkForm" OnValidSubmit="CreateLinkAsync" class="stack-form">
+                    <label for="link-target">Target file</label>
+                    <InputSelect id="link-target" @bind-Value="_linkForm.TargetFileId">
+                        <option value="">Select a file</option>
+                        @foreach (var target in _availableFiles) { <option value="@target.Id">@target.DisplayName</option> }
+                    </InputSelect>
+                    <label for="link-label">Label</label>
+                    <InputText id="link-label" @bind-Value="_linkForm.Label" maxlength="200" />
+                    <button type="submit">Create directed link</button>
+                </EditForm>
+            }
+        </article>
+    </section>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    private FileRecord? _file;
+    private IReadOnlyList<MetadataEntry> _metadata = [];
+    private IReadOnlyList<FileLink> _links = [];
+    private IReadOnlyList<FileRecord> _availableFiles = [];
+    private TextFileContent? _textContent;
+    private string? _textError;
+    private readonly HashSet<string> _revealed = new(StringComparer.Ordinal);
+    private MetadataForm _metadataForm = new();
+    private LinkForm _linkForm = new();
+    private string? _message;
+    private string? _renamingMetadataId;
+    private string _renameKey = string.Empty;
+    private string? _renamingLinkId;
+    private string _renamedLinkLabel = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LibraryState.InitializeAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            _file = await LibraryState.Workspace.GetFileAsync(Id);
+            _textContent = null;
+            _textError = null;
+            if (IsTextMediaType(_file.MediaType))
+            {
+                try { _textContent = await LibraryState.Workspace.ReadTextFileAsync(Id); }
+                catch (SlopFactoryException exception) { _textError = exception.Message; }
+            }
+            _metadata = await LibraryState.Workspace.GetMetadataAsync(Id);
+            _links = await LibraryState.Workspace.GetLinksAsync(Id);
+            _availableFiles = (await LibraryState.Workspace.GetActiveFilesAsync()).Where(file => file.Id != Id).ToArray();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private async Task SaveMetadataAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.SetMetadataAsync(Id, _metadataForm.Key, _metadataForm.Kind, _metadataForm.Value, _metadataForm.IsSensitive);
+            _metadataForm = new();
+            _message = "Metadata saved.";
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private async Task RemoveMetadataAsync(string key)
+    {
+        if (LibraryState.Workspace is null) return;
+        await LibraryState.Workspace.RemoveMetadataAsync(Id, key);
+        await ReloadAsync();
+    }
+
+    private void BeginRename(MetadataEntry entry)
+    {
+        _renamingMetadataId = entry.Id;
+        _renameKey = entry.Key;
+    }
+
+    private void CancelRename()
+    {
+        _renamingMetadataId = null;
+        _renameKey = string.Empty;
+    }
+
+    private async Task RenameMetadataAsync(string currentKey)
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.RenameMetadataAsync(Id, currentKey, _renameKey);
+            CancelRename();
+            _message = "Metadata key renamed.";
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private async Task CreateLinkAsync()
+    {
+        if (LibraryState.Workspace is null || string.IsNullOrWhiteSpace(_linkForm.TargetFileId)) return;
+        try
+        {
+            await LibraryState.Workspace.CreateLinkAsync(Id, _linkForm.TargetFileId, _linkForm.Label);
+            _linkForm = new();
+            _message = "Link created.";
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private void BeginLinkRename(FileLink link)
+    {
+        _renamingLinkId = link.Id;
+        _renamedLinkLabel = link.Label;
+    }
+
+    private void CancelLinkRename()
+    {
+        _renamingLinkId = null;
+        _renamedLinkLabel = string.Empty;
+    }
+
+    private async Task RelabelLinkAsync(string linkId)
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.RelabelLinkAsync(linkId, _renamedLinkLabel);
+            CancelLinkRename();
+            _message = "Link relabelled.";
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private async Task ReverseLinkAsync(string linkId)
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.ReverseLinkAsync(linkId);
+            _message = "Link direction reversed.";
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private async Task RecycleLinkAsync(string linkId)
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.RecycleLinkAsync(linkId);
+            _message = "Link moved to the recycle bin.";
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private void ToggleReveal(string id) { if (!_revealed.Add(id)) _revealed.Remove(id); }
+    private void Back() => Navigation.NavigateTo("/");
+    private static bool IsTextMediaType(string mediaType) => mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || mediaType is "application/json" or "application/xml";
+    private string FileName(string fileId) => fileId == _file?.Id ? _file.DisplayName : _availableFiles.FirstOrDefault(file => file.Id == fileId)?.DisplayName ?? $"Unavailable file {fileId[..Math.Min(8, fileId.Length)]}";
+
+    private sealed class MetadataForm
+    {
+        public string Key { get; set; } = string.Empty;
+        public MetadataValueKind Kind { get; set; } = MetadataValueKind.Text;
+        public string Value { get; set; } = string.Empty;
+        public bool IsSensitive { get; set; }
+    }
+
+    private sealed class LinkForm
+    {
+        public string TargetFileId { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+    }
+}
