@@ -3,7 +3,7 @@
 
 <PageTitle>Recycle bin · SlopFactory</PageTitle>
 
-<header class="page-header"><div><p class="eyebrow">Recovery</p><h1>Recycle bin</h1><p class="muted">Restore items or permanently delete individual files.</p></div></header>
+<header class="page-header"><div><p class="eyebrow">Recovery</p><h1>Recycle bin</h1><p class="muted">Restore top-level aggregates or permanently delete files, folder subtrees, and links.</p></div></header>
 
 @if (!string.IsNullOrWhiteSpace(_message)) { <div class="notice" role="status">@_message</div> }
 
@@ -15,7 +15,13 @@
         <div class="file-list">
             @foreach (var folder in _folders)
             {
-                <article class="file-row"><div class="file-main"><strong>@folder.Name</strong><span>Folder and its contents</span></div><button @onclick="() => RestoreFolderAsync(folder.Id)">Restore</button></article>
+                <article class="file-row">
+                    <div class="file-main"><strong>@folder.Name</strong><span>Folder and its owned contents · @folder.State</span></div>
+                    <div class="actions">
+                        @if (folder.State == LibraryRecordState.Recycled) { <button @onclick="() => RestoreFolderAsync(folder.Id)">Restore</button> }
+                        <button class="danger" @onclick="() => DeleteFolderAsync(folder.Id)">@(folder.State == LibraryRecordState.PendingPermanentDeletion ? "Retry permanent deletion" : "Delete permanently")</button>
+                    </div>
+                </article>
             }
         </div>
     }
@@ -30,8 +36,11 @@
             @foreach (var file in _files)
             {
                 <article class="file-row">
-                    <div class="file-main"><strong>@file.DisplayName</strong><span>@file.MediaType · @file.ByteSize bytes</span></div>
-                    <div class="actions"><button @onclick="() => RestoreFileAsync(file.Id)">Restore</button><button class="danger" @onclick="() => DeleteFileAsync(file.Id)">Delete permanently</button></div>
+                    <div class="file-main"><strong>@file.DisplayName</strong><span>@file.MediaType · @file.ByteSize bytes · @file.State</span></div>
+                    <div class="actions">
+                        @if (file.State == LibraryRecordState.Recycled) { <button @onclick="() => RestoreFileAsync(file.Id)">Restore</button> }
+                        <button class="danger" @onclick="() => DeleteFileAsync(file.Id)">@(file.State == LibraryRecordState.PendingPermanentDeletion ? "Retry permanent deletion" : "Delete permanently")</button>
+                    </div>
                 </article>
             }
         </div>
@@ -70,8 +79,8 @@
     private async Task ReloadAsync()
     {
         if (LibraryState.Workspace is null) return;
-        _files = await LibraryState.Workspace.GetRecycledFilesAsync();
-        _folders = await LibraryState.Workspace.GetRecycledFoldersAsync();
+        _files = await LibraryState.Workspace.GetRecycleBinFilesAsync();
+        _folders = await LibraryState.Workspace.GetRecycleBinFoldersAsync();
         _links = await LibraryState.Workspace.GetRecycledLinksAsync();
     }
 
@@ -92,6 +101,13 @@
     private async Task DeleteFileAsync(string id)
     {
         try { await LibraryState.Workspace!.PermanentlyDeleteFileAsync(id); _message = "File permanently deleted."; }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
+        await ReloadAsync();
+    }
+
+    private async Task DeleteFolderAsync(string id)
+    {
+        try { await LibraryState.Workspace!.PermanentlyDeleteFolderAsync(id); _message = "Folder and its contents were permanently deleted."; }
         catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
         await ReloadAsync();
     }

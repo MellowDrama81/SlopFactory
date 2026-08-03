@@ -1533,24 +1533,19 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Generation-tab drafts are transient working state and do not enter the recycle bin when the user confirms **Discard and Close**.
 - Device preferences, diagnostic logs, credential-index entries, queues, temporary files and regenerable preview caches are operational state rather than recyclable library records.
 - The recycle bin has one page with category filters for its supported entity types.
-- Each top-level deleted aggregate appears once and its owned children are summarized rather than listed independently.
 - Recycle-bin items show entity type, name, original location or parent, deletion time and cascade summary.
 - The recycle bin supports search, sorting, multi-selection, restore, permanent deletion and **Empty Recycle Bin**.
 - Before restoration, the application previews additional parents, descendants, models, saved settings or linked files which may also be restored.
 - Name conflicts and missing dependencies are shown before restoration is committed.
 - Each selected aggregate is restored transactionally.
 - If part of a multi-selection fails, failed items remain in the recycle bin and a per-item summary is shown.
-- Pending and failed permanent deletions remain visible with status and retry actions.
-- Recycling records the deletion timestamp and deleted aggregate ownership without copying or moving media.
 - Integrity checks include recycled managed files.
 - Regenerable preview-cache entries can be removed when a file is recycled.
-- The user can permanently delete an individual item or a selected group of items from the recycle bin.
+- The user can permanently delete a selected group of items from the recycle bin.
 - The user can empty the recycle bin to permanently delete all of its contents.
 - Before permanent deletion, the application shows a confirmation summarizing all items which will be deleted through dependency cascades.
-- Items being permanently deleted are first marked **Pending Permanent Deletion** and cannot be restored or edited.
-- Managed files and secure-storage credentials are removed before their database records are finalized.
-- If a required deletion fails, a visible failed-deletion entry remains with its sanitized error and a retry action.
-- A managed file which is already missing is treated as successfully removed.
+- Secure-storage credentials are removed before their database records are finalized.
+- Pending deletion entries retain and display a sanitized reason for the most recent failure.
 - Failed secure-storage cleanup is retried rather than silently leaving an orphaned credential.
 - Emptying the recycle bin processes aggregates independently and displays a completion summary.
 - Recycled items are never permanently deleted automatically based on age.

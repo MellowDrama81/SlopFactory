@@ -63,4 +63,8 @@ Metadata mutations and the owning file's `modified_at` update share one SQLite t
 
 File and folder recycling is a logical state change. Folder recycling uses recursive SQLite CTEs so the subtree changes in one transaction. Link state is recalculated atomically: an endpoint-owned link is active only when both endpoints are active and returns automatically when both endpoints are restored. Explicit link recycling is tracked separately so endpoint restoration cannot undo the user's deletion; those links support restore and permanent deletion from the recycle bin.
 
-Individual permanent file deletion first marks the database row `PendingPermanentDeletion`, removes the validated managed path, and then removes the database aggregate.
+Permanent file deletion first marks the database row `PendingPermanentDeletion`, removes the validated managed path, and then removes the database aggregate. A missing managed file is already removed; a directory or reparse point substituted at that path is rejected. Failures deliberately leave the pending row for an explicit retry instead of making it restorable again.
+
+Permanent folder deletion marks the entire folder subtree and its files pending in one transaction, then removes each regular managed file. After all paths are absent, another transaction deletes descendant file aggregates before the folder tree so foreign-key ownership remains valid. A partial physical deletion is retryable: already-removed paths are skipped, remaining paths are attempted again, and the database aggregate stays pending until completion.
+
+Recycle-bin queries return only top-level folder aggregates and independently recycled files. Files owned by a recycled or pending folder subtree remain queryable for integrity and deletion work but are not presented as separate user-managed recycle entries.

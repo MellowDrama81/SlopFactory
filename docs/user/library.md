@@ -39,8 +39,10 @@ An explicitly recycled link appears as its own recycle-bin item and can be resto
 
 ## Recycle bin
 
-Recycling a file hides it from the active library while leaving its managed bytes in place. Its metadata remains attached. Recycling a folder also recycles all folders and files below it.
+Recycling a file hides it from the active library while leaving its managed bytes in place. Its metadata remains attached. Recycling a folder also recycles all folders and files below it. The recycle bin shows that deleted subtree once as a top-level folder aggregate instead of exposing every owned file and descendant as unrelated entries.
 
-Open **Recycle bin** to restore a file, folder, or explicitly recycled file link. Restoring a folder restores its descendant hierarchy. A recycled individual file or link can also be permanently deleted.
+Open **Recycle bin** to restore a file, folder, or explicitly recycled file link. Restoring a folder restores its descendant hierarchy. An individual file, complete folder subtree, or link can also be permanently deleted.
+
+Permanent deletion first changes the file or folder aggregate to **Pending Permanent Deletion**, where it cannot be restored. Managed bytes are removed before their database aggregates. If deletion is interrupted or a managed path is unsafe, the pending item remains visible with **Retry permanent deletion**; bytes already missing are treated as removed so an interrupted operation can finish safely.
 
 Permanent deletion cannot be undone. The broader bulk-selection, empty-bin, and conflict-review workflows are still under development.

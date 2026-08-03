@@ -237,6 +237,30 @@ internal sealed class SqliteLibraryDatabase
 
     public Task<IReadOnlyList<FileRecord>> GetActiveFilesAsync(CancellationToken cancellationToken) => GetFilesByStateAsync(LibraryRecordState.Active, cancellationToken);
 
+    public async Task<IReadOnlyList<FileRecord>> GetTopLevelDeletedFilesAsync(CancellationToken cancellationToken)
+    {
+        var results = new List<FileRecord>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT f.id,f.folder_id,f.display_name,f.managed_name,f.content_hash,f.byte_size,f.media_type,f.origin,f.state,f.imported_at,f.modified_at,f.source_last_modified,f.recycled_at
+            FROM files f
+            WHERE f.state IN (1,2)
+              AND NOT EXISTS (
+                WITH RECURSIVE ancestors(id,parent_id,state) AS (
+                    SELECT id,parent_id,state FROM folders WHERE id=f.folder_id
+                    UNION ALL
+                    SELECT p.id,p.parent_id,p.state FROM folders p JOIN ancestors a ON a.parent_id=p.id
+                )
+                SELECT 1 FROM ancestors WHERE state IN (1,2)
+              )
+            ORDER BY f.recycled_at DESC,f.name_key;
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadFile(reader));
+        return results;
+    }
+
     public async Task<IReadOnlyList<FolderRecord>> GetFoldersByStateAsync(LibraryRecordState state, CancellationToken cancellationToken)
     {
         var results = new List<FolderRecord>();
@@ -244,6 +268,23 @@ internal sealed class SqliteLibraryDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT id,parent_id,name,state,created_at,modified_at,recycled_at FROM folders WHERE state=$state ORDER BY recycled_at DESC,name_key;";
         command.Parameters.AddWithValue("$state", (int)state);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadFolder(reader));
+        return results;
+    }
+
+    public async Task<IReadOnlyList<FolderRecord>> GetTopLevelDeletedFoldersAsync(CancellationToken cancellationToken)
+    {
+        var results = new List<FolderRecord>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT f.id,f.parent_id,f.name,f.state,f.created_at,f.modified_at,f.recycled_at
+            FROM folders f
+            WHERE f.state IN (1,2)
+              AND NOT EXISTS (SELECT 1 FROM folders p WHERE p.id=f.parent_id AND p.state IN (1,2))
+            ORDER BY f.recycled_at DESC,f.name_key;
+            """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadFolder(reader));
         return results;
@@ -679,6 +720,8 @@ internal sealed class SqliteLibraryDatabase
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var folder = await GetFolderAsync(connection, folderId, cancellationToken, transaction).ConfigureAwait(false);
+        if (folder.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled folder can be restored.");
         const string ancestorsCte = "WITH RECURSIVE ancestors(id) AS (SELECT $id UNION ALL SELECT f.parent_id FROM folders f JOIN ancestors a ON f.id=a.id WHERE f.parent_id IS NOT NULL), descendants(id) AS (SELECT $id UNION ALL SELECT f.id FROM folders f JOIN descendants d ON f.parent_id=d.id) ";
         var now = Format(DateTimeOffset.UtcNow);
         try
@@ -705,16 +748,53 @@ internal sealed class SqliteLibraryDatabase
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var file = await GetFileAsync(connection, fileId, cancellationToken, transaction).ConfigureAwait(false);
-        if (file.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled file can be permanently deleted.");
-        await ExecuteNonQueryAsync(connection, "UPDATE files SET state=2 WHERE id=$id;", cancellationToken, transaction, ("$id", fileId)).ConfigureAwait(false);
+        if (file.State is not (LibraryRecordState.Recycled or LibraryRecordState.PendingPermanentDeletion)) throw new LibraryValidationException("Only a recycled or pending file can be permanently deleted.");
+        if (file.State == LibraryRecordState.Recycled)
+        {
+            await ExecuteNonQueryAsync(connection, "UPDATE files SET state=2 WHERE id=$id;", cancellationToken, transaction, ("$id", fileId)).ConfigureAwait(false);
+        }
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return file with { State = LibraryRecordState.PendingPermanentDeletion };
     }
 
-    public async Task RevertFileDeletionAsync(string fileId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FileRecord>> PrepareFolderDeletionAsync(string folderId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
-        await ExecuteNonQueryAsync(connection, "UPDATE files SET state=1 WHERE id=$id AND state=2;", cancellationToken, null, ("$id", fileId)).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var folder = await GetFolderAsync(connection, folderId, cancellationToken, transaction).ConfigureAwait(false);
+        if (folder.State is not (LibraryRecordState.Recycled or LibraryRecordState.PendingPermanentDeletion))
+        {
+            throw new LibraryValidationException("Only a recycled or pending folder can be permanently deleted.");
+        }
+        const string descendants = "WITH RECURSIVE descendants(id) AS (SELECT $id UNION ALL SELECT f.id FROM folders f JOIN descendants d ON f.parent_id=d.id) ";
+        await ExecuteNonQueryAsync(connection, descendants + "UPDATE files SET state=2 WHERE folder_id IN (SELECT id FROM descendants) AND state IN (1,2);",
+            cancellationToken, transaction, ("$id", folderId)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, descendants + "UPDATE folders SET state=2 WHERE id IN (SELECT id FROM descendants) AND state IN (1,2);",
+            cancellationToken, transaction, ("$id", folderId)).ConfigureAwait(false);
+
+        var files = new List<FileRecord>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = descendants + "SELECT f.id,f.folder_id,f.display_name,f.managed_name,f.content_hash,f.byte_size,f.media_type,f.origin,f.state,f.imported_at,f.modified_at,f.source_last_modified,f.recycled_at FROM files f WHERE f.folder_id IN (SELECT id FROM descendants) ORDER BY f.id;";
+            command.Parameters.AddWithValue("$id", folderId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) files.Add(ReadFile(reader));
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return files;
+    }
+
+    public async Task DeleteFolderRecordAsync(string folderId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        const string descendants = "WITH RECURSIVE descendants(id) AS (SELECT $id UNION ALL SELECT f.id FROM folders f JOIN descendants d ON f.parent_id=d.id) ";
+        await ExecuteNonQueryAsync(connection, descendants + "DELETE FROM files WHERE folder_id IN (SELECT id FROM descendants);",
+            cancellationToken, transaction, ("$id", folderId)).ConfigureAwait(false);
+        var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM folders WHERE id=$id AND state=2;", cancellationToken, transaction, ("$id", folderId)).ConfigureAwait(false);
+        if (deleted == 0) throw new LibraryValidationException("The pending folder aggregate could not be found for permanent deletion.");
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken)

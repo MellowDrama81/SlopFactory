@@ -170,12 +170,103 @@ public sealed class LibraryWorkspaceTests
         await workspace.RecycleFolderAsync(folder.Id);
         Assert.Contains(await workspace.GetRecycledFoldersAsync(), item => item.Id == folder.Id);
         Assert.Contains(await workspace.GetRecycledFilesAsync(), item => item.Id == file.Id);
+        Assert.Equal(folder.Id, Assert.Single(await workspace.GetRecycleBinFoldersAsync()).Id);
+        Assert.DoesNotContain(await workspace.GetRecycleBinFilesAsync(), item => item.Id == file.Id);
         await workspace.RestoreFolderAsync(folder.Id);
 
         await workspace.RecycleFileAsync(file.Id);
         await workspace.PermanentlyDeleteFileAsync(file.Id);
         Assert.False(File.Exists(managedPath));
         Assert.DoesNotContain(await workspace.GetRecycledFilesAsync(), item => item.Id == file.Id);
+    }
+
+    [Fact]
+    public async Task PermanentFolderDeletionRemovesSubtreeBytesRecordsAndLinks()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourceA = temporary.Child("inside-a.txt");
+        var sourceB = temporary.Child("inside-b.txt");
+        var outsideSource = temporary.Child("outside.txt");
+        await File.WriteAllTextAsync(sourceA, "a");
+        await File.WriteAllTextAsync(sourceB, "b");
+        await File.WriteAllTextAsync(outsideSource, "outside");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var parent = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Parent");
+        var child = await workspace.CreateFolderAsync(parent.Id, "Child");
+        var fileA = Assert.Single(await workspace.ImportAsync([sourceA], parent.Id)).File!;
+        var fileB = Assert.Single(await workspace.ImportAsync([sourceB], child.Id)).File!;
+        var outside = Assert.Single(await workspace.ImportAsync([outsideSource], workspace.Descriptor.RootFolderId)).File!;
+        var pathA = workspace.GetManagedFilePath(fileA);
+        var pathB = workspace.GetManagedFilePath(fileB);
+        var link = await workspace.CreateLinkAsync(outside.Id, fileB.Id, "contains");
+
+        await workspace.RecycleFolderAsync(parent.Id);
+        await workspace.PermanentlyDeleteFolderAsync(parent.Id);
+
+        Assert.False(File.Exists(pathA));
+        Assert.False(File.Exists(pathB));
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetFileAsync(fileA.Id));
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetFileAsync(fileB.Id));
+        Assert.DoesNotContain(await workspace.GetLinksAsync(outside.Id), item => item.Id == link.Id);
+        Assert.Empty(await workspace.GetRecycleBinFoldersAsync());
+    }
+
+    [Fact]
+    public async Task FailedPermanentFileDeletionRemainsPendingAndCanBeRetried()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("pending.txt");
+        await File.WriteAllTextAsync(source, "pending");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var managedPath = workspace.GetManagedFilePath(file);
+        await workspace.RecycleFileAsync(file.Id);
+        File.Delete(managedPath);
+        Directory.CreateDirectory(managedPath);
+
+        await Assert.ThrowsAsync<IOException>(() => workspace.PermanentlyDeleteFileAsync(file.Id));
+
+        var pending = Assert.Single(await workspace.GetRecycleBinFilesAsync());
+        Assert.Equal(LibraryRecordState.PendingPermanentDeletion, pending.State);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RestoreFileAsync(file.Id));
+
+        Directory.Delete(managedPath);
+        await workspace.PermanentlyDeleteFileAsync(file.Id);
+        Assert.Empty(await workspace.GetRecycleBinFilesAsync());
+    }
+
+    [Fact]
+    public async Task FailedPermanentFolderDeletionRemainsPendingAndCanBeRetried()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourceA = temporary.Child("folder-pending-a.txt");
+        var sourceB = temporary.Child("folder-pending-b.txt");
+        await File.WriteAllTextAsync(sourceA, "a");
+        await File.WriteAllTextAsync(sourceB, "b");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var folder = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Pending folder");
+        var fileA = Assert.Single(await workspace.ImportAsync([sourceA], folder.Id)).File!;
+        var fileB = Assert.Single(await workspace.ImportAsync([sourceB], folder.Id)).File!;
+        var unsafePath = workspace.GetManagedFilePath(fileB);
+        File.Delete(unsafePath);
+        Directory.CreateDirectory(unsafePath);
+        await workspace.RecycleFolderAsync(folder.Id);
+
+        await Assert.ThrowsAsync<IOException>(() => workspace.PermanentlyDeleteFolderAsync(folder.Id));
+
+        var pending = Assert.Single(await workspace.GetRecycleBinFoldersAsync());
+        Assert.Equal(LibraryRecordState.PendingPermanentDeletion, pending.State);
+        Assert.Empty(await workspace.GetRecycleBinFilesAsync());
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RestoreFolderAsync(folder.Id));
+
+        Directory.Delete(unsafePath);
+        await workspace.PermanentlyDeleteFolderAsync(folder.Id);
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetFileAsync(fileA.Id));
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetFileAsync(fileB.Id));
+        Assert.Empty(await workspace.GetRecycleBinFoldersAsync());
     }
 
     [Fact]

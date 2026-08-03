@@ -127,6 +127,18 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetFoldersByStateAsync(LibraryRecordState.Recycled, cancellationToken);
     }
 
+    public Task<IReadOnlyList<FileRecord>> GetRecycleBinFilesAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetTopLevelDeletedFilesAsync(cancellationToken);
+    }
+
+    public Task<IReadOnlyList<FolderRecord>> GetRecycleBinFoldersAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetTopLevelDeletedFoldersAsync(cancellationToken);
+    }
+
     public Task<FolderRecord> CreateFolderAsync(string parentFolderId, string name, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -466,16 +478,21 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         ThrowIfDisposed();
         var file = await _database.PrepareFileDeletionAsync(fileId, cancellationToken).ConfigureAwait(false);
         var path = _layout.ManagedFilePath(file.ManagedName);
-        try
+        DeleteManagedFile(path);
+        await _database.DeleteFileRecordAsync(fileId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task PermanentlyDeleteFolderAsync(string folderId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (folderId == Descriptor.RootFolderId || folderId == Descriptor.GeneratedFolderId) throw new LibraryValidationException("Permanent library folders cannot be deleted.");
+        var files = await _database.PrepareFolderDeletionAsync(folderId, cancellationToken).ConfigureAwait(false);
+        foreach (var file in files)
         {
-            if (File.Exists(path)) File.Delete(path);
-            await _database.DeleteFileRecordAsync(fileId, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            DeleteManagedFile(_layout.ManagedFilePath(file.ManagedName));
         }
-        catch
-        {
-            await _database.RevertFileDeletionAsync(fileId, CancellationToken.None).ConfigureAwait(false);
-            throw;
-        }
+        await _database.DeleteFolderRecordAsync(folderId, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default)
@@ -520,5 +537,14 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         if (string.IsNullOrWhiteSpace(path)) return;
         try { if (File.Exists(path)) File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
+
+    private static void DeleteManagedFile(string path)
+    {
+        if (Directory.Exists(path)) throw new IOException("The managed file path was replaced by a directory; deletion is paused for review.");
+        if (!File.Exists(path)) return;
+        var info = new FileInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("The managed file path is a symbolic link or reparse point; deletion is paused for review.");
+        File.Delete(path);
     }
 }
