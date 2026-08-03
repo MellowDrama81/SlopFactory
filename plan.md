@@ -632,7 +632,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The application does not impose a storage quota; capacity is limited only by available device storage.
 - Long file operations display progress and support cancellation.
 - Thumbnail generation and media metadata extraction run in background tasks.
-- Audio and video are streamed from local managed storage.
 - Preview decoding enforces bounded image dimensions, total pixel count, animation frame count, decoded-memory use, media probe time and thumbnail-processing work.
 - These are safety limits on derived viewing work, not limits on what the library can store or export.
 - Files which exceed a preview safety limit remain intact and are shown with metadata plus **Preview Too Complex or Large** rather than being marked corrupt.
@@ -645,8 +644,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## Library File Formats
 
 - The library can store any file type, including files which the application cannot preview.
-- Built-in audio playback supports MP3, WAV and AAC/M4A. FLAC and Opus are supported when the platform codec can play them.
-- Built-in video playback guarantees support for MP4 containing H.264 video and AAC audio.
 - File types are detected using available provider content types, file signatures and filename extensions rather than trusting the extension alone.
 - Detected media type and active-content classification are read-only system metadata and cannot be overridden by the user.
 - Renaming a file's display name or extension never changes its viewer, provider compatibility, preview behavior or safety classification.
@@ -877,14 +874,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Animated-image thumbnails and list previews are always static.
 - When the operating system requests reduced motion, animated images remain paused across navigation and viewer restoration unless the user explicitly plays the current item again.
 - SlopFactory never autoplays potentially flashing imported or generated content.
-- Audio playback provides play, pause, seek, elapsed and remaining time, volume, mute and playback-speed controls.
-- Video playback provides the audio controls plus full-screen mode.
-- When the platform media stack exposes embedded caption or subtitle tracks, the video viewer lists them and allows track and language selection.
-- Caption controls are keyboard, touch and screen-reader accessible and do not cover essential playback controls.
-- SlopFactory does not automatically generate captions or transcripts in the first release.
-- External subtitle files remain separate library files which can be connected through ordinary user-created links but are not discovered or loaded implicitly by the viewer.
-- Audio and video do not autoplay, and only one item plays at a time.
-- Playback stops when the user leaves the viewer. The first release does not provide background media playback.
 - Viewer operations do not modify original file bytes.
 - **Open Externally** never exposes a writable managed library file directly.
 - On Android, the application shares the managed file through a narrowly scoped, read-only content URI grant.
@@ -2035,10 +2024,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 17. The user can read a text file from the library.
 
 18. The user can view an image file from the library.
-
-19. The user can play an audio file from the library.
-
-20. The user can play a video file from the library.
 
 21. The user can view/edit the metadata associated with a file.
 

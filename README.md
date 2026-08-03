@@ -12,6 +12,7 @@ The current development build implements the local-library foundation, including
 - retained original filenames and privacy-safe typed-metadata match explanations;
 - a read-only UTF-8 viewer with full-file search, sanitized rendered Markdown, confirmed external links, and a non-destructive **Edit as Copy** workflow;
 - a verified image viewer with fit, zoom, pan, viewing rotation, and sanitized SVG;
+- verified, seekable audio and video playback with no autoplay, one active player, speed controls, and platform caption/full-screen support;
 - typed user metadata and sensitive-value concealment;
 - directed file links with recycle and restore behavior;
 - searchable aggregate recycling with conflict-aware bulk recovery, persisted retryable-deletion failures, and empty-bin processing;
@@ -19,7 +20,7 @@ The current development build implements the local-library foundation, including
 - transactional SQLite schema upgrades; and
 - shared .NET MAUI application projects for Windows and Android.
 
-AI-provider connections, generation workflows, additional media viewers, generation-aware and typed-comparison filters, export, and release-resilience features remain under development. The outstanding product requirements are tracked in [plan.md](plan.md).
+AI-provider connections, generation workflows, preview thumbnails, generation-aware and typed-comparison filters, export, and release-resilience features remain under development. The outstanding product requirements are tracked in [plan.md](plan.md).
 
 ## Documentation
 

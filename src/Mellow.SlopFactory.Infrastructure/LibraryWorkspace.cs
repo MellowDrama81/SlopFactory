@@ -188,12 +188,64 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return new ImageFileContent(file.MediaType, file.MediaType == "image/svg+xml" ? SvgSanitizer.Sanitize(bytes) : bytes);
     }
 
+    public async Task<MediaPlaybackDescriptor> PrepareMediaPlaybackAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active media file can be played.");
+        if (!IsPlayableMediaType(file.MediaType)) throw new LibraryValidationException("This file is not a supported built-in audio or video format.");
+        var path = ValidateRegularManagedFile(file);
+        var actualHash = await Hashing.Sha256Async(path, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(actualHash, file.ContentHash, StringComparison.Ordinal))
+        {
+            throw new LibraryValidationException("The managed media bytes no longer match the library record.");
+        }
+        return new MediaPlaybackDescriptor(file.Id, file.MediaType, file.ByteSize, file.ContentHash);
+    }
+
+    public async Task<Stream> OpenMediaRangeAsync(string fileId, string expectedContentHash, long offset, long length, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (offset < 0 || length < 0) throw new ArgumentOutOfRangeException(nameof(offset), "Media byte ranges cannot be negative.");
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active || !IsPlayableMediaType(file.MediaType)) throw new LibraryValidationException("The media file is no longer available for playback.");
+        if (!string.Equals(file.ContentHash, expectedContentHash, StringComparison.Ordinal)) throw new LibraryValidationException("The media file changed after playback was prepared.");
+        if (offset > file.ByteSize || length > file.ByteSize - offset) throw new LibraryValidationException("The requested media byte range is outside the file.");
+        var path = ValidateRegularManagedFile(file);
+        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65_536, FileOptions.Asynchronous | FileOptions.RandomAccess);
+        try
+        {
+            if (stream.Length != file.ByteSize) throw new LibraryValidationException("The managed media size no longer matches the library record.");
+            stream.Position = offset;
+            return new BoundedReadStream(stream, length);
+        }
+        catch
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     private static bool IsTextMediaType(string mediaType) =>
         mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase)
         || mediaType is "application/json" or "application/xml";
 
     private static bool IsImageMediaType(string mediaType) =>
         mediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif" or "image/svg+xml";
+
+    private static bool IsPlayableMediaType(string mediaType) =>
+        mediaType is "audio/mpeg" or "audio/wav" or "audio/aac" or "audio/mp4" or "audio/flac" or "audio/ogg" or "video/mp4";
+
+    private string ValidateRegularManagedFile(FileRecord file)
+    {
+        var path = _layout.ManagedFilePath(file.ManagedName);
+        if (Directory.Exists(path)) throw new LibraryValidationException("The managed media path is not a regular file.");
+        if (!File.Exists(path)) throw new LibraryValidationException("The managed media file is missing.");
+        var info = new FileInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("Redirected managed media files cannot be played.");
+        if (info.Length != file.ByteSize) throw new LibraryValidationException("The managed media size no longer matches the library record.");
+        return path;
+    }
 
     public Task<IReadOnlyList<FileRecord>> GetActiveFilesAsync(CancellationToken cancellationToken = default)
     {

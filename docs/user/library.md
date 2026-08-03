@@ -36,6 +36,10 @@ PNG, JPEG, WebP, and GIF files up to 32 MiB open in the built-in raster image vi
 
 SVG files use the same viewing controls only after SlopFactory parses and sanitizes them. The sanitizer removes scripts, event handlers, foreign elements and namespaces, embedded styles, and non-local references before the image enters the WebView. Sanitization changes only the temporary viewing representation, not the original managed SVG.
 
+Supported audio files provide play, pause, seek, time, volume, mute, and playback-speed controls. MP3, WAV, and AAC/M4A are built in; FLAC and Opus playback depends on the codecs available to the Windows or Android media stack. Supported video uses MP4 with H.264 video and AAC audio and also provides full-screen controls. Embedded caption or subtitle choices appear when the platform exposes them.
+
+SlopFactory verifies the complete managed media file against its recorded size and SHA-256 hash before enabling playback. Playback then streams bounded byte ranges from managed storage through a short-lived internal address; the application never places the library path in the page. Media does not autoplay, starting one player pauses another, and leaving the file page stops playback and revokes its internal address. Viewer controls never modify managed bytes.
+
 You can attach typed user metadata as text, number, Boolean, date, date-time, or JSON. Metadata keys are case-insensitively unique per file. The `slopfactory.` prefix is reserved for system data.
 
 Mark an entry **Sensitive** to conceal its value in the interface. **Reveal for session** reveals only that entry in the running application session. This flag is a display safeguard, not encryption.

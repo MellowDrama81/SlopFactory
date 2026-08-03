@@ -1,6 +1,9 @@
 @page "/file/{Id}"
 @inject AppLibraryState LibraryState
 @inject NavigationManager Navigation
+@inject ManagedMediaResourceService MediaResources
+@inject IJSRuntime JavaScript
+@implements IAsyncDisposable
 
 <PageTitle>File details · SlopFactory</PageTitle>
 
@@ -21,6 +24,47 @@ else
     }
 
     <section class="detail-grid">
+        @if (_mediaSource is not null || _mediaError is not null || _mediaPreparing)
+        {
+            <article class="panel media-panel">
+                <h2>@(_file.MediaType.StartsWith("video/", StringComparison.Ordinal) ? "Video viewer" : "Audio player")</h2>
+                @if (_mediaPreparing)
+                {
+                    <p class="muted" role="status">Verifying managed media before playback...</p>
+                }
+                else if (_mediaError is not null)
+                {
+                    <p class="error">@_mediaError</p>
+                }
+                else if (_file.MediaType.StartsWith("video/", StringComparison.Ordinal))
+                {
+                    <video @ref="_mediaElement" src="@_mediaSource!.Uri" controls preload="metadata" class="media-viewer">
+                        This platform cannot play the video format.
+                    </video>
+                }
+                else
+                {
+                    <audio @ref="_mediaElement" src="@_mediaSource!.Uri" controls preload="metadata" class="media-viewer">
+                        This platform cannot play the audio format.
+                    </audio>
+                }
+                @if (_mediaSource is not null)
+                {
+                    <div class="media-tools">
+                        <label for="playback-rate">Playback speed</label>
+                        <select id="playback-rate" value="@_playbackRate" @onchange="ChangePlaybackRateAsync">
+                            <option value="0.5">0.5x</option>
+                            <option value="0.75">0.75x</option>
+                            <option value="1">Normal</option>
+                            <option value="1.25">1.25x</option>
+                            <option value="1.5">1.5x</option>
+                            <option value="2">2x</option>
+                        </select>
+                        <span class="muted">Use the built-in controls for seeking, volume, mute, captions when available, and video full screen.</span>
+                    </div>
+                }
+            </article>
+        }
         @if (_imageDataUri is not null || _imageError is not null)
         {
             <article class="panel image-panel">
@@ -300,6 +344,12 @@ else
     private MarkdownExternalLink? _pendingExternalLink;
     private string? _imageDataUri;
     private string? _imageError;
+    private ManagedMediaSource? _mediaSource;
+    private string? _mediaError;
+    private bool _mediaPreparing;
+    private ElementReference _mediaElement;
+    private bool _registerMediaElement;
+    private double _playbackRate = 1;
     private int _imageZoom = 100;
     private int _imageRotation;
     private bool _fitImage = true;
@@ -321,12 +371,39 @@ else
         await ReloadAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_registerMediaElement && _mediaSource is not null)
+        {
+            _registerMediaElement = false;
+            await JavaScript.InvokeVoidAsync("slopFactoryMedia.register", _mediaElement);
+        }
+    }
+
     private async Task ReloadAsync()
     {
         if (LibraryState.Workspace is null) return;
         try
         {
             _file = await LibraryState.Workspace.GetFileAsync(Id);
+            await StopMediaAsync();
+            _mediaError = null;
+            _mediaPreparing = false;
+            _playbackRate = 1;
+            if (IsPlayableMediaType(_file.MediaType))
+            {
+                _mediaPreparing = true;
+                try
+                {
+                    _mediaSource = await MediaResources.CreateAsync(Id);
+                    _registerMediaElement = true;
+                }
+                catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException)
+                {
+                    _mediaError = exception.Message;
+                }
+                finally { _mediaPreparing = false; }
+            }
             _imageDataUri = null;
             _imageError = null;
             _imageZoom = 100;
@@ -578,9 +655,26 @@ else
     private void FitImage() { _fitImage = true; _imageZoom = 100; }
     private void ActualImageSize() { _fitImage = false; _imageZoom = 100; }
     private void RotateImage() => _imageRotation = (_imageRotation + 90) % 360;
+    private async Task ChangePlaybackRateAsync(ChangeEventArgs args)
+    {
+        if (!double.TryParse(args.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var rate)) return;
+        _playbackRate = rate;
+        await JavaScript.InvokeVoidAsync("slopFactoryMedia.setRate", _mediaElement, rate);
+    }
+    private async Task StopMediaAsync()
+    {
+        if (_mediaSource is null) return;
+        try { await JavaScript.InvokeVoidAsync("slopFactoryMedia.stop", _mediaElement); }
+        catch (JSDisconnectedException) { }
+        MediaResources.Revoke(_mediaSource.Token);
+        _mediaSource = null;
+        _registerMediaElement = false;
+    }
+    public async ValueTask DisposeAsync() => await StopMediaAsync();
     private void Back() => Navigation.NavigateTo("/");
     private static bool IsTextMediaType(string mediaType) => mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || mediaType is "application/json" or "application/xml";
     private static bool IsImageMediaType(string mediaType) => mediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif" or "image/svg+xml";
+    private static bool IsPlayableMediaType(string mediaType) => mediaType is "audio/mpeg" or "audio/wav" or "audio/aac" or "audio/mp4" or "audio/flac" or "audio/ogg" or "video/mp4";
     private string FileName(string fileId) => fileId == _file?.Id ? _file.DisplayName : _availableFiles.FirstOrDefault(file => file.Id == fileId)?.DisplayName ?? $"Unavailable file {fileId[..Math.Min(8, fileId.Length)]}";
 
     private sealed class MetadataForm

@@ -4,7 +4,7 @@ internal static class MediaTypeDetector
 {
     public static async Task<(string MediaType, string Extension)> DetectAsync(string path, CancellationToken cancellationToken)
     {
-        var buffer = new byte[32];
+        var buffer = new byte[64];
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, buffer.Length, FileOptions.Asynchronous | FileOptions.SequentialScan);
         var read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
         var bytes = buffer.AsSpan(0, read);
@@ -15,9 +15,16 @@ internal static class MediaTypeDetector
         if (bytes.StartsWith("GIF87a"u8) || bytes.StartsWith("GIF89a"u8)) return ("image/gif", ".gif");
         if (bytes.StartsWith("%PDF-"u8)) return ("application/pdf", ".pdf");
         if (read >= 12 && bytes[..4].SequenceEqual("RIFF"u8) && bytes[8..12].SequenceEqual("WAVE"u8)) return ("audio/wav", ".wav");
-        if (bytes.StartsWith("ID3"u8) || (read >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0)) return ("audio/mpeg", ".mp3");
+        if (bytes.StartsWith("fLaC"u8)) return ("audio/flac", ".flac");
+        if (bytes.StartsWith("OggS"u8) && bytes.IndexOf("OpusHead"u8) >= 0) return ("audio/ogg", ".opus");
+        if (bytes.StartsWith("ID3"u8) || IsMpegAudioFrame(bytes)) return ("audio/mpeg", ".mp3");
+        if (IsAacAdtsFrame(bytes)) return ("audio/aac", ".aac");
         if (read >= 12 && bytes[4..8].SequenceEqual("ftyp"u8))
         {
+            if (bytes[8..12].SequenceEqual("M4A "u8) || bytes.IndexOf("M4A "u8) >= 0 || Path.GetExtension(path).Equals(".m4a", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("audio/mp4", ".m4a");
+            }
             return ("video/mp4", ".mp4");
         }
 
@@ -44,7 +51,15 @@ internal static class MediaTypeDetector
             ".toml" => ("text/toml", ".toml"),
             ".m4a" => ("audio/mp4", ".m4a"),
             ".aac" => ("audio/aac", ".aac"),
+            ".flac" => ("audio/flac", ".flac"),
+            ".opus" or ".ogg" => ("audio/ogg", ".opus"),
             _ => ("application/octet-stream", ".bin")
         };
     }
+
+    private static bool IsMpegAudioFrame(ReadOnlySpan<byte> bytes) =>
+        bytes.Length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0 && (bytes[1] & 0x06) != 0;
+
+    private static bool IsAacAdtsFrame(ReadOnlySpan<byte> bytes) =>
+        bytes.Length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xF6) == 0xF0;
 }

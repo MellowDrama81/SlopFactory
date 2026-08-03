@@ -647,6 +647,53 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task MediaPlaybackVerifiesContentAndReturnsBoundedSeekRanges()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("sample.wav");
+        var wav = new byte[128];
+        "RIFF"u8.CopyTo(wav);
+        "WAVE"u8.CopyTo(wav.AsSpan(8));
+        for (var index = 12; index < wav.Length; index++) wav[index] = (byte)index;
+        await File.WriteAllBytesAsync(sourcePath, wav);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        var playback = await workspace.PrepareMediaPlaybackAsync(file.Id);
+        await using var range = await workspace.OpenMediaRangeAsync(file.Id, playback.ContentHash, 25, 17);
+        var bytes = new byte[32];
+        var read = await range.ReadAsync(bytes);
+
+        Assert.Equal("audio/wav", playback.MediaType);
+        Assert.Equal(17, read);
+        Assert.Equal(wav.AsSpan(25, 17).ToArray(), bytes.AsSpan(0, read).ToArray());
+        Assert.Equal(0, await range.ReadAsync(bytes));
+        await range.DisposeAsync();
+
+        wav[30] ^= 0xFF;
+        await File.WriteAllBytesAsync(workspace.GetManagedFilePath(file), wav);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.PrepareMediaPlaybackAsync(file.Id));
+    }
+
+    [Theory]
+    [InlineData("track.aac", "//FQ", "audio/aac")]
+    [InlineData("track.flac", "ZkxhQw==", "audio/flac")]
+    public async Task ImportDetectsAdditionalSupportedAudioSignatures(string name, string base64Prefix, string expectedMediaType)
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child(name);
+        var bytes = Convert.FromBase64String(base64Prefix).Concat(new byte[64]).ToArray();
+        await File.WriteAllBytesAsync(sourcePath, bytes);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+
+        var file = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        Assert.Equal(expectedMediaType, file.MediaType);
+    }
+
+    [Fact]
     public async Task SvgViewerRemovesActiveContentAndExternalReferences()
     {
         using var temporary = new TemporaryDirectory();

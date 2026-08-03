@@ -281,6 +281,12 @@ public sealed record ImageFileContent(
     string MediaType,
     byte[] Bytes);
 
+public sealed record MediaPlaybackDescriptor(
+    string FileId,
+    string MediaType,
+    long ByteSize,
+    string ContentHash);
+
 public enum ImportOutcome
 {
     Imported = 0,

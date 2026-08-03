@@ -14,6 +14,7 @@ public static class MauiProgram
         builder.Services.AddSlopFactoryInfrastructure();
         builder.Services.AddSingleton<ILibraryLocationService, LibraryLocationService>();
         builder.Services.AddSingleton<AppLibraryState>();
+        builder.Services.AddSingleton<ManagedMediaResourceService>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif
