@@ -1,0 +1,2187 @@
+# Mellow SlopFactory
+
+## Description
+
+A MAUI Blazor Hybrid application for using AI media generation APIs. It maintains a library of media files which have been generated or added by the user. It provides an interface to manage the library and view the files (text, images, audio, video). It provides an interface to create and manage a collection API connections (Base URL and API key). It provides an interface to create and manage a collection of models (connection and model). It provides an interface to generate text, images, audio or video, allowing a prompt, model settings and source files (chosen from the library). The user can select the number of results to generate. Each result is added to the library and the generation details are saved against it.
+
+## Application Scope
+
+- SlopFactory is a single-user, local-first application.
+- Windows and Android are supported.
+- The minimum supported Windows version is Windows 10 22H2, build 19045. Windows 11 is also supported.
+- The minimum supported Android version is Android 8.0, API level 26.
+- Android builds target the latest API level required for distribution while retaining API level 26 as the minimum installation version.
+- Unsupported operating-system versions display a clear message rather than attempting degraded operation.
+- Platform testing includes storage-volume switching, secure storage, media playback and generation background/resume behavior on each minimum supported version.
+- All library data is stored on the local machine or device. SlopFactory's automatic direct network access is limited to explicitly submitted or resumed work against configured AI APIs; store clients, browsers and user-selected OS storage providers may access their own services independently as described below.
+- There is no synchronization between devices or platforms.
+- Text generation is a single-turn content-creation workflow rather than a conversational chat interface.
+- The application does not provide backup, restore or migration features.
+- The application does not impose a storage quota.
+
+## Implementation Milestones
+
+- Milestones are implementation and validation phases, not reductions in the agreed product scope.
+- All milestones must be complete before the first public release.
+- **Milestone 1 — Local library foundation:** Windows and Android application shells; library creation, discovery, identity, switching and locking; SQLite persistence; managed file import; folders, browsing, metadata, links, viewers and the recycle bin; and the baseline storage and content-security rules.
+- **Milestone 2 — Core generation workflow:** secure connections and models; OpenAI and generic OpenAI-compatible adapters; text and image generation; source inputs and result ingestion; structured generation history; saved settings; prompt improvement; basic queues, cancellation and error handling.
+- **Milestone 3 — Provider and media breadth:** 1min.AI, OpenRouter and DeepInfra adapters; audio and video generation; provider-specific capabilities; asynchronous remote jobs; file-transfer variations; usage and cost handling; rate-limit behavior; and multi-result workflows.
+- **Milestone 4 — Resilience and release readiness:** multi-library background work; Windows notification-area behavior; Android background transfers; removable-storage loss and recovery staging; crash and session recovery; integrity checks; accessibility, localization readiness, performance, diagnostics, packaging and the full automated and manual test matrix.
+- A milestone is complete only when its applicable acceptance tests pass on both supported platforms, except for behavior explicitly limited to one platform.
+- Features completed in an earlier milestone can be revised when later provider or resilience work exposes a missing abstraction; milestone boundaries do not permit incompatible parallel implementations.
+
+## Packaging and Distribution
+
+- Microsoft Store and Google Play are the primary public distribution channels.
+- Windows releases use a signed MSIX package with normal installation and clean uninstallation; the same official project site also provides a signed direct-download MSIX.
+- Google Play releases use a signed Android App Bundle; the official project site also provides a signed APK for direct installation.
+- Every installed build displays its distribution channel, semantic version and platform build number in **About** and diagnostics.
+- Store installations rely only on their store update path.
+- Direct-download installations do not self-update; the user downloads and installs newer signed packages manually from the official site.
+- Direct-download builds do not make automatic background requests to check for update notices in the first release.
+- SlopFactory itself performs no automatic update-service request on any channel; an installed store client may check for package updates independently under the operating system or store's policies.
+- **About** shows the installed channel and version and provides a user-activated link to the official download page.
+- Official download and provider-documentation links are static HTTPS URLs and never include SlopFactory-added app-version, channel, library, device, record or tracking query parameters.
+- SlopFactory does not automatically switch, combine or redirect update behavior between store and direct channels.
+- Official download pages publish cryptographic checksums and signing-certificate information for direct packages.
+- Store and direct production builds share the same stable application/package identity and signing lineage on each platform.
+- Switching a production installation's source requires an explicit installer-level warning, preserves the application's existing storage identity and is never initiated by SlopFactory itself.
+- Production variants cannot be installed side by side and installers reject version downgrades.
+- If the platform cannot validate the shared signing lineage, installation stops without replacing the existing application or data.
+- Application and package identifiers are stable because secure storage and app-specific storage depend on them.
+- Signing credentials are stored outside the source repository.
+- Releases use semantic application versions and platform build numbers.
+- The first release does not implement a separate in-application updater and relies on its distribution channel for updates.
+- Application updates can upgrade library schemas but do not silently relocate or delete libraries.
+- Normal updates preserve the versioned device-local export-cleanup journal and migrate recognized entries conservatively.
+- An entry whose journal schema or provider identity cannot be interpreted remains pending for user review and is never dropped or used for a guessed cleanup attempt.
+- Development builds use separate package identifiers and cannot access production secure storage or app-specific Android libraries.
+- Windows libraries, including the default library, are user data stored outside MSIX package-managed application data.
+- Uninstalling the Windows package removes application-owned preferences and regenerable caches but does not remove any library.
+- On either platform, uninstall also removes the device-local export-cleanup journal and may leave unresolved external temporary files; SlopFactory cannot reliably intercept an OS-managed uninstall to remove them first.
+- After reinstall, SlopFactory never scans external storage for opaque temporary-name patterns or deletes suspected leftovers because the missing journal means it cannot prove ownership safely.
+- Reinstallation checks the known default-library location and offers to reopen a valid library found there.
+- Other preserved libraries can be selected again through the normal library-location workflow.
+- API keys must be re-entered when their OS secure-storage entries do not survive uninstall or are otherwise unavailable.
+- Android retains its platform-specific behavior: uninstalling removes app-specific libraries, preferences and secure-storage data after the warning described under Android storage.
+
+## Testing
+
+- Provider adapters are unit-tested using sanitized request and response fixtures.
+- A local fake HTTP provider covers authentication, discovery, streaming, asynchronous jobs, rate limits, moderation, redirects, downloads and errors.
+- Standard automated tests never contact real providers.
+- Live provider tests are separate, manual or explicitly enabled and skipped when credentials are absent.
+- Test credentials are stored only in OS secure storage or CI secret storage.
+- Dedicated low-privilege test keys are used where supported.
+- Billable live tests require an explicit cost budget and stop when it is exhausted.
+- Media-generation smoke tests do not run during ordinary builds.
+- Live-test output is sanitized before being stored as a test artifact.
+- Provider contract fixtures are versioned so API changes can be reviewed deliberately.
+- Release-blocking export tests on Windows and Android inject crashes before and after every journal flush, external-object creation, identity binding, content flush, verification, atomic commit and journal removal boundary.
+- Fake filesystem and document-provider tests cover partial writes, silent provider renames, expired permissions, provider unavailability, target identity/type swaps, symlink or reparse substitution, tampered or unauthenticated journals, already-absent targets, media/sidecar mismatch and failed cleanup.
+- Tests assert that no unverified object is deleted, no failed or partial export is reported successful, successful unrelated files survive batch failures and no sensitive sidecar data enters diagnostics or notifications.
+- Provider contract tests assert exact system/developer/provider-specific instruction-channel mapping, normalized message order, absence of hidden messages or history, no silent prompt concatenation, capability-rejection behavior and immutable sent-instruction snapshots.
+
+## Settings Scope
+
+- Device-wide settings include active and recent library locations, the currently selected tab per library, window geometry, theme, language, text-scaling preferences, notification preference, diagnostic settings and default cost-confirmation thresholds keyed by exact currency or provider credit unit.
+- Library-specific data includes connections, per-connection threshold overrides, models, credential namespaces, folders, files, metadata, links, generation-tab drafts and ordering, tab-to-run associations, saved generation settings, generation history and provider-specific generation defaults.
+- Device-wide settings are stored in platform application preferences.
+- Windows application preferences use device-local storage only and do not use OS account-roaming settings.
+- Recent library locations, library IDs, credential indexes, notification choices, diagnostics, theme and language never roam between Windows devices.
+- Library-specific settings are stored in the library database.
+- Switching libraries replaces all library-specific choices immediately while retaining device-wide preferences.
+- Generation-tab drafts, titles, ordering and run associations are stored in the shared library database and travel with a portable Windows library.
+- Device-specific window size, responsive layout state and currently selected tab remain local preferences and do not travel with the library.
+- The first release does not copy or export connections, models or saved generation settings between libraries.
+- These records must be recreated deliberately in the destination library.
+- Credentials and secret headers never transfer between libraries or through a configuration file.
+- API-key values are never stored in application preferences or the library database; only their secure-storage lookup identifiers are retained.
+- When a library-specific saved setting refers to a device capability which is unavailable, it is shown as unavailable and is not silently replaced.
+
+## User Interface
+
+- The application supports Windows desktop, Android phones and Android tablets.
+- Appearance provides **Follow System**, **Light**, and **Dark**, with **Follow System** as the default.
+- Theme changes apply immediately as a device-local preference and never alter library content.
+- Windows high-contrast and required platform accessibility colors override ordinary theme colors where necessary for readable, operable controls.
+- The first release does not support custom palettes, user stylesheets or downloadable themes.
+- Android supports both portrait and landscape orientations.
+- Narrow phone screens use single-pane navigation.
+- Tablets and Windows can use split-pane or master/detail layouts where appropriate.
+- All functionality is usable with touch.
+- Windows additionally supports mouse input, keyboard navigation, common keyboard shortcuts and visible focus states.
+- Unsaved form state is preserved during orientation and responsive-layout changes.
+- The interface respects system text scaling without clipping controls or hiding actions.
+- Interface transitions respect the operating system's reduced-motion preference.
+- A new generation tab has an automatic placeholder title until a model is selected.
+- When a tab without a custom title selects a model, its title is derived from the generation type and the configured model label, such as **Image · Flux 1.1**.
+- Changing the selected model updates an automatic tab title.
+- Manually renaming a tab marks its title as custom, and later model changes do not overwrite it.
+- A **Reset to Automatic Title** action removes the custom-title state and immediately derives the title from the current generation type and model.
+- Tab titles and their automatic or custom state persist with the tab draft.
+- Tab titles are local interface metadata and are never included in provider requests.
+- Each generation tab provides **Duplicate Tab**.
+- Duplicating creates a new persistent draft ID and copies the tab's current editable form state, including prompts, the current improvement value and candidate, models, settings, sources and roles, destination and result count.
+- The duplicated tab does not copy run cards, active jobs or generation-history associations.
+- The duplicated tab uses an automatic title derived from its copied model until the user gives it a custom title.
+- Duplicating a tab is a local operation and never submits a provider request.
+- Android phones display one generation page at a time and use a compact tab-switcher control showing the current tab title and total tab count.
+- The phone tab switcher opens a searchable list with draft and run-status indicators and actions to create, duplicate, rename, reorder or close tabs.
+- Android's system **Back** action follows normal in-page and application navigation without closing, discarding or submitting a generation tab.
+- At the library navigation root, **Back** backgrounds or closes the Android activity according to platform conventions while preserving every generation tab and draft.
+- A generation tab is closed only through its explicit tab action, subject to the normal draft-close choices.
+- Windows and tablet layouts use a visible scrollable generation-tab strip plus access to the same searchable management list.
+- Reordering tabs updates the persisted per-library tab order.
+- Tab switching and management remain fully operable by touch, keyboard and supported assistive technologies.
+- SlopFactory does not impose a fixed maximum number of open generation tabs.
+- Inactive tabs can unload their rendered interface and media previews while their lightweight drafts and run associations remain persisted.
+- Tab strips and switcher lists are virtualized when needed so a large number of drafts does not require every tab to remain rendered.
+- When device resources are constrained, the application can recommend closing tabs but never closes or discards a tab automatically.
+
+## Localization
+
+- The first release is in English.
+- All application-owned UI text is stored in localizable resource files.
+- Dates, times, numbers, byte sizes and currencies use the device locale.
+- The device-wide language setting can support a future language override.
+- Provider model IDs, metadata keys and raw technical identifiers are not localized.
+- Common provider errors are converted into localizable application messages while sanitized technical details remain available separately.
+- User prompts, metadata, filenames and provider output are not machine-translated.
+- Layouts accommodate future longer translations and right-to-left languages without restructuring core screens.
+
+## Accessibility
+
+- Interactive controls expose accessible names, roles, states and validation messages.
+- Windows supports complete keyboard operation with a logical focus order.
+- The application supports Windows Narrator and Android TalkBack.
+- Status is not communicated using colour alone.
+- The interface meets WCAG 2.2 AA contrast targets.
+- The interface respects system text scaling, high-contrast mode, reduced-motion settings and light or dark theme preferences.
+- Thumbnails and media controls provide text alternatives.
+- Generation progress, completion, failures and validation errors are announced accessibly without repeatedly interrupting the user.
+- Touch targets are appropriately sized and no action depends on hover input.
+
+## Diagnostics
+
+- Diagnostic logs remain local and use size-limited rolling files.
+- Diagnostic entries older than 30 days are removed automatically.
+- A 50 MB device-wide rolling cap applies across ordinary, verbose and crash diagnostics; the oldest entries are removed first when the cap is reached.
+- Time and size limits apply together, whichever removes an entry first.
+- Logs never contain API keys, authorization headers, raw or improved prompts, system instructions, prompt-improvement guidance, source-file contents, generated-file contents or signed result URLs.
+- Prompt-related text, excerpts, hashes and tokenized forms are prohibited in ordinary, verbose and crash diagnostics; permitted technical context is limited to byte counts and normalized operation state.
+- Logs can contain timestamps, provider types, operation types, local record IDs, HTTP status codes, provider request IDs, retry information, sanitized errors and performance timings.
+- Ordinary, verbose and crash diagnostics never record provider moderation categories or provider-supplied descriptions of sensitive content.
+- A diagnostic may record only that a provider safety response occurred, its normalized outcome, provider type and technical request-correlation data; category details remain solely in library history.
+- Sensitive user-metadata keys and values are excluded from ordinary, verbose and crash diagnostics and all diagnostic exports; troubleshooting may use only opaque metadata-entry IDs, value types, byte counts and sanitized validation outcomes.
+- User metadata values are not logged by default.
+- The application provides a UI to view, clear and export sanitized diagnostics.
+- Before export, the user is warned that diagnostics can reveal provider names, model IDs, timings and file sizes.
+- The user can temporarily enable verbose diagnostics, and verbose mode expires automatically.
+- Verbose diagnostics expire one hour after activation, including across an application restart, and revert to ordinary logging without extending the deadline through activity.
+- Verbose diagnostics still never record credentials or file contents.
+- The application does not collect analytics or usage telemetry and does not upload crash reports automatically.
+- Crashes create a sanitized local diagnostic record.
+- On the next launch, the application notifies the user that it did not close normally and offers to view, clear or export the crash diagnostics.
+- Stack traces and request context follow the existing diagnostic redaction rules.
+- Other than direct calls to configured AI providers, SlopFactory does not directly contact external services automatically.
+- Opening an official download or provider-documentation link is an explicit user action handled by the operating system browser; it is not a background update check.
+- A user-selected operating-system file or document provider, cloud-synchronized destination or storage-provider application may independently use the network during an explicit import, export, open or cleanup action under that provider's own policies; SlopFactory does not present that traffic as its own cloud integration.
+- Any future telemetry requires explicit opt-in and must be documented before collection begins.
+
+## Privacy and Data Flow
+
+- SlopFactory provides a dedicated, locally available **Privacy and Data Flow** page from onboarding, settings, connection setup and generation submission.
+- First-run onboarding links to and summarizes the page but does not require a blanket privacy-acceptance checkbox before local library use.
+- Consent and acknowledgement are requested contextually when the user is about to send provider data, approve private-network HTTP, accept known remote retention or take another specifically disclosed action.
+- Before the first data-bearing submission through a connection revision, a blocking disclosure identifies the provider, final host, transport-security state and whether prompts or source files will be sent.
+- That acknowledgement is requested again only after a material provider, host, transport-security or retention-capability change. Later submissions rely on the always-visible provider/source review and explicit **Generate** action unless the user enables device-wide **Always Confirm Before Sending**.
+- A contextual acknowledgement records only the relevant policy type and connection revision, never prompt or file content.
+- It explains that library databases, prompts, metadata, history, drafts and managed media are stored locally without application-level encryption.
+- It states that the user-metadata **Sensitive** flag provides application UI concealment and export safeguards only, not encryption; sensitive values remain in the local library database and can be read by someone with filesystem access to an unlocked device or library location.
+- It distinguishes OS-secured credentials from ordinary library data and describes the Windows account or Android device lock as the local security boundary.
+- It explains exactly which explicit actions send prompts, original source bytes, safe transport filenames and settings to a configured provider.
+- It also explains that user-selected OS file/document providers and cloud-synchronized locations may independently transfer imported or exported data even though SlopFactory makes no direct cloud-storage API call.
+- It warns that original files can contain undisplayed embedded metadata and that provider retention, billing, moderation and account logs remain governed by the provider.
+- It describes device-local preview caches, emergency draft and result recovery staging, diagnostic retention, Windows and Android uninstall differences, and the absence of synchronization, telemetry, automatic crash upload, backup and restore.
+- It describes the device-local external-export cleanup journal, including that it may temporarily contain an external path or provider handle, is operational state rather than library data or a backup, and persists only until cleanup is resolved or tracking is explicitly stopped.
+- It warns that uninstall removes this tracking state and can leave unresolved external temporary files behind.
+- Built-in adapters provide official provider privacy, retention and account-management links with the application version or review date which supplied them.
+- Provider documentation is opened only through a user action under the normal external-link confirmation and is never fetched silently to populate the page.
+- SlopFactory does not claim that a linked provider policy is current beyond its displayed review date or that local deletion removes provider-side data.
+
+## Data at Rest
+
+- The first release does not encrypt the library database or managed media at the application level.
+- API keys remain exclusively in OS secure storage.
+- Ordinary library data relies on Windows or Android device and volume encryption when enabled by the user.
+- Documentation states that prompts, metadata, history and media can be read by someone with filesystem access to an unlocked device or library location.
+- The application does not describe the complete library as encrypted merely because credentials use secure storage.
+- The first release does not provide a separate SlopFactory PIN or biometric application lock.
+- The Windows user account or Android device lock is the authentication boundary for local application access.
+- Documentation does not present an application-only interface lock as a substitute for encrypting library data.
+- The first release does not block user-initiated screenshots, screen recording or operating-system app-switcher/window previews.
+- SlopFactory does not claim that visible prompts or media are protected from capture by another process, camera or user action.
+- Secret values remain masked under the credential-entry rules and are never intentionally placed in notification or preview content.
+- Application-level library encryption is deferred because it would affect streaming, previews, recovery, key loss and performance.
+
+## Offline Behavior
+
+- Library browsing, viewing, organization, metadata, links, saved generation settings and generation history remain available without internet connectivity.
+- Cached provider model and capability information remains visible offline and shows when it was last refreshed.
+- Application startup does not automatically test connections, refresh provider catalogues or make other provider requests.
+- The only startup exception is resuming polling or result retrieval for previously and explicitly submitted asynchronous work under the normal recovery rules.
+- Startup does not automatically reconcile **Submission Outcome Unknown** records.
+- Such records appear in global activity and history with a local attention indicator and **Attempt Reconciliation**, but no investigation request occurs until the user selects it.
+- Connection tests and catalogue refreshes are user-initiated, including when the user confirms a connection edit which requires retesting.
+- Connection testing and new generation submission require connectivity.
+- An offline generation is not queued for automatic submission when connectivity returns.
+- An unsent generation form is preserved so the user can submit it manually after reconnecting.
+- Billable jobs already queued but not yet preparing or submitting become **Paused — Connection Lost** when connectivity disappears.
+- Network recovery does not start those paused submissions automatically; the user must confirm **Resume Queue** after connectivity returns.
+- The queue allows resuming selected paused jobs or choosing **Resume All for This Connection**.
+- Per-connection resume review shows generation count, total provider request count, current estimate or **Cost unknown** state, and every validation or dependency change.
+- Jobs are revalidated independently; an invalid job remains paused with its explanation while other confirmed valid jobs become eligible.
+- SlopFactory does not provide a one-click global resume spanning multiple connections, providers or libraries.
+- Resume revalidates connection, model, sources, settings, request count and current cost information before restoring queue eligibility.
+- A request which was active when connectivity failed follows the normal interrupted-request and no-automatic-resubmission rules rather than being treated as safely unsent.
+- Polling of previously submitted asynchronous jobs resumes when connectivity returns.
+- Operating-system connectivity status is treated as advisory and actual network failures are handled normally.
+- Application startup does not depend on internet or provider availability.
+
+## Metered Network Transfers
+
+- Metered-network detection is used when provided by the operating system and is treated as advisory.
+- The application shows the known or estimated upload size before sending source files.
+- Large uploads and result downloads over metered connections display a warning.
+- Device-wide transfer options are **Allow**, **Ask** and **Wi-Fi/Unmetered Only**, with **Ask** as the default.
+- A billable generation is not silently deferred for automatic submission later.
+- When a transfer is disallowed, its form or queued job is preserved and requires explicit submission after network conditions change.
+- Small status-polling requests continue for remote jobs which were already submitted.
+- Estimated transfer sizes are identified as estimates when providers may encode or transform inputs.
+
+## Android Background Work
+
+- User-initiated uploads and result downloads use Android's user-initiated data-transfer mechanism where available, with an appropriate backward-compatible scheduled-work fallback.
+- Active background transfers display the required ongoing notification with progress and a cancel action.
+- Notification permission is requested when background transfer behavior is first needed, with an explanation.
+- When permission or platform restrictions prevent reliable background execution, the application warns that leaving SlopFactory may interrupt the operation.
+- Background execution is used for active transfers rather than indefinite provider-status polling.
+- Asynchronous provider job IDs are persisted, with polling resumed through scheduled work or when the application becomes active.
+- A generation is never started automatically during device boot.
+- Android execution suspension and timeout are recorded separately from provider failure.
+
+## Session Recovery
+
+- On launch, the application reopens the last active library when it remains available and unlocked.
+- If the last active library is unavailable, locked, corrupt or uses a newer unsupported schema, startup opens the library switcher with that library's status and applicable actions.
+- Startup never silently opens a different library or creates a replacement library when the expected library cannot be opened.
+- The user can retry, deliberately select another known or valid library, or explicitly create a new library.
+- The previous navigation location, library folder, search, filters, sort and view mode are restored.
+- Only the current search state for each remembered library is stored in device-local preferences; SlopFactory keeps no separate recent-search history and requests no provider-backed search suggestions.
+- Sensitive-metadata filter comparison values are masked and memory-only. If an ordinary free-text query produces any sensitive-metadata match, that query is also excluded from restorable device-local search state.
+- Such sensitive search and filter state may remain active in memory while navigating within the currently open library, but clears when the library is closed, switched away from, locked or unavailable and when the application exits or restarts.
+- Forgetting a library removes its saved search query and related navigation state, and search queries are never written to diagnostics.
+- A library can have multiple generation tabs open concurrently.
+- Every generation tab has its own persistent draft ID and independently autosaved working state.
+- A tab draft includes its selected models, prompts, current improved prompt and retry candidate, settings, source roles and ordering, destination folder, result count, validation state and other unsaved form choices.
+- Text-generation drafts preserve raw user prompt and optional system instructions as separate fields.
+- Draft autosaves are debounced and committed atomically without interrupting editing.
+- Each generation tab exposes subtle **Saving**, **Saved** or persistent **Not Saved** draft status.
+- If autosave fails, the application retains the latest edits in memory, shows the sanitized error beside **Not Saved** and provides **Retry Save**.
+- Navigation, library switching, explicit tab closure and Windows exit warn when they could discard in-memory edits which have not been persisted.
+- Library switching is blocked while any tab in the current library has an unresolved autosave failure and newer in-memory edits.
+- The switch prompt offers **Retry Save**, **Discard Unsaved Edits and Switch**, and **Cancel**.
+- **Discard Unsaved Edits and Switch** reverts each affected tab to its last successfully persisted draft, preserves the tabs themselves, and then closes the library workspace.
+- **Cancel** keeps the current library and all in-memory edits open.
+- SlopFactory attempts to flush pending draft edits when navigating away, switching libraries, closing normally or entering a platform suspension lifecycle state.
+- Android suspension or process termination cannot be guaranteed to wait for that flush; an unresolved save failure is displayed immediately when the existing process resumes.
+- Draft-save diagnostics never include prompts, model-setting values or source filenames.
+- A small device-local dirty-draft marker records only the library ID, tab ID and last persisted draft revision while newer in-memory edits exist; it never contains draft content.
+- The marker is cleared only after the corresponding draft revision commits successfully or the user explicitly discards those edits.
+- During OS shutdown, sign-out, forced close or a platform termination callback, SlopFactory makes one bounded best-effort flush within the available platform deadline and never blocks shutdown indefinitely.
+- If a dirty-draft marker remains on the next launch, SlopFactory restores the last successfully persisted revision and reports that newer edits in the identified tab may have been lost.
+- Forced lifecycle termination does not change submitted-work recovery, polling or no-automatic-resubmission rules.
+- Closing or restarting the application preserves each library's generation-tab set, tab order and selected tab.
+- When a library is reopened, its generation tabs and their drafts are restored in their previous order.
+- Restored tabs are never submitted automatically.
+- Explicitly closing a generation tab with no user-entered or changed draft content closes it immediately.
+- Explicitly closing a tab with draft content offers **Discard and Close**, **Save as Named Settings and Close**, and **Cancel**.
+- **Discard and Close** removes only that tab's draft.
+- **Save as Named Settings and Close** validates and saves the reusable settings before removing the tab draft; if saving fails or is cancelled, the tab remains open.
+- If a tab has queued or active runs, its close dialog states that those runs will continue and remain accessible through global activity and generation history.
+- Closing a generation tab never cancels its queued or active runs.
+- After the tab closes, its runs no longer depend on the tab draft because every submitted request already has an immutable history snapshot.
+- Cancelling a run remains a separate explicit action on its run card, global activity entry or history record.
+- Closing the application does not display per-tab discard prompts because it preserves all generation tabs and drafts for restoration.
+- Drafts never persist unsaved API keys or other plaintext credentials.
+- Eligible asynchronous provider jobs resume from their persisted generation records.
+- Transient modal dialogs, confirmation prompts and in-progress destructive actions are not restored.
+- Submitting a generation does not remove or reset its generation-tab draft.
+- A generation-tab draft remains until its tab is explicitly discarded and closed.
+- A minimal device-wide pending-job registry can store library ID, provider type, connection ID, remote job ID and status, but never prompts or source content.
+- When a provider result becomes available while its destination volume is disconnected, the application attempts to download it into temporary internal app-specific recovery storage before its remote URL expires.
+- Recovery staging is identified as temporary and is not treated as another library.
+- When the intended library returns, the staged result is moved into it atomically and the staged copy is deleted.
+- If internal storage is insufficient, remote job details are retained and download is retried only while the provider result remains available.
+- The user is notified that a result is awaiting its library and may expire remotely.
+- A staged result is never placed into a different library automatically and can be discarded explicitly.
+- Recovery staging lists each completed result with its safe filename, media type, size, generation identifier and validation status.
+- The user can preview a staged result through the normal sandboxed viewer and media-decoding safety limits.
+- **Export Copy** writes the staged bytes to a user-selected external destination without creating a library record or changing the intended library.
+- Exporting does not mark a staged result as reconciled or delete it; it remains staged until the intended library accepts it or the user explicitly discards it.
+- A failed or cancelled staged-result export leaves the staged copy unchanged.
+- A pending-job registry entry is removed only after successful reconciliation or explicit discard.
+- If a library becomes unavailable or read-only while a generation tab has newer in-memory edits, SlopFactory writes a complete emergency draft snapshot to temporary internal app-specific recovery storage when possible.
+- An emergency draft snapshot is keyed by library ID and tab ID, records its base draft revision, and contains the working form state needed for recovery but no API keys, secret headers or source-file bytes.
+- The interface discloses that the temporary draft content is stored outside the selected library until that library returns.
+- Emergency draft storage relies on the same documented device-encryption boundary as other unencrypted application data and is excluded from Android OS backup.
+- Emergency snapshots never submit work and are not treated as another library or as named generation settings.
+- When the intended library becomes writable again, a compatible emergency snapshot is committed atomically to its draft and the temporary copy is deleted.
+- Reconciliation compares the emergency snapshot's base revision with the library draft's current revision.
+- When they differ, SlopFactory displays the two versions and offers **Keep Library Version**, **Restore Recovery Snapshot as New Tab**, and **Cancel**.
+- **Keep Library Version** preserves the library draft and, after confirmation, deletes the emergency snapshot.
+- **Restore Recovery Snapshot as New Tab** creates a new stable tab and draft ID from the recovered working state, preserves the existing library tab unchanged and deletes the temporary snapshot only after the new draft commits.
+- **Cancel** leaves both the library draft and emergency snapshot unchanged for later resolution.
+- SlopFactory never merges or overwrites divergent draft revisions automatically.
+- The user can explicitly discard an emergency snapshot; it is not removed automatically based on age.
+- If emergency staging cannot complete before process termination, the dirty marker still identifies that newer edits may have been lost, but SlopFactory does not claim those edits are recoverable.
+
+## Application Instances
+
+- Windows permits one running SlopFactory process per signed-in user session.
+- The first release provides one Windows main window for that process and does not detach libraries or generation tabs into additional windows.
+- The main window displays one active library workspace at a time; work in other open libraries remains accessible through the library switcher and global activity.
+- Launching SlopFactory again activates the existing process instead of starting another independent process.
+- A second-launch request to open a library or import files is forwarded to the existing process and requires user confirmation before it changes the active library or imports anything.
+- Forwarded requests never switch libraries, import files or submit work automatically.
+- The single Windows process can keep multiple libraries open for explicitly submitted background work, subject to the normal exclusive lock on each library.
+- Android uses the platform's normal single-task application behavior.
+- Per-library exclusive locking remains enforced on both platforms as protection against other processes and unexpected re-entry.
+
+## Work Queues
+
+- Users can submit multiple generation jobs to a visible, persistent generation queue.
+- Each connection's queue is first-in, first-out by durable submission order unless the user explicitly reorders waiting jobs.
+- Paused jobs are skipped when the scheduler selects eligible work and do not block later eligible jobs on the same connection.
+- A paused job retains its original relative queue position while skipped.
+- When resumed, it becomes eligible at that retained position and may run before later waiting jobs which have not started.
+- Resuming a paused job never interrupts or preempts active work.
+- Queued and paused submitted jobs retain immutable request snapshots and cannot be edited in place.
+- To change one, the user cancels it, returns to the originating editable generation tab, changes the working form and submits a new independent run.
+- The cancelled record remains in history and the replacement run receives a new generation-history ID.
+- A queued job can be reordered only before it enters **Preparing** or any later active state.
+- Reordering changes only local queue order and never modifies the immutable request snapshot or provider priority.
+- A generation which requires multiple separate provider submissions occupies one queue position as an indivisible group.
+- Its child requests execute consecutively on that connection before the next queued generation begins.
+- Queue reordering moves the complete generation group and never individual child requests.
+- Cancelling the group prevents remaining unsent children while retaining completed results and their per-child statuses.
+- Active jobs retain their position, and different connection queues continue independently under their own concurrency limits.
+- The first release does not expose numeric or named priority levels.
+- By default, each connection submits one active request at a time. Different connections can run concurrently.
+- Advanced connection settings allow the user to raise submission concurrency only within the adapter or provider's declared safe range.
+- Adapters can enforce a fixed concurrency of one when a provider offers no safe parallel-submission behavior.
+- Values above one display a warning about faster spending, rate limiting and increased upload/network load before saving.
+- Increasing concurrency makes additional queued work eligible immediately under all other limits.
+- Decreasing concurrency never cancels active requests; no new request starts until active count falls below the new value.
+- Concurrency changes apply to scheduling state and never rewrite immutable submitted-request snapshots.
+- Provider adapters can define provider-specific concurrency limits.
+- A device-wide submission cap applies across every connection and open library in the running process.
+- The default cap is three active submissions on Windows and two on Android.
+- Advanced device settings allow values from one through eight on Windows and one through four on Android; lower per-connection and provider limits still apply.
+- Preparing, uploading, submitting and an active synchronous generation request consume a global submission slot.
+- An asynchronous job releases its submission slot after the provider durably accepts it; later status polling does not consume a submission slot.
+- File-import, preview and result-download worker pools remain separate and do not consume provider submission slots.
+- Battery-saver mode, thermal pressure or severe OS resource constraints can temporarily lower the effective global submission cap, including to one.
+- A temporary reduction stops only new starts and never cancels active provider requests or rewrites the user's configured cap.
+- Queue and global activity views show the effective cap and its platform-reported reason.
+- Normal eligibility resumes automatically when the constraint clears, subject to all ordinary queue and background-execution rules.
+- Global submission slots are assigned by fair round-robin across eligible connection queues in all open libraries.
+- FIFO order remains unchanged within each connection queue, and the oldest waiting queue head breaks a round-robin tie.
+- A high-concurrency connection cannot consume every newly available slot while another eligible connection remains waiting.
+- Between child submissions, an active multi-request group retains its position within its connection but participates normally in global round-robin slot allocation.
+- A waiting asynchronous remote job does not block another submission when its provider permits additional work.
+- A queued job can be cancelled before any API request is sent.
+- When cancellation completes before any provider request or asset upload is sent, history uses **Cancelled Before Submission**.
+- That state records zero provider submissions and states that the generation run incurred no provider generation charge.
+- Earlier prompt-improvement operations remain separate history records and can retain their own reported usage and cost.
+- Queued jobs are not submitted automatically after an application restart and require confirmation to resume.
+- File imports, preview generation and result downloads use separate bounded worker queues so background work does not freeze the interface.
+- Active operations temporarily pin the connections, models, source files and destination folders which they require.
+- Unsubmitted generation-tab drafts do not pin their selected connections, models, source files or destination folders.
+- A recycle or permanent-deletion preview reports the number and titles of open generation tabs whose working copies will become unavailable or incomplete.
+- That preview also lists queued, not-yet-submitted jobs whose source file or destination folder would become unavailable.
+- Affected tabs retain stable unavailable references and offer the normal restore or replacement actions.
+- Permanent deletion converts those draft references to non-restorable missing dependencies without discarding the rest of the tab.
+- Recycling a source file or destination folder required by a queued but unsubmitted job pauses it as **Dependency Recycled** while retaining its history and queue position; it never proceeds using the recycled dependency automatically.
+- Restoring the same dependency makes the paused job eligible at its existing position without interrupting active work.
+- Permanent deletion makes its immutable queued request non-runnable; the user must cancel it and submit a new run with a replacement dependency from the originating tab rather than editing the queued snapshot in place.
+- Pinned items cannot be permanently deleted.
+- Recycling a connection, model or destination folder used by an active generation requires the user to cancel or wait for that generation.
+- A source file cannot be recycled while it is actively being read or uploaded. After its upload completes, it can be recycled without cancelling the remote job.
+- Recycling a connection or model cancels dependent queued jobs which have not sent requests after including them in the cascade warning.
+- Recovered drafts and saved settings retain recycled dependencies as unavailable references.
+- Imports, exports, hashing and downloads protect files while actively reading or writing them.
+- Dependency pins are released after completion, failure, cancellation or crash recovery.
+- The user can switch libraries while work continues in the original library.
+- Each library with active work remains open and locked by the same SlopFactory process until its operations finish.
+- A global activity indicator groups active work by library display name.
+- Explicitly submitted work continues after switching libraries. Queued work which requires post-restart confirmation remains paused.
+- Notifications identify the library which owns the completed job, and selecting an activity or notification switches to that library and opens its record.
+- A library with active work cannot be forgotten.
+- If a removable volume disappears, local work for its library pauses safely while remote asynchronous jobs remain tracked for later reconciliation.
+- A background library lock is released after its final operation completes.
+
+## Windows Background Work
+
+- With no active work, closing the main Windows window exits the application normally.
+- Before any actual Windows process exit, SlopFactory attempts to flush pending generation-tab drafts.
+- If newer in-memory edits still cannot be saved, exit is blocked with **Retry Save**, **Exit and Lose Unsaved Edits**, and **Return to App**.
+- The exit warning lists every affected library and tab title.
+- **Exit and Lose Unsaved Edits** requires explicit confirmation and loses only changes newer than each tab's last persisted draft.
+- **Return to App** leaves the process, libraries, tabs and in-memory edits unchanged.
+- With active local work, closing presents **Keep Running**, **Cancel Work and Exit** and **Return to App**.
+- **Keep Running** places SlopFactory in the Windows notification area and preserves active work.
+- **Keep Running** is not an exit and retains failed draft edits in memory with retry still available when the window is reopened.
+- If **Cancel Work and Exit** would also lose unsaved draft edits, the draft exit gate is completed before cancellation or process termination begins.
+- The notification-area icon displays aggregate status and can reopen or exit the application.
+- Exiting attempts provider cancellation where supported and applies the normal cancellation rules.
+- Submitted asynchronous remote jobs remain persisted and can resume reconciliation on the next launch.
+- The user can remember the **Keep Running** choice and change it later in settings.
+- The application does not hide in the notification area without first explaining that it remains active.
+
+## Library Storage
+
+- On first launch, Android creates the initial library in internal app-specific storage.
+- On first launch, Windows proposes a location under the user's local application-data directory and lets the user choose another empty location before creation.
+- First-run guidance explains that libraries are local and independent and that changing location does not move data.
+- Library creation assigns its persistent library ID and creates the permanent root and **Generated** folders.
+- After creation, the application opens directly into the empty library.
+- First-run onboarding does not require a provider connection.
+- The empty-library interface offers **Add Connection**, **Import Files** and **Generate** as next actions. **Generate** explains that a configured connection and model are required.
+- Imported files are copied into an application-managed directory.
+- Each application data location represents an independent SlopFactory library and has a persistent unique library ID.
+- Each library also has an editable display name stored inside the library.
+- A new library defaults to **SlopFactory Library**, with a numeric suffix when useful for disambiguation.
+- Library display names do not need to be globally unique.
+- The library switcher shows display name, platform storage location, last-opened time and availability.
+- Changing a library display name does not change its ID or storage location.
+- Duplicate-library detection uses the persistent library ID rather than the display name.
+- The complete library ID is available in diagnostics but is not shown in ordinary UI.
+- **Forget Library** removes a library from the device's recent-library list without deleting its data.
+- If device-level external-export cleanup entries originated from that library, the forget review warns with their count but does not remove them; cleanup tracking remains independently until each entry is resolved or explicitly stopped.
+- Forgetting a library retains its secure-storage API keys by default so reopening it preserves working connections.
+- Forgetting a library immediately removes its device-local preview-cache namespace without modifying the library itself.
+- If an in-use cache entry cannot be removed immediately, it is marked for cleanup as soon as the viewer releases it and on the next startup.
+- Ordinary **Forget Library** is blocked while unreconciled emergency draft snapshots exist because they may contain the only copy of unsaved work.
+- The blocking explanation offers to cancel, reconnect and reconcile the library, or choose **Delete Recovery Drafts and Forget**.
+- **Delete Recovery Drafts and Forget** lists the affected tab titles, requires explicit permanent-loss confirmation, removes the device-local emergency snapshots and then completes the normal forget workflow.
+- Deleted emergency draft snapshots do not enter the library recycle bin because they were temporary device recovery state and the unavailable library is not modified.
+- Ordinary **Forget Library** is also blocked while completed provider results remain in internal recovery staging for that unavailable library.
+- The explanation offers to cancel, reconnect and reconcile the library, or choose **Discard Staged Results and Forget**.
+- **Discard Staged Results and Forget** lists each affected generation and staged result, warns that its recovered bytes will be permanently lost, and requires explicit confirmation before deleting the temporary files.
+- Staged provider results are never deleted merely because the library is forgotten or unavailable.
+- The confirmation offers an unchecked **Also remove this library's saved API keys from this device** option.
+- Credential removal for a forgotten library covers active and recycled connections in that library's credential namespace without changing the library database.
+- Reopening a library after its saved keys were removed marks the affected connections **Credentials Required**.
+- The application maintains a device-local index of credential identifiers by library and connection so credentials can be removed even when a library is unavailable or corrupt.
+- The credential index never contains API-key values or other authentication secrets.
+- A failed optional credential cleanup is reported and remains available to retry.
+- After a library opens successfully, the device credential index is reconciled against all of its active and recycled connection IDs.
+- A credential indexed for that library whose connection ID no longer exists is treated as residue from a connection permanently deleted on this or another computer and is removed from OS secure storage.
+- Credential reconciliation runs only after manifest, database, schema and library-ID validation succeeds; it never runs against an unavailable, corrupt or unsupported-schema library.
+- Reconciliation diagnostics contain only the library ID, connection ID, cleanup outcome and sanitized error information.
+- Failed reconciliation cleanup remains indexed and is retried on a later valid open.
+- The first release does not provide whole-library permanent deletion. Content is removed through the normal recycle-bin workflow.
+- Any future whole-library deletion feature requires typed confirmation of the library name, credential cleanup, exclusive locking and explicit acknowledgement that recovery is impossible.
+- Selecting an empty location initializes a new, empty library.
+- Selecting a location containing a valid SlopFactory library opens that library.
+- A non-empty location which is not a valid SlopFactory library is rejected.
+- Changing the active data location does not copy, move or delete the previously active library.
+- The first release does not move or copy managed files directly between SlopFactory libraries.
+- To transfer file bytes, the user explicitly exports from one library and imports into the other.
+- The receiving import creates new file identities and does not carry library metadata, links, recycle state or generation-history relationships.
+- A generation can select source files only from the library which owns its generation tab.
+- API keys are stored using OS secure storage. Secure-storage keys are namespaced by both the library ID and connection ID.
+- If a credential is missing or can no longer be decrypted, the connection and all dependent library records remain intact and the connection is marked **Credentials Required**; if the credential store itself is temporarily inaccessible, it is marked **Secure Storage Unavailable** instead.
+- Either state blocks generation and authenticated remote-cleanup attempts but does not block unrelated local library use. Re-entering a key replaces an unusable credential only after the new value has been stored successfully; a failed write leaves the prior state and library records unchanged.
+- A library permits only one active writer and must be opened under an exclusive operating-system lock.
+- When another application instance holds the lock, opening is blocked and the user can retry or choose another library.
+- The application cannot force-unlock a library while its operating-system lock remains active.
+- Stale lock metadata is recovered automatically after a crash once no process holds the actual lock.
+- Database changes use transactions and managed-file changes use atomic operations so interrupted writes do not leave partial library records or files.
+- When the same library ID is registered at more than one Windows location, the copied location cannot be opened as an independent library until the conflict is resolved.
+- The user can adopt the copied location as a new library, which assigns it a new library ID without modifying the original.
+- Adopting a copy preserves its media, metadata, folders, generation-tab drafts, saved settings and generation history.
+- Adoption also preserves provider safety classifications, concealment state requirements and their immutable provenance; assigning a new library ID does not clear existing warnings.
+- Secure-storage credentials are not copied during adoption. Connections in the adopted library are marked **Credentials Required** until their API keys are re-entered under the new library ID.
+- Before adoption, the application warns that the new library is independent and will diverge permanently from the original.
+- The absence of user-facing migration features does not prevent internal database-schema upgrades between SlopFactory versions.
+- Every library stores its database schema version.
+- Schema upgrades run transactionally before normal library access.
+- Before an upgrade, the application creates a temporary database rollback copy and removes it after a successful upgrade. Media files are not copied.
+- If an upgrade fails, the original database is restored and the library remains closed.
+- A library created by a newer, unsupported SlopFactory version is not opened, and the user is told that the application must be updated.
+- Schema-upgrade diagnostics do not include API keys, prompts or other generated content.
+- Structured library records are stored in one SQLite database within the library location.
+- Media is stored as separate managed files and never as database blobs.
+- A small library manifest contains the format identity, persistent library ID, display name and schema version.
+- Windows and Android use the same versioned logical manifest schema, SQLite schema, stable identifier formats and managed-file naming conventions.
+- Persistent database and manifest records use library-relative identifiers and never store platform-specific absolute paths.
+- Platform-specific location handles, volume identities, lock implementation details, temporary files and preview-cache records remain outside the shared logical library format.
+- Schema migrations and integrity validation use the same shared core implementation and are tested against libraries created on both platforms.
+- A shared logical format is an implementation consistency guarantee, not a supported Windows-to-Android transfer, migration or synchronization feature.
+- SQLite foreign-key enforcement is enabled and aggregate changes use transactions.
+- Timestamps are stored in UTC and converted for display using the device locale.
+- Database relationships use stable opaque IDs rather than names or paths.
+- Provider response snapshots use structured JSON only when their provider-specific shape cannot be normalized.
+- A non-empty location is considered a valid library only when its manifest and database validate together.
+- A selected library location which is an ancestor or descendant of another known or detectable SlopFactory library is rejected; libraries cannot be nested or have overlapping ownership boundaries.
+- Selecting the exact location of an existing valid library opens that library normally. Windows resolved-path and filesystem-identity checks and Android document-tree identities are used where available rather than relying only on display paths.
+- Every library open performs fast manifest, schema, database-header, lock and required-directory validation before normal access.
+- SQLite auxiliary files are part of the active library and are not exposed through the media-library UI.
+- The library root and its managed-storage tree cannot contain symbolic links, junctions, reparse-point redirections or other filesystem objects which redirect operations outside their recorded paths.
+- File operations use no-follow behavior where available and verify that resolved targets remain inside the expected library directory before reading, replacing or deleting them.
+- Detectable hard-linked managed files are rejected because modifying their bytes could alter content outside SlopFactory's ownership.
+- An unsafe redirection at the library root prevents the library from opening.
+- A redirection or hard link introduced into managed storage through external tampering blocks the affected operation and is reported by the integrity scan.
+- Permanent deletion never follows a filesystem redirection or acts on a target outside the validated library root.
+- A location with a corrupt manifest or database is never overwritten or initialized as a new library.
+- A corrupt library remains closed and is marked **Corrupt** in the library switcher.
+- Corruption details include the location, failed validation stage and a sanitized diagnostic ID.
+- Corrupt-library actions are **Retry**, **Choose Another Library**, **Forget Library** and, on Windows, **Open Location**.
+- The application does not attempt automatic destructive database repair and preserves the original database and managed files unchanged.
+- A non-mutating integrity scan reports manifest, database, missing-file, orphan-file and content-hash issues.
+- Full file-existence and content-hash scanning starts only through an explicit user action.
+- A crash, unsafe volume removal or detected storage inconsistency marks a full scan as recommended and prompts the user to start or defer it rather than silently beginning an expensive scan.
+- Full scans display progress, can be cancelled and resume from a device-local checkpoint which contains no file content or user metadata.
+- Mutating library operations pause during a full scan so its findings remain coherent, while verified read-only browsing and viewing can continue.
+- Cancelling a scan retains its partial findings as incomplete and never presents them as a clean result.
+- First-release scan actions are limited to retrying validation, clearing or rebuilding derived previews, exporting the findings and opening the library location on Windows.
+- Integrity findings export as a versioned JSON report.
+- The default report contains the library ID, schema version, internal record IDs, issue categories, byte sizes, scan start and completion timestamps, and whether the scan was complete or cancelled.
+- Display names, original filenames, library-relative managed paths and content hashes are separate disclosure categories which require explicit opt-in.
+- Before export, SlopFactory previews the included categories and representative field names.
+- Integrity reports never contain prompts, user-metadata values, API keys, credential identifiers, authorization data or file contents.
+- Integrity reports also exclude sensitive user-metadata key names and contain at most opaque entry IDs when an integrity finding must identify an affected entry.
+- The integrity workflow never deletes orphan files, invents database records, adopts externally changed bytes or performs automatic SQLite repair.
+- Explicit managed-content replacement, recycle-bin actions and manual copying of intact media remain separate user-initiated workflows and are not presented as scan repair.
+- The first release does not promise database repair or recovery.
+- The application explains that intact managed media can be copied manually even when its metadata and relationships are unavailable.
+
+### Windows
+
+- The user can configure the application data location.
+- Healthy libraries provide **Open Library Location** from the advanced storage and diagnostics interface.
+- Before opening Explorer, SlopFactory warns that the directory is application-managed, internal filenames may not match display names, and external modification is unsupported.
+- Opening Explorer does not release the library's exclusive lock or grant an external application permission to edit through SlopFactory.
+- Individual managed files are not exposed through an in-application **Edit in Explorer** workflow.
+- Libraries can use local fixed drives and removable local drives.
+- UNC paths, mapped network drives and other remote filesystems are rejected.
+- The application warns before using a cloud-synchronized folder because concurrent synchronization can corrupt or duplicate library state.
+- Online-only placeholder locations are rejected until their contents are fully local.
+- A removable Windows volume uses the same unavailable-volume behavior as Android external storage.
+- Windows locations retain a stable volume identity and resolved absolute path.
+- Writability, exclusive locking and required filesystem capabilities are revalidated before creating or opening a library.
+- NTFS is not required, but a filesystem which cannot provide the required locking and atomic operations is rejected.
+- If a remembered Windows library is unavailable and the user selects another location containing the same library ID, the application offers **Relink Moved Library**.
+- Relinking validates the manifest and database, obtains the exclusive lock and updates the remembered volume identity and path without changing the library ID.
+- SlopFactory does not move the directory or its files as part of relinking.
+- Relinking is unavailable while the original location remains accessible; when both locations exist, the duplicate-library adoption rules apply instead.
+- A valid Windows library on removable storage can be opened on another supported Windows computer.
+- The portable library retains its persistent library ID and all non-secret files and records.
+- API keys remain device-local; connections are marked **Credentials Required** until their keys are entered into secure storage on the other computer.
+- Keys previously stored for that library remain available when it returns to a computer on which they were retained.
+- Portable opening remains subject to exclusive locking, filesystem validation and schema compatibility.
+- This behavior is filesystem portability only and is not presented as synchronization, backup, restore or guided migration.
+
+### Android
+
+- Libraries use Android app-specific storage. Arbitrary shared-storage folders cannot be selected.
+- The user can select among available app-specific storage locations, including internal storage and app-specific directories on available external volumes.
+- Selecting another location opens its existing SlopFactory library or creates a new, empty library. Data is not moved automatically.
+- Files selected from outside the application are copied into the active library.
+- If the active external volume becomes unavailable, the library is closed and shown as unavailable.
+- The application must not silently create a replacement library in internal storage when an external volume becomes unavailable.
+- The user can select another available library location while the previous location is unavailable.
+- The original library is reopened when its external volume becomes available again.
+- External storage locations are identified by a stable volume identifier rather than a display path.
+- The user is warned that Android removes app-specific storage when the application is uninstalled.
+- Android OS backup excludes SlopFactory libraries, preferences and secure-storage data.
+- After reinstalling on Android, SlopFactory starts with new app-specific storage and no retained credentials.
+- Android permissions follow least privilege and are requested only when the relevant user action occurs.
+- The application does not request broad all-files or `MANAGE_EXTERNAL_STORAGE` access.
+- Android system pickers are used for importing and exporting user-selected files and folders.
+- App-specific internal and external storage does not require broad storage permission.
+- Notification permission is requested only when notifications or required background-transfer notifications are enabled.
+- Only foreground or background work permissions required by the implemented transfer mechanisms are declared.
+- The first release does not request camera, microphone, contacts, location or media-library permissions.
+- Denied permissions are explained contextually without disabling unrelated functionality.
+- When a permanently denied permission blocks a requested feature, the application offers a shortcut to system application settings.
+
+## Storage Failure Handling
+
+- The application checks available space before imports and downloads when the expected size is known. This check is advisory because available space can change during an operation.
+- A storage write failure aborts the operation, removes its temporary files where possible and does not create a successful library record.
+- Previously committed files and records are preserved.
+- Affected imports and generations are marked as failed with a clear storage error.
+- The application does not automatically delete library or recycle-bin contents to recover space.
+- Storage errors provide shortcuts to the recycle bin and storage settings.
+- The user must resolve the storage problem and retry the failed operation explicitly.
+- If the active library becomes read-only or unavailable, the application closes it safely rather than continuing with partial functionality.
+- Managed-file existence is verified before opening, exporting, sending to a provider or generating a preview.
+- While a library is open, SlopFactory uses best-effort filesystem watching to detect unexpected external changes to its manifest, database and managed-file tree.
+- Watcher events are advisory because they can be coalesced, duplicated or missed; they mark affected content for revalidation and can recommend a full integrity scan.
+- Expected events from SlopFactory's own atomic operations are correlated and do not generate false external-change warnings.
+- An unexpected manifest or database change pauses mutations and closes the library if validation cannot prove continued consistency.
+- An unexpected managed-file event marks the affected record for existence and hash verification without automatically accepting, deleting or recreating content.
+- Critical operations retain their explicit existence, containment and hash checks regardless of watcher state.
+- When external modification is suspected, the application recalculates and compares the file's content hash.
+- Missing managed files are marked **Missing** and altered managed files are marked **Content Changed**.
+- Records, metadata, links and generation history are preserved while a file is missing or changed.
+- Externally changed bytes are not silently accepted as the original content.
+- A **Content Changed** record permits metadata and relationship viewing plus a clearly labelled sandboxed **Inspect Changed Bytes** mode subject to all normal content-safety limits.
+- **Export Changed Bytes** lets the user copy the currently present bytes to an external destination for recovery without updating the library record or attaching a normal provenance sidecar.
+- Ordinary export, **Open Externally**, provider-source selection and provenance-based preview remain unavailable while the record is **Content Changed**.
+- A **Missing** record has no bytes to inspect or export.
+- When intentionally supplied replacement bytes match the record's original content hash, the file is restored without changing its generation provenance or marking its content as replaced.
+- When replacement bytes differ, SlopFactory requires confirmation, calculates the new hash, records the replacement timestamp and marks the file **Content Replaced**.
+- Differing-replacement confirmation states that user metadata remains attached by default and summarizes ordinary and sensitive entry counts without revealing sensitive keys or values.
+- It offers an unchecked **Clear User Metadata After Replacement** option; the selected retention or clearing behavior commits transactionally with the replacement so a failed replacement does not alter metadata.
+- A provider safety classification received while a record is **Missing** or **Content Changed** attaches only to the immutable provenance of the record's original bytes.
+- Restoring bytes whose algorithm, digest and size match the original activates the classification and concealment on the current file; differing replacement or externally changed bytes do not inherit that classification or become concealed as if the provider had classified them.
+- A content-replaced file retains its original origin and generation relationship for historical context but clearly states that its current bytes are not the original imported or generated content.
+- Generation history retains the original result hash, media type and byte size and remains immutable after content replacement.
+- Current file metadata separately records the replacement hash, detected media type, byte size and timestamp.
+- Replacement reruns active-file classification and regenerates derived previews without retaining the previous bytes as a hidden copy.
+- **Replace Managed Content** is available only for records marked **Missing** or **Content Changed**.
+- A **Content Changed** record also offers **Accept Current Bytes as Replacement** so the user does not need to select the already-present file again.
+- Before acceptance, SlopFactory revalidates containment and file safety and displays the recorded original and current hashes, detected media types and byte sizes side by side.
+- Acceptance requires the same explicit permanent-change confirmation as selecting different replacement bytes.
+- On confirmation, the existing bytes remain in place, current metadata is updated transactionally, the file becomes **Content Replaced**, and immutable original provenance is retained.
+- Replacement preserves the file's stable ID, virtual folder, user metadata and user-created links.
+- After replacement, SlopFactory revalidates every open generation-tab draft and saved generation setting which references the file against its new media type, dimensions, duration, size and other model-relevant properties.
+- An incompatible reference remains visible as **Needs Review** and cannot be submitted until the file is replaced, restored or removed from that input role.
+- Compatible references remain selected but display the file's **Content Replaced** status.
+- A file pinned by queued preparation, upload or another active submitted operation cannot be replaced or accepted until the pin is released or the work is cancelled.
+- Healthy, unchanged managed files cannot be overwritten through this workflow; new content must be imported as a separate library file.
+- SlopFactory does not retain hidden content versions or provide undo after a differing replacement is confirmed.
+- A broken record can be recycled when its content cannot be recovered.
+- Preview, export and provider upload are unavailable while managed content is missing.
+- The application does not claim to recover missing bytes when no backup exists.
+
+## Large File Handling
+
+- The application does not impose a storage quota; capacity is limited only by available device storage.
+- File copy, hashing, export, upload and download operations use streams rather than loading complete files into memory.
+- Long file operations display progress and support cancellation.
+- Thumbnail generation and media metadata extraction run in background tasks.
+- Audio and video are streamed from local managed storage.
+- Preview decoding enforces bounded image dimensions, total pixel count, animation frame count, decoded-memory use, media probe time and thumbnail-processing work.
+- These are safety limits on derived viewing work, not limits on what the library can store or export.
+- Files which exceed a preview safety limit remain intact and are shown with metadata plus **Preview Too Complex or Large** rather than being marked corrupt.
+- Preview safety limits cannot be bypassed by a misleading filename, MIME declaration or embedded dimension metadata.
+- Text preview uses a configurable safety threshold. Files above the threshold use a partial or range-based viewer and can be opened externally.
+- The application warns before rendering an extremely large image at full resolution.
+- Provider input limits are separate from library storage and preview limits.
+- Preview limitations never prevent storing or exporting original file content.
+
+## Library File Formats
+
+- The library can store any file type, including files which the application cannot preview.
+- Built-in text viewing supports UTF-8 plain text, Markdown, JSON, XML, CSV and common source-code formats.
+- Built-in image viewing supports PNG, JPEG, WebP, GIF and SVG.
+- Built-in audio playback supports MP3, WAV and AAC/M4A. FLAC and Opus are supported when the platform codec can play them.
+- Built-in video playback guarantees support for MP4 containing H.264 video and AAC audio.
+- File types are detected using available provider content types, file signatures and filename extensions rather than trusting the extension alone.
+- Detected media type and active-content classification are read-only system metadata and cannot be overridden by the user.
+- Renaming a file's display name or extension never changes its viewer, provider compatibility, preview behavior or safety classification.
+- When a display extension conflicts with the detected content, the library shows a persistent mismatch warning while continuing to classify by bytes.
+- For an unsupported format, the application displays its metadata and allows the user to export it or open it using another installed application.
+- Imported and generated files retain their original bytes and are not automatically transcoded.
+- The first release also does not offer hidden or temporary resizing, recompression or transcoding merely to satisfy provider input limits; validation explains the violated constraint and requires a separately converted file to be imported.
+- A future conversion workflow would create a visible derived library file with its own identity, content hash and provenance rather than substituting transformed upload bytes invisibly.
+- Every library file has a unique internal ID and managed filename which are independent of its display name.
+- The original imported or generated filename is retained as metadata.
+- The application calculates SHA-256 over the exact stored bytes for integrity checking, duplicate detection and byte-identical safety-classification propagation.
+- Every persisted digest includes its algorithm identifier; digests produced by different algorithms are never compared as equal, allowing a future version to introduce another algorithm without silently redefining identity.
+- Files are treated as byte-identical only when the hash algorithm, digest and byte size all match.
+- Routine duplicate and classification workflows do not perform a second byte-for-byte comparison after that match; an explicit integrity investigation may perform one when diagnosing suspected storage or implementation faults.
+- Identical files can be imported more than once and are not automatically deduplicated.
+- When an identical file already exists, the application warns the user and offers to continue the import or open the existing file.
+- File display names are unique within a folder.
+- Import name conflicts are resolved by adding a numeric suffix, such as `image (2).png`.
+- Rename and restore name conflicts require the user to choose a new display name and never silently replace an existing file.
+- Export name conflicts use an application-controlled review offering **Replace**, **Keep Both** or **Cancel**.
+- **Replace** is offered only when the destination API and filesystem can perform or emulate a safe replacement without exposing a partially overwritten existing file; otherwise only **Keep Both** and **Cancel** are available with an explanation.
+- Bulk export preflight presents all known conflicts in one table with per-item choices and **Apply to All Compatible Conflicts**.
+- A bulk **Replace** choice applies only to items whose destinations support safe replacement; incompatible items remain unresolved until assigned **Keep Both** or **Cancel** and are never silently replaced.
+- A conflict involving an exported or existing executable, installer, script, shortcut or other detected active content cannot inherit **Apply to All**.
+- Each such replacement requires a per-file confirmation showing the actual destination name and detected source and destination content types before writing.
+- When destination APIs expose the entry type, a conflict target which is a symbolic link, junction, reparse point or other redirecting filesystem object is never followed or replaced.
+- It is marked unsafe and offers only **Keep Both** using a new regular-file name or **Cancel**; opaque Android document-provider handles are accessed only through their granted provider API and are not treated as filesystem paths.
+- Immediately before each external write or replacement, SlopFactory revalidates the destination parent, containment, existing-entry identity and type against the reviewed preflight state using handle-based or provider APIs where available.
+- If relevant state changed, that item performs no write and returns to conflict review rather than following a substituted path or applying the stale choice.
+- A safe filesystem replacement streams to a uniquely named temporary sibling, flushes and validates the completed temporary file, and then uses the platform's atomic replace or rename primitive.
+- Temporary siblings use opaque cryptographically random names unrelated to the exported display name and request restrictive permissions or attributes when the destination supports them; only the atomic commit assigns the reviewed final name.
+- If validation or atomic commit fails, the original destination remains in place and SlopFactory removes the temporary sibling where possible, reporting any cleanup failure; a destination which cannot provide this guarantee does not offer **Replace**.
+- While an external temporary document exists, a minimal device-local cleanup journal stores only the destination handle or path, opaque temporary name, operation ID and cleanup state required to remove it after a crash.
+- Before external temporary creation, SlopFactory durably flushes an authenticated **Planned Temporary** entry containing the validated parent and proposed opaque name.
+- Ordinary new-file exports use the same journal whenever the destination can expose an incomplete external object during writing; only a destination API which genuinely guarantees atomic create-and-commit may omit it.
+- If the package/device-scoped journal-authentication secret is unavailable before an export which requires external temporary or partial-file tracking, that export is blocked as **Secure Storage Required** with no unsafe bypass.
+- After exclusive creation, it durably adds the provider-returned or filesystem object identity before writing file content; a crash in the narrow interval leaves an unverified planned entry for manual review and never authorizes automatic deletion.
+- If durable identity recording fails after creation, SlopFactory writes no content, aborts the export, attempts immediate deletion of the empty object and retains the authenticated planned entry whenever absence cannot be verified.
+- Every journal entry is authenticated with a device-local random secret held in OS secure storage and records the minimum provider authority, object identity, expected type and temporary-name evidence needed to validate its cleanup target.
+- The authentication secret uses a package/device-scoped secure-storage namespace separate from library IDs, connection credentials and remote-cleanup identifiers because export cleanup can outlive a remembered library.
+- Before deletion, SlopFactory verifies the journal authentication and revalidates all available identity, type and containment evidence; a failed or incomplete verification performs no external mutation.
+- When a trusted local-filesystem or authenticated document-provider lookup confirms that the exact journaled temporary object is already absent, cleanup records **Already Absent** and removes the journal entry without deleting any similarly named or final export object.
+- If the temporary name resolves to an object whose stable identity or validated attributes differ from the journal, the entry becomes **Target Changed**, no deletion occurs, and the UI offers only manual inspection/removal guidance or **Stop Tracking**.
+- If the journal-authentication secret is missing or inaccessible, affected entries become **Cannot Verify Safely**, no deletion is attempted, and the UI offers only provider-appropriate manual-removal guidance and **Stop Tracking**.
+- On restart, SlopFactory attempts bounded automatic cleanup only for temporaries known to be on a directly accessible local filesystem.
+- Opaque Android document providers and destinations which may invoke a networked storage service are shown as **Cleanup Pending** and are not contacted until the user selects **Retry Cleanup**.
+- SlopFactory reports unresolved external temporaries and removes each journal entry only after cleanup succeeds or the user explicitly stops tracking it; journal data is never written to diagnostics or library history.
+- **Stop Tracking** requires confirmation that the external partial or empty file may remain and that SlopFactory will be unable to clean it automatically later.
+- It removes only the local cleanup-journal entry and never claims or implies that the external document was deleted.
+- Unresolved export-cleanup entries do not expire automatically; the storage and diagnostics UI lists their state with **Retry Cleanup** and **Stop Tracking** actions until each is resolved explicitly.
+- The cleanup list also provides **Retry All** and **Stop Tracking Selected**.
+- **Retry All** preflight groups entries by destination provider, identifies groups which may invoke network access, applies the normal metered-network rules and lets the user exclude entire groups before starting bounded retries.
+- **Stop Tracking Selected** uses one aggregate confirmation showing the entry count and warning that every selected external partial or empty document may remain; it does not require a separate modal for each entry.
+- When notifications are enabled, newly discovered pending external-export cleanup produces one generic **Export cleanup requires attention** notification with no path, filename, provider label or file content.
+- Activating the notification opens the in-app cleanup list subject to normal application and library availability.
+- The same unresolved cleanup batch is not notified again on every launch; it retains an in-app attention badge instead.
+- Another OS notification is permitted only when an explicit retry fails with a different normalized failure category, without exposing the provider's raw message.
+- Viewing the cleanup list does not clear its attention badge; the badge remains until every entry in the batch is removed after successful cleanup or an individually confirmed **Stop Tracking** action.
+- Cleanup UI shows the destination provider or volume plus a masked final component by default; **Reveal Location** exposes the available full path or provider label only for the current session.
+- External cleanup paths and provider handles are excluded from diagnostic exports, notifications and library history.
+- An expired or revoked Android document-provider grant marks the cleanup entry **Permission Required** and pauses cleanup until the user explicitly reauthorizes the narrowest applicable document or parent location.
+- Reauthorization must match the journaled provider authority and stable document or parent identity; selecting a different provider, document or folder is rejected and leaves the original cleanup entry pending.
+- When the provider exposes no stable identity which can be matched after permission loss, the entry becomes **Cannot Reauthorize Safely** and SlopFactory never guesses from a similar name or path.
+- That state offers provider-appropriate manual-removal guidance and **Stop Tracking**, but performs no external deletion attempt.
+- **I Removed It Manually** lets the user resolve an entry after external cleanup; it removes the cleanup-journal entry and records only a device-local, sanitized **User-Reported Removal** outcome.
+- SlopFactory never labels that outcome verified or provider-confirmed.
+- Resolved entries disappear from the cleanup list and have no permanent cleanup-history ledger; their sanitized result events follow ordinary rolling-diagnostic retention and may be cleared by the user.
+- Permission denial, cancellation or an unavailable provider never counts as successful cleanup and never triggers a request for broad shared-storage access.
+- Before a bulk export containing replacements starts, SlopFactory warns that completed external replacements cannot be restored by the application.
+- Cancelling retains completed exports and replacements, prevents not-yet-started items, requests cancellation of active writes and removes incomplete temporary outputs where possible; its summary distinguishes completed, cancelled and leftover partial items.
+- The library action for saving a managed file outside the library is named **Export**.
+- Export copies files out of managed storage without changing their library records.
+- A single-file export lets the user choose the destination and filename.
+- A multi-file or folder export lets the user choose a destination directory. Folder export recreates the selected virtual folder hierarchy.
+- When a file's display extension conflicts with its detected content, export proposes the display basename with the safe detected extension and shows the mismatch.
+- The user can change the export basename freely.
+- Executable or otherwise active content cannot be exported with a harmless-looking or conflicting extension.
+- Non-active content can use a conflicting user-entered export extension only after an explicit warning; its bytes and detected-type metadata remain unchanged.
+- Bulk export automatically uses safe detected extensions for mismatched items and lists renamed outputs in its completion summary.
+- Files are exported using their original bytes without conversion.
+- During export, SlopFactory streams a new SHA-256 digest and byte count and compares both with the managed file's verified identity before final commit.
+- Export review offers **Verify After Export** off by default only when the destination API supports trustworthy read-back; enabling it performs a full post-write size and SHA-256 comparison and may substantially increase time and I/O.
+- An outgoing-stream mismatch before commit aborts and cleans the temporary output, writes no sidecar, marks the library record for integrity review and reports that export did not complete.
+- A post-commit read-back mismatch marks **Export Verification Failed**, writes no sidecar and attempts to delete a newly created output; cleanup failure is tracked normally.
+- Because the outgoing stream already matched the managed file's stored digest and size, a destination read-back mismatch does not mark the library record corrupt or changed.
+- If the mismatched object replaced an existing destination or cannot be deleted, SlopFactory reports it as potentially corrupt and never claims that the prior external object was restored.
+- Ordinary export preserves embedded EXIF, container and document metadata present in the original bytes and warns the user of that fact.
+- The first release does not provide a **Strip Embedded Metadata** export option or silently sanitize exported content.
+- Users who sanitize content with an external tool can import the sanitized result as a new managed file.
+- On Windows, exports of files classified as internet-origin request an appropriate Mark of the Web through supported OS mechanisms.
+- When the destination filesystem or OS operation cannot preserve Mark of the Web, ordinary media export can complete with a clear warning in its result summary.
+- Exporting an executable, installer, script, shortcut or other active file without applicable origin protection requires explicit confirmation before the final destination file is committed.
+- If origin marking fails unexpectedly during an active-file export, SlopFactory does not silently report success; it removes the uncommitted temporary export where possible and asks the user whether to continue without the protection.
+- Export history and diagnostics record only whether origin protection was applied, unavailable or declined, never source-zone URLs.
+- Temporary Windows copies used by **Open Externally** receive the same applicable origin protection before launch.
+- Recycled files must be restored before they can be exported.
+- The user can optionally export a versioned JSON sidecar.
+- **Export JSON Sidecar** is off by default for every new export operation and is never enabled automatically because it was used previously.
+- Sidecars are encoded as UTF-8 without a BOM, use LF line endings, two-space indentation, deterministic property ordering and locale-invariant numeric formatting.
+- Every sidecar includes a stable official JSON Schema ID and an integer sidecar schema version.
+- Sidecars are unsigned documentation, may be modified after export and are never presented as proof of provider authorship, media authenticity or an unaltered SlopFactory record.
+- Generator metadata contains the SlopFactory semantic application version and platform family only; it excludes build channel, package ID, build number, device model, OS version and installation identifiers.
+- The matching schema and human-readable field documentation are bundled with the application and published on the official site; export, viewing and ordinary import never fetch the schema automatically.
+- Published sidecar fields are never repurposed. Any structural or semantic change increments the integer schema version.
+- Readers may ignore unknown optional fields but must reject unsupported required semantics with a clear version error rather than guessing or partially applying them.
+- The first release exports only the application's current bundled sidecar schema version and shows that version in the disclosure preview; it provides no older-version selector or lossy downgrade conversion.
+- Valid non-ASCII Unicode is written directly rather than ASCII-escaped; only JSON-required characters and control sequences are escaped using one deterministic policy.
+- If provider or external descriptive text contains ill-formed Unicode, sidecar serialization replaces invalid sequences with `U+FFFD` and marks the affected field **Unicode Sanitized**.
+- This sanitization applies only to the descriptive JSON representation and never rewrites managed file bytes or claims that invalid source text was preserved exactly.
+- A sidecar is named `<actual-media-filename>.slopfactory.json`, retaining the media extension, and is derived from the actual committed destination name returned by the filesystem or document provider.
+- Its name conflict is reviewed independently from the media conflict and follows the same safe replacement, keep-both and cancellation rules.
+- By default, a sidecar contains only its schema identity/version, the exported file's media type, byte size, content hash, timestamps, origin, provider and model snapshots, and generation settings.
+- Content identity is represented as separate `algorithm`, `digest` and `byteSize` fields; SHA-256 digests use lowercase hexadecimal and are never emitted as an unlabelled hash string.
+- The identity is explicitly labelled as the bytes supplied by SlopFactory to the destination.
+- When the destination supports a trustworthy read-back and one is performed, the sidecar records destination read-back verification separately; absence of that field never implies the stored external object was verified.
+- Default timestamps are the library creation or import time, current library-modified time, generation completion time when applicable, `mediaExportedAt`, and `sidecarCreatedAt` when a sidecar is written.
+- When media and sidecar commit in the same operation the two timestamps remain separate; a later sidecar-only follow-up preserves the original media-export timestamp and records its own creation time.
+- Default `origin` is a normalized enum such as `imported`, `generated`, `user-copy`, `edited-copy` or `provider-reacquired`; it never contains an external source path, filename, URI or document-provider identity.
+- A **Content Replaced** file uses separate `originalOrigin` and `currentContentState: replaced` fields plus the replacement timestamp, and never describes the exported current bytes as the original provider result or import.
+- Any retained original provider/model snapshot and generation settings are nested under `historicalProvenance`; the current-content section explicitly states that the exported replacement bytes were not produced by that provider or model.
+- The former bytes' hash, size and media type are excluded by default and require **Include Historical Content Identity**; the current exported bytes' identity remains the ordinary default content identity.
+- A former-bytes provider safety classification is exported only when both **Include Historical Content Identity** and **Include Provider Safety Metadata** are enabled, is nested under historical provenance and is never attributed to the current replacement bytes.
+- Source-filesystem timestamps require **Include Source Timestamps**, while detailed provider submission, attempt and status timelines require **Include Detailed Generation Timeline**.
+- Sidecar timestamps use RFC 3339 UTC strings with exactly three fractional-second digits and `Z`, and the schema includes an explicit `timestampTimeZone: "UTC"` declaration.
+- Original user-entered offsets appear only within opted-in user **Date-Time** metadata alongside their normalized UTC instants.
+- The default provider/model snapshot contains only provider type and display label plus model ID, label, generation mode and applied capability/settings snapshot.
+- For generated content, these values come from the immutable submission-time provider and model snapshots, never from the connection or model's current labels or configuration.
+- Current local configuration may appear only as separately labelled UI context and is not substituted into sidecar historical provenance.
+- It excludes connection IDs, base URLs, custom-header names and values, organization, project or account identifiers, and routing metadata.
+- Default generation settings contain only normalized structured fields.
+- Default generation provenance includes the terminal normalized run status, this file's provider result position or role, and applicable **Incomplete** or **Validation Warning** flags.
+- A locally committed result may be exported while its aggregate multi-result run remains active; its sidecar uses `generationProvenanceState: nonterminal-snapshot` plus `statusObservedAt` and omits final result count, final cost and completion-time claims.
+- When the owning generation-history aggregate is recycled, the active file may still be exported but its sidecar contains only `generationProvenanceState: history-recycled`; provider/model, prompt, settings, usage and timeline details from that aggregate remain unavailable until it is restored.
+- After the generation-history aggregate is permanently deleted, the sidecar retains normalized origin `generated` but uses `generationProvenanceState: unavailable`; it exports no deletion tombstone and never reconstructs removed provider, prompt or settings details.
+- A default validation warning contains only its normalized warning code and Boolean flag; detailed sanitized text requires **Include Sanitized Error and Warning Details** and never contains response excerpts or file content.
+- Provider error codes and messages and local validation details require **Include Sanitized Error and Warning Details** and remain sanitized; raw provider error bodies and responses are never exported.
+- Validated provider-specific advanced JSON requires **Include Advanced Provider Settings**, whose disclosure preview shows the included keys and values; secrets and reserved transport/request fields remain prohibited regardless of this opt-in.
+- Persistent library ID, internal file ID and generation-history ID are excluded by default and require a separate **Include Internal Identifiers** opt-in which lists each identifier type before export.
+- Provider request IDs are never included in sidecars, including when **Include Internal Identifiers** is enabled; they remain only in local history and permitted sanitized diagnostics.
+- Raw prompts, system instructions, improved prompts, user-metadata values, and source or output filenames are separate disclosure categories which require explicit opt-in for each export.
+- System instructions require **Include System Instructions** and are never included merely because raw or improved prompt disclosure is enabled.
+- Documented provider-reported effective instructions are also excluded unless **Include System Instructions** is enabled and are nested separately as `providerReportedEffectiveInstructions` with provider-source and **Exact** or **Sanitized** status.
+- Default sidecars may state that prompt improvement was used and include its template identifier/version and improvement-model snapshot, but omit optional guidance and the final composed instruction text.
+- Guidance and composed instruction text require **Include Prompt-Improvement Text**; the improved prompt itself remains governed by its separate improved-prompt disclosure category.
+- Provider-reported usage, actual cost and estimate provenance are excluded by default and require **Include Usage and Cost**.
+- That category exports only the operation's reported units, currency or provider-credit unit, actual values and stored estimate source/range; it never includes billing-account identifiers or cumulative library cost summaries.
+- For multi-result work, run-level usage and cost use scope `generation-run` and include requested and returned result counts; SlopFactory never divides a run total among output sidecars.
+- A per-output value appears only when the provider explicitly reports that scope and is labelled provider-reported rather than locally allocated.
+- Late-recovered outputs represent original `generation-run` and later `recovery-operation` usage/cost as separate scoped records when available and opted in; they are never summed into a synthetic combined total.
+- Prompt-improvement usage and cost use a separate `prompt-improvement` scope linked descriptively to the generation and are never added to the generation-run total.
+- For a nonterminal run, opted-in usage or cost may include only values already provider-reported, labelled `reported-so-far` with an incomplete flag and observation timestamp; SlopFactory never calls them final or estimates an unreported remaining total.
+- Source-file provenance is excluded by default and requires **Include Source Provenance**, which may include source roles, media types and content hashes.
+- Source names appear only when the filename category is also enabled, source internal IDs only when **Include Internal Identifiers** is enabled, and source bytes are never embedded in a sidecar.
+- User-created links and read-only copy-provenance relationships are excluded by default and require **Include File Relationships**.
+- Relationship exports contain relationship type or user label plus endpoint content hashes; endpoint names and internal IDs remain omitted unless their separate filename and internal-identifier opt-ins are also enabled.
+- Provider safety metadata for related endpoints is never included in another file's relationship data; the safety-metadata opt-in applies only to the media file whose sidecar is being written.
+- Sensitive user-metadata values remain excluded even when ordinary user metadata is included; exporting them requires an additional **Include Sensitive User Metadata** opt-in.
+- The sensitive-metadata disclosure preview shows the entry count and masked key names by default, permits a separate temporary reveal of key names, and never displays sensitive values.
+- Before commit, it warns that selected sensitive values will be written as unencrypted JSON in the exported sidecars.
+- Provider moderation categories and **Provider Safety Warning** metadata are excluded from sidecars by default.
+- A separate **Include Provider Safety Metadata** opt-in is available in the sidecar disclosure preview and includes only the sanitized provider-attributed category and outcome; raw moderation responses and policy-evasion details are never exported.
+- That opt-in exports only the latest current provider state. Prior sanitized category/outcome revisions and discovery timestamps require the additional **Include Detailed Safety History** opt-in.
+- A latest **Cleared** state is exported as an explicit provider-reported current clearance with its discovery timestamp; it is not omitted in a way that could imply no classification ever occurred.
+- **Include Detailed Safety History** is unavailable unless provider safety metadata is enabled and still excludes acknowledgments, raw moderation responses and policy-evasion details.
+- Local `acknowledgedAt` values, reveal state and concealment overrides are never exported as provider safety metadata.
+- Exporting one or more safety-marked files requires one additional confirmation for the complete export operation, summarizing the number of marked files and whether provider safety metadata will be included in sidecars.
+- Export preflight captures the current safety-classification revision and revalidates it immediately before each media commit.
+- A newly added, stricter or incomparable revision before commit stops that item, cleans its temporary output and requires a fresh export and sidecar-disclosure confirmation; it never relies on the stale operation-level approval.
+- A less restrictive or cleared revision may continue under an already stricter media-export approval, but when provider safety metadata is selected the sidecar pauses for a refreshed disclosure review because its exported fields changed.
+- A file whose latest provider state is **Cleared** does not count as currently safety-marked for that confirmation; when detailed safety history is selected, the sidecar preview separately reports how many cleared files have historical classifications.
+- Bulk export does not prompt separately for every safety-marked file after the operation-level disclosure is confirmed.
+- Before writing sidecars, the application previews the included categories and representative field names.
+- The review captures revisions for every selected metadata and history source and revalidates them before sidecar commit.
+- If selected disclosure data changed, only the sidecar pauses for a refreshed preview; unselected-field changes do not invalidate its review, and media may continue when bytes, destination name and safety approval remain valid.
+- Prompt disclosure previews show only the presence and character/UTF-8 byte count of raw, improved and system-instruction text by default.
+- Each text field may be revealed temporarily from its individual file review, but aggregate bulk previews never display prompt excerpts.
+- Every new export operation begins with privacy-minimal sidecar defaults; disclosure opt-ins from previous exports are never preselected or persisted as defaults.
+- Sidecar files use the same atomic temporary-write and authenticated cleanup-journal rules as media exports whenever the destination can expose partial objects.
+- If a stricter or incomparable safety revision arrives after media commit but before sidecar commit, the external media remains, the sidecar is not written, and the result states that the exported copy predates the safety update.
+- Exporting a sidecar afterward requires a new explicit action and disclosure review using the latest safety revision; SlopFactory never applies the stale sidecar approval.
+- The still-active export session may offer **Review and Export Sidecar** without rewriting media only when its destination handle remains valid and a fresh read-back verifies the external media's size and SHA-256.
+- If trustworthy read-back or identity verification is unavailable, sidecar-only follow-up is disabled and the user must start a new full export.
+- When **Verify After Export** is enabled and sidecar read-back is supported, media and sidecar are verified independently.
+- A sidecar read-back mismatch triggers best-effort deletion and normal cleanup tracking without changing the successful verification state of its media export.
+- Media and sidecar external objects have independent journal entries and cleanup outcomes so a failure involving one is never hidden by the other's state.
+- Normal export commits each media object before attempting its sidecar; a sidecar failure leaves the successful media export in place and is reported separately.
+- If a sidecar commits but its corresponding media export fails, SlopFactory attempts to delete the orphan sidecar; failure creates an explicit tracked cleanup entry and operation warning, including whether opted-in prompts or sensitive metadata may be present without displaying those values.
+- Sidecars never contain API keys, authorization data, cookies, signed URLs, internal storage paths, temporary provider identifiers or credential lookup identifiers.
+- Bulk export applies one reviewed sidecar-disclosure selection to the complete operation and reports any per-file sidecar failures.
+- A selected data revision change pauses only the affected file's sidecar for re-review; other independently validated media and sidecars continue and the completion summary reports each paused or completed item.
+- Cancelling an affected re-review retains any media already exported, records that sidecar as **Skipped — Review Cancelled**, and does not stop unrelated bulk items.
+- When media has not started, cancelling only the sidecar re-review still permits media export because sidecars are optional, unless the same revision change invalidated the media's safety or destination confirmation.
+- Local export history records the sidecar schema version and selected disclosure category names or booleans, but never copies exported values, external destination paths, revealed sensitive keys or provider-returned document handles.
+- It also records outgoing-stream verification, optional destination media read-back verification and sidecar read-back verification as separate normalized outcomes.
+- A sidecar may record media read-back verification completed before the sidecar was written, but never claims to attest to its own read-back; that result appears only in the completion summary and local export history.
+- A file's export-history entries are owned children of that file record: they recycle and restore with it and are permanently removed when the file is permanently deleted, leaving no hidden export ledger.
+- When device-level external-export cleanup entries originated from that file, permanent-deletion preview warns with their count but does not remove them; cleanup tracking remains independently until resolved or explicitly stopped.
+- That preview offers **Open Cleanup List**, **Continue Deletion**, and **Cancel**, but never an inline **Stop Tracking Cleanup** action; abandonment remains a separate explicitly confirmed workflow.
+- A bulk export stores one operation summary with per-file child entries. Permanent deletion of a file removes its child and recalculates the summary using only remaining children.
+- When no file children remain, the empty bulk-operation summary is permanently removed automatically.
+- Export is not presented as a library backup and exported content cannot be imported as a complete library.
+
+## Preview Cache
+
+- Thumbnails, video posters, waveform data and rendered text previews are stored in a regenerable cache separate from managed library files.
+- Preview data is stored in device-local application cache storage rather than inside the persistent library and is keyed by library ID plus content identity.
+- A device-wide configurable cache limit applies across all libraries, with initial defaults of 1 GB on Windows and 256 MB on Android.
+- Cache limits do not restrict original library content, imports, generated results or exports.
+- When the limit is exceeded, least-recently-used entries are evicted first; entries being displayed or generated are temporarily protected.
+- The application can evict additional cache entries when the operating system reports low storage without deleting any original or history record.
+- Cache entries are not library records and do not appear in folders or the recycle bin.
+- Derived data is keyed by content hash, preview type, size and renderer version.
+- Previews are generated on demand in the background, with a placeholder shown while generation is pending or has failed.
+- Preview or thumbnail failure alone does not make a library file ineligible as a generation source.
+- A file with **Preview Unavailable** remains selectable when its detected media type and every property required by the chosen model and source role can still be validated; it is blocked only when a required property such as type, dimensions, duration or decodability cannot be established.
+- Application settings provide **Clear Preview Cache**.
+- Settings show current cache use and allow the user to change the platform default limit within safe numeric bounds.
+- Clearing the cache never removes original files, metadata or generation history.
+- Cached data is regenerated automatically after intentional content replacement.
+- Preview-cache data is not included in exports.
+- Cache loss or operating-system cleanup is treated as normal and not as library corruption.
+- Reopening a forgotten library regenerates its previews on demand rather than restoring deleted cache entries.
+
+## File Viewers
+
+- Every library file is treated as untrusted content.
+- The text viewer supports read-only plain-text and rendered-Markdown modes, in-file search, line wrapping and copying selected text.
+- Rendered Markdown is sanitized and cannot execute scripts or load remote images, fonts, stylesheets, frames or other resources automatically.
+- The image viewer supports fit-to-window, actual size, zoom, pan and non-destructive viewing rotation.
+- SVG is rendered through a sandboxed or sanitized viewer which blocks scripts and external resources.
+- Library content cannot access application APIs through the Blazor WebView.
+- External links show their destination and require confirmation before opening in the operating-system browser.
+- Local-resource access is restricted to the specific managed file or derived preview being displayed.
+- Rendered previews use a restrictive content-security policy and fall back to plain-text viewing when safe rendering fails.
+- Animated images start paused and provide explicit play and pause controls.
+- Animated-image thumbnails and list previews are always static.
+- When the operating system requests reduced motion, animated images remain paused across navigation and viewer restoration unless the user explicitly plays the current item again.
+- SlopFactory never autoplays potentially flashing imported or generated content.
+- Audio playback provides play, pause, seek, elapsed and remaining time, volume, mute and playback-speed controls.
+- Video playback provides the audio controls plus full-screen mode.
+- When the platform media stack exposes embedded caption or subtitle tracks, the video viewer lists them and allows track and language selection.
+- Caption controls are keyboard, touch and screen-reader accessible and do not cover essential playback controls.
+- SlopFactory does not automatically generate captions or transcripts in the first release.
+- External subtitle files remain separate library files which can be connected through ordinary user-created links but are not discovered or loaded implicitly by the viewer.
+- Audio and video do not autoplay, and only one item plays at a time.
+- Playback stops when the user leaves the viewer. The first release does not provide background media playback.
+- Viewer operations do not modify original file bytes.
+- **Open Externally** never exposes a writable managed library file directly.
+- On Android, the application shares the managed file through a narrowly scoped, read-only content URI grant.
+- On Windows, the application creates and opens a temporary read-only copy in application cache storage.
+- External applications cannot write changes back into the library automatically.
+- To retain an externally edited version, the user must import it as a new file or explicitly use the managed-content replacement workflow.
+- Android content grants are revoked when they are no longer needed, subject to platform lifecycle behavior.
+- Windows external-opening copies are treated as regenerable temporary data and are removed on later startup or cache cleanup when they are no longer in use.
+- The application explains that a receiving application may retain its own copy after SlopFactory revokes access or removes its temporary copy.
+- SlopFactory never executes library content.
+- Known executables, installers, application packages, shortcuts and scripts can be stored and exported, but **Open Externally** is unavailable for them.
+- Users who intentionally want to run such content must export it and act through the operating system.
+- Potentially active document formats require a warning before **Open Externally** hands a temporary or read-only copy to another application.
+- Active-file classification uses file signatures, declared media type and extension where available rather than relying on the filename alone.
+- The application can request operating-system malware or reputation scanning where the platform exposes a suitable API, but it does not provide its own malware scanner or describe unflagged content as safe.
+
+## File Import
+
+- Windows and Android support selecting and importing multiple files.
+- Windows additionally supports dragging files or folders into SlopFactory and choosing **Open with SlopFactory** for local files.
+- SlopFactory can register as an available Windows handler but never takes over a default file association automatically.
+- Android additionally supports receiving one or multiple files through **Share to SlopFactory**.
+- Every operating-system import request opens an import-review screen showing the target library, destination folder and selected items.
+- The user can change the target library or folder before confirming, subject to normal library availability and locking rules.
+- Files from drag-and-drop, **Open with SlopFactory** and Android sharing are never imported merely because the request was received.
+- Android shared-content grants are read only and are held only long enough to copy confirmed imports into managed storage.
+- If an external content grant expires before copying completes, the affected file fails clearly and is not represented as imported.
+- Custom URL schemes, remote-URL imports and automatic downloading of shared links are not supported in the first release.
+- Users obtain remote files through the operating system or browser and explicitly import the resulting local bytes, giving SlopFactory a stable content hash and clear provenance boundary.
+- Any later URL-ingestion feature requires dedicated SSRF, redirect, authentication, expiry, content-size and provenance controls rather than reusing provider result-download behavior.
+- Recursive folder import is supported when the platform's picker grants folder access.
+- Recursive import excludes hidden files and directories by default, using platform attributes and leading-dot conventions where applicable.
+- Before import, the user can explicitly enable **Include Hidden Files**; the choice applies only to that reviewed import operation.
+- The completion summary reports hidden items skipped by policy.
+- Protected system files, filesystem metadata, symbolic links, junctions, reparse-point redirections and other non-regular entries are always excluded even when hidden files are included.
+- Before recursive copying starts, SlopFactory performs a cancellable, non-mutating preflight inventory.
+- The preflight shows eligible file count, total known byte size, proposed virtual-folder hierarchy, detected duplicate content, name conflicts and counts grouped by skipped-item reason.
+- When a picker, document provider or permission prevents complete enumeration or reliable sizing, the preflight labels its totals incomplete and explains that additional per-file failures may occur.
+- Copying begins only after the user confirms the reviewed inventory and destination.
+- Cancelling preflight creates no library folders, file records or managed copies.
+- The confirmed preflight freezes the candidate set; files or directories which appear afterward are not added to the running import.
+- Each candidate is revalidated immediately before copying against its preflight identity and content fingerprint when available.
+- A metadata-only timestamp change does not cause a skip when the content hash still matches.
+- A missing, inaccessible or content-changed candidate is skipped and reported for re-review rather than silently importing bytes different from those reviewed.
+- Revalidation failure for one candidate does not stop unrelated validated files from importing.
+- An imported directory hierarchy is recreated as virtual library folders.
+- Every imported file is copied into managed storage and no external file reference is retained.
+- Import copies only the selected regular file's primary byte stream and assigns SlopFactory-controlled permissions in managed storage.
+- Source ACLs, ownership, hidden or read-only attributes, executable flags, alternate data streams and extended attributes are not applied to the managed copy or exposed as editable library metadata.
+- On Windows, SlopFactory reads a source Mark-of-the-Web zone when available and retains only a normalized read-only security-zone classification as system metadata.
+- Source and referrer URLs from zone metadata are not retained.
+- Files downloaded from an AI provider are classified as internet-origin content for Windows export protection even when no raw zone stream exists in managed storage.
+- Failure to read the primary stream fails that file's import; SlopFactory does not fall back to copying a different stream or filesystem object.
+- Each file is an independent import, so one failure does not roll back successfully imported files.
+- Bulk import displays progress, supports cancellation and shows a completion summary.
+- Cancelling stops files which have not started and retains completed imports.
+- Windows recursive import does not follow symbolic links or junctions.
+- Duplicate detection and naming-conflict rules are applied to every imported file.
+- After its SHA-256 digest and byte size are verified, a newly imported file inherits any existing shared provider safety classification for the same bytes in the active library.
+- Import review identifies a known classification when preflight has already verified the bytes; otherwise the completion summary reports the inherited classification after copying and hashing finishes.
+- Bulk-import preflight groups candidates whose content hashes match existing library files.
+- **Skip Duplicates** is the default bulk choice, with **Import All Anyway** and per-file overrides available before confirmation.
+- The running copy phase does not interrupt the user with a separate modal for each duplicate already resolved during preflight.
+- Skipped duplicates identify all matching existing records in the completion summary and provide navigation actions.
+- A candidate intentionally imported despite a match receives a new stable file ID, separate managed bytes and the normal numeric-suffix display name.
+- Duplicate detection includes matching files in the recycle bin and labels them **Recycled Match** rather than treating them as active existing content.
+- A recycled match offers **Restore Existing**, **Import Anyway**, and **Skip** and is never restored automatically.
+- **Restore Existing** runs the normal restoration preview for folder, name and dependency effects before the import operation is confirmed.
+- A matching record in **Pending Permanent Deletion** or failed permanent-deletion cleanup is not restorable; preflight identifies that state and permits only **Import Anyway** or **Skip**.
+- Per-file failures are recorded without exposing external paths in ordinary diagnostic logs.
+- Exported SlopFactory JSON sidecars are documentation-only in the first release and have no privileged import behavior.
+- Importing a media file alongside a sidecar imports each selected item as an independent ordinary file.
+- Sidecar contents are not automatically applied as metadata and do not recreate identifiers, folders, links, models or generation provenance.
+- A JSON file which happens to match the sidecar schema is still treated as untrusted library content.
+
+## Library Organization
+
+- Library folders are virtual database records and do not mirror physical directories in managed storage.
+- Managed files remain in their internal storage locations when library items are moved or renamed.
+- Each file belongs to exactly one folder.
+- Folders form a tree beneath a permanent library root.
+- Folder names are unique within their parent.
+- Users can create, rename and move files and folder subtrees.
+- A folder cannot be moved into itself or one of its descendants.
+- Recycling a folder recycles its complete subtree.
+- Restoring a folder restores the same hierarchy, subject to the library's name-conflict rules.
+- An active, healthy library file provides **Duplicate** within the same library.
+- The user chooses the duplicate's destination folder and display name before copying starts.
+- Duplication streams the source into new managed storage, calculates and verifies its hash, assigns a new stable file ID and commits the new record atomically.
+- The duplicate has system origin **User Copy**, newly calculated system metadata and copied user metadata.
+- A duplicate does not copy the source's generation-history relationship or user-created links.
+- A read-only provenance relationship identifies the source file from which the duplicate was made.
+- Intentional duplication does not show the ordinary duplicate-import warning even though the content hashes match.
+- Missing or unresolved **Content Changed** files must be repaired before they can be duplicated.
+- The first release does not duplicate virtual folders or recursively duplicate folder subtrees.
+- Multi-selection can duplicate a group of eligible active files into one selected destination folder.
+- Each selected file is duplicated as an independent atomic operation and uses the normal numeric-suffix rule for name conflicts.
+- Bulk-duplicate progress identifies the current file and overall completion count.
+- Cancelling prevents files which have not started, retains completed duplicates and waits for the current atomic copy to finish or roll back safely.
+- Per-file failures do not remove successful duplicates and produce a completion summary.
+- Folders and ineligible file records remain disabled with explanations in a bulk duplicate action.
+
+## Naming Rules
+
+- User-facing names and labels can contain Unicode characters.
+- Surrounding whitespace is trimmed and empty names are rejected.
+- Control characters and path separators are not allowed.
+- Labels and titles are limited to 100 characters.
+- File and folder display names are limited to 255 Unicode scalar values, including a file's displayed extension.
+- Virtual display names may otherwise use values which a destination filesystem reserves or trims, including Windows device names and trailing periods, because managed filenames are independent and the logical library format is cross-platform.
+- Export preflight must detect destination-invalid display names and require a reviewed safe-name substitution or user-supplied rename rather than silently changing the library name or failing after partial export.
+- Suggested substitutions replace destination-forbidden characters or endings with `_`, prefix reserved device names with `_`, and then apply the existing numeric-suffix rule for conflicts.
+- When a component or complete destination path exceeds the destination's supported length, the suggestion truncates the base name, preserves the extension when possible and appends `~` plus an eight-hex-character SHA-256-derived suffix based on the stable record identity and original logical name.
+- Preflight still checks the proposed path for collisions and length after substitution and can extend the suffix or apply the numeric conflict suffix when required.
+- Export preflight displays every original-to-exported name mapping and permits editing the proposed exported name without renaming the library record.
+- When an Android document provider does not disclose its filename or path-length limits, SlopFactory applies conservative suggestions but treats a provider rejection as a per-file failure with **Rename and Retry**.
+- It never silently applies another truncation, drops the file or reports export success after that rejection; other independently completed exports remain intact.
+- SlopFactory checks the name returned by an Android document provider after document creation when the provider exposes it.
+- If an unexpected rename is known before bytes are written, export pauses for the user to accept the actual name or choose another destination; if it is discoverable only after writing, the completion summary clearly reports the actual exported name and never claims the requested name was used.
+- When the user rejects a provider-renamed document before any file bytes are written, SlopFactory attempts to delete the empty external document.
+- A failed cleanup is reported with the actual external name as a leftover empty document; the application does not conceal the failure or treat that document as a successful export.
+- If an Android export fails or is cancelled after writing only part of a document, SlopFactory attempts to delete that incomplete external document.
+- When cleanup fails, the operation reports the actual name, **Leftover Partial File** status and number of bytes written when known, and never counts it as a successful export.
+- User-facing file names, folder names, connection labels, model labels, saved-setting titles and link labels are trimmed and stored/displayed in NFC-normalized user casing.
+- Their uniqueness rules use invariant Unicode case-folded comparison keys rather than device-locale or filesystem-specific case behavior.
+- Connection labels, model labels and saved-generation-setting titles are unique within a library.
+- File and folder display names are unique within their parent folder.
+- Link labels are not globally unique; only each source, target and label combination must be unique.
+- Validation is shown before saving and entities are not silently renamed, except for the accepted numeric-suffix behavior during import.
+
+## Library Browsing
+
+- The library provides folder-tree navigation with breadcrumbs.
+- Files can be displayed in grid or list view.
+- Images and videos display thumbnails. Other files display type-specific icons where a preview is unavailable.
+- Search includes display name, original filename, user metadata and generation prompts.
+- System instructions are excluded from ordinary search unless **Search System Instructions** is explicitly enabled for the current library session.
+- That scope is off by default, produces only **Matched system instructions** without snippets, and makes the query memory-only until the library is closed, switched, locked or unavailable or the application exits.
+- JSON user metadata contributes property names and scalar string, finite-number and Boolean values to search; raw serialization punctuation, whitespace and container formatting are not indexed.
+- Prompt matches never display raw or improved prompt snippets in library results; ordinary records show only **Matched generation prompt**, with full prompt text available in generation details.
+- User-metadata matches never display the matching value in library results; they show the metadata key when it is eligible for ordinary display, or the generic label **Matched user metadata** when the key itself is hidden or sensitive.
+- The first release does not index or search the body content of stored text, Markdown, JSON, XML, CSV or source-code files.
+- Individual-file search remains available in the read-only text viewer. Any later library-wide content index must be an explicit per-library opt-in with visible indexing status and controls, rather than an undisclosed device cache.
+- Library search does not generate snippets from file contents.
+- When a generation-prompt match belongs to a currently concealed safety-marked file, the record may appear as a concealed result but the search result does not display a raw or improved prompt excerpt.
+- Such a result uses the generic explanation **Matched generation metadata** without identifying the exact field or exposing matching text.
+- Prompt and safety-category details remain available only through the file or history detail actions governed by their normal disclosure behavior.
+- Text-content search remains available within the individual read-only text viewer.
+- Results can be filtered by media type, origin, date, generation model, active or recycled status, **Provider Safety Warning**, **Provider Blocked After Delivery**, and **Has Provider Safety History**.
+- **Has Provider Safety History** matches any file retaining a provider classification revision, including currently cleared files, without indexing or displaying its category text in ordinary results.
+- A user-metadata filter selects a key, target type, type-appropriate operator and comparison value.
+- It applies only to entries of the selected type and reports separate counts for records excluded because the key is missing or has an incompatible type; it never coerces mixed types implicitly.
+- First-release JSON operators are **Exists**, **Does Not Exist**, **Structurally Equals** and **Does Not Equal**; deeper JSON-path, member-specific and range queries are deferred.
+- JSON structural equality ignores object-property order and insignificant serialization formatting, preserves array order, compares strings and property names case-sensitively, and compares numbers by exact numeric value rather than textual notation.
+- A stored JSON value may be `null`. **Exists** matches it because the metadata entry exists, while **Structurally Equals null** specifically matches that value; a missing metadata key remains a distinct state.
+- Provider moderation-category text is not indexed by or displayed through ordinary library search; safety state is discoverable only through the explicit filters and file details.
+- Results can be sorted by name, creation date, modification date, size and media type.
+- Multi-selection supports move, export, recycle and metadata operations.
+- Results are virtualized or paginated so large libraries remain responsive.
+- When returning from a file, the application preserves the current folder, search, filters, sort and view mode.
+
+## File Metadata
+
+- Read-only system metadata is stored separately from editable user metadata.
+- System metadata includes identifiers, content hashes, media type, byte size, timestamps, origin and generation provenance.
+- Media inspection extracts only technical properties needed for safe viewing and model validation, including dimensions, orientation, duration, codecs, channel count, sample rate and frame rate where applicable.
+- Embedded GPS coordinates, device serial numbers, author or owner identity, face or person tags and similar sensitive descriptive fields are not copied into library metadata, indexed for search or written to diagnostics.
+- Metadata extraction uses bounded parsers and treats malformed embedded metadata as unavailable rather than modifying or rejecting otherwise valid original bytes.
+- Original managed bytes retain their embedded metadata unchanged, and ordinary export preserves it because export is byte-for-byte.
+- Imported files record **Imported At** as the UTC instant at which the managed file and record commit successfully.
+- **Library Modified** records later SlopFactory-managed metadata, naming, content-repair or organization changes without rewriting **Imported At**.
+- When the source picker or document provider supplies a reliable modification instant, it is retained separately as **Source Last Modified**.
+- Unavailable, timezone-ambiguous or demonstrably invalid source timestamps remain unknown rather than being guessed or substituted.
+- Source timestamps never replace SlopFactory's authoritative creation and modification timeline.
+- User metadata supports text, number, Boolean, **Date**, **Date-Time** and JSON values.
+- **Date** stores a calendar date without a time zone. **Date-Time** requires an explicit UTC offset, is normalized to a UTC instant for persistence and comparison, and displays in the device's local time zone.
+- **Date-Time** also retains the originally entered offset for faithful editing and detail display; the device-local rendering does not overwrite that stored offset.
+- Timezone-free or daylight-saving-ambiguous date-time input is not accepted silently; the user must supply or select an offset.
+- **Date-Time** metadata sorting, equality and range filtering compare normalized UTC instants across devices; **Date** values compare as calendar dates and are never converted through a time zone.
+- A text or serialized JSON value is limited to 1 MiB of UTF-8 data; JSON is limited to 32 levels of nesting and 100,000 total object, array and scalar nodes.
+- Saving JSON validates it but preserves the exact submitted text, including insignificant whitespace, numeric notation and object-property order, for later viewing and editing.
+- Search and comparison operate on a separately parsed representation; SlopFactory never silently pretty-prints, compacts, reorders or otherwise canonicalizes the persisted user text.
+- JSON objects reject duplicate property names using ordinal, case-sensitive comparison because duplicate resolution is parser-dependent; property names which differ by case remain distinct.
+- The combined serialized keys, type markers, sensitivity flags and values of all user metadata on one file are limited to 16 MiB.
+- Numeric metadata accepts only finite values within the persisted numeric representation; NaN and positive or negative infinity are rejected.
+- These per-value parsing and interface safety bounds are not a quota on total library storage or managed file sizes.
+- Metadata keys are required, trimmed, limited to 100 Unicode scalar values after normalization and unique per file using case-insensitive comparison.
+- Keys are stored and displayed in the user's NFC-normalized casing, while uniqueness uses an invariant Unicode case-folded comparison key rather than device-locale rules.
+- Metadata keys do not have a library-wide schema in the first release, so the same case-insensitive key may use different value types on different files.
+- Multi-selection displays **Mixed Types** for such a key and requires an explicit target type plus a conversion preview before any bulk normalization.
+- The conversion preview groups selected files into convertible and incompatible outcomes before confirmation.
+- For sensitive entries, that preview shows only the file identity, source type, target type and a sanitized incompatibility reason; it never displays the original value.
+- Confirmed normalization preserves each entry's **Sensitive** flag, converts valid entries transactionally per file, leaves incompatible entries unchanged and reports every per-file result rather than failing or rolling back unrelated conversions.
+- Each file can contain at most 1,000 user-metadata entries; single-file and bulk operations validate projected counts before mutation and reject only affected files which would exceed the bound.
+- The `slopfactory.` prefix is reserved for system-defined metadata keys.
+- Users can add, edit, rename and delete user metadata.
+- Deleting an individual user-metadata entry is an immediate metadata edit and never creates a standalone recycle-bin item or retained historical value.
+- File-level recycle and restore preserve the metadata attached at the time the file aggregate was recycled, but do not provide version history for earlier metadata edits.
+- Each user-metadata entry can be marked **Sensitive** independently of its value type.
+- The first use of **Sensitive** explains that it controls SlopFactory display, search-state and export behavior but does not encrypt the stored value.
+- Sensitive values remain locally searchable but are masked in lists and file details until explicitly revealed, and their search results use only **Matched user metadata** without exposing the key or value.
+- Editing, replacing and filtering by sensitive values uses masked secure-entry controls with autocomplete and autocorrect disabled and applicable platform flags which discourage autofill and keyboard learning.
+- The privacy UI states that these flags reduce exposure but cannot guarantee that the operating system or a third-party keyboard retains nothing.
+- Assistive technology announces a concealed entry's field label, type, concealed state and **Reveal for This Session** action, but not its value or length.
+- After explicit reveal, the ordinary accessible value control becomes available without changing persistence or clipboard rules.
+- Revealing a sensitive value applies only to that metadata entry for the current application session and is never persisted in the library or device preferences.
+- Sensitive-metadata reveals clear when the owning library is closed, switched away from, locked or becomes unavailable, and at application restart; no persistent **Always Show** override is provided for metadata values.
+- Marking an entry sensitive immediately clears any reveal state and masks its value across every view, even when the value was visible immediately before the change.
+- A revealed sensitive value provides an explicit **Copy Value** action; copying shows a brief reminder that operating-system clipboard history may retain the value.
+- SlopFactory never writes the copied value or clipboard contents to diagnostics, history or notifications.
+- SlopFactory does not schedule automatic clipboard clearing after copying sensitive metadata because it cannot reliably remove operating-system clipboard history and could overwrite content copied later by the user.
+- The sensitive flag is stored with the metadata entry, participates in bulk metadata previews and is copied with the entry when a file is duplicated.
+- Before **Duplicate** commits, its review summarizes the number of sensitive metadata entries that will be copied without revealing their keys or values; a multi-file duplication uses one aggregate disclosure rather than per-file prompts.
+- Copied entries retain their **Sensitive** flags and start concealed with no inherited session reveal state.
+- Invalid typed values must be corrected before metadata can be saved.
+- Sensitive JSON validation shows the error kind and line/column and may highlight the location inside the secure editor, but summary messages and diagnostics never echo offending tokens, property names or value excerpts.
+- With multiple files selected, metadata editing shows keys common to all files and indicates mixed values.
+- Multi-selection and bulk metadata views never provide **Reveal All Sensitive Values**; they may show keys, types, sensitivity flags and mixed-value state while keeping every sensitive value masked.
+- A typed user-metadata key and value can be added to every selected file.
+- A bulk operation may replace a sensitive metadata value across selected files only after the user enters the new typed value and confirms the affected-file count; existing sensitive values remain masked throughout.
+- Bulk editing can mark or unmark a common metadata key as **Sensitive** across selected files after previewing and confirming the affected count.
+- Removing sensitivity warns that the values will become visible in ordinary file details and eligible for inclusion through the ordinary user-metadata sidecar opt-in rather than the additional sensitive-metadata opt-in.
+- Updating a key previews how many existing values will be replaced.
+- Removing a user-metadata key from every selected file requires confirmation.
+- System metadata is never editable through bulk metadata operations.
+- A bulk value is validated once and then applied transactionally per file.
+- A failure on one file does not roll back successful changes to unrelated files, and partial failures produce a per-file summary.
+- Metadata changes update modification timestamps but do not create generation-history records.
+- Copying a file within the library also copies its user metadata.
+- Metadata is not embedded into exported file bytes.
+
+## File Links
+
+- User-created file links are directed and require a non-empty label.
+- Link labels are trimmed, normalized to Unicode NFC, limited to 200 Unicode scalar values, and cannot contain control characters or line breaks.
+- Self-links are not allowed.
+- Multiple links can connect the same two files when their labels differ.
+- The combination of source file, target file and invariant-case-folded label is unique, while the user's normalized casing is preserved for display.
+- Users can create, relabel, reverse and delete user-created links.
+- If relabelling or reversing would duplicate an existing directed link, the change is blocked and the user can open the existing link, choose another label or cancel; links are never silently merged.
+- Generation source/output relationships are stored in structured generation history rather than as editable user-created links.
+- A text file created through **Edit as Copy** has a read-only provenance relationship to its source file.
+- A file created through **Duplicate** has a read-only provenance relationship to its source file.
+- Copy provenance always points to the immediate source used for that **Duplicate** or **Edit as Copy** action, not automatically to the earliest ancestor.
+- SlopFactory does not materialize transitive provenance links when a copy is copied again.
+- A **Provenance Chain** view traverses the immediate read-only relationships in order and stops at a missing endpoint or non-restorable source snapshot.
+- Generation provenance relationships can be displayed alongside user-created links but are read-only.
+- Read-only **Duplicate** and **Edit as Copy** provenance relationships become inactive and recycle with the same endpoint rules as user-created file links.
+- They restore automatically when both endpoint files are active again.
+- Permanently deleting either endpoint removes the live provenance relationship.
+- The surviving copied file retains only a non-restorable snapshot of the deleted source's former display name, media type and content hash.
+- That snapshot is provenance metadata rather than a link and cannot restore or navigate to the deleted file.
+- Renaming or moving a file does not affect its links because links use internal file IDs.
+
+## Text Content Editing
+
+- Imported and generated file content is immutable by default, and the normal text viewer is read-only.
+- **Edit as Copy** opens an editor and saves the result as a new user-added UTF-8 text file.
+- It preserves the source's supported text format and safe extension by default, while allowing the user to choose **Plain Text** or **Markdown** explicitly; applicable format-specific validation completes before saving.
+- The original file remains unchanged.
+- The user chooses the edited copy's display name and destination folder.
+- **Edit as Copy** does not copy user metadata by default because the new file contains changed content.
+- Its review offers an unchecked **Copy User Metadata** option which copies ordinary user metadata when selected.
+- Sensitive entries require a second, separately unchecked **Include Sensitive Metadata** option which shows only their count; copied entries retain their types and sensitivity flags, and no reveal state carries into the new file.
+- Editing user metadata or a display name does not create a content copy.
+- Intentional managed-content replacement is reserved for repairing externally changed files rather than routine text editing.
+
+## Connections and Models
+
+- The first release supports OpenAI, generic OpenAI-compatible APIs, 1min.AI, OpenRouter and DeepInfra.
+- The generic OpenAI-compatible adapter supports system instructions only through the standard `system` message role.
+- A provider requiring `developer` or another custom instruction channel needs a signed built-in adapter; the generic adapter neither guesses the mapping nor permits arbitrary role injection through settings or advanced JSON.
+- The first release loads only built-in, signed provider adapters.
+- Tokenizer models, vocabularies and context-accounting tables are bundled only through signed application/adapter releases and are never downloaded dynamically at runtime.
+- When no reviewed bundled tokenizer matches exactly, SlopFactory shows an estimate or unknown state rather than fetching code/data or claiming exactness.
+- Additional adapters are delivered through normal SlopFactory application updates.
+- Provider adapters implement an internal modular interface and are independently testable.
+- The application does not load arbitrary third-party assemblies or scripts.
+- Generic OpenAI-compatible connections are the extension path for compatible services.
+- A sandboxed third-party plug-in system is deferred until there is demonstrated demand and a secure cross-platform design.
+- Each supported provider has its own adapter. An adapter can reuse common OpenAI-compatible request and response handling where applicable while overriding authentication, endpoints, capabilities, settings and job handling by modality.
+- 1min.AI uses its native APIs. Chat requests use its unified chat API, while image, audio and video generation use its AI Feature API with feature-specific request parameters. Long-running feature requests can use its asynchronous result polling.
+- OpenRouter uses its OpenAI-compatible base URL, but media generation uses OpenRouter's modality-specific endpoints and schemas. Image generation, asynchronous video generation and audio generation are handled explicitly by the OpenRouter adapter.
+- DeepInfra uses its OpenAI-compatible endpoints where supported, including chat, image and audio operations. Its native inference API is used for models and modalities, including video generation, which are not exposed through the compatible endpoints.
+- Provider and model capabilities are detected from provider metadata where available and supplemented by provider-specific definitions where the metadata is incomplete.
+- Provider adapters supply typed settings schemas for known models and modalities.
+- The application generates model-setting controls from these schemas, including appropriate selectors, sliders, toggles, dimensions, voice lists and other controls.
+- A settings schema defines required fields, default values, valid ranges, dependencies and provider limits.
+- Optional generated controls begin as **Use Provider Default** and omit the field from the request; a known provider default may be shown as a hint but is not silently supplied.
+- Editing an optional control makes its value explicit, while **Reset to Provider Default** returns it to the omitted state. Required settings always require an explicit valid value.
+- When a dependency makes an explicit setting temporarily inapplicable, its value remains in the editable draft as **Inactive** but is omitted from the provider request; restoring the dependency restores that value.
+- Immutable history records that inactive draft settings were omitted but does not retain their unsent values.
+- Model-discovery metadata supplements maintained settings schemas where available.
+- Text-generation models whose adapter documents a system or developer channel expose the first-class **System Instructions** field defined under Generation Inputs; it is not an arbitrary model setting or advanced-JSON property.
+- Non-text modalities do not receive that generic field, although a signed adapter may expose a provider-specific structured setting with its actual documented semantics.
+- Supplied system instructions remain separately visible in the sanitized request preview and separately stored in saved settings and immutable history.
+- Provider adapters do not add undisclosed behavioral instructions to ordinary generation requests; adapter-added content is limited to protocol framing required to represent the user's selected inputs and settings.
+- Manually entered or otherwise unknown models provide an advanced JSON settings editor.
+- The advanced editor accepts only a JSON object containing model-specific request-body settings.
+- Model ID, prompts or messages, credentials, headers, endpoint URL, source files, result count, streaming, callbacks and internal tracking IDs are reserved and cannot be overridden through advanced JSON.
+- Secret values are not permitted in model JSON.
+- Provider adapters merge validated advanced settings into normalized requests, with explicit structured UI fields taking precedence.
+- Conflicts and unknown reserved-looking keys are shown before submission.
+- Advanced JSON has bounded size and nesting depth.
+- Its validated snapshot is stored in saved generation settings and generation history.
+- A sanitized request preview excludes credentials, signed URLs and embedded file content.
+- Model settings are validated before a generation request is sent.
+- The exact settings used for a request are stored in its generation-history record so later schema changes do not alter its provenance.
+- Generation history preserves whether each setting was explicitly supplied or omitted to use provider defaults.
+- An omitted setting is not replaced with a guessed default.
+- Known provider or model defaults from the active schema are recorded separately as a default snapshot.
+- When a provider reports the value actually applied, it is recorded as the effective value.
+- Effective values are identified as known, provider-reported or unknown.
+- Saved generation settings preserve omitted values so they continue to use current provider defaults.
+- **Use Again** lets the user preserve omitted values or pin known historical effective values.
+- Exact reproducibility is not claimed when a provider-controlled default was unknown.
+- Each configured model entry has one primary generation mode: Text, Image, Audio or Video.
+- The same provider model ID can be configured more than once with different primary modes and labels.
+- Each configured entry uses the settings schema appropriate to its selected mode. Input capabilities are configured independently from the primary output mode.
+- Model labels are unique within a library, but provider model IDs do not need to be unique.
+- If a generation returns auxiliary outputs of other media types, every output is stored and grouped under the same generation-history record.
+- When supported by a provider, the application loads the models available through a connection.
+- If the provider cannot list models, or the desired model is absent from the returned list, the user can enter a model ID manually.
+- For a manually entered model, the user selects its output type and supported input types.
+- A manually entered generic OpenAI-compatible model defaults **Supports System Instructions** off; the user may enable it explicitly based on provider documentation, and the generic adapter then uses only the standard `system` role.
+- Provider-specific defaults supply known settings and capabilities where available.
+- Testing a connection does not depend on successful model discovery.
+- Testing a connection first validates its base URL and required fields locally.
+- The test uses a non-generating, non-billable authenticated request, such as listing models or retrieving account information. It must not issue a paid generation request.
+- Authentication, network, TLS, rate-limit and model-discovery failures are reported separately.
+- Valid authentication is considered a successful test even when the provider does not support model discovery.
+- A failed or temporarily unreachable connection can be saved after warning the user and is marked as **Unverified**.
+- An **Unverified** connection can be used when its required fields and credentials are present and the request passes normal URL, TLS and transport-security validation.
+- The first submission through an unverified connection revision requires confirmation showing its last test status and sanitized failure reason.
+- Later forms and submissions retain a visible **Unverified** warning until a connection test succeeds.
+- Editing connection details creates a new unverified revision and requires the confirmation again.
+- Unverified status never permits bypassing certificate validation, hostname rules, authentication requirements or the explicit private-network HTTP warning.
+- The last test status, timestamp and diagnostic message are stored with the connection. API keys are never included in logs or diagnostic messages.
+- After an API key is saved, the connection editor displays only a masked **Credential stored** state and does not redisplay the saved plaintext value.
+- Leaving the credential field untouched preserves the existing API key.
+- Replacing an API key requires an explicit action. A newly entered replacement can be revealed only before it is saved.
+- API-key and secret-header inputs use protected password controls with autocorrect, spellcheck, predictive suggestions, keyboard learning and ordinary autofill disabled where the platform permits.
+- Accessibility exposes each protected field's label, required state, validation error and whether a value is present, but never announces the secret value.
+- A newly entered secret can be revealed only while the user holds the reveal control; releasing it, losing focus, backgrounding the application or opening another screen masks it immediately.
+- Saved secret values are never loaded back into a revealable text control.
+- These controls still support explicit paste, including paste initiated from a password manager, subject to the normal clipboard rules.
+- When unresolved remote-cleanup tasks were created with the current key, replacement warns that the new credential may not have access to those assets.
+- The warning offers **Retry Cleanup Before Replacing**, **Replace Key and Retry Later**, and **Cancel**.
+- **Retry Cleanup Before Replacing** attempts the explicit cleanup first and does not change the key unless the cleanup succeeds or the user subsequently chooses another action.
+- **Replace Key and Retry Later** atomically replaces the secure-storage value, permanently removes the old key and leaves the cleanup tasks pending for retry with the new credential.
+- SlopFactory never retains a previous API key secretly for remote cleanup after replacement.
+- Removing a stored API key requires an explicit action and confirmation.
+- When unresolved cleanup tasks require that credential, removal offers **Retry Cleanup First**, **Stop Tracking and Remove Key**, and **Cancel**.
+- **Retry Cleanup First** keeps the credential and removal request pending until the explicit cleanup attempt succeeds or the user chooses another action.
+- **Stop Tracking and Remove Key** warns that remote assets may remain, deletes their retry identifiers and then removes the secure-storage value.
+- Key removal never leaves a cleanup task presented as retryable without usable authentication and never retains a hidden credential copy.
+- Pasting an API key is supported, but the application never copies a key to the clipboard automatically.
+- SlopFactory reads clipboard content only in response to the user's explicit paste action and never monitors it proactively.
+- After paste, the credential field masks the value and SlopFactory does not automatically clear or replace the user-owned OS clipboard.
+- A non-blocking reminder can state that the original key may remain in clipboard history and can be cleared through operating-system controls.
+- Clipboard contents and paste events are never written to diagnostics or generation history.
+- A connection without an accessible credential is marked **Credentials Required**.
+- When a readable stored credential receives a confirmed connection-wide authentication rejection, the credential is retained and the connection is marked **Authentication Failed** rather than **Credentials Required**.
+- A documented `401` blocks new submissions until the connection is successfully retested or its credential is updated. A `403` remains request- or model-specific unless the active adapter explicitly defines that response as a connection-wide authentication failure.
+- SlopFactory never deletes or replaces a stored credential merely because a provider rejected it.
+- Already-submitted remote jobs are retained in their current lifecycle state when a connection enters **Authentication Failed** and are never cancelled or resubmitted automatically.
+- Polling and authenticated result downloads pause as **Authentication Required**. After a credential update succeeds and the connection passes its test, SlopFactory resumes those operations using their existing provider job IDs; expired or irrecoverable jobs follow the normal recovery workflow.
+- Connection export and diagnostics never include API keys.
+- Plaintext credentials are retained in application memory only for the shortest practical duration.
+- Public internet connection base URLs require HTTPS.
+- HTTP is allowed for loopback addresses and, after a clear warning, for private-network addresses.
+- Before using HTTP, the application warns that API keys and uploaded files will not be encrypted in transit.
+- Sending a stored credential to a changed hostname requires confirmation.
+- Base URLs containing embedded usernames or passwords are rejected.
+- Base URLs are normalized to prevent duplicated path segments such as `/v1/v1`.
+- Connection testing displays the final request host.
+- Connection testing validates transport, authentication and supported discovery endpoints but never sends a sample generation merely to test system-instruction support or another model capability.
+- Manually declared capabilities remain unverified until used in an explicit real operation, which may incur normal provider charges.
+- Redirects carrying authentication to a different host are not followed without confirmation.
+- HTTPS uses the operating-system trust store and TLS certificate errors cannot be ignored.
+- Provider networking honors the operating system's configured proxy, VPN routing, proxy authentication and bypass rules.
+- The first release does not expose application-specific proxy URLs, bypass lists or proxy credential fields.
+- SlopFactory never deliberately bypasses an OS-configured proxy or VPN.
+- Proxy connection and authentication failures are reported distinctly while proxy credentials remain unavailable to logs, history and diagnostics.
+- A self-signed local server requires its certificate or private certificate authority to be installed in the operating-system trust store, or the user can choose the explicitly warned private-network HTTP mode.
+- Expired, hostname-mismatched, untrusted and revoked certificates are reported distinctly.
+- The application never silently falls back from HTTPS to HTTP and does not persist one-time certificate exceptions.
+- The same TLS validation applies to provider result downloads and redirects.
+- An API key is optional for generic OpenAI-compatible connections so unauthenticated local servers can be used.
+- Generic connections use `Authorization: Bearer <key>` by default.
+- Advanced connection settings can configure a different credential header name and optional value prefix.
+- Secret custom-header values are stored in OS secure storage under the library and connection namespace.
+- Additional non-secret headers can be configured for gateways and routing.
+- Restricted transport headers, including `Host`, `Content-Length` and connection-management headers, cannot be overridden.
+- `Authorization`, `Proxy-Authorization`, cookies and user-marked headers are treated as secret and redacted from connection tests, logs, history and exports.
+- Advanced connection settings can override connection, upload, response-idle and result-download timeouts.
+- Each provider adapter supplies defaults and bounded minimum and maximum values for those timeout categories.
+- A timeout cannot be disabled, set to zero or saved outside its permitted range.
+- Each override has **Use Provider Default**, and the effective value is shown before saving.
+- Timeout changes require local validation and connection retesting and follow the normal pending operational-edit rules while work is active.
+- Each request attempt stores the effective timeout values in its immutable operational snapshot.
+- Asynchronous polling intervals and maximum monitoring lifetimes remain separate provider-adapter policies rather than connection timeout overrides.
+- Changing authentication or header configuration requires the connection to be retested.
+- A base URL, provider type, credential-header name, authentication prefix or secret-header structure cannot take effect while unresolved cleanup tasks belong to the current connection configuration.
+- Before applying such a change, SlopFactory offers **Retry Cleanup with Current Configuration**, **Stop Tracking and Apply Changes**, and **Cancel**.
+- **Retry Cleanup with Current Configuration** uses only the currently active endpoint and credentials and leaves the proposed edit unapplied if cleanup remains unresolved.
+- **Stop Tracking and Apply Changes** warns that remote assets may remain, removes their retry identifiers and only then activates the new connection revision.
+- Old remote asset identifiers are never sent to a new host, provider adapter or authentication structure.
+- API-key, base-URL, provider-type or authentication-structure changes also detect **Submission Outcome Unknown** records whose documented reconciliation depends on the active connection revision.
+- Before such a change, SlopFactory offers **Attempt Reconciliation**, **Abandon Recovery and Apply Changes**, and **Cancel**.
+- **Attempt Reconciliation** uses only the currently active endpoint, adapter and credentials and leaves the proposed edit unapplied while any selected outcome remains unresolved.
+- **Abandon Recovery and Apply Changes** warns that provider processing and charges may remain unknown, removes actionable request IDs and idempotency context, retains only non-actionable sanitized history and then activates the new revision.
+- SlopFactory never retains the previous credential or sends historical recovery identifiers through the new connection revision.
+- Generic OpenAI-compatible connections use standard OpenAI endpoint paths by default.
+- Advanced settings allow a relative-path override for each modality while retaining OpenAI-compatible request and response bodies.
+- Individual modalities can be disabled for a generic connection.
+- A relative-path override cannot change the connection's scheme or hostname.
+- Connection testing displays and validates each enabled modality's resolved endpoint independently without issuing paid generation requests.
+- APIs with non-OpenAI request or response formats require a dedicated provider adapter rather than arbitrary protocol mapping in the generic adapter.
+- Changing a connection label does not affect its dependent models.
+- Updating a connection API key stages the candidate in a temporary secure-storage entry and tests it before replacing the active secure-storage value.
+- A successful test promotes the candidate. If testing fails, **Keep Existing Key** is the default; **Save New Key as Unverified** remains available after an explicit warning, and no candidate plaintext is retained in application storage.
+- Candidate credentials use a separate indexed secure-storage namespace. Cancellation or a completed failed edit deletes the candidate immediately, while a cleanup failure remains indexed for sanitized retry without exposing its value.
+- Startup reconciliation removes orphaned candidate entries which are not referenced by an active credential-update operation.
+- Active credentials use revisioned secure-storage entries selected by a non-secret committed pointer. Promotion writes and verifies the new entry first, atomically commits that pointer, and only then removes superseded active and candidate entries.
+- Crash reconciliation trusts only the committed revision pointer and cleans up other revisions; it never chooses a credential by timestamp or other guesswork.
+- If the committed credential pointer is missing or corrupt while secure-storage revisions still exist, SlopFactory preserves every revision, marks the connection **Credential State Requires Repair**, and blocks authenticated operations rather than guessing.
+- Re-entering a key writes and commits a new active revision; only after that succeeds are the ambiguous older revisions removed.
+- If pending remote jobs exist, API-key replacement previews their count and warns that a credential for another provider account may be unable to poll, download or clean them up.
+- Replacement remains available, but every existing provider job ID is preserved; jobs inaccessible with the new credential are retained for explicit recovery and are never discarded automatically.
+- Changing a connection base URL warns the user, retests the connection, refreshes model discovery and marks dependent models as **Needs Review** until they are validated.
+- A model is not automatically deleted merely because refreshed discovery no longer returns it.
+- A connection's provider type cannot be changed while dependent models exist.
+- When a connection has no dependent models, its provider type can be changed and its provider-specific settings are reset.
+- A connection which fails retesting can still be saved as **Unverified**; its dependent models retain the visible warning and use the normal first-submission confirmation rather than becoming categorically unavailable.
+- Editing a connection does not alter existing generation-history records.
+- Changing only a configured model's label does not invalidate its saved generation settings.
+- Changing a configured model's provider model ID, primary mode, input capabilities or settings schema identifies and displays affected saved generation settings before confirmation, then marks them as **Needs Review**.
+- Editing a configured model does not alter existing generation-history records.
+- Settings which are unsupported by the edited model remain visible as invalid until the user resolves or removes them.
+- A configured model marked **Needs Review** cannot be used for generation until its configuration validates.
+- Changing a configured model's primary mode requires explicit confirmation.
+- Reverting a configured model does not clear dependent warnings until each saved generation setting validates again.
+- A provider model catalogue is refreshed during initial connection setup after successful authentication, when the user selects **Refresh Models**, and when appropriate during connection retesting.
+- The application does not contact providers merely because SlopFactory starts.
+- Each connection caches its latest model catalogue and retrieval timestamp.
+- The catalogue view always displays its retrieval timestamp and age.
+- A failed refresh immediately labels the retained catalogue **Possibly Stale**.
+- A successfully retrieved catalogue becomes **Stale** after seven days unless its provider adapter defines and documents a different freshness period.
+- A stale label does not trigger a network request, delete or disable configured models, or prevent manual model use.
+- Refreshing discovery data does not silently change configured model entries.
+- A configured model absent from the latest catalogue is marked **Not Currently Listed** rather than deleted.
+- When catalogue refresh fails, the previous catalogue is preserved and identified as potentially stale.
+- Manual model IDs remain available regardless of catalogue state.
+- Connection and model labels can be changed while jobs depend on them because jobs retain identity snapshots.
+- Operational connection changes, including API key, base URL, authentication, headers and provider settings, cannot take effect while an active job depends on the connection.
+- Operational model changes, including provider model ID, mode, capabilities and schema, cannot take effect while an active job depends on the model.
+- The user can cancel or wait for active work, or save an operational edit as **Pending** until dependency pins are released.
+- A queued job retains the request snapshot created when it was submitted.
+- Before a queued job begins, its connection, model, settings, sources and cost are revalidated.
+- A queued job whose dependency changed is paused for confirmation rather than silently sending a different request.
+- Pending operational edits apply atomically after the final dependency pin is released.
+
+## Provider File Transfer
+
+- Only source files explicitly selected for a generation are sent to its provider.
+- Each upload uses a sanitized transport filename derived from the library display basename and the safe detected extension.
+- **Use Generic Upload Names** can instead assign deterministic provider-facing aliases such as `source-1.png` in source-role/order sequence without renaming or modifying library records.
+- It is enabled by default for new generation tabs and newly created saved settings; the user may explicitly disable it when sanitized library-derived filename context is useful.
+- Each source may alternatively receive a user-edited safe descriptive alias for provider use without exposing its library display name.
+- A custom provider-facing alias is limited to 100 Unicode scalar values including its extension, is normalized to Unicode NFC, cannot contain path separators or control characters, and must be unique within the request using invariant case folding.
+- The application-controlled safe extension derived from detected media type remains fixed and cannot be edited as part of a custom alias.
+- Adapters may declare stricter transport-filename constraints, which are validated before prompt improvement and final generation.
+- A custom alias that violates an active adapter's constraints blocks submission with an actionable validation error and is never silently rewritten, because doing so could invalidate prompt references.
+- An automatically assigned alias that violates those constraints may instead be regenerated deterministically, with the resulting alias used consistently throughout the request workflow.
+- A generation tab establishes its source aliases before prompt improvement, and every source shared by improvement and final generation uses the identical alias, role and relative order in both requests.
+- Adapters declare whether provider-facing filenames are preserved reliably enough for prompt references.
+- Generic OpenAI-compatible connections default filename-reference reliability to **Unknown/Unreliable**; the user may explicitly enable it for a connection only after confirming that endpoint behavior.
+- A connection supplies the default reliability value, while an individual model may override it because models behind the same endpoint can use different upload pipelines.
+- Signed built-in adapter metadata may declare reliability per model. A manual model override is clearly labelled as user-supplied and is retained with that model's configuration.
+- A successful request never causes SlopFactory to infer filename-reference reliability, because success does not establish that the selected model received or retained the filenames.
+- When filename fidelity is false or unknown, SlopFactory and its improvement template identify sources by stable role and ordinal, such as **the second style reference**, rather than encouraging filename references.
+- When prompt improvement and final generation use different adapters, every source shared by both stages must have an alias valid under the intersection of both adapters' filename constraints before improvement begins.
+- An invalid shared custom alias blocks improvement with an explanation; an automatic alias is regenerated deterministically to satisfy both adapters. A source used by only one stage is validated solely against that stage's adapter.
+- Once assigned, an automatic alias is bound to its source within the generation tab and is preserved with the draft; adding, removing or reordering sources does not rename the remaining sources.
+- An alias removed from a draft is not reused within that draft. Automatic aliases are regenerated only when active provider constraints require it or the user explicitly resets aliases, and any resulting reference-affecting change follows the normal **Needs Review** workflow.
+- Aliases are bound to attachment occurrences rather than library-file identity. Attaching the same file in multiple roles or positions therefore creates distinct, uniquely addressable occurrences with separate aliases.
+- An adapter may deduplicate transferred bytes only when the provider safely supports doing so without collapsing those occurrence-level roles, ordering or references; drafts and immutable history always preserve every occurrence.
+- Drafts, saved settings and immutable history preserve the selected mode, while history records the transport names actually sent.
+- Immutable generation history also records the resolved filename-reference reliability, whether it came from signed adapter metadata or a manual override, and whether source references used aliases or stable role-and-ordinal descriptions.
+- Submission review shows the complete library-file-to-transport-name mapping before any upload, and immutable history records only the exact transport names actually sent plus the normal source snapshots.
+- A misleading local display extension is never sent to the provider.
+- Generation history snapshots the library display name and exact transport filename used for each source without storing or sending its former external filesystem path.
+- Provider uploads do not include user metadata, virtual-folder names, file links, recycle state or prior generation provenance.
+- The only accompanying application data is the required media type, assigned source role, safe transport filename, prompt and explicitly selected model settings needed for the request.
+- Submission review shows each source's transport filename and role so the user can see what identifying name will be disclosed.
+- The generation page continuously shows the destination provider and connection, every selected source, transport filename, role, estimated transfer size and embedded-metadata notice before submission.
+- The primary action is labelled with the submission intent, such as **Generate with OpenAI**, when space permits, and its accessible name always includes the provider.
+- Clicking the enabled **Generate** action is explicit consent for the ordinary, visibly summarized request and does not add a redundant privacy modal.
+- Additional confirmation appears only for an applicable exceptional condition already defined by the plan, including unverified connections, insecure HTTP, undeletable remote uploads or a cost threshold.
+- Future metadata-sharing features must require field-level user selection and cannot change this default silently.
+- Provider adapters prefer direct request uploads or encoded request content when supported.
+- Provider asset-storage APIs are used only when required by the selected model or operation.
+- Connection capabilities state whether required remote uploads support documented deletion.
+- Before the first submission through a connection revision which requires uploads but cannot delete them, SlopFactory requires acknowledgement that the provider may retain source bytes under its own policy.
+- The user can continue or cancel; the acknowledgement is stored for that connection revision without storing source details.
+- Later submissions show the retention limitation in connection capabilities and submission review without repeating the blocking confirmation.
+- A relevant connection or provider-capability change creates a new revision and requires acknowledgement again.
+- Remote source assets are not cached or reused across separate generation or prompt-improvement runs in the first release.
+- When one immutable run requires multiple child requests, its adapter may reuse a remote asset only within that run and only for sources in its submitted snapshot.
+- An asynchronous job can retain its required temporary asset association until the job reaches a terminal or explicitly discarded state.
+- Run-scoped reuse does not make an asset available to another tab, preset or later **Use Again** request.
+- Temporary provider asset IDs are recorded in the active generation-history record.
+- Temporary remote assets are deleted after completion or cancellation when the provider supports deletion.
+- Remote asset deletion is tracked separately from generation success, failure or cancellation.
+- A failed deletion uses bounded retries only when the adapter defines deletion as idempotent and the error is transient.
+- After retries are exhausted, history shows **Remote Cleanup Failed** with the sanitized reason and **Retry Cleanup**.
+- Successful generation results remain successful when remote cleanup fails.
+- The minimum remote asset identifier and adapter context required for retry remain locally until deletion succeeds or the user selects **Stop Tracking Cleanup**.
+- Remote asset identifiers are excluded from ordinary logs, diagnostics, notifications, sidecars and other exports.
+- **Stop Tracking Cleanup** warns that the provider may retain the asset, requires confirmation and removes the local retry identifier without claiming remote deletion.
+- An authenticated provider response that the asset is already absent is treated as successful cleanup.
+- SlopFactory does not run an inbound local file server, create a public tunnel or publish a local source file at a publicly reachable URL.
+- Source transfer uses direct request content, multipart upload or the provider's documented authenticated asset-storage API.
+- Provider-issued signed upload destinations are used only for outbound upload under the normal host, redirect and credential rules and are not treated as SlopFactory-hosted URLs.
+- If a model accepts only externally reachable source URLs and its provider offers no safe upload mechanism, that source-input capability is marked unsupported.
+- Before sending a generation request, the application identifies which local files will be sent and which provider will receive them.
+- Application-managed user-metadata keys, values and sensitivity flags are never attached automatically when a file is sent to a provider.
+- Provider transfer contains only the selected original file bytes, required safe transport filename, declared media type and adapter-required source role/order; any future user-metadata sharing feature requires a separate explicit reviewed workflow.
+- Submission review states that selected source files are sent as original bytes and may contain embedded metadata which SlopFactory does not display or index.
+- The first release does not create metadata-stripped upload copies and does not silently strip, rewrite or transcode source files before provider upload, because such transformations can alter orientation, colour, timing or other model-relevant content.
+- Generation history records that the disclosure was shown and that originals were sent, but does not extract or retain sensitive embedded metadata values.
+- A future format-specific sanitized-derivative workflow must be explicit, cannot replace the selected original without user review, and must record the transformed transport hash and exact operations performed.
+- Remote provider storage is not part of the local SlopFactory library.
+- Upload and remote-cleanup failures are recorded without exposing credentials.
+- Local source files are preserved regardless of remote upload or cleanup outcomes.
+- Recycling or permanently deleting local files, generation history or related records does not make a new provider request and never claims to delete provider-side account data.
+- Provider account logs, billing records, moderation records and retained request content remain governed by the provider's own service and retention policies.
+- Remote deletion is limited to temporary provider assets cleaned up as part of the original upload or generation lifecycle where the provider exposes a documented deletion operation.
+- Local deletion confirmations state that deleting SlopFactory data does not erase copies or records retained by an AI provider.
+
+## Provider Result URLs
+
+- Provider result URLs use HTTPS by default.
+- HTTP result URLs are accepted only for a connection which was explicitly approved for local or private-network HTTP.
+- Provider-supplied `file:`, `content:`, `javascript:` and other non-HTTP result URL schemes are rejected.
+- A result URL from a public-internet connection cannot target or redirect to loopback, link-local, private, multicast or unspecified network addresses by hostname or literal address.
+- SlopFactory validates resolved address classes before a direct connection and revalidates every redirect and new resolution to detect DNS rebinding.
+- If a host's resolution changes into a prohibited address class during the download lifecycle, the request is aborted without contacting the new target.
+- Private-network result hosts are permitted only for a connection explicitly configured under the local/private-network warning or through a built-in adapter's narrowly defined trusted-host rule.
+- A trusted-host rule is limited to documented result delivery and does not relax scheme, TLS, redirect, credential or content validation.
+- API keys and secret custom headers are not attached to a result host unless the provider adapter explicitly requires them and the host is trusted.
+- Authentication is stripped from cross-host redirects.
+- Redirect count is limited and every redirect target is validated.
+- Result downloads apply connection, response-header, idle and total timeouts.
+- Results are streamed into temporary storage and enforce known model or provider maximum output sizes.
+- An unexpectedly large result requires confirmation when no reliable limit exists.
+- Signed result URLs are not retained in ordinary logs or permanent generation history.
+
+## Provider Safety Responses
+
+- SlopFactory does not initially implement a separate local content-moderation system.
+- Provider moderation and safety responses are respected.
+- When a request or result is blocked, the application displays a clear, sanitized explanation.
+- If a provider marks a result as safety-blocked while still returning media bytes, SlopFactory treats those bytes as unusable temporary data.
+- Blocked bytes are not committed, previewed, opened externally, exported or counted as a successful result and are deleted from temporary storage.
+- History retains only the sanitized moderation outcome, category when supplied, provider request ID and failed-result position.
+- Other independently successful results remain available and can make the aggregate generation **Partially Completed**.
+- When the provider explicitly permits a result but labels it sensitive, SlopFactory commits it as successful with read-only **Provider Safety Warning** system metadata and the sanitized provider category when supplied.
+- The result's library thumbnail and inline generation preview are concealed behind **Show Content** until the user reveals them for the current application viewing session.
+- Reveal state is temporary device UI state, is not stored in the portable library and resets after application restart.
+- The user can explicitly choose **Always Show This File on This Device** after reviewing its provider-attributed warning.
+- This per-file concealment override is stored only in device-local preferences keyed by library ID and file ID, is reversible through **Restore Concealment**, and is removed when the library is forgotten or the file is permanently deleted.
+- The override does not remove or edit the provider safety classification, hide its warning badge, authorize external opening or export, apply to duplicate file records, or travel with a portable library.
+- Per-file concealment overrides and temporary reveal state are excluded from sidecars, local export history, generation history and diagnostics because they are device UI preferences rather than content provenance.
+- The first release provides no device-wide, library-wide, category-wide or bulk **Never Conceal Safety-Marked Content** setting; each persistent override requires an individual file decision.
+- Choosing **Show Content** does not authorize **Open Externally** because external opening creates a temporary copy outside SlopFactory's concealed viewer.
+- The first external open of each safety-marked file in an application session requires a separate provider-attributed confirmation; this authorization is session-only and resets at restart.
+- If a stricter provider revision arrives while the file is already open externally, SlopFactory cannot claim to close, conceal or erase content held or cached by the other application.
+- It notifies the user, clears the session's external-open authorization, blocks another external open until fresh confirmation, revokes an Android content-URI grant when possible, and deletes a Windows temporary open copy as soon as the operating system releases it.
+- Reveal authorization is scoped to the selected file record, not its content hash; revealing one safety-marked record does not reveal other duplicate records containing identical bytes.
+- For that record, the session reveal applies consistently across its library view, generation-history view and generation-tab result cards so navigation does not repeatedly request the same reveal.
+- All reveal and external-open authorizations are cleared when the owning library is closed, switched away from, locked or becomes unavailable, even if the application process continues; they also reset at application restart.
+- Concealed content remains accessible to screen readers as a provider-attributed warning and available actions without describing the hidden media or automatically announcing the moderation category.
+- A keyboard-accessible **View Safety Details** action exposes the sanitized provider category and outcome on demand.
+- **View Safety Details** never reveals the media, authorizes **Open Externally**, or changes sidecar export disclosure; each remains a separate explicit action.
+- Export, recycle, metadata, links and other normal library actions remain available; SlopFactory does not relabel an allowed result as blocked.
+- A safety-marked file may be selected as a source for another generation, but submission requires an additional operation-level warning identifying the destination provider and the number of marked source files that will be sent.
+- That confirmation applies only to the submitted run and neither suppresses nor attempts to bypass the destination provider's upload, retention, moderation or safety rules.
+- A byte-identical file created through **Duplicate** inherits the source's **Provider Safety Warning** and concealed-preview behavior.
+- Exact-hash restoration preserves the warning because the classified bytes are restored unchanged.
+- A differing managed-content replacement moves the former warning and category into immutable historical provenance and does not apply them to the current bytes.
+- **Edit as Copy** and other changed derivatives do not inherit a provider safety classification automatically because the provider did not classify their new bytes.
+- A blocked prompt is not modified or retried automatically. The user can edit the prompt or source selection and submit a new request.
+- Provider moderation outcomes and categories are stored when supplied, without retaining unnecessary sensitive response details.
+- Safety-blocked results have no committed library file and therefore cannot produce a file sidecar.
+- SlopFactory waits for the provider adapter's documented final result state before ordinarily committing returned media.
+- If later polling, refresh or another authenticated provider update newly reports that an already committed result was blocked, SlopFactory does not silently delete the local file.
+- The file is marked **Provider Blocked After Delivery**, its thumbnail and inline previews use the same session-scoped concealment behavior as other provider safety warnings, and the user is notified with a sanitized provider-attributed explanation.
+- A late provider safety update never rewrites the generation run's immutable terminal status, completion timestamp, result count or cost facts.
+- The run and affected result instead receive a separate **Safety Status Updated** attention flag with the provider-update discovery timestamp.
+- **Acknowledge Update** clears only that attention indicator after the user views the update; the provider classification, warning badge, concealment or per-file override choice, and immutable audit timestamp remain unchanged.
+- **Show Content**, concealment override changes and ordinary viewing create no durable audit trail.
+- Acknowledgment stores only a library-level `acknowledgedAt` UTC timestamp on the shared classification revision so its attention state remains cleared when a portable library is reopened elsewhere; it stores no user identity or viewing history.
+- Acknowledgment is scoped to the shared classification event and clears its attention flag across every affected duplicate record; per-file reveal and persistent concealment-override choices remain independent.
+- A file created or imported after that event inherits the classification without creating a new **Safety Status Updated** attention flag when the shared event was already acknowledged.
+- Its creation or import review still identifies the inherited warning, and the normal warning badge and concealment rules apply.
+- When OS notifications are enabled, a late-block notification uses generic wording such as **A provider updated a result's safety status** and contains no thumbnail, filename, prompt, moderation category or content description.
+- Activating that notification opens the owning library and navigates to the concealed in-app record, subject to normal library availability and locking behavior.
+- A newly received late safety classification is also applied to every active or recycled file record with the same verified content hash, including duplicates that existed before the classification arrived.
+- Each affected record retains its own provenance while referencing the shared classification event; changed derivatives with different bytes are not marked automatically.
+- A shared safety-classification event is retained while any active or recycled file record or generation-history aggregate references it.
+- When every referencing aggregate has been permanently deleted, the now-unreferenced classification event and its sanitized category data are removed atomically rather than retained as orphaned moderation data.
+- A later authenticated provider change to the category or outcome appends an immutable revision to the shared classification event rather than overwriting an earlier observation.
+- The latest provider state drives the current label and behavior, while **View Safety Details** shows the sanitized revision sequence and discovery timestamps; each new provider revision raises a new acknowledgment-required attention alert.
+- Each revision stores SlopFactory's UTC `discoveredAt` timestamp and, only when explicitly supplied by the documented API, a separate `providerReportedAt`; neither replaces or is inferred from the other.
+- An invalid, out-of-range or timezone-free provider timestamp is treated as unavailable; SlopFactory retains `discoveredAt` and records only a sanitized timestamp-validation warning without storing the rejected raw timestamp or guessing an offset.
+- Provider safety revisions affect only managed records and application-controlled temporary access; SlopFactory does not track, modify, revoke or claim to erase copies previously exported by the user.
+- Safety details state that files outside the library remain outside SlopFactory's control.
+- When an authenticated provider revision explicitly clears the warning, the affected files lose their current warning badge and concealment behavior automatically while the earlier classified state remains visible in immutable safety history.
+- Clearing the current warning also removes every device-local persistent concealment override for the affected file records; a later warning starts concealed and requires a new user choice.
+- The clearance raises a new **Safety Status Updated** attention alert so the user can review and acknowledge the change.
+- A provider revision to a more restrictive normalized outcome, including **Provider Safety Warning** becoming **Provider Blocked After Delivery**, clears affected files' persistent concealment overrides and conceals them again.
+- If the affected file is currently visible or playing inside SlopFactory when that revision arrives, playback stops and the media view is immediately replaced by the revised provider warning.
+- A fresh **Show Content** or persistent per-file override is required, while unrelated tabs, files and active work remain uninterrupted.
+- A category-only change which remains at the same normalized outcome retains each file's existing override while still updating its badge details and raising the new revision alert.
+- When an adapter cannot reliably compare the old and new provider-specific outcomes, SlopFactory conservatively resets concealment overrides and conceals the affected records.
+- The UI labels the new outcome as provider-specific and does not invent a cross-provider severity ranking merely to justify that concealment decision.
+- After reviewing the new stricter or incomparable warning, the user may again choose **Always Show This File on This Device**; safety revisions reset prior consent but do not permanently revoke local visibility control.
+- Safety classifications and their content-hash index are library-local and are never shared automatically with another library on the same device.
+- Importing identical bytes into another library does not inherit a classification from the first library; the destination library must independently receive a provider classification through its own records, and documentation-only sidecars never create trusted safety metadata.
+- The file remains available until the user recycles or permanently deletes it through the normal library workflow; the late status, discovery timestamp and sanitized category are retained as read-only provenance.
+- After a generation reaches a terminal provider state, SlopFactory does not periodically contact the provider to recheck its moderation or safety status.
+- Late status changes are accepted only while monitoring an active asynchronous job or through an explicit user-requested provider-status refresh or reconciliation.
+- **Refresh Provider Status** is available only when the adapter supports an authenticated, read-only status lookup and the required provider request ID is still retained.
+- Before refreshing, the UI states that the action contacts the provider; refresh never resubmits generation work or creates a new billable request.
+- Refresh actions are rate-limited per provider request and disable repeated activation while a lookup is in progress; provider throttling responses are shown without automatic retry loops.
+- If a refresh reports that the provider's remote job or result no longer exists or is no longer accessible, SlopFactory retains every locally committed file and successful history state unchanged.
+- History records **Provider Record Unavailable** with the lookup timestamp and sanitized provider response; remote disappearance never deletes, recycles or invalidates locally stored bytes.
+- A provider-status refresh never overwrites or silently replaces an existing local output when the provider reports additional results or different remote bytes.
+- Newly discovered outputs are presented for review and require an explicit **Import Missing Results** action before download and commit.
+- Status refresh does not pre-download newly discovered output bytes; its review uses only sanitized provider metadata.
+- After **Import Missing Results** is confirmed, downloads use bounded temporary storage and the existing result-download security limits, and temporary bytes are removed after commit, skip or failure.
+- If a remote result reference expires before import, SlopFactory attempts a fresh read-only provider-status lookup when supported or reports the result unavailable; it never resubmits the generation.
+- Imported missing results pass the normal URL, size, media validation and provider-safety checks and are stored as new result files; changed remote bytes remain separate from the originally committed files.
+- Importing multiple missing results is transactional per result rather than all-or-nothing for the batch.
+- Successfully committed results remain available when another result fails or is skipped; failed and skipped remote results remain eligible for a later explicit recovery attempt when still available.
+- The operation reports a per-result summary of imported, attached, restored-and-attached, skipped, unavailable and failed outcomes.
+- Cancelling a multi-result recovery stops downloads that have not started, requests cancellation of active downloads, removes incomplete temporary files and performs no new commits after cancellation is observed.
+- Files already committed and associations already completed remain intact; all uncommitted results stay eligible for a later explicit recovery attempt when the provider still makes them available.
+- Provider-status refreshes and late-result downloads share the normal per-connection and global network-transfer limits and adapter-defined throttling rules.
+- Recovery work is scheduled fairly alongside ordinary result downloads and never interrupts active transfers, active provider work or queue ordering for generation submissions.
+- When an adapter indicates that a provider-status lookup or late-result retrieval may incur a charge, the operation uses the normal estimate-source, threshold and confirmation rules before contacting the provider.
+- SlopFactory does not describe refresh or recovery as free unless the adapter has reliable provider-specific knowledge; otherwise it explicitly displays **Cost unknown**.
+- Each imported missing result is appended to the original immutable generation history as a **Late-Recovered Output** with its provider result position and recovery timestamp.
+- Late recovery does not change the run's original completion timestamp, requested result count, terminal-state timeline or previously recorded cost and usage facts; any newly returned usage data is recorded as a later provider observation rather than rewriting the original observation.
+- Any additional provider-reported usage or cost attributable to refresh or recovery is stored in an append-only **Recovery Operation** entry linked to the original generation.
+- Recovery operations appear separately in history details and local cost summaries and never rewrite or merge into the original run's cost or usage values.
+- Recovery-operation records are owned children of the original generation-history aggregate and do not have an independent recycle-bin lifecycle.
+- Recycling, restoring or permanently deleting the original history record applies atomically to its recovery operations, and destructive-action previews summarize the associated recovery-operation count and cost-data impact.
+- If a downloaded late-recovered output has a verified content hash matching an existing active or recycled library file, the review offers **Attach Existing File**, **Import Duplicate**, and **Skip**.
+- **Attach Existing File** is the default but requires confirmation that it adds the original generation association to that file; it does not create another managed-byte copy.
+- Attaching an existing file never replaces its original origin or provenance; it adds an immutable secondary association stating that the same verified bytes were later confirmed as an output of the identified generation run.
+- When the matching file is recycled, it cannot be attached in place. The review instead offers **Restore and Attach**, **Import Duplicate**, and **Skip**.
+- **Restore and Attach** runs the normal restoration preview and conflict handling before atomically restoring the file and adding the secondary generation association; no workflow silently reactivates a recycled file.
+- A matching record in **Pending Permanent Deletion** or failed permanent-deletion cleanup cannot be restored or attached by late recovery; the review offers only **Import Duplicate** and **Skip** for that match.
+- **Import Duplicate** creates a separate file record through the normal duplicate workflow, while **Skip** leaves the newly reported output uncommitted and records no output association.
+- Moderation rejection is distinguished from authentication, validation and service failures.
+- Provider-documented safety settings can be exposed within the ranges officially supported by that provider.
+- Manually selecting another provider or model and editing a rejected prompt are normal user actions and are not treated as bypasses.
+- SlopFactory does not provide controls specifically intended to evade provider policies, including disabling required safety filters, jailbreak or obfuscation features, automatic fallback after moderation rejection, repeated automatic rewriting, undocumented suppression flags or falsified safety metadata.
+
+## Recycle Bin
+
+- Deleting a record or file moves it to the recycle bin.
+- The recycle bin covers durable user-managed library aggregates and managed files, including folders, files with owned metadata, user links, connections, models, saved generation settings and submitted generation-history records.
+- Generation-tab drafts are transient working state and do not enter the recycle bin when the user confirms **Discard and Close**.
+- Device preferences, diagnostic logs, credential-index entries, queues, temporary files and regenerable preview caches are operational state rather than recyclable library records.
+- The recycle bin has one page with category filters for its supported entity types.
+- Each top-level deleted aggregate appears once and its owned children are summarized rather than listed independently.
+- Recycle-bin items show entity type, name, original location or parent, deletion time and cascade summary.
+- The recycle bin supports search, sorting, multi-selection, restore, permanent deletion and **Empty Recycle Bin**.
+- Before restoration, the application previews additional parents, descendants, models, saved settings or linked files which may also be restored.
+- Name conflicts and missing dependencies are shown before restoration is committed.
+- Each selected aggregate is restored transactionally.
+- If part of a multi-selection fails, failed items remain in the recycle bin and a per-item summary is shown.
+- Pending and failed permanent deletions remain visible with status and retry actions.
+- Recycling a file is a logical database state change. Its managed bytes remain in their existing internal location.
+- Recycling records the deletion timestamp and deleted aggregate ownership without copying or moving media.
+- Active library views exclude recycled records.
+- Restoring changes record state and resolves hierarchy or name conflicts without moving managed bytes.
+- Permanently deleting a file removes its managed bytes and finalizes its records.
+- Integrity checks include recycled managed files.
+- Regenerable preview-cache entries can be removed when a file is recycled.
+- Parent entities and their owned children are recycled atomically. Owned children, such as file metadata, are not exposed as unrelated recycle-bin items.
+- Deleting a folder recycles the folder and all of its descendants.
+- Restoring a folder restores its descendant hierarchy.
+- File metadata is restored with its file and cannot be restored independently.
+- The user can permanently delete an individual item or a selected group of items from the recycle bin.
+- The user can empty the recycle bin to permanently delete all of its contents.
+- Before permanent deletion, the application shows a confirmation summarizing all items which will be deleted through dependency cascades.
+- Items being permanently deleted are first marked **Pending Permanent Deletion** and cannot be restored or edited.
+- Managed files and secure-storage credentials are removed before their database records are finalized.
+- If a required deletion fails, a visible failed-deletion entry remains with its sanitized error and a retry action.
+- A managed file which is already missing is treated as successfully removed.
+- Failed secure-storage cleanup is retried rather than silently leaving an orphaned credential.
+- Emptying the recycle bin processes aggregates independently and displays a completion summary.
+- Recycled items are never permanently deleted automatically based on age.
+- Recycling a connection retains its API key so the connection can be restored.
+- Recycling a connection also retains the minimum remote-cleanup tasks associated with it and permits explicit cleanup retries using the retained credential.
+- Permanently deleting a connection removes its API key from OS secure storage.
+- If pending or failed remote cleanup still depends on that connection, permanent-deletion cascade preview lists every affected task and offers **Retry All Cleanup**, **Stop Tracking and Delete Connection**, and **Cancel**.
+- **Retry All Cleanup** performs explicit bounded cleanup attempts; the connection remains in the recycle bin if any required task is still unresolved.
+- **Stop Tracking and Delete Connection** warns that remote assets may remain, removes all affected retry identifiers and then proceeds with normal credential and record deletion.
+- Permanent connection deletion leaves neither hidden remote-cleanup identifiers nor retained credentials in its namespace.
+- The permanent-deletion preview also lists active or recycled **Submission Outcome Unknown** history records which depend on the connection for authenticated investigation.
+- When such records exist, deletion offers **Keep Connection** or **Delete Connection Anyway** after any remote-cleanup decisions are resolved.
+- **Delete Connection Anyway** warns that reconciliation may become impossible, removes the credential normally, preserves the independent history records and marks their recovery credentials unavailable.
+- Recreating a similarly labelled connection later does not automatically relink or send those historical identifiers.
+- Recycling a connection also recycles all models which depend on it and all saved generation settings which depend on those models.
+- The user is warned about these dependent removals before recycling a connection.
+- Recycling a model also recycles all saved generation settings which depend on it.
+- Restoring a connection restores the models and saved generation settings which were recycled with it.
+- Permanently deleting a connection or model permanently deletes the dependent models and saved generation settings which were recycled with it.
+- Files generated with a recycled or permanently deleted model remain in the library.
+- Generated files do not retain an active database reference to a recycled or permanently deleted model, but retain a plain-text snapshot of the original provider and model ID as provenance.
+- A link can be active only while both endpoint files are active.
+- If either endpoint file is recycled, the link is also recycled.
+- A recycled link is automatically restored as soon as both endpoint files are active.
+- When restoring a file whose linked file remains recycled, the user is prompted to restore the linked file.
+- If either endpoint file is permanently deleted, the link is permanently deleted.
+
+## Generation Lifecycle
+
+- Each generation is represented by a structured generation-history record, separate from file metadata.
+- The generation record groups the entire request and all of its results.
+- Every submitted generation is independent and does not inherit conversation state or content from an earlier generation.
+- A generation tab remains an editable working form after submission; it does not transform into a history or progress-only tab.
+- Clicking **Generate** snapshots the tab's current working state into a new immutable generation-history record.
+- Later edits in the tab do not change a request which was already submitted.
+- Re-running from the same tab creates another independent generation-history record from the then-current working state.
+- The same generation tab can submit another run while one or more earlier runs remain active.
+- Every submission from a tab has its own run card, status, cancellation action, result set and immutable history record.
+- Each submitted history record retains the stable originating tab ID and the tab title captured at submission time.
+- Submissions from the same tab use the normal queue, per-connection concurrency, provider limits and cost-confirmation rules; they do not bypass or replace earlier work.
+- The **Generate** action is disabled while a submission click is being accepted so an accidental double activation cannot create duplicate runs.
+- Once the submission is durably recorded, the action becomes available again even when that run is queued or active.
+- Active run cards remain visible in the generation page. Completed, failed and cancelled cards can collapse automatically and remain available to expand.
+- A generation tab shows all of its queued and active run cards plus its ten most recent terminal run cards.
+- Older terminal runs remain fully retained in generation history and are not deleted or summarized away.
+- **View All Runs from This Tab** opens generation history filtered by the stable originating tab ID.
+- The history association remains valid after the originating tab is renamed or closed; its captured submission-time title remains available for context.
+- Cancelling one run does not cancel other runs submitted from the same tab.
+- The generation page embeds status, progress, cancellation controls, errors and result previews for its submitted work while retaining the editable form.
+- Completed, failed and cancelled runs remain available through generation history even after their originating tab is closed.
+- The request definition becomes immutable when generation starts. It contains snapshots of the provider and model, the original and improved prompts, model settings, source-file links and requested result count.
+- For text generation, that snapshot stores optional system instructions separately from the raw and improved user prompts and records the documented provider role or channel used to transmit them.
+- History labels these as **Instructions Sent** and never claims the provider applied them unchanged.
+- A provider-reported effective instruction or behavior is stored separately only when explicitly returned by the documented API; otherwise effective instruction handling remains **Unknown**.
+- Provider-reported effective instruction text is retained verbatim only from a documented user-visible response field, subject to the same 1 MiB prompt bound and secret-redaction rules.
+- SlopFactory never mines debug payloads, headers or raw responses for hidden provider instructions; any redacted provider-reported text is labelled **Sanitized** rather than presented as exact.
+- Each source snapshot contains the stable file ID, submission-time content hash, media type, byte size, assigned role and order, plus relevant validated media properties.
+- Complete raw provider HTTP requests and responses are not retained by default.
+- Generation history stores normalized request data, settings, status, usage, outputs, provider and model snapshots, and provider request IDs.
+- Provider-specific JSON is retained only for fields needed to reproduce or explain a generation which cannot be normalized.
+- Authorization data, cookies, remote asset credentials, unrelated account information and signed URLs after local download are removed.
+- Base64 media is not duplicated in the database after it is saved as a managed file.
+- Sanitized provider error codes and messages are retained.
+- Provider adapters version their normalized snapshot formats so older history remains readable.
+- Operational fields, including status, progress, timestamps and errors, are updated while the generation is running. The completed record is retained as immutable history.
+- Successful output files are linked to the generation record. Each generated file references the generation record which produced it.
+- A generation continues when the user navigates away from the generation page, provided the application remains running and the operating system permits execution.
+- The application displays persistent generation progress and allows the user to cancel an active generation.
+- Successful results from a partially successful multi-result generation are retained in the library.
+- When a provider supports a native result-count parameter, the application uses it.
+- When a provider does not support a native result-count parameter, the application issues separate requests sequentially under the same generation-history record.
+- Each request in a multi-request generation has its status and error tracked independently.
+- Before starting a multi-request generation, the application shows the user how many API requests will be made.
+- Cancelling a multi-request generation prevents requests which have not started, while retaining completed results.
+- Provider-specific maximum result counts prevent accidental excessive usage.
+- Cancelling stops local requests and uploads which have not started.
+- Cancellation after an asset or direct source upload begins attempts to stop the local transfer immediately and uses normal **Cancelled** rather than **Cancelled Before Submission**.
+- History records that zero generation submissions occurred, the upload phase and transferred-byte count when known, any provider asset identifier needed for cleanup, and the remote cleanup outcome.
+- SlopFactory states that no generation request was submitted but does not claim the upload was free unless the provider confirms uploads are non-billable or reports zero cost.
+- The application attempts provider-side cancellation when supported.
+- If provider cancellation is unsupported or fails, the generation displays **Cancellation Requested** and warns that remote processing and charges may continue.
+- The application continues minimal polling for an already-submitted asynchronous job so its final state is known.
+- When an asynchronous job exceeds its adapter-defined maximum monitoring lifetime while the provider still reports it as running, its state becomes **Monitoring Paused** rather than failed or cancelled.
+- **Monitoring Paused** stops scheduled polling, preserves the remote job ID and warns that provider processing and charges may continue.
+- A paused job offers **Check Now**, **Resume Monitoring**, and provider cancellation when supported.
+- **Check Now** performs one explicit status request and leaves monitoring paused if the job remains active.
+- **Resume Monitoring** starts a new bounded monitoring period and is never triggered automatically at startup.
+- Temporary network, rate-limit and provider errors during a status check use the normal bounded idempotent retry policy and do not immediately declare the remote job missing.
+- When an adapter confirms an authenticated, definitive **Not Found** or **Expired** status for the persisted remote job, the attempt becomes **Failed — Remote Job Unavailable**.
+- If that job already produced one or more committed usable results, its aggregate generation becomes **Partially Completed** and identifies the unavailable remaining work instead of discarding those results.
+- The sanitized remote job ID, last confirmed provider state and status history remain in generation history for diagnosis.
+- A missing or expired remote job is never recreated or resubmitted automatically because doing so could duplicate work and charges.
+- Cancelling provider-accepted work offers **Cancel and Keep Any Results** (default) and **Cancel and Discard Late Results**.
+- The keep choice downloads and retains usable results which arrive after cancellation, subject to ordinary network and safety rules. The discard choice performs only the minimum status and cost monitoring needed to determine the outcome and does not download later results.
+- The chosen late-result policy is stored in immutable history. Both choices warn that provider processing or charges may continue and neither claims to delete provider-side data.
+- The final history status distinguishes **Cancelled**, **Cancelled with Results** and **Completed Before Cancellation**.
+- Generation history records whether cancellation was confirmed by the provider.
+- The application does not claim that charges were prevented unless the provider confirms cancellation.
+- Generation status uses the normalized states **Queued**, **Paused**, **Preparing**, **Uploading**, **Submitting**, **Submission Outcome Unknown**, **Processing**, **Monitoring Paused**, **Downloading Results**, **Awaiting Library**, **Cancellation Requested**, **Completed**, **Partially Completed**, **Completed Before Cancellation**, **Cancelled Before Submission**, **Cancelled**, **Cancelled with Results** and **Failed**.
+- **Paused** includes an explicit hold reason such as **Connection Lost**, **Restart Confirmation**, **Metered Network**, **Dependency Changed** or another defined nonterminal scheduling condition.
+- Every status transition and its timestamp are recorded.
+- **Monitoring Paused** is nonterminal and can return to **Processing** only through an explicit monitoring action or can move to an appropriate terminal state after a status or cancellation response.
+- A terminal status cannot return to an active state.
+- Retrying terminal work creates a new attempt or generation rather than rewriting terminal history.
+- A **Partially Completed** multi-result generation offers **Retry Failed/Missing Results Only** as the default when the adapter can safely represent the unsuccessful result count independently, plus **Run Entire Request Again**.
+- Either action creates a new generation linked as a retry and never fills in or rewrites the original history or its successful files. When the provider's native request is indivisible or position-dependent, only the full rerun is available.
+- A multi-request generation tracks child-attempt statuses while exposing one aggregate status.
+- Provider-specific statuses are normalized while their original sanitized values remain available for diagnostics.
+- Drafts remain form state and do not become generation-history records until submitted.
+- A generation-history record remains active when one of its source or result files is recycled. Recycled files are shown as unavailable and reconnect automatically when restored.
+- A **Submission Outcome Unknown** history record is not locally active and can be recycled only after acknowledgement that provider work and charges may continue.
+- Recycling does not send cancellation or cleanup requests and preserves the record's unknown status, provider identifiers and documented recovery actions.
+- Restoring the record restores the same unknown state rather than implying that the provider outcome changed.
+- A permanently deleted source or result file leaves a non-restorable tombstone in generation history containing only its former display name, media type, content hash and role in the generation.
+- Recycling a generation-history record does not recycle its source or result files.
+- A recycled generation-history record is inert: it cannot run **Refresh Provider Status**, reconciliation or **Import Missing Results** until it is restored.
+- Viewing its locally retained details remains available in the recycle bin, but restoration is required before any action contacts the provider or changes its output associations.
+- Restoring a generation-history record reconnects every referenced file which still exists.
+- When an active history record references a recycled output file, provider-status refresh labels it **Output Recycled** and does not treat it as a missing remote result.
+- Recovery review offers the normal restore workflow for that file and never downloads or creates another local copy automatically merely because the existing output is recycled.
+- When an output file was permanently deleted but the active history tombstone still identifies a provider result that remains remotely available, the user may explicitly select **Reacquire Permanently Deleted Output**.
+- Reacquisition requires confirmation, downloads and validates the result through the normal safety pipeline, creates a new file identity, preserves the former file's tombstone and records that the result was reacquired from the provider rather than restored from local deletion.
+- After reacquisition, SlopFactory compares the downloaded content hash with the permanent-deletion tombstone's stored hash.
+- A mismatch preserves the tombstone and requires a clear warning before the new bytes may be committed as a separate **Provider Output Changed** result; it is never described as recovery of the permanently deleted file.
+- Permanently deleting a generation-history record removes its provenance references but does not delete any source or result files.
+- Permanently deleting a **Submission Outcome Unknown** record separately warns that the last local provider identifiers and investigation context will be lost and that provider processing or charges are unaffected.
+- That deletion removes the recovery identifiers and creates no hidden tracking record or provider request.
+- Permanent deletion of history with pending or failed remote asset cleanup is paused before local record removal.
+- The confirmation offers **Retry Cleanup Now**, **Stop Tracking and Delete**, and **Cancel**.
+- **Retry Cleanup Now** is an explicit provider action; if it does not complete successfully, the history record and retry state remain.
+- **Stop Tracking and Delete** warns that the provider may retain the asset, removes every local remote-cleanup identifier owned by the history aggregate and then completes permanent local deletion.
+- **Cancel** changes neither local history nor cleanup state.
+- No hidden cleanup ledger or remote asset identifier survives successful permanent deletion of its owning history record.
+- Generated files whose generation history was permanently deleted retain a minimal provider and model snapshot in system metadata.
+- An active generation-history record cannot be recycled until its generation finishes or is cancelled.
+- Asynchronous provider job IDs are persisted. When the application reopens, it resumes polling incomplete asynchronous jobs.
+- Asynchronous provider completion uses authenticated outbound polling only; SlopFactory does not expose webhook, callback or inbound listener endpoints.
+- Provider callback URLs are never synthesized or inserted into requests, and advanced model settings cannot override that restriction.
+- Outbound streaming responses remain supported where an adapter documents them and are not treated as inbound webhooks.
+- If an ordinary HTTP generation is interrupted before any provider submission bytes are sent, the run fails without an unknown-acceptance warning.
+- If transmission began and SlopFactory cannot determine whether the provider accepted the request, the run becomes **Submission Outcome Unknown** rather than ordinary **Failed**.
+- **Submission Outcome Unknown** is indeterminate but not locally active: it releases queue slots and dependency pins and performs no polling unless the adapter exposes a documented reconciliation operation.
+- It warns that provider processing and charges may continue and retains the minimum provider request ID, idempotency context or safe recovery action when available.
+- Adapter-confirmed idempotent reconciliation can transition the record to the provider's actual state; SlopFactory never guesses acceptance from a network error alone.
+- Interrupted submissions are not resubmitted automatically. A manual retry creates a separate run and requires a duplicate-processing and duplicate-charge warning unless reconciliation proved the original was not accepted.
+
+## Generation History
+
+- Generation history is browsed separately from the file library.
+- The history list shows model label, output type, status, creation time, duration, result count and cost when known.
+- History can be filtered by status, date, provider, model and output type.
+- A history record displays its prompts, settings, sources, outputs, attempts, errors and usage.
+- System instructions are collapsed by default in history and saved-setting previews, which show only presence, character/UTF-8 byte counts and the resolved instruction channel.
+- **Show System Instructions** reveals the text only in the current view and clears when that view closes or the library leaves the active security context.
+- Revealed instructions provide **Copy Instructions**, which shows the clipboard-history reminder; SlopFactory neither clears the clipboard automatically nor records instruction text or clipboard contents in diagnostics.
+- When a linked source file's current hash differs from its submission-time snapshot, history labels it **Source Content Replaced** and continues to show the properties of the bytes originally sent.
+- Active records display progress and allow cancellation.
+- Completed, failed and cancelled records provide **Use Again**, which opens a new generation form populated from the historical snapshot.
+- **Use Again** creates a new request and never modifies or reactivates the historical record.
+- When historical system instructions used one adapter channel but the current adapter resolves another, **Use Again** shows both mappings and requires confirmation before the new request can be submitted; it never silently treats them as equivalent.
+- **Use Again** requires explicit confirmation before selecting current replacement bytes for a source whose hash changed after submission.
+- Replacement bytes are revalidated against the current model and role and are not selected when incompatible.
+- SlopFactory does not claim that **Use Again** reproduces the original request when its original source bytes are unavailable.
+- Missing or incompatible models and source files use the same restoration and replacement behavior as saved generation settings.
+- Terminal history records can be selected and moved to the recycle bin.
+- Every submitted prompt-improvement attempt creates a lightweight AI-operation history record.
+- An improvement record contains provider and model snapshots, status, timestamps, source roles, template version, guidance, token usage and cost when reported.
+- Normal cost estimates and confirmation thresholds apply before prompt improvement.
+- Failed and retried improvement attempts are recorded separately because each can incur usage.
+- The selected improvement attempt is linked to the main generation record when its prompt is used.
+- Completed improvement records remain for usage accountability when their generation draft is discarded.
+- History displays these entries with a **Prompt Improvement** operation type and no output files.
+- Unused prompt candidates do not create library text files.
+
+## Generation Notifications
+
+- Generation status is always visible within the application.
+- When enabled, the application shows an OS notification if a generation finishes or fails while SlopFactory is backgrounded or not focused.
+- Android notification permission is requested only when the user enables generation notifications.
+- Generation notifications can be disabled in application settings.
+- A notification includes the configured model label and generation status but does not include prompts, filenames or provider error details.
+- When a run enters **Submission Outcome Unknown**, enabled generation notifications issue one **Submission outcome needs attention** alert containing only the model label and library display name.
+- Selecting that alert opens the affected history record and does not start reconciliation automatically.
+- The notification never describes the run as completed, failed or cancelled and never asserts a known charge.
+- The OS alert is not repeated on every startup; the in-application attention indicator persists until the state is resolved, abandoned or the record is deleted.
+- Selecting a notification opens the corresponding generation-history record.
+- The application does not show a redundant OS notification while the corresponding generation page is visible.
+
+## Generation Inputs
+
+- A text-generation submission contains one raw prompt and, when enabled, the selected saved improved-prompt candidate.
+- Raw prompt, improved prompt, system instructions and prompt-improvement guidance are each limited to 1 MiB of well-formed UTF-8 text before provider-specific token or byte limits are applied.
+- An edit or paste which would exceed a field's limit is rejected atomically with the current and permitted byte counts; SlopFactory never truncates the inserted text or creates an oversized unsavable draft.
+- IME or mobile-keyboard composition may hold temporary uncommitted text; limits apply atomically when composition commits, and uncommitted composition is neither autosaved nor counted as persisted prompt content.
+- Prompt text is not Unicode-normalized because normalization can alter code, identifiers or intentional character distinctions; only CRLF and CR line endings are normalized to LF for storage and transmission.
+- Leading and trailing whitespace is preserved exactly. Whitespace-only system instructions and improvement guidance are treated as absent, while an empty or whitespace-only user prompt is accepted only when the selected model's documented capabilities and source-input combination permit it.
+- It also provides an optional separate **System Instructions** field when the selected model and adapter document support for a system or developer instruction channel.
+- The generic **System Instructions** field is limited to text-generation models in the first release.
+- Image, audio and video adapters may expose documented instruction-like parameters only as provider-specific structured settings with their actual semantics; SlopFactory does not relabel them as chat system roles.
+- System instructions are transmitted through that documented channel and are never silently concatenated into the user prompt, prompt-improvement guidance or advanced JSON.
+- For chat-shaped APIs, the normalized text request contains at most one adapter-selected system or developer message followed by exactly one user message containing the selected raw or improved prompt and any explicitly selected compatible source content parts.
+- SlopFactory adds no hidden assistant messages, conversation history or previous-generation content.
+- Primary generation requests contain no hidden SlopFactory-authored system instructions; built-in application instruction templates are used only by the separately invoked prompt-improvement operation and remain available through **View Instruction**.
+- The sanitized request preview and immutable history snapshot display whether the adapter used a `system`, `developer` or named provider-specific instruction channel.
+- Users cannot override the instruction role or channel per request or through advanced JSON in the first release; the signed adapter and model-capability schema select the documented mapping.
+- When unsupported, the field is retained in the working draft but is disabled with an explanation and must be removed or a compatible model selected before submission.
+- SlopFactory does not create chat sessions, retain conversational memory or automatically include previous generations in a new request.
+- A previous text result can be used deliberately by selecting its file as a compatible source or by starting from **Use Again**.
+- The source-file picker shows active library files.
+- Compatible files can be selected. Incompatible files remain visible but disabled with an explanation.
+- Input validation covers media type, file size, dimensions, duration, file count and permitted input combinations using the selected model's capability schema.
+- Model capability schemas define named input slots where applicable, including roles such as reference image, mask, first frame, last frame, source audio and source video.
+- Each input slot defines accepted media types, minimum and maximum counts, ordering and whether it is required.
+- The generation form displays sources in their assigned slots and allows reordering where order matters.
+- Models without named slots use one ordered general-source list.
+- Duplicate use of a source file is validated according to the selected model's rules.
+- Saved generation settings and generation history preserve source roles and ordering.
+- Provider adapters translate normalized source roles into provider-specific request shapes.
+- Incompatible role assignments are rejected before upload or billing.
+- Inputs are validated again immediately before sending in case model definitions or provider limits changed.
+- Invalid inputs are rejected before any billable request begins.
+- SlopFactory never automatically truncates system instructions, raw or improved prompts, or text-source content to fit a provider context limit.
+- It uses exact tokenizers and limits only when the adapter can identify them reliably; known-over-limit submissions are blocked, while approximate counts are labelled estimates and never presented as guarantees.
+- For a documented shared context window, validation reserves the selected maximum output tokens and adapter-defined message overhead before calculating available input capacity; uncertain overhead or tokenizer behavior is displayed as an estimate.
+- Image, audio and video source inputs contribute token counts only when the adapter has a provider-documented formula; otherwise SlopFactory applies documented count, byte, dimension or duration limits separately.
+- When no reliable media-to-context conversion exists, validation is labelled partial and SlopFactory does not invent a token value or claim the provider will accept the request.
+- Prompt and context calculations run as debounced, cancellable background work and display **Estimating** or **Stale** while newer edits are pending.
+- Estimation never blocks text entry or lets an obsolete count be presented as current.
+- **Generate** remains disabled until the latest required exact validation finishes; when only approximate validation is possible, submission remains available with an explicit **Estimate** or **Partial Validation** label.
+- The user must edit prompts, remove sources or choose another model rather than having input content changed silently.
+- Manually configured models use the input capabilities and limits entered by the user.
+- When a provider rejects an apparently valid input, its error is recorded and the user can adjust the selection without rebuilding the generation form.
+- If a provider rejects a manually declared system-instruction capability, SlopFactory records the sanitized failure and offers **Update Model Capability** but does not disable the setting, remove instructions, edit saved settings or retry without them automatically.
+- If the user explicitly disables that capability, drafts and saved settings retain their system-instruction text but become incompatible for submission with that model until the instructions are removed or a compatible model is selected.
+- Saved generation settings identify missing, recycled and newly incompatible source files.
+- Changing the selected output model preserves the raw prompt, system instructions, destination folder and prompt-improvement text.
+- Model-specific settings are replaced with the new model's defaults and are not silently mapped by similarly named fields.
+- Before entered settings are cleared, the application warns the user and shows what will be discarded.
+- Selected source files are revalidated. Incompatible sources remain visible but become unselected with explanations.
+- The requested result count is clamped or reset to the new model's limit after informing the user.
+- The prompt-improvement model is preserved when it remains valid and independent of the output model.
+- Changing a form's model does not create generation history before submission.
+
+## Generation Results
+
+- The generation page previews successful results from its submitted run using the same safe viewers and media controls as the library.
+- Result previews reference the committed managed files and do not create additional result copies.
+- Each preview provides an action to open the result's library record.
+- The generation form includes a destination library folder.
+- The destination defaults to the folder from which generation was opened, or otherwise to a permanent **Generated** folder.
+- Saved generation settings include the destination folder.
+- If a saved destination is recycled, the user can restore it or select another folder. If it was permanently deleted, a replacement is required.
+- Every result from the same generation is placed in the selected destination folder.
+- Every provider result is committed as a distinct library file and provenance entry even when two or more results have identical bytes or content hashes.
+- Generated-result ingestion does not display the ordinary duplicate-import warning because each output represents a distinct requested and potentially billable result.
+- Matching hashes remain visible through normal metadata and integrity information so the user can identify and remove duplicates later.
+- SlopFactory does not deduplicate the managed bytes of identical generated results automatically.
+- An archive which is itself the requested model output is stored unchanged as one result and is not automatically extracted.
+- A built-in provider adapter can extract an archive only when the provider documents it as a transport container for multiple result files.
+- Transport extraction occurs in temporary library-local storage and validates entry count, total expanded size, individual expanded size, compression ratio and available space before commit.
+- Absolute paths, parent traversal, symbolic links, junctions, device files and other non-regular archive entries are rejected.
+- Extracted entries must remain within the validated temporary extraction directory and each is subjected to normal content-type, size, hash and active-file classification.
+- Every entry in a documented transport archive is validated before any extracted result is committed.
+- If one entry is invalid or unsafe, the complete transport container is rejected, all of its temporary extracted content is removed and no result from that container is added to the library.
+- The failed attempt retains a sanitized archive-validation reason without retaining unsafe paths or extracted content.
+- Results committed independently of the rejected container remain available and can make the aggregate generation **Partially Completed**.
+- Archive extraction supports cancellation and removes uncommitted temporary content after cancellation or failure.
+- A safe provider-supplied filename is used when available.
+- The original provider-supplied filename is retained as provenance metadata even when it cannot be used as the display filename.
+- When its extension conflicts with the validated content type, SlopFactory uses a sanitized display filename with the detected safe extension and records a content-type mismatch warning.
+- File signatures and active-file classification take precedence over provider MIME declarations and filenames.
+- Executable or otherwise active content is never assigned a harmless-looking extension merely because the provider supplied one.
+- Otherwise, the application creates a filename from the configured model label, timestamp, result index and detected extension.
+- Generated filenames are sanitized and use the library's numeric-suffix conflict rule.
+- Renaming a generated file's display name does not alter its provenance.
+- Text is displayed incrementally when the provider supports streaming and is written to a temporary file until complete.
+- A successful text result is committed atomically using UTF-8 encoding.
+- Markdown (`.md`) is the default generated text format.
+- JSON (`.json`) is used when structured JSON output was explicitly requested and the returned content validates as JSON.
+- A configured text-model profile or generation setting can select plain text (`.txt`).
+- Selecting a text format does not rewrite the generated content.
+- Invalid declared structured output is retained as `.txt`, marked with a validation warning and recorded as an error in generation history.
+- Source-code extensions are not inferred automatically from generated content.
+- Generation history records the requested and actual text formats.
+- When a text generation is cancelled or interrupted after receiving content, the user can keep or discard the partial result.
+- A retained partial text result is marked **Incomplete** in system metadata, remains linked to its failed or cancelled generation record and is not presented as successful.
+- Text result files contain the generated assistant content rather than the provider's raw response envelope.
+- Structured provider response details needed for provenance remain in generation history rather than being embedded in the text file.
+- Provider results are downloaded immediately when returned because result URLs may expire.
+- Each result is written to a temporary file within the active library location.
+- Before committing a result, the application validates the response status, content type, expected media category, non-zero size and provider checksum when available.
+- When bytes cannot be validated as the expected text, image, audio or video type, the result fails and no successful media record is created automatically.
+- If the non-empty bytes are not recognized as an error document, authentication page or provider-blocked payload, the result review offers **Retain as Unverified Binary** or **Discard**.
+- Retention commits a distinct `.bin` file marked **Unverified Provider Output**. It is export-only and cannot be previewed, opened externally or reused as a generation source; the failed expected-media outcome remains visible in generation history.
+- Recognized error, authentication and blocked payloads are never eligible for binary retention and their temporary bytes are removed.
+- An adapter may retain unknown bytes only when its documented output contract explicitly defines an opaque binary-file result.
+- Such an output uses a `.bin` extension, is marked **Unverified Content Type**, provides metadata and export only, and cannot be previewed or opened externally from managed storage.
+- A provider error document or HTML page returned with a successful HTTP status is never stored as a successful media result.
+- The application calculates its own content hash after download.
+- A completed temporary file is moved atomically into managed storage and its database record is created transactionally.
+- A successful library-file record never points only to a remote provider URL.
+- Incomplete temporary files are removed after failure or cancellation.
+- If an asynchronous provider job succeeds but result download fails, its remote job and result information are retained so the user can retry the download while it remains available.
+- Generation status and result-download status are recorded separately so provider failures can be distinguished from local storage failures.
+
+## Cost and Usage
+
+- Pre-generation estimates prefer a provider's documented non-billable estimate API when it can be called without submitting prompts, source content or a generation request.
+- Otherwise, an adapter can use versioned bundled pricing metadata which exactly matches the provider, model, modality and applicable pricing dimensions.
+- Bundled pricing displays its effective date and is labelled as potentially outdated.
+- SlopFactory never scrapes provider pricing pages automatically.
+- If no reliable provider estimate or matching bundled pricing exists, the application shows **Cost unknown** rather than guessing.
+- Before the first billable submission for a model and connection pricing-capability revision marked **Cost unknown**, SlopFactory requires acknowledgement that no configured threshold can be enforced.
+- The acknowledgement stores only the relevant model, connection and pricing-capability revisions.
+- **Cost Unknown** remains prominent on every later submission, and device-wide **Always Confirm Unknown-Cost Requests** can require blocking confirmation each time.
+- The default remains one acknowledgement per relevant revision because repetitive confirmations can encourage warning dismissal without improving estimate accuracy.
+- Later submissions retain a prominent **Cost unknown** label without repeating the dialog until one of those revisions changes.
+- Prompt-improvement operations use the same unknown-cost acknowledgement for their selected text model.
+- Multi-request submissions always show the exact request count even after unknown-cost acknowledgement.
+- The first release does not provide user-authored pricing formulas for manual, custom or unmatched models.
+- Post-generation usage and actual cost reported by the provider are still retained for those models with their original units and currency.
+- SlopFactory does not send prompt or source-file content solely to obtain a cost estimate without a separate explicit user action and disclosure.
+- When reliable pricing metadata is available, the application shows an estimated cost before generation.
+- A single estimated value is shown only when cost is deterministic from the submitted request and selected settings.
+- When variable output usage, duration, routing, tiering or another unknown affects price, SlopFactory shows a minimum-to-maximum range only when both bounds are reliable and their assumptions are documented.
+- If a reliable upper bound is unavailable, SlopFactory shows **Cost unknown** rather than a minimum which could be mistaken for a total.
+- Confirmation thresholds compare against the reliable upper bound of a range.
+- Multi-request generations show the aggregate deterministic value or aggregate range for all planned requests.
+- Cost estimates are clearly labelled and generation is not blocked when no reliable estimate is available.
+- The number of API requests is shown even when cost cannot be estimated.
+- Provider-reported token usage, media usage and actual cost are stored in generation history when returned by the provider.
+- Generation history stores the displayed estimate source, value or range, effective pricing date and applicable confirmation threshold alongside any later provider-reported actual cost.
+- When actual cost exceeds the displayed upper estimate or applicable threshold beyond adapter-defined rounding tolerance, the run card, history detail and cost summary highlight the variance.
+- If generation notifications are enabled, a completion notification can state that actual cost exceeded the estimate or threshold without including prompts, filenames or secret billing details.
+- An overrun cannot retroactively block, cancel or relabel otherwise completed provider work.
+- After three material overruns attributable to the same bundled pricing-metadata revision, that revision is marked **Unreliable** and no longer supplies estimates; affected models show **Cost unknown** until updated pricing ships.
+- Provider-supplied estimate variance is labelled as provider variance and does not silently mutate bundled pricing metadata.
+- A local cost-summary view aggregates only provider-reported actual costs, never pre-generation estimates.
+- Cost summaries can be filtered by date range, provider, connection, model and operation type.
+- Cost summaries include active and recycled history by default because recycling does not undo incurred usage; a filter can exclude recycled operations.
+- Permanently deleting a history record removes its usage and cost from future local summaries.
+- The permanent-deletion confirmation identifies when cost or usage data will be lost.
+- SlopFactory does not maintain a hidden or undeletable accounting ledger after the owning history record is permanently deleted.
+- Prompt-improvement operations are included and can be shown separately from primary generations.
+- Every ISO currency and provider-defined credit unit has a separate subtotal and is never combined into a converted grand total.
+- The summary displays counts of included operations, operations with no reported cost and operations with partial usage data so coverage is clear.
+- Cost summaries are derived locally from library history and do not contact providers.
+- The application does not present a locally calculated value as an actual cost when it is based on potentially stale pricing.
+- The user can configure a cost threshold above which explicit confirmation is required.
+- SlopFactory does not convert between currencies or provider credit units.
+- Every estimate and reported cost retains its ISO currency code or documented provider-defined unit.
+- Device-wide confirmation thresholds are keyed by that exact currency or unit, and a connection can override the matching threshold for its library.
+- A threshold comparison occurs only between like-for-like values.
+- When no matching threshold exists, the estimate is shown but no threshold confirmation is inferred.
+- Costs expressed in different currencies or units are never added into a single total.
+- The first release does not enforce daily, monthly or other cumulative spending budgets.
+- Such local caps could be misleading because cost reporting may be delayed, incomplete or unknown, usage outside SlopFactory is invisible, and currencies or provider credit units cannot be combined safely.
+- Provider- and unit-scoped advisory budgets may be considered later, but per-request confirmation thresholds and local cost summaries are the first-release safeguards.
+- Local summaries and per-request thresholds are advisory safeguards and are never presented as provider-account spending limits.
+- SlopFactory cannot account for provider usage created by other applications, delayed billing corrections or costs which the provider does not report.
+- A multi-request generation shows its estimated total cost rather than only a per-request estimate.
+- The application does not issue an additional billable request solely to retrieve usage information.
+
+## API Retries and Rate Limits
+
+- Idempotent operations, including model listing, status polling and result downloads, can be retried automatically.
+- Automatic retries honour `Retry-After` and provider rate-limit headers.
+- While an active multi-request group waits for `Retry-After`, later work on the same connection does not overtake it.
+- The wait remains cancellable; cancelling the group releases the connection queue after normal cancellation handling.
+- Independent connection queues can continue during that delay unless their own provider responses impose limits.
+- Rate-limit state, reset times and adaptive throttling are scoped to the connection which received the provider response.
+- SlopFactory does not compare API keys, headers or account details to infer that separate connections share an account or quota.
+- Account-wide throttling reported by a provider is explained on the affected connection but is not silently propagated to other connection records.
+- Retries use bounded exponential backoff with jitter.
+- The application displays delayed or rate-limited status and allows cancellation while waiting.
+- A generation-submission request is not retried automatically unless the provider supports an idempotency key and confirms that repeating the request is safe.
+- For an adapter with documented idempotency support, SlopFactory generates an opaque unique key and persists it before transmitting any bytes for that provider submission.
+- The key is scoped to one immutable child generation request or one prompt-improvement attempt and is reused only for a safe retry of that exact request.
+- Separate runs, multi-result children, prompt-improvement attempts and **Use Again** always receive different keys.
+- Idempotency keys are application-controlled and cannot be entered or overridden through model settings or advanced JSON.
+- The exact key remains available only while retry or reconciliation is possible; after terminal resolution it is removed and history retains only that idempotency was used plus a non-reusable fingerprint when needed for diagnostics.
+- Exact idempotency keys are excluded from logs, exports, notifications and sanitized request previews.
+- Authentication, validation and permanent provider errors are not retried automatically.
+- Provider-specific settings define maximum retry attempts and timeout limits.
+- Every attempt and its sanitized outcome are stored in generation history.
+- After automatic retries are exhausted, further retry requires explicit user action.
+
+## Prompt Improvement
+
+- Prompt improvement is optional and is enabled explicitly by the user.
+- When enabling prompt improvement, the user selects a configured text model.
+- Prompt improvement sends only the raw prompt by default.
+- The default improvement instruction includes the final generation modality and relevant normalized capability constraints, but does not disclose the final provider name or model ID to a different improvement provider.
+- **Include Target Model Identity** explicitly adds that provider/model identity for model-specific tailoring; the preflight disclosure and improvement history record whether it was sent.
+- System instructions are also excluded by default. **Include System Instructions in Improvement** explicitly sends them to the selected improvement model through the adapter's documented instruction channel or as a clearly delimited part of the versioned improvement instruction when that model lacks a separate channel.
+- Before improvement, the disclosure identifies the improvement provider/model and states whether system instructions will be sent; history records the choice and exact transmitted improvement instruction separately from the later output-generation request.
+- When the improvement model supports compatible media input, the user can enable **Include Compatible Sources** and explicitly select which sources to send.
+- Improvement disclosure shows the same provider-facing aliases which the final generation will use for shared sources, allowing the model to refer to them consistently in its proposed prompt.
+- Sources sent only for improvement are identified as improvement-only context, and the versioned template instructs the model not to reference those sources by name in the improved prompt because the generation model will not receive them.
+- Before improvement, the application shows the improvement provider, model, selected files, estimated transfer size and cost when known.
+- Improvement-source transfers use the normal upload, privacy, metered-network and remote-cleanup rules.
+- Sources sent to the improvement model are recorded separately from sources sent to the output model.
+- Saved generation settings preserve the include-sources choice and source roles.
+- Saved generation settings also preserve the include-system-instructions choice without changing the default for newly created settings.
+- Disabling prompt improvement does not send improvement sources.
+- The application uses a built-in prompt-improvement template tailored to the selected output mode.
+- The template instructs the model to return only the improved prompt without commentary or formatting wrappers.
+- When system instructions are included, the template also instructs the improvement model to use them as constraints without repeating them inside the improved user prompt.
+- The user can provide optional improvement guidance, such as style, tone or constraints, in a separate field.
+- The improvement panel provides a read-only **View Instruction** action before submission.
+- The instruction view shows the exact template text and version, the optional user guidance as incorporated into the instruction, and the source-file roles selected for the improvement request.
+- The built-in template is not edited in place; users customize an improvement through the separate guidance field.
+- The first release does not provide user-created or user-edited prompt-improvement templates.
+- Free-form improvement guidance is the first-release customization surface; user-authored named templates may be considered later with full instruction preview, versioning and provenance rules.
+- Template identifiers and versions remain explicit in saved settings and history so custom template support can be added later without changing historical prompt records.
+- Built-in improvement templates do not include policy-evasion instructions and are versioned.
+- Generation history stores the exact template version, optional guidance, improvement-model snapshot and final instruction.
+- Saved generation settings preserve the optional guidance and template version.
+- If a saved template version is unavailable later, the application shows its saved instruction rather than silently substituting a newer template.
+- While prompt improvement is enabled, a second prompt text box is visible.
+- Before **Improve Prompt** submits, SlopFactory validates every final-generation dependency the improvement cannot repair, including final-model availability, source roles and compatibility, structured settings and destination availability.
+- Unrelated validation errors block improvement with actionable explanations. Prompt-quality or prompt-length issues which improvement could plausibly address do not block it, and the UI states that improvement may incur cost without guaranteeing final validation.
+- When the raw prompt is empty or whitespace-only, improvement is available only if the request includes at least one explicitly selected compatible source or non-empty improvement guidance and the active versioned template supports source-derived prompting.
+- Otherwise **Improve Prompt** is disabled, while a model-supported source-only final generation remains available with improvement turned off.
+- Clicking **Improve Prompt** sends the disclosed improvement inputs to the selected text model and populates the second text box with the result.
+- If the provider returns multiple textual candidates, SlopFactory presents them separately and never concatenates them.
+- An improvement attempt accepts at most 16 candidates, 1 MiB of decoded text per candidate and 4 MiB of decoded candidate text in total.
+- Exceeding any bound records **Response Too Large**, retains provider-reported usage or cost plus sanitized count and size facts, leaves the current prompt unchanged and retains no misleading partial candidate set.
+- The current improved prompt remains unchanged until the user selects **Replace with This Candidate**; the improvement-attempt history retains every returned candidate locally as part of the exact provider result.
+- Only adapter-documented textual output can become an improved-prompt candidate.
+- An explicit provider refusal records a **Refused** improvement attempt with its sanitized reason; a tool call or unsupported non-text response records **Unsupported Response**. Neither state changes the current improved prompt, and raw-prompt generation remains available.
+- A response mixing textual output with tool calls or unsupported parts is also **Unsupported Response** unless the signed adapter defines a deterministic documented textual-candidate extraction rule; SlopFactory never silently drops parts and guesses.
+- If a streamed improvement response disconnects after yielding partial text, the attempt is **Interrupted** and retains that text locally as a clearly labelled **Incomplete Response**.
+- Incomplete response text is not available through the normal **Replace with This Candidate** action. **Use as Editable Incomplete Copy** creates a separate review candidate directly inside SlopFactory, without requiring the OS clipboard or overwriting the current improved prompt, after acknowledging that the text may be truncated.
+- If that recovered copy is later selected and used, generation history links the interrupted improvement attempt and records that the user adopted incomplete output.
+- A textual candidate is preserved exactly except for the same well-formed UTF-8 validation and CRLF/CR-to-LF normalization applied to prompt fields; SlopFactory does not strip quotes, Markdown fences, labels or surrounding whitespace heuristically.
+- Versioned improvement templates request prompt-only output, while any cleanup of a returned candidate remains an explicit user edit.
+- Prompt improvement never writes to, replaces or edits the separate **System Instructions** field; it produces only an improved user-prompt candidate.
+- SlopFactory does not automatically remove text suspected of echoing system instructions because reliable detection is impossible; the candidate remains reviewable and editable before use.
+- The user can accept or edit the improved prompt, retry prompt improvement, or disable prompt improvement to use the raw prompt.
+- When prompt improvement is enabled, the contents of the second text box are used for generation.
+- If that selected improved prompt is empty or whitespace-only, submission is blocked with actions to edit it or disable prompt improvement; SlopFactory never silently falls back to the raw prompt.
+- The raw prompt and improved prompt are both saved in the structured generation-history record.
+- A failed prompt-improvement request leaves both prompt text boxes unchanged and does not prevent generation using the raw prompt.
+- Improvement failures are displayed beside the improvement controls with a retry action.
+- Retrying does not immediately overwrite an edited or previously saved improved prompt. The new candidate is shown separately and the user can replace the current value, keep it or cancel.
+- Changing a final-generation source selection, role, order or provider-facing alias after improvement marks the current improved prompt **Needs Review**.
+- Changing the resolved filename-reference reliability through connection settings, model overrides or adapter metadata also marks the current improved prompt **Needs Review**.
+- Editing the raw prompt, changing the output model, or changing any improvement guidance, included source, included system instructions, improvement model or template revision used to produce the current candidate also marks it **Needs Review**.
+- A change to system instructions does so only when those instructions were included in the improvement request.
+- Generation using that prompt is blocked until the user explicitly keeps it, edits it or regenerates it; SlopFactory never rewrites source references automatically.
+- Replacing an improved prompt affects only the current working copy until its saved generation settings are explicitly saved.
+- When an improved prompt is used for generation, the history record includes the improvement model snapshot and provider-reported usage or cost.
+- Prompt improvement through an unverified connection uses the normal first-use confirmation and visible warning.
+- Prompt improvement is disabled with an explanation when its selected text model is recycled, missing required credentials or otherwise unavailable.
+
+## Saved Generation Settings
+
+- Saved generation settings contain a title, the selected generation model, raw prompt, optional system instructions, improved prompt, model settings, result count, selected source files, prompt-improvement enabled state and selected improvement model.
+- **Save** and **Save As** review the selected sources and provide a checked **Include Sources** option. Clearing it saves the other reusable form state without source references.
+- Included sources are stable library-file references only; saving settings never duplicates their managed bytes.
+- Opening saved generation settings always creates a new generation tab rather than replacing or merging into an existing tab.
+- The new tab contains an editable working-copy snapshot and retains the stable ID and version of the saved settings from which it was opened.
+- If the saved system-instruction channel snapshot differs from the current adapter mapping, the working copy shows both and requires confirmation before submission without modifying the saved record.
+- Accepting the current mapping updates only the autosaved tab working copy; the named saved setting changes only through explicit **Save** or **Save As** and the normal revision-conflict workflow.
+- Multiple tabs can be opened independently from the same saved settings.
+- The improved prompt which was present when the settings were saved is loaded into the working copy and is not regenerated automatically.
+- The user can retry prompt improvement in the working copy without changing or losing the improved prompt stored in the saved settings.
+- Changes to the working copy do not alter the saved settings automatically.
+- Later changes to the saved settings do not silently rewrite an already open tab.
+- **Save** explicitly updates the saved settings, while **Save As** creates a separate saved setting and preserves the original.
+- Each saved-generation-settings record has an opaque revision which changes on every successful update.
+- **Save** compares the tab's loaded revision with the current record revision.
+- If they differ, the application offers **Review Changes**, **Overwrite**, **Save As**, and **Cancel** rather than silently applying last-write-wins behavior.
+- **Review Changes** displays field-level differences, including prompts, models, settings, source roles, destination and result count, without modifying either version.
+- **Overwrite** requires confirmation and replaces the saved record with the tab's complete current working copy.
+- **Save As** creates a new stable settings record and updates the tab's source reference to that new record.
+- **Cancel** leaves both the tab and saved record unchanged.
+- Saved generation settings can be deleted.
+- Recycling or permanently deleting saved settings does not discard or rewrite working copies already open in generation tabs.
+- When a tab's source saved settings are recycled, **Save** offers to restore and update the original or to use **Save As**.
+- When the source saved settings were permanently deleted, the tab clears its updatable source state and only **Save As** is available.
+- Such a tab can continue generating when all of its actual model, source-file, destination and connection dependencies remain valid.
+- A referenced model or source file which is in the recycle bin is shown as unavailable and the user is offered the option to restore it.
+- If a referenced model or source file has been permanently deleted, the user must select a replacement before generation.
+
+## User Stories
+
+1. The user can add a connection. The user enters a label for the connection and selects the type of API (OpenAI, 1min.AI, etc) and configures the settings (eg. Base URL and API Key). The connection is tested and saved and added to the list.
+
+2. The user can view a list of connections.
+
+3. The user can delete an existing connection.
+
+4. The user can open, edit, test and save an existing connection.
+
+5. The user can add a model. The user enters a label for the model, and select the type (Text, Image, Audio, Video) and a connection. The available models are loaded from the connection and the user selects one. The model is saved and added to the model list.
+
+6. The user can view a list of models.
+
+7. The user can delete an existing model.
+
+8. The user can open, edit, and save an existing model.
+
+9. The user can add a file to the library. This is marked as a user-added file.
+
+10. The user can rename the file.
+
+11. The user can associate arbitary metadata (key/value pairs) with the file in the library.
+
+12. The user can browse the library.
+
+13. The user can organise the library into folders.
+
+14. The user can add labeled, directed links between files in the library.
+
+15. The user can save a file from the library.
+
+16. The user can remove files from the library.
+
+17. The user can read a text file from the library.
+
+18. The user can view an image file from the library.
+
+19. The user can play an audio file from the library.
+
+20. The user can play a video file from the library.
+
+21. The user can view/edit the metadata associated with a file.
+
+22. The user can view/edit links between files.
+
+23. The user can generate a file. The user opens a new generation page. They then select a model. This determines what file type will be generated. The user can enter a prompt and add select files from the library to be sent to the AI model. A text model can be used to improve/expand the prompt. Model settings can be configured (or left blank to use default values). Allow the user to enter the number of results to generate. The user then clicks a button to send the request to the AI model. The results are added to the library, marked as generation results, and the generation settings are associated with it as metadata and the source files are linked.
+
+24. The generation settings can be saved with a title for future use.
+
+25. The user can view a list of saved generation settings.
+
+26. The user can open a new generation page, populated with saved settings.
+
+27. The user can delete saved generation settings.
