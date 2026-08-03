@@ -66,7 +66,7 @@ else
                 @foreach (var candidate in _pendingImports)
                 {
                     <li>
-                        <div><strong>@candidate.DisplayName</strong><small>@(candidate.ByteSize is null ? "Size unavailable until import" : FormatBytes(candidate.ByteSize.Value))</small></div>
+                        <div><strong>@candidate.DisplayName</strong><small>@(candidate.ByteSize is null ? "Size unavailable until import" : FormatBytes(candidate.ByteSize.Value))@(!string.IsNullOrWhiteSpace(candidate.RelativeFolder) ? $" · {candidate.RelativeFolder}" : string.Empty)</small></div>
                         <button class="ghost danger" disabled="@_busy" @onclick="() => RemovePendingImport(candidate.Path)">Remove</button>
                     </li>
                 }
@@ -492,7 +492,7 @@ else
             long? size = null;
             try { var info = new FileInfo(item.FullPath); if (info.Exists) size = info.Length; }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) { }
-            return new PendingImport(item.FullPath, string.IsNullOrWhiteSpace(item.FileName) ? Path.GetFileName(item.FullPath) : item.FileName, size, false);
+            return new PendingImport(item.FullPath, string.IsNullOrWhiteSpace(item.FileName) ? Path.GetFileName(item.FullPath) : item.FileName, size, false, null);
         }).GroupBy(item => item.Path, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).Select(group => group.First()).ToList();
         AddPendingImports(selected);
         _importForm = new ImportForm { TargetLibraryPath = LibraryState.ActivePath ?? string.Empty, DestinationFolderId = _contents.Folder.Id };
@@ -516,12 +516,12 @@ else
         });
         try
         {
-            _lastImportResults = await LibraryState.Workspace.ImportWithProgressAsync(runItems.Select(item => item.Path), _importForm.DestinationFolderId, _importForm.ImportDuplicates, progress, _importCancellation.Token);
+            _lastImportResults = await ImportReviewedItemsAsync(LibraryState.Workspace, runItems, progress, _importCancellation.Token);
             _message = $"Imported {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Imported)}; skipped {_lastImportResults.Count(item => item.Outcome == ImportOutcome.DuplicateSkipped)} duplicate(s); {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Failed)} failed; {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Cancelled)} cancelled.";
             foreach (var item in runItems)
             {
                 _pendingImports.RemoveAll(candidate => SameSourcePath(candidate.Path, item.Path));
-                if (item.IsTemporary) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true));
+                if (item.IsTemporary) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true, item.RelativeFolder));
             }
             _importProgress = null;
             if (_contents is not null) await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
@@ -533,7 +533,7 @@ else
     {
         var item = _pendingImports.FirstOrDefault(candidate => SameSourcePath(candidate.Path, path));
         _pendingImports.RemoveAll(candidate => SameSourcePath(candidate.Path, path));
-        if (item?.IsTemporary == true) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true));
+        if (item?.IsTemporary == true) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true, item.RelativeFolder));
     }
     private void CancelImport() => _importCancellation?.Cancel();
     private async Task CancelImportReview()
@@ -541,12 +541,12 @@ else
         var discarded = _pendingImports.Where(item => item.IsTemporary).ToArray();
         _pendingImports = [];
         _importProgress = null;
-        foreach (var item in discarded) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true));
+        foreach (var item in discarded) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true, item.RelativeFolder));
     }
 
     private void DrainIncomingImports()
     {
-        var incoming = IncomingImports.TakePending().Select(item => new PendingImport(item.Path, item.DisplayName, item.ByteSize, item.IsTemporary));
+        var incoming = IncomingImports.TakePending().Select(item => new PendingImport(item.Path, item.DisplayName, item.ByteSize, item.IsTemporary, item.RelativeFolder));
         AddPendingImports(incoming);
         var failures = IncomingImports.TakeFailures();
         if (failures.Count > 0) _incomingFailures = _incomingFailures.Concat(failures).ToArray();
@@ -569,6 +569,76 @@ else
     });
 
     private static bool SameSourcePath(string left, string right) => string.Equals(left, right, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private async Task<IReadOnlyList<ImportResult>> ImportReviewedItemsAsync(ILibraryWorkspace workspace, IReadOnlyList<PendingImport> items, IProgress<ImportProgress> progress, CancellationToken cancellationToken)
+    {
+        var results = new List<ImportResult>(items.Count);
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            if (cancellationToken.IsCancellationRequested)
+            {
+                AddCancelledResults(results, items, index);
+                break;
+            }
+            try
+            {
+                var destinationId = await ResolveImportFolderAsync(workspace, _importForm.DestinationFolderId, item.RelativeFolder, cancellationToken);
+                var mappedProgress = new DelegatingProgress<ImportProgress>(value => progress.Report(value with { ItemIndex = index + 1, TotalItems = items.Count, DisplayName = item.DisplayName }));
+                var result = AssertSingleImportResult(await workspace.ImportWithProgressAsync([item.Path], destinationId, _importForm.ImportDuplicates, mappedProgress, cancellationToken));
+                results.Add(result);
+                if (result.Outcome == ImportOutcome.Cancelled)
+                {
+                    AddCancelledResults(results, items, index + 1);
+                    break;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                AddCancelledResults(results, items, index);
+                break;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+            {
+                results.Add(new ImportResult(new ImportCandidate(item.Path, item.DisplayName, item.ByteSize ?? 0, null), null, ImportOutcome.Failed, [], exception.Message));
+            }
+        }
+        return results;
+    }
+
+    private static ImportResult AssertSingleImportResult(IReadOnlyList<ImportResult> results) => results.Count == 1
+        ? results[0]
+        : throw new InvalidOperationException("A single reviewed import did not return one result.");
+
+    private static void AddCancelledResults(List<ImportResult> results, IReadOnlyList<PendingImport> items, int startIndex)
+    {
+        for (var index = startIndex; index < items.Count; index++)
+        {
+            var item = items[index];
+            results.Add(new ImportResult(new ImportCandidate(item.Path, item.DisplayName, item.ByteSize ?? 0, null), null, ImportOutcome.Cancelled, [], null));
+        }
+    }
+
+    private static async Task<string> ResolveImportFolderAsync(ILibraryWorkspace workspace, string destinationId, string? relativeFolder, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(relativeFolder)) return destinationId;
+        var folders = (await workspace.GetActiveFoldersAsync(cancellationToken)).ToList();
+        var currentId = destinationId;
+        foreach (var rawSegment in relativeFolder.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var segment = LibraryRules.NormalizeDisplayName(rawSegment, "Imported folder name");
+            var comparison = LibraryRules.ComparisonKey(segment);
+            var existing = folders.FirstOrDefault(folder => folder.ParentId == currentId && LibraryRules.ComparisonKey(folder.Name) == comparison);
+            if (existing is not null) currentId = existing.Id;
+            else
+            {
+                var created = await workspace.CreateFolderAsync(currentId, segment, cancellationToken);
+                folders.Add(created);
+                currentId = created.Id;
+            }
+        }
+        return currentId;
+    }
 
     private IReadOnlyList<RecentLibrary> AvailableImportLibraries()
     {
@@ -736,7 +806,7 @@ else
         _thumbnailCancellation?.Dispose();
         _importCancellation?.Cancel();
         _importCancellation?.Dispose();
-        IncomingImports.ReturnPending(_pendingImports.Where(item => !_activeImportPaths.Contains(item.Path)).Select(item => new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, item.IsTemporary)));
+        IncomingImports.ReturnPending(_pendingImports.Where(item => !_activeImportPaths.Contains(item.Path)).Select(item => new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, item.IsTemporary, item.RelativeFolder)));
     }
 
     private static string MediaIcon(string mediaType) => mediaType.Split('/')[0] switch
@@ -787,7 +857,11 @@ else
         public string Name { get; set; } = string.Empty;
         public string DestinationFolderId { get; set; } = string.Empty;
     }
-    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize, bool IsTemporary);
+    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize, bool IsTemporary, string? RelativeFolder);
+    private sealed class DelegatingProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
+    }
     private sealed class ImportForm
     {
         public string TargetLibraryPath { get; set; } = string.Empty;

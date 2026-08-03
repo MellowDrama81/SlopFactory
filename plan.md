@@ -862,7 +862,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## File Import
 
 - Windows and Android support selecting and importing multiple files.
-- Windows folder drops must preserve a reviewed virtual-folder hierarchy rather than flattening it.
 - Custom URL schemes, remote-URL imports and automatic downloading of shared links are not supported in the first release.
 - Users obtain remote files through the operating system or browser and explicitly import the resulting local bytes, giving SlopFactory a stable content hash and clear provenance boundary.
 - Any later URL-ingestion feature requires dedicated SSRF, redirect, authentication, expiry, content-size and provenance controls rather than reusing provider result-download behavior.

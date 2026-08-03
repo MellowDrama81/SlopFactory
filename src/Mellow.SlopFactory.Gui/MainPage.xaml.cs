@@ -33,13 +33,16 @@ public partial class MainPage : ContentPage
         {
             if (!args.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems)) return;
             var items = await args.DataView.GetStorageItemsAsync();
-            var paths = new List<string>();
+            var incoming = new List<Services.IncomingImportItem>();
             foreach (var item in items)
             {
-                if (item is Windows.Storage.StorageFile file) paths.Add(file.Path);
-                else if (item is Windows.Storage.StorageFolder folder) await AddFolderFilesAsync(folder, paths, 0);
+                if (item is Windows.Storage.StorageFile file)
+                {
+                    incoming.Add(new Services.IncomingImportItem(file.Path, file.Name, null, false));
+                }
+                else if (item is Windows.Storage.StorageFolder folder) await AddFolderFilesAsync(folder, incoming, folder.Name, 0);
             }
-            _incomingImports.QueueLocalPaths(paths);
+            _incomingImports.QueueLocalItems(incoming);
             args.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -48,20 +51,23 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private static async Task AddFolderFilesAsync(Windows.Storage.StorageFolder folder, List<string> paths, int depth)
+    private static async Task AddFolderFilesAsync(Windows.Storage.StorageFolder folder, List<Services.IncomingImportItem> incoming, string relativeFolder, int depth)
     {
-        if (depth > 64 || paths.Count >= 100_000) return;
+        if (depth > 64 || incoming.Count >= 100_000) return;
         try
         {
             if ((File.GetAttributes(folder.Path) & (FileAttributes.Hidden | FileAttributes.ReparsePoint)) != 0) return;
             foreach (var item in await folder.GetItemsAsync())
             {
-                if (paths.Count >= 100_000) break;
+                if (incoming.Count >= 100_000) break;
                 if (item is Windows.Storage.StorageFile file)
                 {
-                    if ((File.GetAttributes(file.Path) & (FileAttributes.Hidden | FileAttributes.ReparsePoint)) == 0) paths.Add(file.Path);
+                    if ((File.GetAttributes(file.Path) & (FileAttributes.Hidden | FileAttributes.ReparsePoint)) == 0)
+                    {
+                        incoming.Add(new Services.IncomingImportItem(file.Path, file.Name, null, false, relativeFolder));
+                    }
                 }
-                else if (item is Windows.Storage.StorageFolder child) await AddFolderFilesAsync(child, paths, depth + 1);
+                else if (item is Windows.Storage.StorageFolder child) await AddFolderFilesAsync(child, incoming, Path.Combine(relativeFolder, child.Name), depth + 1);
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }

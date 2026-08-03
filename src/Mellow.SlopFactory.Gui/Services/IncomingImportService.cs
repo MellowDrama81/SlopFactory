@@ -1,6 +1,6 @@
 namespace Mellow.SlopFactory.Gui.Services;
 
-public sealed record IncomingImportItem(string Path, string DisplayName, long? ByteSize, bool IsTemporary);
+public sealed record IncomingImportItem(string Path, string DisplayName, long? ByteSize, bool IsTemporary, string? RelativeFolder = null);
 public sealed record IncomingImportFailure(string DisplayName, string Message);
 
 public sealed class IncomingImportService
@@ -63,13 +63,30 @@ public sealed class IncomingImportService
             try
             {
                 var info = new FileInfo(path);
-                if (!info.Exists || (info.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                if (!info.Exists || (info.Attributes & (FileAttributes.Hidden | FileAttributes.ReparsePoint)) != 0) continue;
                 additions.Add(new IncomingImportItem(info.FullName, info.Name, info.Length, false));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) { }
         }
         if (additions.Count == 0) return;
         lock (_gate) _pending.AddRange(additions);
+        PendingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void QueueLocalItems(IEnumerable<IncomingImportItem> items)
+    {
+        var additions = new List<IncomingImportItem>();
+        foreach (var item in items.Where(item => !item.IsTemporary))
+        {
+            try
+            {
+                var info = new FileInfo(item.Path);
+                if (info.Exists && (info.Attributes & (FileAttributes.Hidden | FileAttributes.ReparsePoint)) == 0) additions.Add(item with { Path = info.FullName, ByteSize = info.Length });
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) { }
+        }
+        if (additions.Count == 0) return;
+        lock (_gate) _pending.AddRange(additions.Where(item => _pending.All(existing => !string.Equals(existing.Path, item.Path, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))));
         PendingChanged?.Invoke(this, EventArgs.Empty);
     }
 
