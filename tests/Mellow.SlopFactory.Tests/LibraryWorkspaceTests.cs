@@ -612,6 +612,75 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task IntegrityScanHashesRecycledManagedFilesWithoutMutatingRecords()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("integrity-recycled.txt");
+        await File.WriteAllTextAsync(source, "original");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.RecycleFileAsync(file.Id);
+
+        var clean = await workspace.RunIntegrityScanAsync();
+
+        Assert.True(clean.IsComplete);
+        Assert.False(clean.WasCancelled);
+        Assert.Empty(clean.Findings);
+
+        await File.WriteAllTextAsync(workspace.GetManagedFilePath(file), "changed content");
+        var changed = await workspace.RunIntegrityScanAsync();
+
+        Assert.Contains(changed.Findings, finding => finding.Kind == LibraryIntegrityIssueKind.ManagedFileHashMismatch && finding.RecordId == file.Id);
+        Assert.Equal(LibraryRecordState.Recycled, (await workspace.GetFileAsync(file.Id)).State);
+    }
+
+    [Fact]
+    public async Task IntegrityScanReportsMissingAndOrphanManagedFilesWithoutRepairingThem()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var source = temporary.Child("integrity-missing.txt");
+        await File.WriteAllTextAsync(source, "missing");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        File.Delete(workspace.GetManagedFilePath(file));
+        var orphanPath = Path.Combine(root, "media", "orphan.bin");
+        await File.WriteAllBytesAsync(orphanPath, [1, 2, 3, 4]);
+
+        var report = await workspace.RunIntegrityScanAsync();
+
+        Assert.True(report.IsComplete);
+        Assert.Contains(report.Findings, finding => finding.Kind == LibraryIntegrityIssueKind.ManagedFileMissing && finding.RecordId == file.Id);
+        Assert.Contains(report.Findings, finding => finding.Kind == LibraryIntegrityIssueKind.OrphanManagedFile && finding.RecordId is null && finding.ActualByteSize == 4);
+        Assert.True(File.Exists(orphanPath));
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetFileAsync(file.Id)).State);
+    }
+
+    [Fact]
+    public async Task CancelledIntegrityScanReturnsAnIncompletePartialReport()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("integrity-cancel.txt");
+        await File.WriteAllTextAsync(source, new string('x', 100_000));
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        _ = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<LibraryIntegrityScanProgress>(value =>
+        {
+            if (value.Stage == "Hashing managed files") cancellation.Cancel();
+        });
+
+        var report = await workspace.RunIntegrityScanAsync(progress, cancellation.Token);
+
+        Assert.True(report.WasCancelled);
+        Assert.False(report.IsComplete);
+        Assert.True(report.FinishedAt >= report.StartedAt);
+    }
+
+    [Fact]
     public async Task OpeningVersionOneLibraryUpgradesDatabaseAndManifestWithRollbackCleanup()
     {
         using var temporary = new TemporaryDirectory();
@@ -638,5 +707,10 @@ public sealed class LibraryWorkspaceTests
         Assert.Empty(await upgraded.GetRecycledLinksAsync());
         Assert.False(File.Exists(databasePath + ".upgrade-backup"));
         Assert.Contains("\"schemaVersion\": 2", await File.ReadAllTextAsync(manifestPath));
+    }
+
+    private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 }

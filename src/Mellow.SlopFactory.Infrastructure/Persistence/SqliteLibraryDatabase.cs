@@ -237,6 +237,32 @@ internal sealed class SqliteLibraryDatabase
 
     public Task<IReadOnlyList<FileRecord>> GetActiveFilesAsync(CancellationToken cancellationToken) => GetFilesByStateAsync(LibraryRecordState.Active, cancellationToken);
 
+    public async Task<IReadOnlyList<FileRecord>> GetFilesForIntegrityScanAsync(CancellationToken cancellationToken)
+    {
+        var results = new List<FileRecord>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id,folder_id,display_name,managed_name,content_hash,byte_size,media_type,origin,state,imported_at,modified_at,source_last_modified,recycled_at FROM files WHERE state<>2 ORDER BY id;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadFile(reader));
+        return results;
+    }
+
+    public async Task<IReadOnlyList<string>> CheckIntegrityAsync(CancellationToken cancellationToken)
+    {
+        var findings = new List<string>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA quick_check;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var result = reader.GetString(0);
+            if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase)) findings.Add(result);
+        }
+        return findings;
+    }
+
     public async Task<IReadOnlyList<FileRecord>> GetTopLevelDeletedFilesAsync(CancellationToken cancellationToken)
     {
         var results = new List<FileRecord>();

@@ -574,6 +574,168 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return await ProcessRecycleBinItemsAsync(entries.Select(entry => entry.Reference).ToArray(), restore: false, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<LibraryIntegrityReport> RunIntegrityScanAsync(IProgress<LibraryIntegrityScanProgress>? progress = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var startedAt = DateTimeOffset.UtcNow;
+        var findings = new List<LibraryIntegrityFinding>();
+        var processed = 0;
+        var total = 4;
+        var complete = true;
+        var cancelled = false;
+
+        try
+        {
+            progress?.Report(new LibraryIntegrityScanProgress(processed, total, "Validating manifest"));
+            try
+            {
+                var manifest = await LibraryManifestStore.ReadAsync(_layout, cancellationToken).ConfigureAwait(false);
+                if (!string.Equals(manifest.LibraryId, Descriptor.LibraryId, StringComparison.Ordinal) || manifest.SchemaVersion != Descriptor.SchemaVersion)
+                {
+                    findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManifestInvalid, null, null, null, "The manifest identity does not match the open library."));
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+            {
+                findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManifestInvalid, null, null, null, "The library manifest could not be validated."));
+            }
+            progress?.Report(new LibraryIntegrityScanProgress(++processed, total, "Validating database"));
+
+            IReadOnlyList<FileRecord> files = [];
+            var databaseRecordsAvailable = false;
+            try
+            {
+                var databaseFindings = await _database.CheckIntegrityAsync(cancellationToken).ConfigureAwait(false);
+                if (databaseFindings.Count > 0)
+                {
+                    findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.DatabaseInvalid, null, null, null, $"SQLite reported {databaseFindings.Count} integrity issue(s)."));
+                    complete = false;
+                }
+                else
+                {
+                    files = await _database.GetFilesForIntegrityScanAsync(cancellationToken).ConfigureAwait(false);
+                    databaseRecordsAvailable = true;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch
+            {
+                findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.DatabaseInvalid, null, null, null, "The library database could not be validated."));
+                complete = false;
+            }
+            progress?.Report(new LibraryIntegrityScanProgress(++processed, total, "Validating required directories"));
+
+            if (!Directory.Exists(_layout.ManagedPath))
+            {
+                findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.RequiredDirectoryMissing, null, null, null, "The managed media directory is missing."));
+                complete = false;
+            }
+            if (!Directory.Exists(_layout.StagingPath))
+            {
+                findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.RequiredDirectoryMissing, null, null, null, "The staging directory is missing."));
+            }
+            progress?.Report(new LibraryIntegrityScanProgress(++processed, total, "Enumerating managed storage"));
+
+            string[] managedEntries = [];
+            if (Directory.Exists(_layout.ManagedPath))
+            {
+                try
+                {
+                    managedEntries = Directory.EnumerateFileSystemEntries(_layout.ManagedPath, "*", SearchOption.TopDirectoryOnly).ToArray();
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManagedFileInaccessible, null, null, null, "Managed storage could not be enumerated."));
+                    complete = false;
+                }
+            }
+            processed++;
+            total = processed + files.Count + managedEntries.Length;
+            var knownManagedNames = files.Select(file => file.ManagedName).ToHashSet(StringComparer.Ordinal);
+
+            foreach (var file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report(new LibraryIntegrityScanProgress(processed, total, "Hashing managed files"));
+                var path = _layout.ManagedFilePath(file.ManagedName);
+                try
+                {
+                    if (Directory.Exists(path))
+                    {
+                        findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.UnsafeManagedEntry, file.Id, file.ByteSize, null, "The recorded managed path is a directory instead of a regular file."));
+                    }
+                    else if (!File.Exists(path))
+                    {
+                        findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManagedFileMissing, file.Id, file.ByteSize, null, "The recorded managed file is missing."));
+                    }
+                    else
+                    {
+                        var info = new FileInfo(path);
+                        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+                        {
+                            findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.UnsafeManagedEntry, file.Id, file.ByteSize, null, "The recorded managed path is a symbolic link or reparse point."));
+                        }
+                        else
+                        {
+                            var actualSize = info.Length;
+                            if (actualSize != file.ByteSize)
+                            {
+                                findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManagedFileSizeMismatch, file.Id, file.ByteSize, actualSize, "The managed file size differs from its database record."));
+                            }
+                            var actualHash = await Hashing.Sha256Async(path, cancellationToken).ConfigureAwait(false);
+                            if (!string.Equals(actualHash, file.ContentHash, StringComparison.Ordinal))
+                            {
+                                findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManagedFileHashMismatch, file.Id, file.ByteSize, actualSize, "The managed file content hash differs from its database record."));
+                            }
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManagedFileInaccessible, file.Id, file.ByteSize, null, "The recorded managed file could not be read safely."));
+                }
+                processed++;
+            }
+
+            foreach (var path in managedEntries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report(new LibraryIntegrityScanProgress(processed, total, "Checking for orphan files"));
+                var name = Path.GetFileName(path);
+                if (databaseRecordsAvailable && !knownManagedNames.Contains(name))
+                {
+                    try
+                    {
+                        var attributes = File.GetAttributes(path);
+                        if ((attributes & FileAttributes.ReparsePoint) != 0 || Directory.Exists(path))
+                        {
+                            findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.UnsafeManagedEntry, null, null, null, "Managed storage contains an unrecorded directory or redirected entry."));
+                        }
+                        else
+                        {
+                            findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.OrphanManagedFile, null, null, new FileInfo(path).Length, "Managed storage contains a regular file with no database record."));
+                        }
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                    {
+                        findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManagedFileInaccessible, null, null, null, "An unrecorded managed-storage entry could not be inspected safely."));
+                    }
+                }
+                processed++;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            complete = false;
+            cancelled = true;
+        }
+
+        progress?.Report(new LibraryIntegrityScanProgress(processed, Math.Max(total, processed), cancelled ? "Scan cancelled" : "Scan finished"));
+        return new LibraryIntegrityReport(Descriptor.LibraryId, Descriptor.SchemaVersion, startedAt, DateTimeOffset.UtcNow, complete && !cancelled, cancelled, findings);
+    }
+
     public async Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

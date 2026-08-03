@@ -43,6 +43,19 @@ public enum RecycleBinItemKind
     FileLink = 2
 }
 
+public enum LibraryIntegrityIssueKind
+{
+    ManifestInvalid = 0,
+    DatabaseInvalid = 1,
+    RequiredDirectoryMissing = 2,
+    ManagedFileMissing = 3,
+    ManagedFileSizeMismatch = 4,
+    ManagedFileHashMismatch = 5,
+    UnsafeManagedEntry = 6,
+    OrphanManagedFile = 7,
+    ManagedFileInaccessible = 8
+}
+
 public sealed record LibraryManifest(
     string FormatIdentity,
     int ManifestVersion,
@@ -141,6 +154,27 @@ public sealed record RecycleBinRestorePreview(
     public int RestorableCount => Items.Count(item => item.CanRestore);
     public int BlockedCount => Items.Count - RestorableCount;
 }
+
+public sealed record LibraryIntegrityFinding(
+    LibraryIntegrityIssueKind Kind,
+    string? RecordId,
+    long? ExpectedByteSize,
+    long? ActualByteSize,
+    string Summary);
+
+public sealed record LibraryIntegrityScanProgress(
+    int ProcessedItems,
+    int TotalItems,
+    string Stage);
+
+public sealed record LibraryIntegrityReport(
+    string LibraryId,
+    int SchemaVersion,
+    DateTimeOffset StartedAt,
+    DateTimeOffset FinishedAt,
+    bool IsComplete,
+    bool WasCancelled,
+    IReadOnlyList<LibraryIntegrityFinding> Findings);
 
 public sealed record LibraryFolderContents(
     FolderRecord Folder,

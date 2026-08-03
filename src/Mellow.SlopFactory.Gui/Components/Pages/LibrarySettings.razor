@@ -1,4 +1,5 @@
 @page "/library-settings"
+@implements IDisposable
 @inject AppLibraryState LibraryState
 @inject ILibraryLocationService Locations
 
@@ -25,7 +26,7 @@
         <EditForm Model="_nameForm" OnValidSubmit="RenameAsync" class="inline-form">
             <label for="library-name">Library name</label>
             <InputText id="library-name" @bind-Value="_nameForm.Name" maxlength="255" />
-            <button type="submit">Rename library</button>
+            <button type="submit" disabled="@(_busy || _scanning)">Rename library</button>
         </EditForm>
     }
 
@@ -43,8 +44,49 @@
         <InputText id="library-location" @bind-Value="_form.Path" />
 #endif
         <p class="muted">An empty location becomes a new library. A valid existing SlopFactory library is opened. A non-empty unrelated directory is rejected. Existing data is never moved or copied.</p>
-        <button type="submit" disabled="@_busy">@(_busy ? "Switching…" : "Open this library")</button>
+        <button type="submit" disabled="@(_busy || _scanning)">@(_busy ? "Switching…" : "Open this library")</button>
     </EditForm>
+</section>
+
+<section class="panel integrity-panel">
+    <h2>Library integrity</h2>
+    <p class="muted">An explicit full scan validates the manifest and database, then reads and hashes every active and recycled managed file. It never repairs, deletes, adopts, or rewrites anything.</p>
+    <div class="actions">
+        <button disabled="@(_scanning || LibraryState.Workspace is null)" @onclick="StartIntegrityScanAsync">@(_scanning ? "Scanning…" : "Start full integrity scan")</button>
+        @if (_scanning) { <button class="secondary" @onclick="CancelIntegrityScan">Cancel scan</button> }
+    </div>
+    @if (_scanProgress is not null)
+    {
+        <div class="scan-progress" role="status" aria-live="polite">
+            <progress max="@Math.Max(_scanProgress.TotalItems, 1)" value="@_scanProgress.ProcessedItems"></progress>
+            <span>@_scanProgress.Stage · @_scanProgress.ProcessedItems of @_scanProgress.TotalItems items</span>
+        </div>
+    }
+    @if (_scanReport is not null)
+    {
+        <div class="integrity-summary">
+            <h3>@IntegrityHeading</h3>
+            <p>Started @_scanReport.StartedAt.ToLocalTime().ToString("g"); finished @_scanReport.FinishedAt.ToLocalTime().ToString("g").</p>
+            @if (_scanReport.WasCancelled) { <p class="error">This is an incomplete partial result because the scan was cancelled.</p> }
+            @if (_scanReport.Findings.Count > 0)
+            {
+                <ul class="integrity-findings">
+                    @foreach (var finding in _scanReport.Findings)
+                    {
+                        <li>
+                            <strong>@IssueName(finding.Kind)</strong>
+                            <span>@finding.Summary</span>
+                            @if (finding.RecordId is not null) { <span class="mono">Record @finding.RecordId</span> }
+                            @if (finding.ExpectedByteSize is not null || finding.ActualByteSize is not null)
+                            {
+                                <span>Expected @(finding.ExpectedByteSize?.ToString() ?? "unknown") bytes; found @(finding.ActualByteSize?.ToString() ?? "unknown") bytes.</span>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
 </section>
 
 @code {
@@ -52,7 +94,19 @@
     private LocationForm _form = new();
     private NameForm _nameForm = new();
     private bool _busy;
+    private bool _scanning;
     private string? _message;
+    private CancellationTokenSource? _scanCancellation;
+    private LibraryIntegrityScanProgress? _scanProgress;
+    private LibraryIntegrityReport? _scanReport;
+
+    private string IntegrityHeading => _scanReport switch
+    {
+        { WasCancelled: true } => $"Partial scan: {_scanReport.Findings.Count} finding(s)",
+        { IsComplete: true, Findings.Count: 0 } => "Integrity scan completed with no findings",
+        { IsComplete: true } => $"Integrity scan completed with {_scanReport.Findings.Count} finding(s)",
+        _ => $"Integrity scan incomplete with {_scanReport?.Findings.Count ?? 0} finding(s)"
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -88,6 +142,56 @@
             _message = "Library renamed.";
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private async Task StartIntegrityScanAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        _scanCancellation?.Dispose();
+        _scanCancellation = new CancellationTokenSource();
+        _scanReport = null;
+        _scanProgress = new LibraryIntegrityScanProgress(0, 1, "Starting scan");
+        _scanning = true;
+        _message = null;
+        var progress = new Progress<LibraryIntegrityScanProgress>(value =>
+        {
+            _scanProgress = value;
+            _ = InvokeAsync(StateHasChanged);
+        });
+        try
+        {
+            _scanReport = await LibraryState.Workspace.RunIntegrityScanAsync(progress, _scanCancellation.Token);
+            _message = _scanReport.WasCancelled ? "Integrity scan cancelled; partial findings are shown below." : "Integrity scan finished.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+        }
+        finally
+        {
+            _scanning = false;
+        }
+    }
+
+    private void CancelIntegrityScan() => _scanCancellation?.Cancel();
+
+    private static string IssueName(LibraryIntegrityIssueKind kind) => kind switch
+    {
+        LibraryIntegrityIssueKind.ManifestInvalid => "Manifest invalid",
+        LibraryIntegrityIssueKind.DatabaseInvalid => "Database invalid",
+        LibraryIntegrityIssueKind.RequiredDirectoryMissing => "Required directory missing",
+        LibraryIntegrityIssueKind.ManagedFileMissing => "Managed file missing",
+        LibraryIntegrityIssueKind.ManagedFileSizeMismatch => "File size mismatch",
+        LibraryIntegrityIssueKind.ManagedFileHashMismatch => "Content hash mismatch",
+        LibraryIntegrityIssueKind.UnsafeManagedEntry => "Unsafe managed entry",
+        LibraryIntegrityIssueKind.OrphanManagedFile => "Orphan managed file",
+        _ => "Managed file inaccessible"
+    };
+
+    public void Dispose()
+    {
+        _scanCancellation?.Cancel();
+        _scanCancellation?.Dispose();
     }
 
     private sealed class LocationForm { public string Path { get; set; } = string.Empty; }

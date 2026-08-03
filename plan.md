@@ -519,12 +519,9 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Corruption details include the location, failed validation stage and a sanitized diagnostic ID.
 - Corrupt-library actions are **Retry**, **Choose Another Library**, **Forget Library** and, on Windows, **Open Location**.
 - The application does not attempt automatic destructive database repair and preserves the original database and managed files unchanged.
-- A non-mutating integrity scan reports manifest, database, missing-file, orphan-file and content-hash issues.
-- Full file-existence and content-hash scanning starts only through an explicit user action.
 - A crash, unsafe volume removal or detected storage inconsistency marks a full scan as recommended and prompts the user to start or defer it rather than silently beginning an expensive scan.
-- Full scans display progress, can be cancelled and resume from a device-local checkpoint which contains no file content or user metadata.
+- Full scans can resume from a device-local checkpoint which contains no file content or user metadata.
 - Mutating library operations pause during a full scan so its findings remain coherent, while verified read-only browsing and viewing can continue.
-- Cancelling a scan retains its partial findings as incomplete and never presents them as a clean result.
 - First-release scan actions are limited to retrying validation, clearing or rebuilding derived previews, exporting the findings and opening the library location on Windows.
 - Integrity findings export as a versioned JSON report.
 - The default report contains the library ID, schema version, internal record IDs, issue categories, byte sizes, scan start and completion timestamps, and whether the scan was complete or cancelled.
@@ -1533,7 +1530,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - When connections, models, saved generation settings and generation-history records are implemented, their recycle entries and dependency-aware restore previews must extend the existing unified category, search, sort, selection, confirmation and independent batch-operation workflows.
 - Generation-tab drafts are transient working state and do not enter the recycle bin when the user confirms **Discard and Close**.
 - Device preferences, diagnostic logs, credential-index entries, queues, temporary files and regenerable preview caches are operational state rather than recyclable library records.
-- Integrity checks include recycled managed files.
 - Regenerable preview-cache entries can be removed when a file is recycled.
 - Secure-storage credentials are removed before their database records are finalized.
 - Pending deletion entries retain and display a sanitized reason for the most recent failure.
