@@ -56,7 +56,86 @@ else
                 else
                 {
                     <p class="muted">Read-only · @_textContent!.EncodingName@(_textContent.IsTruncated ? " · Showing the first 1,048,576 characters" : string.Empty)</p>
-                    <pre class="text-viewer">@_textContent.Content</pre>
+                    <div class="text-tools">
+                        @if (_file.MediaType == "text/markdown")
+                        {
+                            <div class="view-toggle" aria-label="Markdown view">
+                                <button class="@(!_showRenderedMarkdown ? string.Empty : "secondary")" aria-pressed="@(!_showRenderedMarkdown)" @onclick="ShowPlainText">Plain text</button>
+                                <button class="@(_showRenderedMarkdown ? string.Empty : "secondary")" aria-pressed="@_showRenderedMarkdown" @onclick="ShowRenderedMarkdownAsync" disabled="@_textContent.IsTruncated">Rendered Markdown</button>
+                            </div>
+                        }
+                        <EditForm Model="_textSearchForm" OnValidSubmit="SearchTextAsync" class="text-search-form">
+                            <label for="text-search">Find in file</label>
+                            <InputText id="text-search" @bind-Value="_textSearchForm.SearchText" maxlength="256" />
+                            <label class="check"><InputCheckbox @bind-Value="_textSearchForm.MatchCase" /> Match case</label>
+                            <button type="submit" disabled="@_searchingText">@(_searchingText ? "Searching…" : "Find")</button>
+                            @if (_textSearchResult is not null) { <button type="button" class="secondary" @onclick="ClearTextSearch">Clear</button> }
+                        </EditForm>
+                    </div>
+
+                    @if (_showRenderedMarkdown)
+                    {
+                        @if (_markdownError is not null)
+                        {
+                            <p class="error">@_markdownError</p>
+                        }
+                        else if (_markdownContent is null)
+                        {
+                            <p class="muted" aria-live="polite">Rendering Markdown…</p>
+                        }
+                        else
+                        {
+                            <div class="rendered-markdown">@((MarkupString)_markdownContent.Html)</div>
+                            @if (_markdownContent.ExternalLinks.Count > 0)
+                            {
+                                <section class="markdown-links" aria-labelledby="markdown-links-title">
+                                    <h3 id="markdown-links-title">External links</h3>
+                                    <p class="muted">Markdown links are inert in the rendered document. Review the destination before opening one in another application.</p>
+                                    <ul>
+                                        @foreach (var link in _markdownContent.ExternalLinks)
+                                        {
+                                            <li><span>@link.Label</span><code>@link.Destination</code><button class="ghost" @onclick="() => ReviewExternalLink(link)">Review link</button></li>
+                                        }
+                                    </ul>
+                                </section>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        <pre class="text-viewer">@_textContent.Content</pre>
+                    }
+
+                    @if (_textSearchResult is not null)
+                    {
+                        <section class="text-search-results" aria-live="polite" aria-labelledby="text-search-results-title">
+                            <h3 id="text-search-results-title">Search results</h3>
+                            @if (_textSearchResult.TotalMatches == 0)
+                            {
+                                <p>No matches found in the complete file.</p>
+                            }
+                            else
+                            {
+                                var selected = _textSearchResult.Matches[_selectedSearchIndex];
+                                <div class="selection-bar">
+                                    <span>Match @(_selectedSearchIndex + 1) of @_textSearchResult.TotalMatches@(_textSearchResult.ResultsTruncated ? " · First 200 available for navigation" : string.Empty)</span>
+                                    <div class="actions"><button class="secondary" @onclick="PreviousTextMatch">Previous</button><button class="secondary" @onclick="NextTextMatch">Next</button></div>
+                                </div>
+                                <p class="muted">Character offset @selected.CharacterOffset@(_textContent.IsTruncated && selected.CharacterOffset >= _textContent.Content.Length ? " · Beyond the displayed plain-text prefix" : string.Empty)</p>
+                                <pre class="text-search-snippet">@selected.Snippet[..selected.MatchStart]<mark>@selected.Snippet.Substring(selected.MatchStart, selected.MatchLength)</mark>@selected.Snippet[(selected.MatchStart + selected.MatchLength)..]</pre>
+                            }
+                        </section>
+                    }
+
+                    @if (_pendingExternalLink is not null)
+                    {
+                        <section class="panel external-link-review" role="dialog" aria-labelledby="external-link-review-title">
+                            <h3 id="external-link-review-title">Open external link?</h3>
+                            <p>Another application will receive this destination:</p>
+                            <code>@_pendingExternalLink.Destination</code>
+                            <div class="actions"><button @onclick="OpenReviewedExternalLinkAsync">Open externally</button><button class="secondary" @onclick="CancelExternalLink">Cancel</button></div>
+                        </section>
+                    }
                     @if (!_showTextEditor)
                     {
                         <button @onclick="BeginTextEdit" disabled="@_textContent.IsTruncated">Edit as Copy</button>
@@ -211,6 +290,14 @@ else
     private IReadOnlyList<FolderRecord> _availableFolders = [];
     private TextFileContent? _textContent;
     private string? _textError;
+    private RenderedMarkdownContent? _markdownContent;
+    private string? _markdownError;
+    private bool _showRenderedMarkdown;
+    private TextSearchResult? _textSearchResult;
+    private int _selectedSearchIndex;
+    private bool _searchingText;
+    private TextSearchForm _textSearchForm = new();
+    private MarkdownExternalLink? _pendingExternalLink;
     private string? _imageDataUri;
     private string? _imageError;
     private int _imageZoom = 100;
@@ -256,6 +343,11 @@ else
             }
             _textContent = null;
             _textError = null;
+            _markdownContent = null;
+            _markdownError = null;
+            _showRenderedMarkdown = false;
+            ClearTextSearch();
+            _pendingExternalLink = null;
             if (IsTextMediaType(_file.MediaType))
             {
                 try { _textContent = await LibraryState.Workspace.ReadTextFileAsync(Id); }
@@ -397,6 +489,73 @@ else
         _textCopyForm = new();
     }
 
+    private void ShowPlainText()
+    {
+        _showRenderedMarkdown = false;
+        _pendingExternalLink = null;
+    }
+
+    private async Task ShowRenderedMarkdownAsync()
+    {
+        if (LibraryState.Workspace is null || _textContent?.IsTruncated != false) return;
+        _showRenderedMarkdown = true;
+        _pendingExternalLink = null;
+        if (_markdownContent is not null || _markdownError is not null) return;
+        try { _markdownContent = await LibraryState.Workspace.RenderMarkdownFileAsync(Id); }
+        catch (SlopFactoryException exception)
+        {
+            _markdownError = exception.Message;
+            _showRenderedMarkdown = false;
+            _message = $"{exception.Message} Plain text is shown instead.";
+        }
+    }
+
+    private async Task SearchTextAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        _searchingText = true;
+        try
+        {
+            _textSearchResult = await LibraryState.Workspace.SearchTextFileAsync(Id, _textSearchForm.SearchText, _textSearchForm.MatchCase);
+            _selectedSearchIndex = 0;
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+        finally { _searchingText = false; }
+    }
+
+    private void ClearTextSearch()
+    {
+        _textSearchResult = null;
+        _selectedSearchIndex = 0;
+    }
+
+    private void PreviousTextMatch()
+    {
+        if (_textSearchResult?.Matches.Count > 0) _selectedSearchIndex = (_selectedSearchIndex + _textSearchResult.Matches.Count - 1) % _textSearchResult.Matches.Count;
+    }
+
+    private void NextTextMatch()
+    {
+        if (_textSearchResult?.Matches.Count > 0) _selectedSearchIndex = (_selectedSearchIndex + 1) % _textSearchResult.Matches.Count;
+    }
+
+    private void ReviewExternalLink(MarkdownExternalLink link) => _pendingExternalLink = link;
+    private void CancelExternalLink() => _pendingExternalLink = null;
+
+    private async Task OpenReviewedExternalLinkAsync()
+    {
+        if (_pendingExternalLink is null) return;
+        try
+        {
+            await Browser.Default.OpenAsync(new Uri(_pendingExternalLink.Destination), BrowserLaunchMode.SystemPreferred);
+            _pendingExternalLink = null;
+        }
+        catch (Exception exception) when (exception is UriFormatException or InvalidOperationException or NotSupportedException or ArgumentException)
+        {
+            _message = $"The external destination could not be opened: {exception.Message}";
+        }
+    }
+
     private async Task SaveTextCopyAsync()
     {
         if (LibraryState.Workspace is null) return;
@@ -446,5 +605,11 @@ else
         public TextCopyFormat Format { get; set; }
         public bool CopyUserMetadata { get; set; }
         public bool IncludeSensitiveMetadata { get; set; }
+    }
+
+    private sealed class TextSearchForm
+    {
+        public string SearchText { get; set; } = string.Empty;
+        public bool MatchCase { get; set; }
     }
 }

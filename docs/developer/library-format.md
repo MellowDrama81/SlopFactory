@@ -68,6 +68,14 @@ The bytes are written under `.staging`, hashed, and moved to a new opaque manage
 
 Metadata mutations and the owning file's `modified_at` update share one SQLite transaction. They do not rewrite `imported_at`, `source_last_modified`, or managed content.
 
+## Text search and Markdown rendering
+
+`SearchTextFileAsync` streams strict UTF-8 through bounded character buffers and scans the complete active managed file without building a content index or loading the file into memory. Searches are single-line, limited to 256 Unicode scalars, optionally case-sensitive, and count all overlapping occurrences. Only a caller-bounded set of snippets is retained; the default UI retains 200 while continuing to count later matches. Buffer overlap preserves matches crossing read boundaries and provides bounded surrounding context.
+
+`RenderMarkdownFileAsync` is limited to complete Markdown inputs of at most 262,144 characters. `SafeMarkdownRenderer` recognizes a deliberately bounded set of block and inline constructs and emits only a fixed HTML element vocabulary. Every source text and destination is HTML-encoded. Raw HTML is rendered as text, image syntax produces an inert textual reference, and links render without `href` attributes. Allowed HTTP, HTTPS, and mail destinations are returned separately for the GUI's explicit review and operating-system handoff.
+
+The Blazor WebView document also applies a restrictive content-security policy which blocks frames, objects, non-application scripts, form submission, and automatic remote resources. A rendering rejection leaves the verified plain-text viewer available.
+
 ## Recycle semantics implemented so far
 
 File and folder recycling is a logical state change. Folder recycling uses recursive SQLite CTEs so the subtree changes in one transaction. Link state is recalculated atomically: an endpoint-owned link is active only when both endpoints are active and returns automatically when both endpoints are restored. Explicit link recycling is tracked separately so endpoint restoration cannot undo the user's deletion; those links support restore and permanent deletion from the recycle bin.

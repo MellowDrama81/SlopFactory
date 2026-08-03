@@ -527,6 +527,62 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task TextSearchScansBeyondDisplayedPrefixAndBoundsReturnedMatches()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("large.txt");
+        var content = new string('a', 32_766) + "NEEDLE" + new string('b', 1_020_000) + "needle";
+        await File.WriteAllTextAsync(source, content, new UTF8Encoding(false));
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+
+        var insensitive = await workspace.SearchTextFileAsync(file.Id, "needle", matchCase: false, maximumResults: 1);
+        var sensitive = await workspace.SearchTextFileAsync(file.Id, "needle", matchCase: true);
+
+        Assert.Equal(2, insensitive.TotalMatches);
+        Assert.Single(insensitive.Matches);
+        Assert.True(insensitive.ResultsTruncated);
+        Assert.Contains("NEEDLE", insensitive.Matches[0].Snippet, StringComparison.Ordinal);
+        Assert.Single(sensitive.Matches);
+        Assert.True(sensitive.Matches[0].CharacterOffset > 1_048_576);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.SearchTextFileAsync(file.Id, string.Empty));
+    }
+
+    [Fact]
+    public async Task MarkdownRendererEmitsOnlyEncodedStaticMarkupAndSeparatesExternalLinks()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("unsafe.md");
+        await File.WriteAllTextAsync(source, """
+            # Heading
+
+            <script>alert('raw html')</script>
+
+            ![tracker](https://example.com/tracker.png)
+            [Official site](https://example.com/path?q=1)
+            [Unsafe](javascript:alert(1))
+
+            - **Strong** item
+            - `code`
+            """);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+
+        var rendered = await workspace.RenderMarkdownFileAsync(file.Id);
+
+        Assert.Contains("<h1>Heading</h1>", rendered.Html, StringComparison.Ordinal);
+        Assert.Contains("&lt;script&gt;", rendered.Html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script", rendered.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<img", rendered.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<strong>Strong</strong>", rendered.Html, StringComparison.Ordinal);
+        var link = Assert.Single(rendered.ExternalLinks);
+        Assert.Equal("Official site", link.Label);
+        Assert.Equal("https://example.com/path?q=1", link.Destination);
+    }
+
+    [Fact]
     public async Task EditAsCopyWritesUtf8WithoutChangingOriginalAndHonorsMetadataChoices()
     {
         using var temporary = new TemporaryDirectory();

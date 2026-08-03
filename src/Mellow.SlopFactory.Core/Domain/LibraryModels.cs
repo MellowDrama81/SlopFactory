@@ -256,6 +256,27 @@ public sealed record TextFileContent(
     bool IsTruncated,
     string EncodingName);
 
+public sealed record TextSearchMatch(
+    long CharacterOffset,
+    string Snippet,
+    int MatchStart,
+    int MatchLength);
+
+public sealed record TextSearchResult(
+    long TotalMatches,
+    IReadOnlyList<TextSearchMatch> Matches)
+{
+    public bool ResultsTruncated => TotalMatches > Matches.Count;
+}
+
+public sealed record MarkdownExternalLink(
+    string Label,
+    string Destination);
+
+public sealed record RenderedMarkdownContent(
+    string Html,
+    IReadOnlyList<MarkdownExternalLink> ExternalLinks);
+
 public sealed record ImageFileContent(
     string MediaType,
     byte[] Bytes);

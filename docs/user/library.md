@@ -20,7 +20,13 @@ Open a file to view its immutable system information, including its SHA-256 cont
 
 SlopFactory retains the filename supplied at import separately from the editable display name. Renaming a file does not change that original filename, and either name can locate the file through Library search. Copies retain the imported ancestor's original filename; an edited text copy starts with its own chosen filename.
 
-Supported UTF-8 text, Markdown, JSON, XML, CSV, and common source-code files open in a read-only, wrapping text viewer. Text can be selected and copied normally. To keep the interface responsive, the viewer displays at most the first 1,048,576 characters and identifies a truncated display; the complete managed file remains unchanged.
+Supported UTF-8 text, Markdown, JSON, XML, CSV, and common source-code files open in a read-only, wrapping text viewer. Text can be selected and copied normally. To keep the interface responsive, the plain-text viewer displays at most the first 1,048,576 characters and identifies a truncated display; the complete managed file remains unchanged.
+
+**Find in file** searches the complete managed text, including content beyond that displayed prefix. Search can match case or ignore it, counts every occurrence, and makes up to the first 200 matches available with bounded context and previous/next navigation. It does not create a library-wide file-content index.
+
+Markdown files up to 262,144 characters can switch between plain text and **Rendered Markdown**. The renderer accepts common headings, paragraphs, lists, quotations, fenced code, emphasis, links, and image references, but it never passes source HTML into the WebView. Source HTML is displayed as text, image references remain inert text, and remote resources are never loaded. If bounded rendering cannot complete, SlopFactory keeps the plain-text view available.
+
+Rendered Markdown links are inert. SlopFactory lists their labels and complete destinations separately; **Review link** shows the destination again and requires confirmation before asking the operating system to open it. Unsupported or potentially executable URI schemes are never offered as external actions.
 
 For a text file that fits in the built-in editor, choose **Edit as Copy** to change its content without modifying the original. Choose the new display name and destination, and either preserve the detected source format or explicitly save plain text or Markdown. Preserved JSON and XML are validated before saving. The new managed file is UTF-8 without a byte-order mark and has origin **Edited Copy**.
 

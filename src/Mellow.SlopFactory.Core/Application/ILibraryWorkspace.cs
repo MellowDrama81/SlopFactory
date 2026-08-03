@@ -10,6 +10,8 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<FolderRecord>> GetActiveFoldersAsync(CancellationToken cancellationToken = default);
     Task<FileRecord> GetFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<TextFileContent> ReadTextFileAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<TextSearchResult> SearchTextFileAsync(string fileId, string searchText, bool matchCase = false, int maximumResults = 200, CancellationToken cancellationToken = default);
+    Task<RenderedMarkdownContent> RenderMarkdownFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<ImageFileContent> ReadImageFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<LibraryFileBrowseResult> BrowseFilesAsync(LibraryFileBrowseQuery query, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileRecord>> GetActiveFilesAsync(CancellationToken cancellationToken = default);

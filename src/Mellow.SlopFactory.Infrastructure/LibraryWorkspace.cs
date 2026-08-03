@@ -83,6 +83,91 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
     }
 
+    public async Task<TextSearchResult> SearchTextFileAsync(string fileId, string searchText, bool matchCase = false, int maximumResults = 200, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(searchText);
+        if (searchText.Length == 0) throw new LibraryValidationException("Search text is required.");
+        if (searchText.Any(character => character is '\r' or '\n' or '\0')) throw new LibraryValidationException("Text search must use a single line of text.");
+        if (searchText.EnumerateRunes().Count() > LibraryRules.MaximumTextSearchScalars) throw new LibraryValidationException($"Text search cannot exceed {LibraryRules.MaximumTextSearchScalars} Unicode characters.");
+        if (maximumResults is < 1 or > 1_000) throw new LibraryValidationException("The maximum text-search result count must be between 1 and 1,000.");
+
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be searched.");
+        if (!IsTextMediaType(file.MediaType)) throw new LibraryValidationException("This file is not a supported text format.");
+
+        const int bufferSize = 32_768;
+        const int contextLength = 60;
+        var comparison = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var matches = new List<TextSearchMatch>(Math.Min(maximumResults, 200));
+        long totalMatches = 0;
+        long totalCharacters = 0;
+        long nextCandidateOffset = 0;
+        var carry = string.Empty;
+        var path = GetManagedFilePath(file);
+
+        void ProcessCandidates(string value, long valueOffset, long exclusiveOffset)
+        {
+            var localStart = (int)Math.Max(0, nextCandidateOffset - valueOffset);
+            while (localStart <= value.Length - searchText.Length)
+            {
+                var found = value.IndexOf(searchText, localStart, comparison);
+                if (found < 0) break;
+                var absoluteOffset = valueOffset + found;
+                if (absoluteOffset >= exclusiveOffset) break;
+                totalMatches++;
+                if (matches.Count < maximumResults)
+                {
+                    var snippetStart = Math.Max(0, found - contextLength);
+                    var snippetEnd = Math.Min(value.Length, found + searchText.Length + contextLength);
+                    matches.Add(new TextSearchMatch(absoluteOffset, value[snippetStart..snippetEnd], found - snippetStart, searchText.Length));
+                }
+                localStart = found + 1;
+            }
+        }
+
+        try
+        {
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65_536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            using var reader = new StreamReader(stream, new UTF8Encoding(false, true), detectEncodingFromByteOrderMarks: true, bufferSize, leaveOpen: false);
+            var buffer = new char[bufferSize];
+            while (true)
+            {
+                var read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
+                if (read == 0) break;
+                var combined = carry + new string(buffer, 0, read);
+                var combinedOffset = totalCharacters - carry.Length;
+                totalCharacters += read;
+                var safeExclusiveOffset = Math.Max(0, totalCharacters - (searchText.Length + contextLength - 1));
+                ProcessCandidates(combined, combinedOffset, safeExclusiveOffset);
+                nextCandidateOffset = safeExclusiveOffset;
+                var carryLength = Math.Min(combined.Length, searchText.Length + (contextLength * 2));
+                carry = combined[^carryLength..];
+            }
+            ProcessCandidates(carry, totalCharacters - carry.Length, totalCharacters);
+            return new TextSearchResult(totalMatches, matches);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw new LibraryValidationException("The file contains invalid UTF-8 and cannot be searched by the built-in text viewer.");
+        }
+    }
+
+    public async Task<RenderedMarkdownContent> RenderMarkdownFileAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be rendered.");
+        if (file.MediaType != "text/markdown") throw new LibraryValidationException("Rendered view is available only for Markdown files.");
+        var text = await ReadTextFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (text.IsTruncated) throw new LibraryValidationException("This Markdown file is too large for safe rendered view. Plain-text partial view remains available.");
+        if (text.Content.Length > LibraryRules.MaximumRenderedMarkdownCharacters)
+        {
+            throw new LibraryValidationException($"Markdown longer than {LibraryRules.MaximumRenderedMarkdownCharacters:N0} characters is shown as plain text to keep rendering bounded.");
+        }
+        return SafeMarkdownRenderer.Render(text.Content);
+    }
+
     public async Task<ImageFileContent> ReadImageFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

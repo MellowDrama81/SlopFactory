@@ -15,6 +15,8 @@ public static class LibraryRules
     public const int MaximumMetadataEntriesPerFile = 1_000;
     public const int MaximumMetadataValueUtf8Bytes = 1_048_576;
     public const int MaximumEditableTextUtf8Bytes = 4_194_304;
+    public const int MaximumRenderedMarkdownCharacters = 262_144;
+    public const int MaximumTextSearchScalars = 256;
     public const int MaximumInlineImageBytes = 33_554_432;
 
     public static string NewId() => Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);

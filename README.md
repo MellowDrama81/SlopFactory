@@ -10,7 +10,7 @@ The current development build implements the local-library foundation, including
 - managed file import, hashing, duplication, rename, and move operations;
 - virtual folders and breadcrumbs, plus paged library-wide search, filters, stable sorting, and list/grid views;
 - retained original filenames and privacy-safe typed-metadata match explanations;
-- a read-only UTF-8 text viewer and non-destructive **Edit as Copy** workflow;
+- a read-only UTF-8 viewer with full-file search, sanitized rendered Markdown, confirmed external links, and a non-destructive **Edit as Copy** workflow;
 - a verified image viewer with fit, zoom, pan, viewing rotation, and sanitized SVG;
 - typed user metadata and sensitive-value concealment;
 - directed file links with recycle and restore behavior;

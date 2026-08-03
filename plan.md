@@ -873,12 +873,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## File Viewers
 
 - Every library file is treated as untrusted content.
-- The text viewer supports rendered-Markdown mode and in-file search.
-- Rendered Markdown is sanitized and cannot execute scripts or load remote images, fonts, stylesheets, frames or other resources automatically.
-- Library content cannot access application APIs through the Blazor WebView.
-- External links show their destination and require confirmation before opening in the operating-system browser.
-- Local-resource access is restricted to the specific managed file or derived preview being displayed.
-- Rendered previews use a restrictive content-security policy and fall back to plain-text viewing when safe rendering fails.
 - Animated images start paused and provide explicit play and pause controls.
 - Animated-image thumbnails and list previews are always static.
 - When the operating system requests reduced motion, animated images remain paused across navigation and viewer restoration unless the user explicitly plays the current item again.
@@ -1012,11 +1006,10 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - System instructions are excluded from ordinary search unless **Search System Instructions** is explicitly enabled for the current library session.
 - That scope is off by default, produces only **Matched system instructions** without snippets, and makes the query memory-only until the library is closed, switched, locked or unavailable or the application exits.
 - Prompt matches never display raw or improved prompt snippets in library results; ordinary records show only **Matched generation prompt**, with full prompt text available in generation details.
-- Individual-file search remains available in the read-only text viewer. Any later library-wide content index must be an explicit per-library opt-in with visible indexing status and controls, rather than an undisclosed device cache.
+- Any later library-wide content index must be an explicit per-library opt-in with visible indexing status and controls, rather than an undisclosed device cache.
 - When a generation-prompt match belongs to a currently concealed safety-marked file, the record may appear as a concealed result but the search result does not display a raw or improved prompt excerpt.
 - Such a result uses the generic explanation **Matched generation metadata** without identifying the exact field or exposing matching text.
 - Prompt and safety-category details remain available only through the file or history detail actions governed by their normal disclosure behavior.
-- Text-content search remains available within the individual read-only text viewer.
 - Results can additionally be filtered by generation model, active or recycled status, **Provider Safety Warning**, **Provider Blocked After Delivery**, and **Has Provider Safety History** as those records are implemented.
 - **Has Provider Safety History** matches any file retaining a provider classification revision, including currently cleared files, without indexing or displaying its category text in ordinary results.
 - A user-metadata filter selects a key, target type, type-appropriate operator and comparison value.
