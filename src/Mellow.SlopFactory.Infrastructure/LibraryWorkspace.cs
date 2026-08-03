@@ -185,6 +185,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         {
             throw new LibraryValidationException("The managed image bytes no longer match the library record.");
         }
+        ImageSafetyInspector.Validate(bytes, file.MediaType);
         return new ImageFileContent(file.MediaType, file.MediaType == "image/svg+xml" ? SvgSanitizer.Sanitize(bytes) : bytes);
     }
 

@@ -10,6 +10,8 @@ Results can be filtered by detected media category, origin, and an inclusive loc
 
 Opening a file and returning to the Library page restores the current folder, query, scope, filters, sort, page, and list/grid choice for the current application session. Switching libraries starts a separate default browser state.
 
+Raster images and MP4 videos acquire static thumbnails in the background. Until one is ready, or when the platform decoder cannot safely create one, the file keeps its type icon and remains usable. The preview is regenerable device data rather than part of the library.
+
 Choose **Manage** beside a file or non-permanent folder to change its display name or move it to another folder. Moving or renaming a library item does not move or rename the application-managed bytes. A folder cannot be moved into itself or below one of its descendants, and an existing active name is never silently replaced.
 
 Choose **Duplicate** beside an active file to create an independent copy in a selected library folder. The copy receives a new identity and managed file, retains the source's user metadata, and does not inherit its editable file links. Name conflicts must be resolved before the copy is created.
@@ -39,6 +41,12 @@ SVG files use the same viewing controls only after SlopFactory parses and saniti
 Supported audio files provide play, pause, seek, time, volume, mute, and playback-speed controls. MP3, WAV, and AAC/M4A are built in; FLAC and Opus playback depends on the codecs available to the Windows or Android media stack. Supported video uses MP4 with H.264 video and AAC audio and also provides full-screen controls. Embedded caption or subtitle choices appear when the platform exposes them.
 
 SlopFactory verifies the complete managed media file against its recorded size and SHA-256 hash before enabling playback. Playback then streams bounded byte ranges from managed storage through a short-lived internal address; the application never places the library path in the page. Media does not autoplay, starting one player pauses another, and leaving the file page stops playback and revokes its internal address. Viewer controls never modify managed bytes.
+
+Before a raster image reaches the browser decoder, SlopFactory validates its encoded dimensions, total pixel count, and bounded animation complexity. A file beyond those limits remains intact and active but shows **Preview Too Complex or Large** instead of being decoded.
+
+GIF animations open on a static cached frame. **Play animation** explicitly loads the animation; **Pause animation** returns to the static frame. Reopening the viewer starts paused again.
+
+**Library settings** shows current preview-cache use and its device-wide limit. The default is 1 GiB on Windows and 256 MiB on Android; it can be set from 64 MiB to 8 GiB. Least-recently-used entries are removed when needed. **Clear preview cache** removes only regenerable thumbnails and posters, never original files, records, metadata, or links.
 
 You can attach typed user metadata as text, number, Boolean, date, date-time, or JSON. Metadata keys are case-insensitively unique per file. The `slopfactory.` prefix is reserved for system data.
 

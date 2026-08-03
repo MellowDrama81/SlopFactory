@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject AppLibraryState LibraryState
 @inject NavigationManager Navigation
+@inject PreviewCacheService PreviewCache
 
 <PageTitle>Library · SlopFactory</PageTitle>
 
@@ -183,7 +184,23 @@ else
                 {
                     <article class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? "file-card" : "file-row")">
                         <button class="file-main" @onclick="() => OpenFile(item.File.Id)">
-                            <span class="file-type-icon" aria-hidden="true">@MediaIcon(item.File.MediaType)</span>
+                            @if (CanShowThumbnail(item.File))
+                            {
+                                <span class="thumbnail-frame">
+                                    @if (_thumbnails.TryGetValue(item.File.Id, out var thumbnail) && thumbnail.DataUri is not null)
+                                    {
+                                        <img src="@thumbnail.DataUri" alt="" />
+                                    }
+                                    else
+                                    {
+                                        <span class="file-type-icon" aria-hidden="true" title="@thumbnail?.Error">@MediaIcon(item.File.MediaType)</span>
+                                    }
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="file-type-icon" aria-hidden="true">@MediaIcon(item.File.MediaType)</span>
+                            }
                             <span class="file-identity"><strong>@item.File.DisplayName</strong><span>@item.File.MediaType · @FormatBytes(item.File.ByteSize)</span></span>
                         </button>
                         @if (_browser.Scope == LibraryBrowseScope.EntireLibrary)
@@ -232,6 +249,8 @@ else
     private ItemForm _itemForm = new();
     private DuplicateForm _duplicateForm = new();
     private IReadOnlyList<FolderRecord> _activeFolders = [];
+    private readonly Dictionary<string, PreviewThumbnail> _thumbnails = new(StringComparer.Ordinal);
+    private CancellationTokenSource? _thumbnailCancellation;
     private LibraryBrowserSession _browser => LibraryState.BrowserSession;
     private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null;
     private int CurrentPage => _browseResult is null ? 1 : (_browseResult.Offset / PageSize) + 1;
@@ -277,6 +296,7 @@ else
                 _browser.Offset = ((_browseResult.TotalCount - 1) / PageSize) * PageSize;
                 _browseResult = await LibraryState.Workspace.BrowseFilesAsync(query with { Offset = _browser.Offset });
             }
+            QueueThumbnails();
             _message = null;
         }
         catch (Exception exception) when (exception is SlopFactoryException or FormatException or ArgumentException)
@@ -314,6 +334,32 @@ else
     {
         _browser.Offset += PageSize;
         return LoadBrowseAsync();
+    }
+
+    private void QueueThumbnails()
+    {
+        _thumbnailCancellation?.Cancel();
+        _thumbnailCancellation?.Dispose();
+        _thumbnailCancellation = new CancellationTokenSource();
+        _thumbnails.Clear();
+        if (_browseResult is null || LibraryState.Workspace is null) return;
+        foreach (var file in _browseResult.Items.Select(item => item.File).Where(CanShowThumbnail))
+        {
+            _ = LoadThumbnailAsync(LibraryState.Workspace, file, _thumbnailCancellation.Token);
+        }
+    }
+
+    private async Task LoadThumbnailAsync(ILibraryWorkspace workspace, FileRecord file, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var thumbnail = await PreviewCache.GetThumbnailAsync(workspace, file, cancellationToken);
+            if (cancellationToken.IsCancellationRequested || LibraryState.Workspace != workspace) return;
+            _thumbnails[file.Id] = thumbnail;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
     }
 
     private static DateTimeOffset? ParseLocalDate(DateTime? value, bool inclusiveThrough)
@@ -496,7 +542,12 @@ else
 
     private void OpenFile(string id) => Navigation.NavigateTo($"/file/{id}");
     private void OnLibraryChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
-    public void Dispose() => LibraryState.Changed -= OnLibraryChanged;
+    public void Dispose()
+    {
+        LibraryState.Changed -= OnLibraryChanged;
+        _thumbnailCancellation?.Cancel();
+        _thumbnailCancellation?.Dispose();
+    }
 
     private static string MediaIcon(string mediaType) => mediaType.Split('/')[0] switch
     {
@@ -507,6 +558,9 @@ else
         _ when mediaType is "application/json" or "application/xml" => "TXT",
         _ => "FILE"
     };
+
+    private static bool CanShowThumbnail(FileRecord file) =>
+        (file.MediaType.StartsWith("image/", StringComparison.Ordinal) && file.MediaType != "image/svg+xml") || file.MediaType == "video/mp4";
 
     private static string FormatOrigin(FileOrigin origin) => origin switch
     {

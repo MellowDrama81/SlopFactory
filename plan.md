@@ -849,19 +849,8 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## Preview Cache
 
 - Thumbnails, video posters, waveform data and rendered text previews are stored in a regenerable cache separate from managed library files.
-- Preview data is stored in device-local application cache storage rather than inside the persistent library and is keyed by library ID plus content identity.
-- A device-wide configurable cache limit applies across all libraries, with initial defaults of 1 GB on Windows and 256 MB on Android.
-- Cache limits do not restrict original library content, imports, generated results or exports.
-- When the limit is exceeded, least-recently-used entries are evicted first; entries being displayed or generated are temporarily protected.
 - The application can evict additional cache entries when the operating system reports low storage without deleting any original or history record.
-- Cache entries are not library records and do not appear in folders or the recycle bin.
-- Derived data is keyed by content hash, preview type, size and renderer version.
-- Previews are generated on demand in the background, with a placeholder shown while generation is pending or has failed.
-- Preview or thumbnail failure alone does not make a library file ineligible as a generation source.
 - A file with **Preview Unavailable** remains selectable when its detected media type and every property required by the chosen model and source role can still be validated; it is blocked only when a required property such as type, dimensions, duration or decodability cannot be established.
-- Application settings provide **Clear Preview Cache**.
-- Settings show current cache use and allow the user to change the platform default limit within safe numeric bounds.
-- Clearing the cache never removes original files, metadata or generation history.
 - Cached data is regenerated automatically after intentional content replacement.
 - Preview-cache data is not included in exports.
 - Cache loss or operating-system cleanup is treated as normal and not as library corruption.
@@ -870,10 +859,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## File Viewers
 
 - Every library file is treated as untrusted content.
-- Animated images start paused and provide explicit play and pause controls.
-- Animated-image thumbnails and list previews are always static.
-- When the operating system requests reduced motion, animated images remain paused across navigation and viewer restoration unless the user explicitly plays the current item again.
-- SlopFactory never autoplays potentially flashing imported or generated content.
 - Viewer operations do not modify original file bytes.
 - **Open Externally** never exposes a writable managed library file directly.
 - On Android, the application shares the managed file through a narrowly scoped, read-only content URI grant.
@@ -990,7 +975,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Library Browsing
 
-- Images and videos display thumbnails. Other files display type-specific icons where a preview is unavailable.
 - Search also includes generation prompts after generation records are implemented.
 - System instructions are excluded from ordinary search unless **Search System Instructions** is explicitly enabled for the current library session.
 - That scope is off by default, produces only **Matched system instructions** without snippets, and makes the query memory-only until the library is closed, switched, locked or unavailable or the application exits.

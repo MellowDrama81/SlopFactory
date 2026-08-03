@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject AppLibraryState LibraryState
 @inject ILibraryLocationService Locations
+@inject PreviewCacheService PreviewCache
 
 <PageTitle>Library settings · SlopFactory</PageTitle>
 
@@ -46,6 +47,32 @@
         <p class="muted">An empty location becomes a new library. A valid existing SlopFactory library is opened. A non-empty unrelated directory is rejected. Existing data is never moved or copied.</p>
         <button type="submit" disabled="@(_busy || _scanning)">@(_busy ? "Switching…" : "Open this library")</button>
     </EditForm>
+</section>
+
+<section class="panel">
+    <h2>Preview cache</h2>
+    <p class="muted">Regenerable thumbnails are stored in device-local application cache, separately from every library. Cache limits never restrict or delete original files.</p>
+    @if (_cacheStatus is not null)
+    {
+        <p>Using <strong>@FormatBytes(_cacheStatus.UseBytes)</strong> of <strong>@FormatBytes(_cacheStatus.LimitBytes)</strong>.</p>
+    }
+    <EditForm Model="_cacheForm" OnValidSubmit="SaveCacheLimitAsync" class="inline-form">
+        <label for="cache-limit">Cache limit (MiB)</label>
+        <InputNumber id="cache-limit" @bind-Value="_cacheForm.LimitMiB" min="64" max="8192" />
+        <button type="submit">Save cache limit</button>
+    </EditForm>
+    @if (!_confirmClearCache)
+    {
+        <button class="secondary" @onclick="() => _confirmClearCache = true">Clear preview cache</button>
+    }
+    else
+    {
+        <div class="inline-form" role="group" aria-label="Confirm clearing preview cache">
+            <span>Clear all device-local previews? Original library files are unaffected.</span>
+            <button class="danger" @onclick="ClearCacheAsync">Clear previews</button>
+            <button class="secondary" @onclick="() => _confirmClearCache = false">Cancel</button>
+        </div>
+    }
 </section>
 
 <section class="panel integrity-panel">
@@ -99,6 +126,9 @@
     private CancellationTokenSource? _scanCancellation;
     private LibraryIntegrityScanProgress? _scanProgress;
     private LibraryIntegrityReport? _scanReport;
+    private PreviewCacheStatus? _cacheStatus;
+    private CacheForm _cacheForm = new();
+    private bool _confirmClearCache;
 
     private string IntegrityHeading => _scanReport switch
     {
@@ -114,6 +144,7 @@
         _availableLocations = Locations.GetAvailableLocations();
         _form.Path = LibraryState.ActivePath ?? _availableLocations.FirstOrDefault()?.Path ?? Locations.DefaultPath;
         _nameForm.Name = LibraryState.Workspace?.Descriptor.DisplayName ?? string.Empty;
+        await ReloadCacheStatusAsync();
     }
 
     private async Task SwitchAsync()
@@ -175,6 +206,35 @@
 
     private void CancelIntegrityScan() => _scanCancellation?.Cancel();
 
+    private async Task ReloadCacheStatusAsync()
+    {
+        _cacheStatus = await PreviewCache.GetStatusAsync();
+        _cacheForm.LimitMiB = Math.Max(64, _cacheStatus.LimitBytes / 1_048_576);
+    }
+
+    private async Task SaveCacheLimitAsync()
+    {
+        await PreviewCache.SetLimitAsync(_cacheForm.LimitMiB * 1_048_576);
+        await ReloadCacheStatusAsync();
+        _message = "Preview cache limit saved. Older previews were removed if needed.";
+    }
+
+    private async Task ClearCacheAsync()
+    {
+        await PreviewCache.ClearAsync();
+        _confirmClearCache = false;
+        await ReloadCacheStatusAsync();
+        _message = "Preview cache cleared. Original files were not changed.";
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1_073_741_824) return $"{bytes / 1_073_741_824d:0.##} GiB";
+        if (bytes >= 1_048_576) return $"{bytes / 1_048_576d:0.##} MiB";
+        if (bytes >= 1_024) return $"{bytes / 1_024d:0.##} KiB";
+        return $"{bytes} B";
+    }
+
     private static string IssueName(LibraryIntegrityIssueKind kind) => kind switch
     {
         LibraryIntegrityIssueKind.ManifestInvalid => "Manifest invalid",
@@ -196,4 +256,5 @@
 
     private sealed class LocationForm { public string Path { get; set; } = string.Empty; }
     private sealed class NameForm { public string Name { get; set; } = string.Empty; }
+    private sealed class CacheForm { public long LimitMiB { get; set; } }
 }

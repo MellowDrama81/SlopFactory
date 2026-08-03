@@ -2,6 +2,7 @@
 @inject AppLibraryState LibraryState
 @inject NavigationManager Navigation
 @inject ManagedMediaResourceService MediaResources
+@inject PreviewCacheService PreviewCache
 @inject IJSRuntime JavaScript
 @implements IAsyncDisposable
 
@@ -76,13 +77,24 @@ else
                 else
                 {
                     <div class="image-tools" aria-label="Image view controls">
+                        @if (_file.MediaType == "image/gif")
+                        {
+                            <button class="ghost" @onclick="ToggleAnimatedImage">@(_animatedImagePlaying ? "Pause animation" : "Play animation")</button>
+                        }
                         <button class="ghost" @onclick="FitImage">Fit</button>
                         <button class="ghost" @onclick="ActualImageSize">Actual size</button>
                         <label>Zoom <input type="range" min="25" max="400" step="25" @bind="_imageZoom" @bind:event="oninput" /> @_imageZoom%</label>
                         <button class="ghost" @onclick="RotateImage">Rotate 90°</button>
                     </div>
                     <div class="image-viewport">
-                        <img src="@_imageDataUri" alt="Preview of @_file.DisplayName" class="@(_fitImage ? "fit-image" : "actual-image")" style="transform: rotate(@(_imageRotation)deg) scale(@(_imageZoom / 100d));" />
+                        @if (_file.MediaType != "image/gif" || _animatedImagePlaying || _animatedImagePosterUri is not null)
+                        {
+                            <img src="@(_file.MediaType == "image/gif" && !_animatedImagePlaying ? _animatedImagePosterUri : _imageDataUri)" alt="Preview of @_file.DisplayName" class="@(_fitImage ? "fit-image" : "actual-image")" style="transform: rotate(@(_imageRotation)deg) scale(@(_imageZoom / 100d));" />
+                        }
+                        else
+                        {
+                            <p class="muted">Animation paused. Choose Play animation to decode it.</p>
+                        }
                     </div>
                     <p class="muted">Viewing controls do not modify the managed image.</p>
                 }
@@ -353,6 +365,8 @@ else
     private int _imageZoom = 100;
     private int _imageRotation;
     private bool _fitImage = true;
+    private string? _animatedImagePosterUri;
+    private bool _animatedImagePlaying;
     private readonly HashSet<string> _revealed = new(StringComparer.Ordinal);
     private MetadataForm _metadataForm = new();
     private LinkForm _linkForm = new();
@@ -409,12 +423,19 @@ else
             _imageZoom = 100;
             _imageRotation = 0;
             _fitImage = true;
+            _animatedImagePosterUri = null;
+            _animatedImagePlaying = false;
             if (IsImageMediaType(_file.MediaType))
             {
                 try
                 {
                     var image = await LibraryState.Workspace.ReadImageFileAsync(Id);
                     _imageDataUri = $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}";
+                    if (_file.MediaType == "image/gif")
+                    {
+                        var poster = await PreviewCache.GetImageThumbnailAsync(LibraryState.Workspace, _file);
+                        _animatedImagePosterUri = poster.DataUri;
+                    }
                 }
                 catch (SlopFactoryException exception) { _imageError = exception.Message; }
             }
@@ -655,6 +676,7 @@ else
     private void FitImage() { _fitImage = true; _imageZoom = 100; }
     private void ActualImageSize() { _fitImage = false; _imageZoom = 100; }
     private void RotateImage() => _imageRotation = (_imageRotation + 90) % 360;
+    private void ToggleAnimatedImage() => _animatedImagePlaying = !_animatedImagePlaying;
     private async Task ChangePlaybackRateAsync(ChangeEventArgs args)
     {
         if (!double.TryParse(args.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var rate)) return;

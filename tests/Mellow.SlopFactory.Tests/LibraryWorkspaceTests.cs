@@ -647,6 +647,27 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task RasterImageViewerRejectsUnsafeDeclaredDimensionsBeforeBrowserDecode()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("oversized.png");
+        var pngHeader = new byte[32];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }.CopyTo(pngHeader, 0);
+        "IHDR"u8.CopyTo(pngHeader.AsSpan(12));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(pngHeader.AsSpan(16, 4), 50_000);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(pngHeader.AsSpan(20, 4), 50_000);
+        await File.WriteAllBytesAsync(sourcePath, pngHeader);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        var exception = await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReadImageFileAsync(file.Id));
+
+        Assert.Contains("Preview Too Complex or Large", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetFileAsync(file.Id)).State);
+    }
+
+    [Fact]
     public async Task MediaPlaybackVerifiesContentAndReturnsBoundedSeekRanges()
     {
         using var temporary = new TemporaryDirectory();
