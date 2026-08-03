@@ -216,25 +216,38 @@ public sealed class LibraryWorkspaceTests
     public async Task FailedPermanentFileDeletionRemainsPendingAndCanBeRetried()
     {
         using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
         var source = temporary.Child("pending.txt");
         await File.WriteAllTextAsync(source, "pending");
         var factory = new LibraryWorkspaceFactory();
-        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
-        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
-        var managedPath = workspace.GetManagedFilePath(file);
-        await workspace.RecycleFileAsync(file.Id);
-        File.Delete(managedPath);
-        Directory.CreateDirectory(managedPath);
+        string fileId;
+        string managedPath;
+        await using (var workspace = await factory.CreateAsync(root))
+        {
+            var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+            fileId = file.Id;
+            managedPath = workspace.GetManagedFilePath(file);
+            await workspace.RecycleFileAsync(file.Id);
+            File.Delete(managedPath);
+            Directory.CreateDirectory(managedPath);
 
-        await Assert.ThrowsAsync<IOException>(() => workspace.PermanentlyDeleteFileAsync(file.Id));
+            await Assert.ThrowsAsync<IOException>(() => workspace.PermanentlyDeleteFileAsync(file.Id));
 
-        var pending = Assert.Single(await workspace.GetRecycleBinFilesAsync());
-        Assert.Equal(LibraryRecordState.PendingPermanentDeletion, pending.State);
-        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RestoreFileAsync(file.Id));
+            var pending = Assert.Single(await workspace.GetRecycleBinEntriesAsync());
+            Assert.Equal(LibraryRecordState.PendingPermanentDeletion, pending.State);
+            Assert.NotNull(pending.DeletionFailure);
+            Assert.Contains("replaced by a directory", pending.DeletionFailure.SanitizedError, StringComparison.Ordinal);
+            Assert.DoesNotContain(root, pending.DeletionFailure.SanitizedError, StringComparison.OrdinalIgnoreCase);
+            await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RestoreFileAsync(file.Id));
+        }
 
+        await using var reopened = await factory.OpenAsync(root);
+        var persisted = Assert.Single(await reopened.GetRecycleBinEntriesAsync());
+        Assert.NotNull(persisted.DeletionFailure);
+        Assert.Equal(fileId, persisted.Reference.Id);
         Directory.Delete(managedPath);
-        await workspace.PermanentlyDeleteFileAsync(file.Id);
-        Assert.Empty(await workspace.GetRecycleBinFilesAsync());
+        await reopened.PermanentlyDeleteFileAsync(fileId);
+        Assert.Empty(await reopened.GetRecycleBinEntriesAsync());
     }
 
     [Fact]
@@ -259,6 +272,9 @@ public sealed class LibraryWorkspaceTests
 
         var pending = Assert.Single(await workspace.GetRecycleBinFoldersAsync());
         Assert.Equal(LibraryRecordState.PendingPermanentDeletion, pending.State);
+        var pendingEntry = Assert.Single(await workspace.GetRecycleBinEntriesAsync());
+        Assert.NotNull(pendingEntry.DeletionFailure);
+        Assert.Contains("replaced by a directory", pendingEntry.DeletionFailure.SanitizedError, StringComparison.Ordinal);
         Assert.Empty(await workspace.GetRecycleBinFilesAsync());
         await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RestoreFolderAsync(folder.Id));
 
@@ -694,19 +710,46 @@ public sealed class LibraryWorkspaceTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "ALTER TABLE file_links DROP COLUMN explicitly_recycled; UPDATE library_info SET schema_version=1 WHERE singleton=1;";
+            command.CommandText = "ALTER TABLE file_links DROP COLUMN explicitly_recycled; DROP TABLE permanent_deletion_failures; UPDATE library_info SET schema_version=1 WHERE singleton=1;";
             await command.ExecuteNonQueryAsync();
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 2", "\"schemaVersion\": 1", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 3", "\"schemaVersion\": 1", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(2, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(3, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycledLinksAsync());
+        Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
         Assert.False(File.Exists(databasePath + ".upgrade-backup"));
-        Assert.Contains("\"schemaVersion\": 2", await File.ReadAllTextAsync(manifestPath));
+        Assert.Contains("\"schemaVersion\": 3", await File.ReadAllTextAsync(manifestPath));
+    }
+
+    [Fact]
+    public async Task OpeningVersionTwoLibraryAddsPermanentDeletionFailureStorage()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE permanent_deletion_failures; UPDATE library_info SET schema_version=2 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 3", "\"schemaVersion\": 2", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(3, upgraded.Descriptor.SchemaVersion);
+        Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
     }
 
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>

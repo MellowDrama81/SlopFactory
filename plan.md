@@ -1532,7 +1532,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Device preferences, diagnostic logs, credential-index entries, queues, temporary files and regenerable preview caches are operational state rather than recyclable library records.
 - Regenerable preview-cache entries can be removed when a file is recycled.
 - Secure-storage credentials are removed before their database records are finalized.
-- Pending deletion entries retain and display a sanitized reason for the most recent failure.
 - Failed secure-storage cleanup is retried rather than silently leaving an orphaned credential.
 - Recycled items are never permanently deleted automatically based on age.
 - Recycling a connection retains its API key so the connection can be restored.

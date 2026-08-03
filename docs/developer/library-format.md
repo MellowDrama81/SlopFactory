@@ -17,7 +17,7 @@ The manifest contains the format identity `mellow.slopfactory.library`, manifest
 
 The lock file is opened with exclusive sharing while a workspace is active. Its mere presence is not treated as an active lock, so a stale file after a crash can be reopened when no process holds it.
 
-## SQLite schema version 2
+## SQLite schema version 3
 
 The schema contains:
 
@@ -25,7 +25,8 @@ The schema contains:
 - `folders`: the virtual folder tree and recycle state;
 - `files`: display identity, managed filename, SHA-256 hash, byte size, detected type, provenance, timestamps, and recycle state;
 - `metadata_entries`: typed user metadata owned by a file;
-- `file_links`: directed, labelled file relationships, including whether recycling was an explicit user action or was inherited from an endpoint.
+- `file_links`: directed, labelled file relationships, including whether recycling was an explicit user action or was inherited from an endpoint;
+- `permanent_deletion_failures`: the most recent sanitized failure and UTC timestamp for a pending file or folder aggregate.
 
 Foreign keys are enabled for every connection. Mutating aggregate operations use transactions. Persistent timestamps are UTC round-trip strings, and IDs are opaque 128-bit values encoded as lowercase 32-character hexadecimal strings.
 
@@ -33,7 +34,7 @@ Active file and folder names are unique within their parent using normalized inv
 
 ## Schema upgrades
 
-Opening a version 1 library upgrades it to version 2 before normal access. After obtaining the exclusive lock, SlopFactory checkpoints SQLite, creates `library.sqlite3.upgrade-backup`, applies the database change in a transaction, and atomically updates the manifest. Success removes the rollback copy. Failure restores the original database and manifest and leaves the library closed. Media bytes are not copied during a schema upgrade, and libraries declaring a newer schema are rejected.
+Opening a version 1 or version 2 library upgrades it to version 3 before normal access. Version 2 introduced explicit-link recycling ownership; version 3 adds permanent-deletion failure records. After obtaining the exclusive lock, SlopFactory checkpoints SQLite, creates `library.sqlite3.upgrade-backup`, applies every required database change in one transaction, and atomically updates the manifest. Success removes the rollback copy. Failure restores the original database and manifest and leaves the library closed. Media bytes are not copied during a schema upgrade, and libraries declaring a newer schema are rejected.
 
 ## Import commit protocol
 
@@ -66,6 +67,8 @@ File and folder recycling is a logical state change. Folder recycling uses recur
 Permanent file deletion first marks the database row `PendingPermanentDeletion`, removes the validated managed path, and then removes the database aggregate. A missing managed file is already removed; a directory or reparse point substituted at that path is rejected. Failures deliberately leave the pending row for an explicit retry instead of making it restorable again.
 
 Permanent folder deletion marks the entire folder subtree and its files pending in one transaction, then removes each regular managed file. After all paths are absent, another transaction deletes descendant file aggregates before the folder tree so foreign-key ownership remains valid. A partial physical deletion is retryable: already-removed paths are skipped, remaining paths are attempted again, and the database aggregate stays pending until completion.
+
+A known file/folder deletion failure is sanitized before it is upserted into `permanent_deletion_failures`; exact filesystem paths and uncontrolled platform exception text are not retained. The recycle-bin projection joins the latest failure so its explanation and timestamp survive reopening the library. A retry replaces the row if it fails again. Successful file deletion clears its failure in the same transaction as the file row; successful folder deletion clears failures for the complete owned subtree before deleting those aggregates in the same transaction.
 
 Recycle-bin queries return only top-level folder aggregates and independently recycled files. Files owned by a recycled or pending folder subtree remain queryable for integrity and deletion work but are not presented as separate user-managed recycle entries.
 

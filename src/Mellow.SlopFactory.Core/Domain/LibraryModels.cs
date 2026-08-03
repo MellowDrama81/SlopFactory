@@ -125,7 +125,12 @@ public sealed record RecycleBinEntry(
     DateTimeOffset RecycledAt,
     int OwnedFolderCount,
     int OwnedFileCount,
-    int OwnedLinkCount);
+    int OwnedLinkCount,
+    PermanentDeletionFailure? DeletionFailure);
+
+public sealed record PermanentDeletionFailure(
+    string SanitizedError,
+    DateTimeOffset FailedAt);
 
 public sealed record RecycleBinOperationItemResult(
     RecycleBinItemReference Reference,

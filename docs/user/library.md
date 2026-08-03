@@ -43,7 +43,7 @@ Recycling a file hides it from the active library while leaving its managed byte
 
 Open **Recycle bin** to restore a file, folder, or explicitly recycled file link. Restoring a folder restores its descendant hierarchy. An individual file, complete folder subtree, or link can also be permanently deleted.
 
-Permanent deletion first changes the file or folder aggregate to **Pending Permanent Deletion**, where it cannot be restored. Managed bytes are removed before their database aggregates. If deletion is interrupted or a managed path is unsafe, the pending item remains visible with **Retry permanent deletion**; bytes already missing are treated as removed so an interrupted operation can finish safely.
+Permanent deletion first changes the file or folder aggregate to **Pending Permanent Deletion**, where it cannot be restored. Managed bytes are removed before their database aggregates. If deletion is interrupted or a managed path is unsafe, the pending item remains visible with **Retry permanent deletion**; bytes already missing are treated as removed so an interrupted operation can finish safely. The most recent sanitized failure explanation and its time remain visible after page reloads and application restarts. A later failure replaces that explanation, while successful permanent deletion removes it with the aggregate.
 
 The page can search names and original locations, filter by files, folders, or file links, and sort by deletion time, name, or entity type. Select individual entries or all currently shown entries to restore or permanently delete a group. **Empty recycle bin** processes every current entry. Selection is retained across filters until it is cleared or processed.
 

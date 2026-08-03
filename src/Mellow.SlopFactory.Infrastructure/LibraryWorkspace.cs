@@ -487,9 +487,19 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         ThrowIfDisposed();
         var file = await _database.PrepareFileDeletionAsync(fileId, cancellationToken).ConfigureAwait(false);
-        var path = _layout.ManagedFilePath(file.ManagedName);
-        DeleteManagedFile(path);
-        await _database.DeleteFileRecordAsync(fileId, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var path = _layout.ManagedFilePath(file.ManagedName);
+            DeleteManagedFile(path);
+            await _database.DeleteFileRecordAsync(fileId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            var sanitizedError = SanitizeRecycleBinError(exception);
+            await TryRecordPermanentDeletionFailureAsync(new RecycleBinItemReference(RecycleBinItemKind.File, fileId), sanitizedError).ConfigureAwait(false);
+            if (exception is Microsoft.Data.Sqlite.SqliteException) throw new LibraryValidationException(sanitizedError);
+            throw;
+        }
     }
 
     public async Task PermanentlyDeleteFolderAsync(string folderId, CancellationToken cancellationToken = default)
@@ -497,12 +507,22 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         ThrowIfDisposed();
         if (folderId == Descriptor.RootFolderId || folderId == Descriptor.GeneratedFolderId) throw new LibraryValidationException("Permanent library folders cannot be deleted.");
         var files = await _database.PrepareFolderDeletionAsync(folderId, cancellationToken).ConfigureAwait(false);
-        foreach (var file in files)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            DeleteManagedFile(_layout.ManagedFilePath(file.ManagedName));
+            foreach (var file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                DeleteManagedFile(_layout.ManagedFilePath(file.ManagedName));
+            }
+            await _database.DeleteFolderRecordAsync(folderId, cancellationToken).ConfigureAwait(false);
         }
-        await _database.DeleteFolderRecordAsync(folderId, cancellationToken).ConfigureAwait(false);
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            var sanitizedError = SanitizeRecycleBinError(exception);
+            await TryRecordPermanentDeletionFailureAsync(new RecycleBinItemReference(RecycleBinItemKind.Folder, folderId), sanitizedError).ConfigureAwait(false);
+            if (exception is Microsoft.Data.Sqlite.SqliteException) throw new LibraryValidationException(sanitizedError);
+            throw;
+        }
     }
 
     public Task<RecycleBinOperationResult> RestoreRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default)
@@ -875,6 +895,20 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         UnauthorizedAccessException => "Access was denied while processing managed content.",
         IOException when exception.Message.StartsWith("The managed file path", StringComparison.Ordinal) => exception.Message,
         IOException => "Managed content is in use or unavailable.",
-        _ => exception.Message
+        Microsoft.Data.Sqlite.SqliteException => "The library database could not finalize permanent deletion.",
+        SlopFactoryException => exception.Message,
+        _ => "Permanent deletion could not be completed."
     };
+
+    private async Task TryRecordPermanentDeletionFailureAsync(RecycleBinItemReference reference, string sanitizedError)
+    {
+        try
+        {
+            await _database.RecordPermanentDeletionFailureAsync(reference, sanitizedError, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Preserve the original deletion failure when its diagnostic record cannot be written.
+        }
+    }
 }

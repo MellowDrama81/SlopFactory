@@ -117,6 +117,10 @@ else
                     <strong>@entry.Name</strong>
                     <span>@KindName(entry.Reference.Kind) · originally in @entry.OriginalLocation</span>
                     <span>Deleted @entry.RecycledAt.ToLocalTime().ToString("g") · @EntryCascadeSummary(entry) · @StateName(entry.State)</span>
+                    @if (entry.DeletionFailure is not null)
+                    {
+                        <span class="error">Last deletion attempt failed @entry.DeletionFailure.FailedAt.ToLocalTime().ToString("g"): @entry.DeletionFailure.SanitizedError</span>
+                    }
                 </div>
                 <div class="actions">
                     @if (entry.State == LibraryRecordState.Recycled)

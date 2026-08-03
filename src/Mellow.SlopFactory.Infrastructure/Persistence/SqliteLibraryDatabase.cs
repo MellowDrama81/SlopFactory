@@ -108,6 +108,14 @@ internal sealed class SqliteLibraryDatabase
             );
             CREATE INDEX ix_file_links_source ON file_links(source_file_id, state);
             CREATE INDEX ix_file_links_target ON file_links(target_file_id, state);
+
+            CREATE TABLE permanent_deletion_failures (
+                record_kind INTEGER NOT NULL CHECK(record_kind IN (0,1)),
+                record_id TEXT NOT NULL,
+                sanitized_error TEXT NOT NULL,
+                failed_at TEXT NOT NULL,
+                PRIMARY KEY(record_kind, record_id)
+            );
             """;
         await ExecuteNonQueryAsync(connection, schema, cancellationToken, transaction).ConfigureAwait(false);
 
@@ -163,6 +171,10 @@ internal sealed class SqliteLibraryDatabase
             {
                 await ExecuteNonQueryAsync(connection, "ALTER TABLE file_links ADD COLUMN explicitly_recycled INTEGER NOT NULL DEFAULT 0;", cancellationToken, transaction).ConfigureAwait(false);
             }
+        }
+        if (fromVersion < 3)
+        {
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE permanent_deletion_failures (record_kind INTEGER NOT NULL CHECK(record_kind IN (0,1)),record_id TEXT NOT NULL,sanitized_error TEXT NOT NULL,failed_at TEXT NOT NULL,PRIMARY KEY(record_kind,record_id));", cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -341,9 +353,11 @@ internal sealed class SqliteLibraryDatabase
                         SELECT folder.id UNION ALL SELECT child.id FROM folders child JOIN descendants ON child.parent_id=descendants.id
                     ) SELECT COUNT(DISTINCT link.id) FROM file_links link
                        WHERE link.source_file_id IN (SELECT id FROM files WHERE folder_id IN (SELECT id FROM descendants))
-                          OR link.target_file_id IN (SELECT id FROM files WHERE folder_id IN (SELECT id FROM descendants)))
+                          OR link.target_file_id IN (SELECT id FROM files WHERE folder_id IN (SELECT id FROM descendants))),
+                    failure.sanitized_error,failure.failed_at
                 FROM folders folder
                 LEFT JOIN folder_paths parent_path ON parent_path.id=folder.parent_id
+                LEFT JOIN permanent_deletion_failures failure ON failure.record_kind=0 AND failure.record_id=folder.id
                 WHERE folder.state IN (1,2)
                   AND NOT EXISTS (SELECT 1 FROM folders parent WHERE parent.id=folder.parent_id AND parent.state IN (1,2));
                 """;
@@ -353,7 +367,8 @@ internal sealed class SqliteLibraryDatabase
                 results.Add(new RecycleBinEntry(
                     new RecycleBinItemReference(RecycleBinItemKind.Folder, reader.GetString(0)),
                     reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3), Parse(reader.GetString(4)),
-                    reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7)));
+                    reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7),
+                    reader.IsDBNull(8) ? null : new PermanentDeletionFailure(reader.GetString(8), Parse(reader.GetString(9)))));
             }
         }
 
@@ -367,8 +382,10 @@ internal sealed class SqliteLibraryDatabase
                     FROM folders child JOIN folder_paths ON child.parent_id=folder_paths.id
                 )
                 SELECT file.id,file.display_name,folder_paths.path,file.state,file.recycled_at,
-                    (SELECT COUNT(*) FROM file_links link WHERE link.source_file_id=file.id OR link.target_file_id=file.id)
+                    (SELECT COUNT(*) FROM file_links link WHERE link.source_file_id=file.id OR link.target_file_id=file.id),
+                    failure.sanitized_error,failure.failed_at
                 FROM files file JOIN folder_paths ON folder_paths.id=file.folder_id
+                LEFT JOIN permanent_deletion_failures failure ON failure.record_kind=1 AND failure.record_id=file.id
                 WHERE file.state IN (1,2)
                   AND NOT EXISTS (
                     WITH RECURSIVE ancestors(id,parent_id,state) AS (
@@ -383,7 +400,8 @@ internal sealed class SqliteLibraryDatabase
                 results.Add(new RecycleBinEntry(
                     new RecycleBinItemReference(RecycleBinItemKind.File, reader.GetString(0)),
                     reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3), Parse(reader.GetString(4)),
-                    0, 1, reader.GetInt32(5)));
+                    0, 1, reader.GetInt32(5),
+                    reader.IsDBNull(6) ? null : new PermanentDeletionFailure(reader.GetString(6), Parse(reader.GetString(7)))));
             }
         }
 
@@ -402,7 +420,7 @@ internal sealed class SqliteLibraryDatabase
                 results.Add(new RecycleBinEntry(
                     new RecycleBinItemReference(RecycleBinItemKind.FileLink, reader.GetString(0)),
                     reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3), Parse(reader.GetString(4)),
-                    0, 0, 1));
+                    0, 0, 1, null));
             }
         }
 
@@ -966,7 +984,22 @@ internal sealed class SqliteLibraryDatabase
     public async Task DeleteFileRecordAsync(string fileId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
-        await ExecuteNonQueryAsync(connection, "DELETE FROM files WHERE id=$id AND state=2;", cancellationToken, null, ("$id", fileId)).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM files WHERE id=$id AND state=2;", cancellationToken, transaction, ("$id", fileId)).ConfigureAwait(false);
+        if (deleted == 0) throw new LibraryValidationException("The pending file aggregate could not be found for permanent deletion.");
+        await ExecuteNonQueryAsync(connection, "DELETE FROM permanent_deletion_failures WHERE record_kind=1 AND record_id=$id;", cancellationToken, transaction, ("$id", fileId)).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RecordPermanentDeletionFailureAsync(RecycleBinItemReference reference, string sanitizedError, CancellationToken cancellationToken)
+    {
+        if (reference.Kind is not (RecycleBinItemKind.Folder or RecycleBinItemKind.File)) return;
+        var normalized = string.IsNullOrWhiteSpace(sanitizedError) ? "Permanent deletion failed." : sanitizedError.Trim();
+        if (normalized.Length > 1_024) normalized = normalized[..1_024];
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO permanent_deletion_failures(record_kind,record_id,sanitized_error,failed_at) VALUES($kind,$id,$error,$failed) ON CONFLICT(record_kind,record_id) DO UPDATE SET sanitized_error=excluded.sanitized_error,failed_at=excluded.failed_at;",
+            cancellationToken, null, ("$kind", (int)reference.Kind), ("$id", reference.Id), ("$error", normalized), ("$failed", Format(DateTimeOffset.UtcNow))).ConfigureAwait(false);
     }
 
     public async Task<FileRecord> PrepareFileDeletionAsync(string fileId, CancellationToken cancellationToken)
@@ -1016,6 +1049,8 @@ internal sealed class SqliteLibraryDatabase
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         const string descendants = "WITH RECURSIVE descendants(id) AS (SELECT $id UNION ALL SELECT f.id FROM folders f JOIN descendants d ON f.parent_id=d.id) ";
+        await ExecuteNonQueryAsync(connection, descendants + "DELETE FROM permanent_deletion_failures WHERE (record_kind=0 AND record_id IN (SELECT id FROM descendants)) OR (record_kind=1 AND record_id IN (SELECT file.id FROM files file WHERE file.folder_id IN (SELECT id FROM descendants)));",
+            cancellationToken, transaction, ("$id", folderId)).ConfigureAwait(false);
         await ExecuteNonQueryAsync(connection, descendants + "DELETE FROM files WHERE folder_id IN (SELECT id FROM descendants);",
             cancellationToken, transaction, ("$id", folderId)).ConfigureAwait(false);
         var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM folders WHERE id=$id AND state=2;", cancellationToken, transaction, ("$id", folderId)).ConfigureAwait(false);
