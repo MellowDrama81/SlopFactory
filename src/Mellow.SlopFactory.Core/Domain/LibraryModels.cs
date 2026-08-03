@@ -36,6 +36,13 @@ public enum TextCopyFormat
     Markdown = 2
 }
 
+public enum RecycleBinItemKind
+{
+    Folder = 0,
+    File = 1,
+    FileLink = 2
+}
+
 public sealed record LibraryManifest(
     string FormatIdentity,
     int ManifestVersion,
@@ -92,6 +99,33 @@ public sealed record FileLink(
     DateTimeOffset CreatedAt,
     DateTimeOffset? RecycledAt,
     bool ExplicitlyRecycled);
+
+public sealed record RecycleBinItemReference(
+    RecycleBinItemKind Kind,
+    string Id);
+
+public sealed record RecycleBinEntry(
+    RecycleBinItemReference Reference,
+    string Name,
+    string OriginalLocation,
+    LibraryRecordState State,
+    DateTimeOffset RecycledAt,
+    int OwnedFolderCount,
+    int OwnedFileCount,
+    int OwnedLinkCount);
+
+public sealed record RecycleBinOperationItemResult(
+    RecycleBinItemReference Reference,
+    string Name,
+    bool Succeeded,
+    string? Error);
+
+public sealed record RecycleBinOperationResult(
+    IReadOnlyList<RecycleBinOperationItemResult> Items)
+{
+    public int SucceededCount => Items.Count(item => item.Succeeded);
+    public int FailedCount => Items.Count - SucceededCount;
+}
 
 public sealed record LibraryFolderContents(
     FolderRecord Folder,

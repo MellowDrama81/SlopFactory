@@ -139,6 +139,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetTopLevelDeletedFoldersAsync(cancellationToken);
     }
 
+    public Task<IReadOnlyList<RecycleBinEntry>> GetRecycleBinEntriesAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetRecycleBinEntriesAsync(cancellationToken);
+    }
+
     public Task<FolderRecord> CreateFolderAsync(string parentFolderId, string name, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -495,6 +501,25 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         await _database.DeleteFolderRecordAsync(folderId, cancellationToken).ConfigureAwait(false);
     }
 
+    public Task<RecycleBinOperationResult> RestoreRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return ProcessRecycleBinItemsAsync(items, restore: true, cancellationToken);
+    }
+
+    public Task<RecycleBinOperationResult> PermanentlyDeleteRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return ProcessRecycleBinItemsAsync(items, restore: false, cancellationToken);
+    }
+
+    public async Task<RecycleBinOperationResult> EmptyRecycleBinAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var entries = await GetRecycleBinEntriesAsync(cancellationToken).ConfigureAwait(false);
+        return await ProcessRecycleBinItemsAsync(entries.Select(entry => entry.Reference).ToArray(), restore: false, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -547,4 +572,63 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("The managed file path is a symbolic link or reparse point; deletion is paused for review.");
         File.Delete(path);
     }
+
+    private async Task<RecycleBinOperationResult> ProcessRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, bool restore, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var entries = await GetRecycleBinEntriesAsync(cancellationToken).ConfigureAwait(false);
+        var names = entries.ToDictionary(entry => entry.Reference, entry => entry.Name);
+        var references = items.Distinct().OrderBy(reference => OperationOrder(reference.Kind, restore)).ThenBy(reference => reference.Id, StringComparer.Ordinal).ToArray();
+        var results = new List<RecycleBinOperationItemResult>(references.Length);
+        foreach (var reference in references)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var name = names.GetValueOrDefault(reference, reference.Id);
+            try
+            {
+                if (restore)
+                {
+                    switch (reference.Kind)
+                    {
+                        case RecycleBinItemKind.Folder: await RestoreFolderAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.File: await RestoreFileAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.FileLink: await RestoreLinkAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        default: throw new LibraryValidationException("The recycle-bin item type is not supported.");
+                    }
+                }
+                else
+                {
+                    switch (reference.Kind)
+                    {
+                        case RecycleBinItemKind.Folder: await PermanentlyDeleteFolderAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.File: await PermanentlyDeleteFileAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.FileLink: await PermanentlyDeleteLinkAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        default: throw new LibraryValidationException("The recycle-bin item type is not supported.");
+                    }
+                }
+                results.Add(new RecycleBinOperationItemResult(reference, name, true, null));
+            }
+            catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException)
+            {
+                results.Add(new RecycleBinOperationItemResult(reference, name, false, SanitizeRecycleBinError(exception)));
+            }
+        }
+        return new RecycleBinOperationResult(results);
+    }
+
+    private static int OperationOrder(RecycleBinItemKind kind, bool restore) => (restore, kind) switch
+    {
+        (true, RecycleBinItemKind.FileLink) => 1,
+        (false, RecycleBinItemKind.FileLink) => 0,
+        (false, _) => 1,
+        _ => 0
+    };
+
+    private static string SanitizeRecycleBinError(Exception exception) => exception switch
+    {
+        UnauthorizedAccessException => "Access was denied while processing managed content.",
+        IOException when exception.Message.StartsWith("The managed file path", StringComparison.Ordinal) => exception.Message,
+        IOException => "Managed content is in use or unavailable.",
+        _ => exception.Message
+    };
 }

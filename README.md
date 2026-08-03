@@ -13,7 +13,7 @@ The current development build implements the local-library foundation, including
 - a verified image viewer with fit, zoom, pan, viewing rotation, and sanitized SVG;
 - typed user metadata and sensitive-value concealment;
 - directed file links with recycle and restore behavior;
-- aggregate file and folder recycling, recovery, and retryable permanent deletion;
+- searchable aggregate recycling with bulk recovery, retryable permanent deletion, and empty-bin processing;
 - transactional SQLite schema upgrades; and
 - shared .NET MAUI application projects for Windows and Android.
 

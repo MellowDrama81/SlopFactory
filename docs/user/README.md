@@ -9,4 +9,4 @@ SlopFactory is a local-first media library being built for Windows and Android. 
 
 ## Current development status
 
-The current build can create its default local library, import, duplicate, and edit supported text files as independent managed copies, organize files in folders, view supported UTF-8 text, raster images, and sanitized SVG, attach typed user metadata, create and display directed file links, and recover or permanently delete file and folder aggregates from the recycle bin. Windows and Android projects both compile from the same source and use the same library format.
+The current build can create its default local library, import, duplicate, and edit supported text files as independent managed copies, organize files in folders, view supported UTF-8 text, raster images, and sanitized SVG, attach typed user metadata, create and display directed file links, and search, bulk-restore, or permanently delete recycle-bin aggregates. Windows and Android projects both compile from the same source and use the same library format.

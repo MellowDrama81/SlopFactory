@@ -45,4 +45,6 @@ Open **Recycle bin** to restore a file, folder, or explicitly recycled file link
 
 Permanent deletion first changes the file or folder aggregate to **Pending Permanent Deletion**, where it cannot be restored. Managed bytes are removed before their database aggregates. If deletion is interrupted or a managed path is unsafe, the pending item remains visible with **Retry permanent deletion**; bytes already missing are treated as removed so an interrupted operation can finish safely.
 
-Permanent deletion cannot be undone. The broader bulk-selection, empty-bin, and conflict-review workflows are still under development.
+The page can search names and original locations, filter by files, folders, or file links, and sort by deletion time, name, or entity type. Select individual entries or all currently shown entries to restore or permanently delete a group. **Empty recycle bin** processes every current entry. Selection is retained across filters until it is cleared or processed.
+
+Every permanent-deletion action first shows the selected top-level aggregates and totals for affected folders, files, and links. Permanent deletion cannot be undone. Batch items are processed independently: if one fails, unrelated items continue, and the page lists each failed item while leaving it available for retry. More detailed name-conflict and dependency review before restoration is still under development.

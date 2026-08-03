@@ -290,6 +290,99 @@ internal sealed class SqliteLibraryDatabase
         return results;
     }
 
+    public async Task<IReadOnlyList<RecycleBinEntry>> GetRecycleBinEntriesAsync(CancellationToken cancellationToken)
+    {
+        var results = new List<RecycleBinEntry>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                WITH RECURSIVE folder_paths(id,path) AS (
+                    SELECT id,name FROM folders WHERE parent_id IS NULL
+                    UNION ALL
+                    SELECT child.id,folder_paths.path || ' / ' || child.name
+                    FROM folders child JOIN folder_paths ON child.parent_id=folder_paths.id
+                )
+                SELECT folder.id,folder.name,COALESCE(parent_path.path,'Library'),folder.state,folder.recycled_at,
+                    (WITH RECURSIVE descendants(id) AS (
+                        SELECT folder.id UNION ALL SELECT child.id FROM folders child JOIN descendants ON child.parent_id=descendants.id
+                    ) SELECT COUNT(*) FROM descendants),
+                    (WITH RECURSIVE descendants(id) AS (
+                        SELECT folder.id UNION ALL SELECT child.id FROM folders child JOIN descendants ON child.parent_id=descendants.id
+                    ) SELECT COUNT(*) FROM files WHERE folder_id IN (SELECT id FROM descendants)),
+                    (WITH RECURSIVE descendants(id) AS (
+                        SELECT folder.id UNION ALL SELECT child.id FROM folders child JOIN descendants ON child.parent_id=descendants.id
+                    ) SELECT COUNT(DISTINCT link.id) FROM file_links link
+                       WHERE link.source_file_id IN (SELECT id FROM files WHERE folder_id IN (SELECT id FROM descendants))
+                          OR link.target_file_id IN (SELECT id FROM files WHERE folder_id IN (SELECT id FROM descendants)))
+                FROM folders folder
+                LEFT JOIN folder_paths parent_path ON parent_path.id=folder.parent_id
+                WHERE folder.state IN (1,2)
+                  AND NOT EXISTS (SELECT 1 FROM folders parent WHERE parent.id=folder.parent_id AND parent.state IN (1,2));
+                """;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                results.Add(new RecycleBinEntry(
+                    new RecycleBinItemReference(RecycleBinItemKind.Folder, reader.GetString(0)),
+                    reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3), Parse(reader.GetString(4)),
+                    reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7)));
+            }
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                WITH RECURSIVE folder_paths(id,path) AS (
+                    SELECT id,name FROM folders WHERE parent_id IS NULL
+                    UNION ALL
+                    SELECT child.id,folder_paths.path || ' / ' || child.name
+                    FROM folders child JOIN folder_paths ON child.parent_id=folder_paths.id
+                )
+                SELECT file.id,file.display_name,folder_paths.path,file.state,file.recycled_at,
+                    (SELECT COUNT(*) FROM file_links link WHERE link.source_file_id=file.id OR link.target_file_id=file.id)
+                FROM files file JOIN folder_paths ON folder_paths.id=file.folder_id
+                WHERE file.state IN (1,2)
+                  AND NOT EXISTS (
+                    WITH RECURSIVE ancestors(id,parent_id,state) AS (
+                        SELECT id,parent_id,state FROM folders WHERE id=file.folder_id
+                        UNION ALL
+                        SELECT parent.id,parent.parent_id,parent.state FROM folders parent JOIN ancestors ON ancestors.parent_id=parent.id
+                    ) SELECT 1 FROM ancestors WHERE state IN (1,2));
+                """;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                results.Add(new RecycleBinEntry(
+                    new RecycleBinItemReference(RecycleBinItemKind.File, reader.GetString(0)),
+                    reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3), Parse(reader.GetString(4)),
+                    0, 1, reader.GetInt32(5)));
+            }
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT link.id,link.label,source.display_name || ' -> ' || target.display_name,link.state,link.recycled_at
+                FROM file_links link
+                JOIN files source ON source.id=link.source_file_id
+                JOIN files target ON target.id=link.target_file_id
+                WHERE link.explicitly_recycled=1;
+                """;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                results.Add(new RecycleBinEntry(
+                    new RecycleBinItemReference(RecycleBinItemKind.FileLink, reader.GetString(0)),
+                    reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3), Parse(reader.GetString(4)),
+                    0, 0, 1));
+            }
+        }
+
+        return results.OrderByDescending(item => item.RecycledAt).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     public async Task<FolderRecord> CreateFolderAsync(string parentId, string name, CancellationToken cancellationToken)
     {
         var normalized = LibraryRules.NormalizeDisplayName(name, "Folder name");

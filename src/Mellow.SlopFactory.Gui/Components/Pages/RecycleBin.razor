@@ -3,72 +3,162 @@
 
 <PageTitle>Recycle bin · SlopFactory</PageTitle>
 
-<header class="page-header"><div><p class="eyebrow">Recovery</p><h1>Recycle bin</h1><p class="muted">Restore top-level aggregates or permanently delete files, folder subtrees, and links.</p></div></header>
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Recovery</p>
+        <h1>Recycle bin</h1>
+        <p class="muted">Search, restore, or permanently delete top-level library aggregates.</p>
+    </div>
+    <button class="danger" disabled="@(_entries.Count == 0 || _isBusy)" @onclick="BeginEmpty">Empty recycle bin</button>
+</header>
 
 @if (!string.IsNullOrWhiteSpace(_message)) { <div class="notice" role="status">@_message</div> }
+@if (_failures.Count > 0)
+{
+    <div class="notice error" role="alert">
+        <strong>@_failures.Count item(s) could not be processed.</strong>
+        <ul>
+            @foreach (var failure in _failures) { <li><strong>@failure.Name:</strong> @failure.Error</li> }
+        </ul>
+    </div>
+}
 
-<section>
-    <h2>Folders</h2>
-    @if (_folders.Count == 0) { <p class="empty">No recycled folders.</p> }
-    else
-    {
-        <div class="file-list">
-            @foreach (var folder in _folders)
+@if (_pendingAction is not null)
+{
+    <section class="panel confirmation-panel" aria-labelledby="confirmation-title">
+        <h2 id="confirmation-title">@ConfirmationTitle</h2>
+        <p>@ConfirmationMessage</p>
+        <p><strong>Affected content:</strong> @CascadeSummary(_pendingEntries)</p>
+        <ul>
+            @foreach (var entry in _pendingEntries.Take(6))
             {
-                <article class="file-row">
-                    <div class="file-main"><strong>@folder.Name</strong><span>Folder and its owned contents · @folder.State</span></div>
-                    <div class="actions">
-                        @if (folder.State == LibraryRecordState.Recycled) { <button @onclick="() => RestoreFolderAsync(folder.Id)">Restore</button> }
-                        <button class="danger" @onclick="() => DeleteFolderAsync(folder.Id)">@(folder.State == LibraryRecordState.PendingPermanentDeletion ? "Retry permanent deletion" : "Delete permanently")</button>
-                    </div>
-                </article>
+                <li>@KindName(entry.Reference.Kind): <strong>@entry.Name</strong> — @EntryCascadeSummary(entry)</li>
             }
+            @if (_pendingEntries.Count > 6) { <li>And @(_pendingEntries.Count - 6) more item(s).</li> }
+        </ul>
+        <div class="actions">
+            <button class="@(_pendingAction == RecycleBinAction.Restore ? string.Empty : "danger")" disabled="@_isBusy" @onclick="ConfirmPendingActionAsync">@ConfirmationButtonLabel</button>
+            <button class="secondary" disabled="@_isBusy" @onclick="CancelPendingAction">Cancel</button>
         </div>
-    }
+    </section>
+}
+
+<section class="panel recycle-controls" aria-label="Recycle bin controls">
+    <label>Search
+        <input type="search" placeholder="Name or original location" @bind="_search" @bind:event="oninput" />
+    </label>
+    <label>Category
+        <select @bind="_category">
+            <option value="all">All</option>
+            <option value="folder">Folders</option>
+            <option value="file">Files</option>
+            <option value="link">File links</option>
+        </select>
+    </label>
+    <label>Sort
+        <select @bind="_sort">
+            <option value="deleted-desc">Recently deleted</option>
+            <option value="deleted-asc">Oldest deleted</option>
+            <option value="name-asc">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+            <option value="type">Entity type</option>
+        </select>
+    </label>
 </section>
 
-<section>
-    <h2>Files</h2>
-    @if (_files.Count == 0) { <p class="empty">No recycled files.</p> }
-    else
-    {
-        <div class="file-list">
-            @foreach (var file in _files)
-            {
-                <article class="file-row">
-                    <div class="file-main"><strong>@file.DisplayName</strong><span>@file.MediaType · @file.ByteSize bytes · @file.State</span></div>
-                    <div class="actions">
-                        @if (file.State == LibraryRecordState.Recycled) { <button @onclick="() => RestoreFileAsync(file.Id)">Restore</button> }
-                        <button class="danger" @onclick="() => DeleteFileAsync(file.Id)">@(file.State == LibraryRecordState.PendingPermanentDeletion ? "Retry permanent deletion" : "Delete permanently")</button>
-                    </div>
-                </article>
-            }
-        </div>
-    }
-</section>
+<div class="selection-bar">
+    <span>@VisibleEntries.Count item(s) shown · @_selected.Count selected</span>
+    <div class="actions">
+        <button class="secondary" disabled="@(VisibleEntries.Count == 0 || _isBusy)" @onclick="SelectVisible">Select all shown</button>
+        <button class="secondary" disabled="@(_selected.Count == 0 || _isBusy)" @onclick="ClearSelection">Clear selection</button>
+        <button disabled="@(SelectedRestorableCount == 0 || _isBusy)" @onclick="BeginRestoreSelected">Restore selected (@SelectedRestorableCount)</button>
+        <button class="danger" disabled="@(_selected.Count == 0 || _isBusy)" @onclick="BeginDeleteSelected">Delete selected permanently (@_selected.Count)</button>
+    </div>
+</div>
 
-<section>
-    <h2>File links</h2>
-    @if (_links.Count == 0) { <p class="empty">No explicitly recycled links.</p> }
-    else
-    {
-        <div class="file-list">
-            @foreach (var link in _links)
-            {
-                <article class="file-row">
-                    <div class="file-main"><strong>@link.Label</strong><span>Directed file link</span></div>
-                    <div class="actions"><button @onclick="() => RestoreLinkAsync(link.Id)">Restore</button><button class="danger" @onclick="() => DeleteLinkAsync(link.Id)">Delete permanently</button></div>
-                </article>
-            }
-        </div>
-    }
-</section>
+@if (_entries.Count == 0)
+{
+    <div class="empty-panel"><p>The recycle bin is empty.</p></div>
+}
+else if (VisibleEntries.Count == 0)
+{
+    <div class="empty-panel"><p>No recycled items match the current search and category.</p></div>
+}
+else
+{
+    <div class="file-list">
+        @foreach (var entry in VisibleEntries)
+        {
+            <article class="file-row recycle-entry">
+                <label class="recycle-check">
+                    <input type="checkbox" checked="@_selected.Contains(entry.Reference)" @onchange="eventArgs => ToggleSelection(entry.Reference, eventArgs)" />
+                    <span class="visually-hidden">Select @KindName(entry.Reference.Kind) @entry.Name</span>
+                </label>
+                <div class="file-main">
+                    <strong>@entry.Name</strong>
+                    <span>@KindName(entry.Reference.Kind) · originally in @entry.OriginalLocation</span>
+                    <span>Deleted @entry.RecycledAt.ToLocalTime().ToString("g") · @EntryCascadeSummary(entry) · @StateName(entry.State)</span>
+                </div>
+                <div class="actions">
+                    @if (entry.State == LibraryRecordState.Recycled)
+                    {
+                        <button disabled="@_isBusy" @onclick="() => BeginRestore([entry.Reference])">Restore</button>
+                    }
+                    <button class="danger" disabled="@_isBusy" @onclick="() => BeginDelete([entry.Reference])">@(entry.State == LibraryRecordState.PendingPermanentDeletion ? "Retry permanent deletion" : "Delete permanently")</button>
+                </div>
+            </article>
+        }
+    </div>
+}
 
 @code {
-    private IReadOnlyList<FileRecord> _files = [];
-    private IReadOnlyList<FolderRecord> _folders = [];
-    private IReadOnlyList<FileLink> _links = [];
+    private IReadOnlyList<RecycleBinEntry> _entries = [];
+    private readonly HashSet<RecycleBinItemReference> _selected = [];
+    private IReadOnlyList<RecycleBinEntry> _pendingEntries = [];
+    private IReadOnlyList<RecycleBinOperationItemResult> _failures = [];
+    private RecycleBinAction? _pendingAction;
+    private string _search = string.Empty;
+    private string _category = "all";
+    private string _sort = "deleted-desc";
     private string? _message;
+    private bool _isBusy;
+
+    private enum RecycleBinAction { Restore, Delete, Empty }
+
+    private IReadOnlyList<RecycleBinEntry> VisibleEntries
+    {
+        get
+        {
+            IEnumerable<RecycleBinEntry> query = _entries;
+            query = _category switch
+            {
+                "folder" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.Folder),
+                "file" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.File),
+                "link" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.FileLink),
+                _ => query
+            };
+            if (!string.IsNullOrWhiteSpace(_search))
+            {
+                query = query.Where(entry => entry.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) || entry.OriginalLocation.Contains(_search, StringComparison.OrdinalIgnoreCase));
+            }
+            query = _sort switch
+            {
+                "deleted-asc" => query.OrderBy(entry => entry.RecycledAt),
+                "name-asc" => query.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase),
+                "name-desc" => query.OrderByDescending(entry => entry.Name, StringComparer.OrdinalIgnoreCase),
+                "type" => query.OrderBy(entry => entry.Reference.Kind).ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase),
+                _ => query.OrderByDescending(entry => entry.RecycledAt)
+            };
+            return query.ToArray();
+        }
+    }
+
+    private int SelectedRestorableCount => _entries.Count(entry => _selected.Contains(entry.Reference) && entry.State == LibraryRecordState.Recycled);
+    private string ConfirmationTitle => _pendingAction switch { RecycleBinAction.Restore => "Restore selected items?", RecycleBinAction.Empty => "Empty the recycle bin?", _ => "Permanently delete selected items?" };
+    private string ConfirmationMessage => _pendingAction == RecycleBinAction.Restore
+        ? "Folders restore their complete descendant hierarchy. File links are restored only after their endpoint files are available."
+        : "Permanent deletion cannot be undone. Managed files, metadata, and affected file links will be removed.";
+    private string ConfirmationButtonLabel => _pendingAction switch { RecycleBinAction.Restore => "Restore", RecycleBinAction.Empty => "Empty recycle bin", _ => "Delete permanently" };
 
     protected override async Task OnInitializedAsync()
     {
@@ -79,50 +169,82 @@
     private async Task ReloadAsync()
     {
         if (LibraryState.Workspace is null) return;
-        _files = await LibraryState.Workspace.GetRecycleBinFilesAsync();
-        _folders = await LibraryState.Workspace.GetRecycleBinFoldersAsync();
-        _links = await LibraryState.Workspace.GetRecycledLinksAsync();
+        _entries = await LibraryState.Workspace.GetRecycleBinEntriesAsync();
+        _selected.IntersectWith(_entries.Select(entry => entry.Reference));
     }
 
-    private async Task RestoreFileAsync(string id)
+    private void ToggleSelection(RecycleBinItemReference reference, ChangeEventArgs eventArgs)
     {
-        try { await LibraryState.Workspace!.RestoreFileAsync(id); _message = "File restored."; }
-        catch (SlopFactoryException exception) { _message = exception.Message; }
-        await ReloadAsync();
+        if (eventArgs.Value is true) _selected.Add(reference); else _selected.Remove(reference);
     }
 
-    private async Task RestoreFolderAsync(string id)
+    private void SelectVisible() => _selected.UnionWith(VisibleEntries.Select(entry => entry.Reference));
+    private void ClearSelection() => _selected.Clear();
+    private void BeginRestoreSelected() => BeginRestore(_selected);
+    private void BeginDeleteSelected() => BeginDelete(_selected);
+    private void BeginEmpty() => BeginAction(RecycleBinAction.Empty, _entries);
+
+    private void BeginRestore(IEnumerable<RecycleBinItemReference> references)
     {
-        try { await LibraryState.Workspace!.RestoreFolderAsync(id); _message = "Folder restored."; }
-        catch (SlopFactoryException exception) { _message = exception.Message; }
-        await ReloadAsync();
+        var selected = references.ToHashSet();
+        BeginAction(RecycleBinAction.Restore, _entries.Where(entry => selected.Contains(entry.Reference) && entry.State == LibraryRecordState.Recycled));
     }
 
-    private async Task DeleteFileAsync(string id)
+    private void BeginDelete(IEnumerable<RecycleBinItemReference> references)
     {
-        try { await LibraryState.Workspace!.PermanentlyDeleteFileAsync(id); _message = "File permanently deleted."; }
-        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
-        await ReloadAsync();
+        var selected = references.ToHashSet();
+        BeginAction(RecycleBinAction.Delete, _entries.Where(entry => selected.Contains(entry.Reference)));
     }
 
-    private async Task DeleteFolderAsync(string id)
+    private void BeginAction(RecycleBinAction action, IEnumerable<RecycleBinEntry> entries)
     {
-        try { await LibraryState.Workspace!.PermanentlyDeleteFolderAsync(id); _message = "Folder and its contents were permanently deleted."; }
-        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
-        await ReloadAsync();
+        var snapshot = entries.ToArray();
+        if (snapshot.Length == 0) return;
+        _pendingAction = action;
+        _pendingEntries = snapshot;
+        _message = null;
+        _failures = [];
     }
 
-    private async Task RestoreLinkAsync(string id)
+    private void CancelPendingAction()
     {
-        try { await LibraryState.Workspace!.RestoreLinkAsync(id); _message = "Link restored."; }
-        catch (SlopFactoryException exception) { _message = exception.Message; }
-        await ReloadAsync();
+        _pendingAction = null;
+        _pendingEntries = [];
     }
 
-    private async Task DeleteLinkAsync(string id)
+    private async Task ConfirmPendingActionAsync()
     {
-        try { await LibraryState.Workspace!.PermanentlyDeleteLinkAsync(id); _message = "Link permanently deleted."; }
-        catch (SlopFactoryException exception) { _message = exception.Message; }
-        await ReloadAsync();
+        if (_pendingAction is null || LibraryState.Workspace is null) return;
+        _isBusy = true;
+        try
+        {
+            var result = _pendingAction switch
+            {
+                RecycleBinAction.Restore => await LibraryState.Workspace.RestoreRecycleBinItemsAsync(_pendingEntries.Select(entry => entry.Reference).ToArray()),
+                RecycleBinAction.Empty => await LibraryState.Workspace.EmptyRecycleBinAsync(),
+                _ => await LibraryState.Workspace.PermanentlyDeleteRecycleBinItemsAsync(_pendingEntries.Select(entry => entry.Reference).ToArray())
+            };
+            foreach (var success in result.Items.Where(item => item.Succeeded)) _selected.Remove(success.Reference);
+            _failures = result.Items.Where(item => !item.Succeeded).ToArray();
+            _message = result.FailedCount == 0
+                ? $"{result.SucceededCount} item(s) processed successfully."
+                : $"{result.SucceededCount} item(s) succeeded and {result.FailedCount} failed. Failed items remain in the recycle bin.";
+        }
+        finally
+        {
+            _isBusy = false;
+            _pendingAction = null;
+            _pendingEntries = [];
+            await ReloadAsync();
+        }
+    }
+
+    private static string KindName(RecycleBinItemKind kind) => kind switch { RecycleBinItemKind.Folder => "Folder", RecycleBinItemKind.File => "File", _ => "File link" };
+    private static string StateName(LibraryRecordState state) => state == LibraryRecordState.PendingPermanentDeletion ? "Pending permanent deletion" : "Recycled";
+    private static string EntryCascadeSummary(RecycleBinEntry entry) => CascadeSummary([entry]);
+    private static string CascadeSummary(IEnumerable<RecycleBinEntry> entries)
+    {
+        var snapshot = entries.ToArray();
+        return $"{snapshot.Sum(entry => entry.OwnedFolderCount)} folder(s), {snapshot.Sum(entry => entry.OwnedFileCount)} file(s), and {snapshot.Sum(entry => entry.OwnedLinkCount)} link(s)";
     }
 }

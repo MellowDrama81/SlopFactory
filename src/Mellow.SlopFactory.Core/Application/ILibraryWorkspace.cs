@@ -16,6 +16,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<FolderRecord>> GetRecycledFoldersAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileRecord>> GetRecycleBinFilesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FolderRecord>> GetRecycleBinFoldersAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RecycleBinEntry>> GetRecycleBinEntriesAsync(CancellationToken cancellationToken = default);
     Task<FolderRecord> CreateFolderAsync(string parentFolderId, string name, CancellationToken cancellationToken = default);
     Task<FolderRecord> RenameFolderAsync(string folderId, string name, CancellationToken cancellationToken = default);
     Task<FolderRecord> MoveFolderAsync(string folderId, string destinationFolderId, CancellationToken cancellationToken = default);
@@ -42,6 +43,9 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task RestoreFolderAsync(string folderId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteFolderAsync(string folderId, CancellationToken cancellationToken = default);
+    Task<RecycleBinOperationResult> RestoreRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default);
+    Task<RecycleBinOperationResult> PermanentlyDeleteRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default);
+    Task<RecycleBinOperationResult> EmptyRecycleBinAsync(CancellationToken cancellationToken = default);
     Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default);
     string GetManagedFilePath(FileRecord file);
 }

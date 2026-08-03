@@ -270,6 +270,100 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task RecycleBinEntriesIncludeOriginalLocationsAndFolderCascadeCounts()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourceA = temporary.Child("summary-a.txt");
+        var sourceB = temporary.Child("summary-b.txt");
+        var outsideSource = temporary.Child("summary-outside.txt");
+        await File.WriteAllTextAsync(sourceA, "a");
+        await File.WriteAllTextAsync(sourceB, "b");
+        await File.WriteAllTextAsync(outsideSource, "outside");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var parent = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Summary parent");
+        var child = await workspace.CreateFolderAsync(parent.Id, "Summary child");
+        _ = Assert.Single(await workspace.ImportAsync([sourceA], parent.Id)).File!;
+        var childFile = Assert.Single(await workspace.ImportAsync([sourceB], child.Id)).File!;
+        var outside = Assert.Single(await workspace.ImportAsync([outsideSource], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.CreateLinkAsync(outside.Id, childFile.Id, "references");
+
+        await workspace.RecycleFolderAsync(parent.Id);
+
+        var entry = Assert.Single(await workspace.GetRecycleBinEntriesAsync());
+        Assert.Equal(new RecycleBinItemReference(RecycleBinItemKind.Folder, parent.Id), entry.Reference);
+        Assert.Equal("Library", entry.OriginalLocation);
+        Assert.Equal(2, entry.OwnedFolderCount);
+        Assert.Equal(2, entry.OwnedFileCount);
+        Assert.Equal(1, entry.OwnedLinkCount);
+    }
+
+    [Fact]
+    public async Task BatchRestoreAndEmptyRecycleBinOrderLinksSafely()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourceA = temporary.Child("batch-a.txt");
+        var sourceB = temporary.Child("batch-b.txt");
+        await File.WriteAllTextAsync(sourceA, "a");
+        await File.WriteAllTextAsync(sourceB, "b");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var fileA = Assert.Single(await workspace.ImportAsync([sourceA], workspace.Descriptor.RootFolderId)).File!;
+        var fileB = Assert.Single(await workspace.ImportAsync([sourceB], workspace.Descriptor.RootFolderId)).File!;
+        var link = await workspace.CreateLinkAsync(fileA.Id, fileB.Id, "batch link");
+        await workspace.RecycleLinkAsync(link.Id);
+        await workspace.RecycleFileAsync(fileA.Id);
+        var references = (await workspace.GetRecycleBinEntriesAsync()).Select(entry => entry.Reference).ToArray();
+
+        var restored = await workspace.RestoreRecycleBinItemsAsync(references);
+
+        Assert.Equal(2, restored.SucceededCount);
+        Assert.Equal(0, restored.FailedCount);
+        Assert.Empty(await workspace.GetRecycleBinEntriesAsync());
+        Assert.Equal(LibraryRecordState.Active, Assert.Single(await workspace.GetLinksAsync(fileA.Id)).State);
+
+        await workspace.RecycleLinkAsync(link.Id);
+        await workspace.RecycleFileAsync(fileA.Id);
+        var emptied = await workspace.EmptyRecycleBinAsync();
+
+        Assert.Equal(2, emptied.SucceededCount);
+        Assert.Equal(0, emptied.FailedCount);
+        Assert.Empty(await workspace.GetRecycleBinEntriesAsync());
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetFileAsync(fileA.Id));
+        Assert.Empty(await workspace.GetLinksAsync(fileB.Id));
+    }
+
+    [Fact]
+    public async Task BatchPermanentDeletionContinuesAfterAnItemFails()
+    {
+        using var temporary = new TemporaryDirectory();
+        var blockedSource = temporary.Child("batch-blocked.txt");
+        var deletableSource = temporary.Child("batch-deletable.txt");
+        await File.WriteAllTextAsync(blockedSource, "blocked");
+        await File.WriteAllTextAsync(deletableSource, "deletable");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var blocked = Assert.Single(await workspace.ImportAsync([blockedSource], workspace.Descriptor.RootFolderId)).File!;
+        var deletable = Assert.Single(await workspace.ImportAsync([deletableSource], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.RecycleFileAsync(blocked.Id);
+        await workspace.RecycleFileAsync(deletable.Id);
+        var blockedPath = workspace.GetManagedFilePath(blocked);
+        File.Delete(blockedPath);
+        Directory.CreateDirectory(blockedPath);
+
+        var result = await workspace.PermanentlyDeleteRecycleBinItemsAsync([
+            new RecycleBinItemReference(RecycleBinItemKind.File, blocked.Id),
+            new RecycleBinItemReference(RecycleBinItemKind.File, deletable.Id)]);
+
+        Assert.Equal(1, result.SucceededCount);
+        Assert.Equal(1, result.FailedCount);
+        Assert.Contains(result.Items, item => item.Reference.Id == blocked.Id && !item.Succeeded && item.Error is not null);
+        Assert.Contains(await workspace.GetRecycleBinEntriesAsync(), item => item.Reference.Id == blocked.Id && item.State == LibraryRecordState.PendingPermanentDeletion);
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetFileAsync(deletable.Id));
+        Directory.Delete(blockedPath);
+    }
+
+    [Fact]
     public async Task FilesAndFolderSubtreesCanBeRenamedAndMovedWithoutMovingManagedBytes()
     {
         using var temporary = new TemporaryDirectory();
