@@ -17,13 +17,14 @@ The manifest contains the format identity `mellow.slopfactory.library`, manifest
 
 The lock file is opened with exclusive sharing while a workspace is active. Its mere presence is not treated as an active lock, so a stale file after a crash can be reopened when no process holds it.
 
-## SQLite schema version 5
+## SQLite schema version 6
 
 The schema contains:
 
 - `library_info`: library identity, display name, schema version, and permanent folder IDs;
 - `folders`: the virtual folder tree and recycle state;
 - `files`: editable display identity, retained original filename, managed filename, SHA-256 hash, byte size, detected type, provenance, timestamps, recycle state, and independent managed-content health state;
+- `file_content_provenance`: immutable original hash, byte size, and media type plus the latest differing-replacement timestamp;
 - `metadata_entries`: typed user metadata owned by a file;
 - `file_links`: directed, labelled file relationships, including whether recycling was an explicit user action or was inherited from an endpoint;
 - `permanent_deletion_failures`: the most recent sanitized failure and UTC timestamp for a pending file or folder aggregate.
@@ -34,13 +35,19 @@ Active file and folder names are unique within their parent using normalized inv
 
 ## Schema upgrades
 
-Opening an older library upgrades it to version 5 before normal access. Version 2 introduced explicit-link recycling ownership; version 3 added permanent-deletion failure records; version 4 adds the retained original filename used by library search; and version 5 adds managed-content health independently of recycle lifecycle. Libraries upgraded from version 3 backfill the original filename from the display name because the earlier format did not retain a distinct imported name. Existing records start with healthy content state; their bytes are still verified before built-in use or through explicit revalidation. After obtaining the exclusive lock, SlopFactory checkpoints SQLite, creates `library.sqlite3.upgrade-backup`, applies every required database change in one transaction, and atomically updates the manifest. Success removes the rollback copy. Failure restores the original database and manifest and leaves the library closed. Media bytes are not copied during a schema upgrade, and libraries declaring a newer schema are rejected.
+Opening an older library upgrades it to version 6 before normal access. Version 2 introduced explicit-link recycling ownership; version 3 added permanent-deletion failure records; version 4 added the retained original filename used by library search; version 5 added managed-content health independently of recycle lifecycle; and version 6 added immutable original-content provenance for replacement. Libraries upgraded from version 3 backfill the original filename from the display name because the earlier format did not retain a distinct imported name. Existing records start with healthy content state; their bytes are still verified before built-in use or through explicit revalidation. A version-5 record has no provenance row until replacement and reads its current identity as the original identity. After obtaining the exclusive lock, SlopFactory checkpoints SQLite, creates `library.sqlite3.upgrade-backup`, applies every required database change in one transaction, and atomically updates the manifest. Success removes the rollback copy. Failure restores the original database and manifest and leaves the library closed. Media bytes are not copied during a schema upgrade, and libraries declaring a newer schema are rejected.
 
 ## Managed-content health
 
 Recycle lifecycle and content health are separate columns. An active record can therefore be **Healthy**, **Missing**, **Changed**, or, after the later replacement workflow, **Replaced** without detaching metadata or changing link endpoints. `RevalidateFileContentAsync` holds the workspace mutation boundary, rejects recycled records, validates the managed path without following reparse points, streams SHA-256, redetects media type, and stores only the resulting health state. Its result returns observed hash, byte size, and detected media type for an explicit comparison UI; missing or unsafe entries do not invent unavailable observations.
 
 Built-in text, image, and media preparation first perform an independent existence, regular-file, byte-size, and SHA-256 check. Healthy verified reads do not acquire the mutation boundary, so they remain available during a full integrity scan. A mismatch enters the revalidation path, persists **Missing** or **Changed**, and blocks normal use. Restoring the exact recorded size and hash returns the record to **Healthy**. Revalidation never accepts differing bytes, updates recorded provenance, deletes content, or removes metadata and links.
+
+Managed-content replacement is restricted to active **Missing** and **Changed** records. Review validates a regular, non-reparse candidate, hashes it, detects its media type, reads metadata counts, and freezes those facts for confirmation. Commit revalidates both the record and candidate. Exact original identity produces **Healthy**; different identity requires an explicit flag and produces **Replaced**.
+
+On the first acceptance, `file_content_provenance` captures the then-recorded identity with `ON CONFLICT DO NOTHING`; later replacements cannot rewrite it. The current hash, size, type, health state, replacement timestamp, and optional deletion of all user metadata commit in one SQLite transaction. Folder identity and link ownership are unchanged.
+
+An external candidate is copied and hashed into `.staging`, the existing managed path is moved to a unique rollback path, and the staged file is installed before the database transaction. A database failure restores the previous managed bytes. Accepting the already-present changed bytes performs no filesystem replacement. After a successful database commit, transient rollback content is deleted; SlopFactory does not expose it as a version or provide replacement undo.
 
 ## Library browsing queries
 

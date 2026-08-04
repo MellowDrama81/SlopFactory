@@ -97,6 +97,14 @@ internal sealed class SqliteLibraryDatabase
                 UNIQUE(file_id, key_key)
             );
 
+            CREATE TABLE file_content_provenance (
+                file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+                original_content_hash TEXT NOT NULL,
+                original_byte_size INTEGER NOT NULL CHECK(original_byte_size >= 0),
+                original_media_type TEXT NOT NULL,
+                replaced_at TEXT NULL
+            );
+
             CREATE TABLE file_links (
                 id TEXT PRIMARY KEY,
                 source_file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
@@ -187,6 +195,10 @@ internal sealed class SqliteLibraryDatabase
         if (fromVersion < 5)
         {
             await ExecuteNonQueryAsync(connection, "ALTER TABLE files ADD COLUMN content_state INTEGER NOT NULL DEFAULT 0;", cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 6)
+        {
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE file_content_provenance (file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,original_content_hash TEXT NOT NULL,original_byte_size INTEGER NOT NULL CHECK(original_byte_size >= 0),original_media_type TEXT NOT NULL,replaced_at TEXT NULL);", cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -900,6 +912,49 @@ internal sealed class SqliteLibraryDatabase
             ("$state", (int)contentState), ("$modified", Format(modified)), ("$id", fileId)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return file with { ContentState = contentState, ModifiedAt = modified };
+    }
+
+    public async Task<FileContentProvenance> GetFileContentProvenanceAsync(string fileId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var file = await GetFileAsync(connection, fileId, cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT original_content_hash,original_byte_size,original_media_type,replaced_at FROM file_content_provenance WHERE file_id=$id;";
+        command.Parameters.AddWithValue("$id", fileId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return new FileContentProvenance(file.ContentHash, file.ByteSize, file.MediaType, null);
+        return new FileContentProvenance(reader.GetString(0), reader.GetInt64(1), reader.GetString(2), reader.IsDBNull(3) ? null : Parse(reader.GetString(3)));
+    }
+
+    public async Task<FileRecord> AcceptFileContentAsync(string fileId, string contentHash, long byteSize, string mediaType, bool restoresOriginal, bool clearUserMetadata, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var file = await GetFileAsync(connection, fileId, cancellationToken, transaction).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active || file.ContentState is not (FileContentState.Missing or FileContentState.Changed))
+        {
+            throw new LibraryValidationException("Managed content can be replaced only for a missing or changed active file.");
+        }
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO file_content_provenance(file_id,original_content_hash,original_byte_size,original_media_type,replaced_at) VALUES($id,$hash,$size,$media,NULL) ON CONFLICT(file_id) DO NOTHING;",
+            cancellationToken, transaction, ("$id", file.Id), ("$hash", file.ContentHash), ("$size", file.ByteSize), ("$media", file.MediaType)).ConfigureAwait(false);
+        var modified = DateTimeOffset.UtcNow;
+        DateTimeOffset? replacementTime = restoresOriginal ? null : modified;
+        await ExecuteNonQueryAsync(connection,
+            "UPDATE files SET content_hash=$hash,byte_size=$size,media_type=$media,content_state=$contentState,modified_at=$modified WHERE id=$id; UPDATE file_content_provenance SET replaced_at=$replaced WHERE file_id=$id;",
+            cancellationToken, transaction,
+            ("$hash", contentHash), ("$size", byteSize), ("$media", mediaType), ("$contentState", restoresOriginal ? (int)FileContentState.Healthy : (int)FileContentState.Replaced),
+            ("$modified", Format(modified)), ("$id", file.Id), ("$replaced", replacementTime is null ? DBNull.Value : Format(replacementTime.Value))).ConfigureAwait(false);
+        if (clearUserMetadata) await ExecuteNonQueryAsync(connection, "DELETE FROM metadata_entries WHERE file_id=$id;", cancellationToken, transaction, ("$id", file.Id)).ConfigureAwait(false);
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        return file with
+        {
+            ContentHash = contentHash,
+            ByteSize = byteSize,
+            MediaType = mediaType,
+            ContentState = restoresOriginal ? FileContentState.Healthy : FileContentState.Replaced,
+            ModifiedAt = modified
+        };
     }
 
     public async Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken)

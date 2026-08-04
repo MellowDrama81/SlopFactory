@@ -150,6 +150,27 @@ public sealed record FileContentHealth(
     long? ObservedByteSize,
     string? ObservedMediaType);
 
+public sealed record ManagedContentReplacementReview(
+    FileRecord File,
+    string OriginalContentHash,
+    long OriginalByteSize,
+    string OriginalMediaType,
+    string CandidateContentHash,
+    long CandidateByteSize,
+    string CandidateMediaType,
+    bool UsesCurrentManagedBytes,
+    int OrdinaryMetadataCount,
+    int SensitiveMetadataCount)
+{
+    public bool RestoresOriginal => CandidateByteSize == OriginalByteSize && string.Equals(CandidateContentHash, OriginalContentHash, StringComparison.Ordinal);
+}
+
+public sealed record FileContentProvenance(
+    string OriginalContentHash,
+    long OriginalByteSize,
+    string OriginalMediaType,
+    DateTimeOffset? ReplacedAt);
+
 public sealed record LibraryFileBrowseQuery(
     string FolderId,
     LibraryBrowseScope Scope,

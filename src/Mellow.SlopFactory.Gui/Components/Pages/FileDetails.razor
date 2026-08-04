@@ -39,6 +39,46 @@ else
                 <dl><dt>Recorded</dt><dd class="mono">@_file.ContentHash · @_file.ByteSize bytes · @_file.MediaType</dd><dt>Observed</dt><dd class="mono">@_contentHealth.ObservedContentHash · @_contentHealth.ObservedByteSize bytes · @_contentHealth.ObservedMediaType</dd></dl>
             }
         }
+        else if (_file.ContentState == FileContentState.Replaced && _contentProvenance is not null)
+        {
+            <p>The current bytes were accepted as a permanent replacement. The recorded original identity remains available for comparison.</p>
+            <dl>
+                <dt>Recorded original</dt><dd class="mono">@_contentProvenance.OriginalContentHash · @_contentProvenance.OriginalByteSize bytes · @_contentProvenance.OriginalMediaType</dd>
+                <dt>Current replacement</dt><dd class="mono">@_file.ContentHash · @_file.ByteSize bytes · @_file.MediaType</dd>
+                @if (_contentProvenance.ReplacedAt is not null) { <dt>Replaced</dt><dd>@_contentProvenance.ReplacedAt.Value.ToLocalTime().ToString("g")</dd> }
+            </dl>
+        }
+        @if (_file.ContentState is FileContentState.Missing or FileContentState.Changed)
+        {
+            <div class="actions">
+                <button disabled="@_replacingContent" @onclick="ChooseReplacementAsync">Choose replacement file</button>
+                @if (_file.ContentState == FileContentState.Changed) { <button class="secondary" disabled="@_replacingContent" @onclick="ReviewCurrentBytesAsync">Accept current bytes as replacement</button> }
+            </div>
+        }
+        @if (_replacementReview is not null)
+        {
+            <div class="notice replacement-review" role="status">
+                <h3>Review managed-content replacement</h3>
+                <dl>
+                    <dt>Recorded original</dt><dd class="mono">@_replacementReview.OriginalContentHash · @_replacementReview.OriginalByteSize bytes · @_replacementReview.OriginalMediaType</dd>
+                    <dt>Candidate</dt><dd class="mono">@_replacementReview.CandidateContentHash · @_replacementReview.CandidateByteSize bytes · @_replacementReview.CandidateMediaType</dd>
+                </dl>
+                @if (_replacementReview.RestoresOriginal)
+                {
+                    <p>The candidate exactly restores the recorded original bytes. Original provenance and user metadata will remain unchanged.</p>
+                }
+                else
+                {
+                    <p class="error">This permanently accepts different bytes without retaining a hidden previous version. The stable file ID, folder, links, and original provenance remain; current content metadata changes.</p>
+                    <p>@_replacementReview.OrdinaryMetadataCount ordinary and @_replacementReview.SensitiveMetadataCount sensitive user-metadata entrie(s) are attached. Sensitive keys and values remain concealed.</p>
+                    <label class="check"><input type="checkbox" @bind="_clearMetadataAfterReplacement" /> Clear all user metadata after replacement</label>
+                }
+                <div class="actions">
+                    <button class="@(_replacementReview.RestoresOriginal ? string.Empty : "danger")" disabled="@_replacingContent" @onclick="CommitReplacementAsync">@(_replacementReview.RestoresOriginal ? "Restore original content" : "Confirm permanent replacement")</button>
+                    <button class="secondary" disabled="@_replacingContent" @onclick="CancelReplacementReview">Cancel</button>
+                </div>
+            </div>
+        }
     </section>
 
     <section class="detail-grid">
@@ -254,6 +294,7 @@ else
                 <dt>Origin</dt><dd>@_file.Origin</dd>
                 <dt>State</dt><dd>@_file.State</dd>
                 <dt>Content state</dt><dd>@ContentStateLabel(_file.ContentState)</dd>
+                @if (_contentProvenance?.ReplacedAt is not null) { <dt>Content replaced</dt><dd>@_contentProvenance.ReplacedAt.Value.ToLocalTime().ToString("g")</dd> }
             </dl>
         </article>
 
@@ -390,7 +431,12 @@ else
     private LinkForm _linkForm = new();
     private string? _message;
     private FileContentHealth? _contentHealth;
+    private FileContentProvenance? _contentProvenance;
     private bool _verifyingContent;
+    private ManagedContentReplacementReview? _replacementReview;
+    private string? _replacementSourcePath;
+    private bool _clearMetadataAfterReplacement;
+    private bool _replacingContent;
     private string? _renamingMetadataId;
     private string _renameKey = string.Empty;
     private string? _renamingLinkId;
@@ -421,6 +467,7 @@ else
         {
             _contentHealth = await LibraryState.Workspace.RevalidateFileContentAsync(Id);
             _file = _contentHealth.File;
+            _contentProvenance = await LibraryState.Workspace.GetFileContentProvenanceAsync(Id);
             await StopMediaAsync();
             _mediaError = null;
             _mediaPreparing = false;
@@ -495,6 +542,53 @@ else
         FileContentState.Replaced => "Content replaced",
         _ => "Healthy"
     };
+
+    private async Task ChooseReplacementAsync()
+    {
+        var selected = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Choose replacement content" });
+        if (selected is null) return;
+        await ReviewReplacementAsync(selected.FullPath);
+    }
+
+    private Task ReviewCurrentBytesAsync() => ReviewReplacementAsync(null);
+
+    private async Task ReviewReplacementAsync(string? sourcePath)
+    {
+        if (LibraryState.Workspace is null) return;
+        _replacingContent = true;
+        try
+        {
+            _replacementReview = await LibraryState.Workspace.ReviewManagedContentReplacementAsync(Id, sourcePath);
+            _replacementSourcePath = sourcePath;
+            _clearMetadataAfterReplacement = false;
+            _message = null;
+        }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
+        finally { _replacingContent = false; }
+    }
+
+    private async Task CommitReplacementAsync()
+    {
+        if (LibraryState.Workspace is null || _replacementReview is null) return;
+        _replacingContent = true;
+        try
+        {
+            var restoresOriginal = _replacementReview.RestoresOriginal;
+            await LibraryState.Workspace.CommitManagedContentReplacementAsync(_replacementReview, _replacementSourcePath, !restoresOriginal, !restoresOriginal && _clearMetadataAfterReplacement);
+            CancelReplacementReview();
+            await ReloadAsync();
+            _message = restoresOriginal ? "The recorded original content was restored." : "The replacement content was accepted permanently.";
+        }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
+        finally { _replacingContent = false; }
+    }
+
+    private void CancelReplacementReview()
+    {
+        _replacementReview = null;
+        _replacementSourcePath = null;
+        _clearMetadataAfterReplacement = false;
+    }
 
     private async Task SaveMetadataAsync()
     {

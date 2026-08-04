@@ -53,6 +53,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => RevalidateFileContentCoreAsync(fileId, cancellationToken), cancellationToken);
     }
 
+    public Task<FileContentProvenance> GetFileContentProvenanceAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetFileContentProvenanceAsync(fileId, cancellationToken);
+    }
+
     private async Task<FileContentHealth> RevalidateFileContentCoreAsync(string fileId, CancellationToken cancellationToken)
     {
         var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
@@ -110,6 +116,96 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             return (await RevalidateFileContentAsync(fileId, cancellationToken).ConfigureAwait(false)).File;
         }
         return file;
+    }
+
+    public async Task<ManagedContentReplacementReview> ReviewManagedContentReplacementAsync(string fileId, string? sourcePath, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active || file.ContentState is not (FileContentState.Missing or FileContentState.Changed))
+        {
+            throw new LibraryValidationException("Managed content can be replaced only for a missing or changed active file.");
+        }
+        var managedPath = _layout.ManagedFilePath(file.ManagedName);
+        var candidatePath = string.IsNullOrWhiteSpace(sourcePath) ? managedPath : Path.GetFullPath(sourcePath);
+        var usesCurrent = string.Equals(candidatePath, managedPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        if (usesCurrent && file.ContentState == FileContentState.Missing) throw new LibraryValidationException("There are no current managed bytes to accept.");
+        var candidate = await InspectReplacementCandidateAsync(candidatePath, cancellationToken).ConfigureAwait(false);
+        var original = await _database.GetFileContentProvenanceAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var metadata = await _database.GetMetadataAsync(fileId, cancellationToken).ConfigureAwait(false);
+        return new ManagedContentReplacementReview(file, original.OriginalContentHash, original.OriginalByteSize, original.OriginalMediaType, candidate.Hash, candidate.ByteSize, candidate.MediaType,
+            usesCurrent, metadata.Count(item => !item.IsSensitive), metadata.Count(item => item.IsSensitive));
+    }
+
+    public Task<FileRecord> CommitManagedContentReplacementAsync(ManagedContentReplacementReview review, string? sourcePath, bool confirmDifferingReplacement, bool clearUserMetadata, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(review);
+        return RunMutationAsync(() => CommitManagedContentReplacementCoreAsync(review, sourcePath, confirmDifferingReplacement, clearUserMetadata, cancellationToken), cancellationToken);
+    }
+
+    private async Task<FileRecord> CommitManagedContentReplacementCoreAsync(ManagedContentReplacementReview review, string? sourcePath, bool confirmDifferingReplacement, bool clearUserMetadata, CancellationToken cancellationToken)
+    {
+        var file = await _database.GetFileAsync(review.File.Id, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active || file.ContentState is not (FileContentState.Missing or FileContentState.Changed)) throw new LibraryValidationException("The file is no longer eligible for content replacement.");
+        var original = await _database.GetFileContentProvenanceAsync(file.Id, cancellationToken).ConfigureAwait(false);
+        if (original.OriginalContentHash != review.OriginalContentHash || original.OriginalByteSize != review.OriginalByteSize || original.OriginalMediaType != review.OriginalMediaType) throw new LibraryValidationException("The recorded provenance changed after replacement review.");
+        var managedPath = _layout.ManagedFilePath(file.ManagedName);
+        var candidatePath = string.IsNullOrWhiteSpace(sourcePath) ? managedPath : Path.GetFullPath(sourcePath);
+        var usesCurrent = string.Equals(candidatePath, managedPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        if (usesCurrent != review.UsesCurrentManagedBytes) throw new LibraryValidationException("The replacement source changed after review.");
+        var candidate = await InspectReplacementCandidateAsync(candidatePath, cancellationToken).ConfigureAwait(false);
+        if (candidate.Hash != review.CandidateContentHash || candidate.ByteSize != review.CandidateByteSize || candidate.MediaType != review.CandidateMediaType) throw new LibraryValidationException("The replacement bytes changed after review. Review them again.");
+        if (!review.RestoresOriginal && !confirmDifferingReplacement) throw new LibraryValidationException("Confirm the permanent differing-content replacement before continuing.");
+
+        if (usesCurrent)
+        {
+            return await _database.AcceptFileContentAsync(file.Id, candidate.Hash, candidate.ByteSize, candidate.MediaType, review.RestoresOriginal, !review.RestoresOriginal && clearUserMetadata, cancellationToken).ConfigureAwait(false);
+        }
+
+        var stagedPath = _layout.StagingFilePath($"replacement-{LibraryRules.NewId()}.tmp");
+        string? rollbackPath = null;
+        try
+        {
+            var copied = await Hashing.CopyAndHashAsync(candidatePath, stagedPath, cancellationToken).ConfigureAwait(false);
+            if (copied.Hash != candidate.Hash || copied.Bytes != candidate.ByteSize) throw new LibraryValidationException("The replacement source changed while it was copied.");
+            if (File.Exists(managedPath))
+            {
+                var existing = new FileInfo(managedPath);
+                if ((existing.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("The managed path is redirected and cannot be replaced safely.");
+                rollbackPath = _layout.StagingFilePath($"replacement-rollback-{LibraryRules.NewId()}.tmp");
+                File.Move(managedPath, rollbackPath);
+            }
+            else if (Directory.Exists(managedPath)) throw new LibraryValidationException("The managed path was replaced by a directory and cannot be repaired automatically.");
+            File.Move(stagedPath, managedPath);
+            try
+            {
+                var accepted = await _database.AcceptFileContentAsync(file.Id, candidate.Hash, candidate.ByteSize, candidate.MediaType, review.RestoresOriginal, !review.RestoresOriginal && clearUserMetadata, cancellationToken).ConfigureAwait(false);
+                TryDelete(rollbackPath);
+                return accepted;
+            }
+            catch
+            {
+                TryDelete(managedPath);
+                if (rollbackPath is not null && File.Exists(rollbackPath)) File.Move(rollbackPath, managedPath);
+                throw;
+            }
+        }
+        finally
+        {
+            TryDelete(stagedPath);
+            TryDelete(rollbackPath);
+        }
+    }
+
+    private static async Task<(string Hash, long ByteSize, string MediaType)> InspectReplacementCandidateAsync(string path, CancellationToken cancellationToken)
+    {
+        if (Directory.Exists(path) || !File.Exists(path)) throw new LibraryValidationException("The replacement source is not an available regular file.");
+        var info = new FileInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("A redirected file cannot be used as replacement content.");
+        var hash = await Hashing.Sha256Async(path, cancellationToken).ConfigureAwait(false);
+        var mediaType = (await MediaTypeDetector.DetectAsync(path, cancellationToken).ConfigureAwait(false)).MediaType;
+        return (hash, info.Length, mediaType);
     }
 
     public async Task<TextFileContent> ReadTextFileAsync(string fileId, CancellationToken cancellationToken = default)

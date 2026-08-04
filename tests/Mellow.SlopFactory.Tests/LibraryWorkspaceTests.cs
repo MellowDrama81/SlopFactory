@@ -919,6 +919,76 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task ManagedContentReplacementPreservesImmutableOriginalAndRequiresDifferingConfirmation()
+    {
+        using var temporary = new TemporaryDirectory();
+        var originalPath = temporary.Child("original.txt");
+        var linkedPath = temporary.Child("linked.txt");
+        await File.WriteAllTextAsync(originalPath, "original bytes");
+        await File.WriteAllTextAsync(linkedPath, "linked");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var files = (await workspace.ImportAsync([originalPath, linkedPath], workspace.Descriptor.RootFolderId)).Select(result => result.File!).ToArray();
+        await workspace.SetMetadataAsync(files[0].Id, "Note", MetadataValueKind.Text, "keep", false);
+        await workspace.SetMetadataAsync(files[0].Id, "Secret", MetadataValueKind.Text, "concealed", true);
+        var link = await workspace.CreateLinkAsync(files[0].Id, files[1].Id, "related");
+        var originalHash = files[0].ContentHash;
+        var managedPath = workspace.GetManagedFilePath(files[0]);
+        await File.WriteAllTextAsync(managedPath, "replacement bytes");
+        Assert.Equal(FileContentState.Changed, (await workspace.RevalidateFileContentAsync(files[0].Id)).File.ContentState);
+
+        var review = await workspace.ReviewManagedContentReplacementAsync(files[0].Id, null);
+        Assert.True(review.UsesCurrentManagedBytes);
+        Assert.False(review.RestoresOriginal);
+        Assert.Equal(originalHash, review.OriginalContentHash);
+        Assert.Equal(1, review.OrdinaryMetadataCount);
+        Assert.Equal(1, review.SensitiveMetadataCount);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CommitManagedContentReplacementAsync(review, null, false, false));
+        Assert.Equal(FileContentState.Changed, (await workspace.GetFileAsync(files[0].Id)).ContentState);
+
+        var replaced = await workspace.CommitManagedContentReplacementAsync(review, null, true, false);
+        Assert.Equal(FileContentState.Replaced, replaced.ContentState);
+        Assert.NotEqual(originalHash, replaced.ContentHash);
+        Assert.Equal(2, (await workspace.GetMetadataAsync(files[0].Id)).Count);
+        Assert.Contains(await workspace.GetLinksAsync(files[0].Id), item => item.Id == link.Id && item.State == LibraryRecordState.Active);
+
+        await File.WriteAllTextAsync(managedPath, "tampered again");
+        _ = await workspace.RevalidateFileContentAsync(files[0].Id);
+        var restoreReview = await workspace.ReviewManagedContentReplacementAsync(files[0].Id, originalPath);
+        Assert.True(restoreReview.RestoresOriginal);
+        Assert.Equal(originalHash, restoreReview.OriginalContentHash);
+        var restored = await workspace.CommitManagedContentReplacementAsync(restoreReview, originalPath, false, true);
+        Assert.Equal(FileContentState.Healthy, restored.ContentState);
+        Assert.Equal(originalHash, restored.ContentHash);
+        Assert.Equal(2, (await workspace.GetMetadataAsync(files[0].Id)).Count);
+        Assert.Equal("original bytes", (await workspace.ReadTextFileAsync(files[0].Id)).Content);
+    }
+
+    [Fact]
+    public async Task MissingContentCanBeReplacedAndMetadataClearedTransactionally()
+    {
+        using var temporary = new TemporaryDirectory();
+        var originalPath = temporary.Child("missing.txt");
+        var replacementPath = temporary.Child("replacement.bin");
+        await File.WriteAllTextAsync(originalPath, "original");
+        await File.WriteAllBytesAsync(replacementPath, [0, 1, 2, 3, 4]);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([originalPath], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.SetMetadataAsync(file.Id, "Remove", MetadataValueKind.Boolean, "true", true);
+        File.Delete(workspace.GetManagedFilePath(file));
+        _ = await workspace.RevalidateFileContentAsync(file.Id);
+
+        var review = await workspace.ReviewManagedContentReplacementAsync(file.Id, replacementPath);
+        var replaced = await workspace.CommitManagedContentReplacementAsync(review, replacementPath, true, true);
+
+        Assert.Equal(FileContentState.Replaced, replaced.ContentState);
+        Assert.Equal("application/octet-stream", replaced.MediaType);
+        Assert.Empty(await workspace.GetMetadataAsync(file.Id));
+        Assert.Equal(await File.ReadAllBytesAsync(replacementPath), await File.ReadAllBytesAsync(workspace.GetManagedFilePath(replaced)));
+    }
+
+    [Fact]
     public async Task CancelledIntegrityScanReturnsAnIncompletePartialReport()
     {
         using var temporary = new TemporaryDirectory();
@@ -999,20 +1069,20 @@ public sealed class LibraryWorkspaceTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "ALTER TABLE file_links DROP COLUMN explicitly_recycled; DROP TABLE permanent_deletion_failures; ALTER TABLE files DROP COLUMN original_name; ALTER TABLE files DROP COLUMN content_state; UPDATE library_info SET schema_version=1 WHERE singleton=1;";
+            command.CommandText = "ALTER TABLE file_links DROP COLUMN explicitly_recycled; DROP TABLE permanent_deletion_failures; DROP TABLE file_content_provenance; ALTER TABLE files DROP COLUMN original_name; ALTER TABLE files DROP COLUMN content_state; UPDATE library_info SET schema_version=1 WHERE singleton=1;";
             await command.ExecuteNonQueryAsync();
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 5", "\"schemaVersion\": 1", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 6", "\"schemaVersion\": 1", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(5, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(6, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycledLinksAsync());
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
         Assert.False(File.Exists(databasePath + ".upgrade-backup"));
-        Assert.Contains("\"schemaVersion\": 5", await File.ReadAllTextAsync(manifestPath));
+        Assert.Contains("\"schemaVersion\": 6", await File.ReadAllTextAsync(manifestPath));
     }
 
     [Fact]
@@ -1028,16 +1098,16 @@ public sealed class LibraryWorkspaceTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "DROP TABLE permanent_deletion_failures; ALTER TABLE files DROP COLUMN original_name; ALTER TABLE files DROP COLUMN content_state; UPDATE library_info SET schema_version=2 WHERE singleton=1;";
+            command.CommandText = "DROP TABLE permanent_deletion_failures; DROP TABLE file_content_provenance; ALTER TABLE files DROP COLUMN original_name; ALTER TABLE files DROP COLUMN content_state; UPDATE library_info SET schema_version=2 WHERE singleton=1;";
             await command.ExecuteNonQueryAsync();
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 5", "\"schemaVersion\": 2", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 6", "\"schemaVersion\": 2", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(5, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(6, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
     }
 
@@ -1062,17 +1132,17 @@ public sealed class LibraryWorkspaceTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "ALTER TABLE files DROP COLUMN original_name; ALTER TABLE files DROP COLUMN content_state; UPDATE library_info SET schema_version=3 WHERE singleton=1;";
+            command.CommandText = "DROP TABLE file_content_provenance; ALTER TABLE files DROP COLUMN original_name; ALTER TABLE files DROP COLUMN content_state; UPDATE library_info SET schema_version=3 WHERE singleton=1;";
             await command.ExecuteNonQueryAsync();
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 5", "\"schemaVersion\": 3", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 6", "\"schemaVersion\": 3", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
         var file = await upgraded.GetFileAsync(fileId);
-        Assert.Equal(5, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(6, upgraded.Descriptor.SchemaVersion);
         Assert.Equal("current-name.txt", file.OriginalFileName);
     }
 
@@ -1095,17 +1165,55 @@ public sealed class LibraryWorkspaceTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "ALTER TABLE files DROP COLUMN content_state; UPDATE library_info SET schema_version=4 WHERE singleton=1;";
+            command.CommandText = "DROP TABLE file_content_provenance; ALTER TABLE files DROP COLUMN content_state; UPDATE library_info SET schema_version=4 WHERE singleton=1;";
             await command.ExecuteNonQueryAsync();
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 5", "\"schemaVersion\": 4", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 6", "\"schemaVersion\": 4", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(5, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(6, upgraded.Descriptor.SchemaVersion);
         Assert.Equal(FileContentState.Healthy, (await upgraded.GetFileAsync(fileId)).ContentState);
+    }
+
+    [Fact]
+    public async Task OpeningVersionFiveLibraryAddsImmutableContentProvenance()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var source = temporary.Child("before-provenance.txt");
+        await File.WriteAllTextAsync(source, "original identity");
+        var factory = new LibraryWorkspaceFactory();
+        string fileId;
+        string originalHash;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            var file = Assert.Single(await created.ImportAsync([source], created.Descriptor.RootFolderId)).File!;
+            fileId = file.Id;
+            originalHash = file.ContentHash;
+        }
+
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE file_content_provenance; UPDATE library_info SET schema_version=5 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 6", "\"schemaVersion\": 5", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        var provenance = await upgraded.GetFileContentProvenanceAsync(fileId);
+        Assert.Equal(6, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(originalHash, provenance.OriginalContentHash);
+        Assert.Null(provenance.ReplacedAt);
     }
 
     [Fact]
