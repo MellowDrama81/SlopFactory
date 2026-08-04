@@ -69,6 +69,8 @@ File details show a content-health status and provide **Verify now**. SlopFactor
 
 If the managed file is absent, the record becomes **Missing**. If bytes differ or the managed path was replaced by an unsafe redirected entry, it becomes **Content changed**. These statuses do not recycle the record: its folder identity, user metadata, and file links remain available, and the broken record can still be recycled normally. Changed bytes are not silently accepted and normal built-in viewing remains blocked. Putting back bytes with the exact recorded size and hash and verifying again restores **Healthy** status. Replacement with different content is not part of this verification action.
 
+While a library is open, SlopFactory watches its managed-media directory as a best-effort early warning. Events are debounced and mapped through opaque managed filenames. Expected file creation from a completed import or copy is revalidated as healthy and remains silent. A missing or changed record produces a global **Managed content needs review** notice linking to file details. Filesystem watcher overflow or a failed revalidation recommends the explicit full integrity scan because operating-system watcher events can be coalesced or missed.
+
 ## File links
 
 The file-details page can create a directed, labelled link from the current file to another active file. A file cannot link to itself, while the same pair of files may have multiple links with different labels. Existing active links can be relabelled, reversed, or moved to the recycle bin. SlopFactory blocks a relabel or reversal if it would duplicate an existing directed link.

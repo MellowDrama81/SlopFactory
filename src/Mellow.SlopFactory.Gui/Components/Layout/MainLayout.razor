@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject IncomingImportService IncomingImports
+@inject ManagedContentWatchService ContentWatch
 
 <div class="app-shell">
     <aside class="sidebar" aria-label="Primary navigation">
@@ -19,12 +20,35 @@
                 @IncomingImports.PendingCount shared or dropped item(s) are waiting for review. <a href="/">Review in Library</a>
             </div>
         }
+        @if (ContentWatch.Notices.Count > 0)
+        {
+            <div class="notice content-watch-notice" role="alert">
+                <strong>Managed content needs review</strong>
+                @foreach (var item in ContentWatch.Notices.Take(3))
+                {
+                    <div>
+                        <span>@item.DisplayName: @item.Message</span>
+                        @if (item.FileId is not null) { <a href="@($"/file/{item.FileId}")">Review</a> }
+                    </div>
+                }
+                @if (ContentWatch.Notices.Count > 3) { <div>@(ContentWatch.Notices.Count - 3) more notice(s).</div> }
+            </div>
+        }
         @Body
     </main>
 </div>
 
 @code {
-    protected override void OnInitialized() => IncomingImports.PendingChanged += OnPendingChanged;
+    protected override void OnInitialized()
+    {
+        IncomingImports.PendingChanged += OnPendingChanged;
+        ContentWatch.Changed += OnPendingChanged;
+        ContentWatch.Start();
+    }
     private void OnPendingChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
-    public void Dispose() => IncomingImports.PendingChanged -= OnPendingChanged;
+    public void Dispose()
+    {
+        IncomingImports.PendingChanged -= OnPendingChanged;
+        ContentWatch.Changed -= OnPendingChanged;
+    }
 }

@@ -571,11 +571,8 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The user must resolve the storage problem and retry the failed operation explicitly.
 - If the active library becomes read-only or unavailable, the application closes it safely rather than continuing with partial functionality.
 - Managed-file existence must also be verified before export and provider submission when those workflows are implemented.
-- While a library is open, SlopFactory uses best-effort filesystem watching to detect unexpected external changes to its manifest, database and managed-file tree.
-- Watcher events are advisory because they can be coalesced, duplicated or missed; they mark affected content for revalidation and can recommend a full integrity scan.
-- Expected events from SlopFactory's own atomic operations are correlated and do not generate false external-change warnings.
+- Best-effort watching must additionally detect unexpected manifest and database changes.
 - An unexpected manifest or database change pauses mutations and closes the library if validation cannot prove continued consistency.
-- An unexpected managed-file event marks the affected record for existence and hash verification without automatically accepting, deleting or recreating content.
 - Future provider and export operations retain explicit existence, containment and hash checks regardless of watcher state.
 - A **Content Changed** record permits metadata and relationship viewing plus a clearly labelled sandboxed **Inspect Changed Bytes** mode subject to all normal content-safety limits.
 - **Export Changed Bytes** lets the user copy the currently present bytes to an external destination for recovery without updating the library record or attaching a normal provenance sidecar.
