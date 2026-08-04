@@ -1107,6 +1107,55 @@ public sealed class LibraryWorkspaceTests
         Assert.Empty(future.Items);
     }
 
+    [Fact]
+    public async Task LibraryBrowserAppliesStrictTypedMetadataFilters()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var files = new List<FileRecord>();
+        foreach (var name in new[] { "ten.txt", "five.txt", "text.txt", "missing.txt", "json.txt" })
+        {
+            var path = temporary.Child(name);
+            await File.WriteAllTextAsync(path, name);
+            files.Add(Assert.Single(await workspace.ImportAsync([path], workspace.Descriptor.RootFolderId)).File!);
+        }
+        await workspace.SetMetadataAsync(files[0].Id, "Rating", MetadataValueKind.Number, "10.0", false);
+        await workspace.SetMetadataAsync(files[1].Id, "Rating", MetadataValueKind.Number, "5", false);
+        await workspace.SetMetadataAsync(files[2].Id, "Rating", MetadataValueKind.Text, "TEN", true);
+        await workspace.SetMetadataAsync(files[4].Id, "Profile", MetadataValueKind.Json, "{\"count\":4.0,\"tags\":[\"a\",\"b\"]}", false);
+        await workspace.SetMetadataAsync(files[3].Id, "Profile", MetadataValueKind.Json, "null", false);
+        await workspace.SetMetadataAsync(files[0].Id, "Captured", MetadataValueKind.DateTime, "2026-08-03T08:00:00+08:00", false);
+
+        LibraryFileBrowseQuery Query(UserMetadataFilter filter) => new(workspace.Descriptor.RootFolderId, LibraryBrowseScope.CurrentFolder, string.Empty,
+            LibraryMediaKind.Any, null, null, null, LibraryFileSort.Name, 0, 20, filter);
+
+        var number = await workspace.BrowseFilesAsync(Query(new UserMetadataFilter("rating", MetadataValueKind.Number, MetadataFilterOperator.GreaterThan, "6")));
+        Assert.Equal(files[0].Id, Assert.Single(number.Items).File.Id);
+        Assert.Equal(2, number.MetadataMissingCount);
+        Assert.Equal(1, number.MetadataIncompatibleTypeCount);
+        Assert.Contains("Matched user metadata filter", number.Items[0].MatchReasons);
+
+        var text = await workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Rating", MetadataValueKind.Text, MetadataFilterOperator.Contains, "ten")));
+        Assert.Equal(files[2].Id, Assert.Single(text.Items).File.Id);
+
+        var json = await workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Profile", MetadataValueKind.Json, MetadataFilterOperator.StructurallyEquals, "{\"tags\":[\"a\",\"b\"],\"count\":4}")));
+        Assert.Equal(files[4].Id, Assert.Single(json.Items).File.Id);
+        var wrongArrayOrder = await workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Profile", MetadataValueKind.Json, MetadataFilterOperator.StructurallyEquals, "{\"tags\":[\"b\",\"a\"],\"count\":4}")));
+        Assert.Empty(wrongArrayOrder.Items);
+        var jsonExists = await workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Profile", MetadataValueKind.Json, MetadataFilterOperator.Exists, null)));
+        Assert.Equal(2, jsonExists.TotalCount);
+        var jsonNull = await workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Profile", MetadataValueKind.Json, MetadataFilterOperator.StructurallyEquals, "null")));
+        Assert.Equal(files[3].Id, Assert.Single(jsonNull.Items).File.Id);
+        var jsonMissing = await workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Profile", MetadataValueKind.Json, MetadataFilterOperator.DoesNotExist, null)));
+        Assert.Equal(3, jsonMissing.TotalCount);
+
+        var instant = await workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Captured", MetadataValueKind.DateTime, MetadataFilterOperator.Equals, "2026-08-03T00:00:00Z")));
+        Assert.Equal(files[0].Id, Assert.Single(instant.Items).File.Id);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Rating", MetadataValueKind.Number, MetadataFilterOperator.Contains, "1"))));
+    }
+
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
     {
         public void Report(T value) => report(value);

@@ -42,6 +42,8 @@ Opening an older library upgrades it to version 4 before normal access. Version 
 
 Name and metadata search uses escaped parameterized `LIKE` expressions; `%`, `_`, and backslash in user input remain literal characters. JSON metadata is traversed with SQLite JSON functions and contributes only property names and scalar string, finite-number, and Boolean values. The query never reads managed file bodies. Its projection returns safe match reasons rather than snippets: a non-sensitive metadata match may return one key, while a sensitive match returns only a generic reason.
 
+Typed metadata filtering normalizes the key and validates the operator/value pair before SQL construction. Every value remains a bound parameter. Separate aggregate subqueries count missing keys and incompatible stored types among files which pass the other browser criteria. Unicode text comparisons use registered ordinal-ignore-case functions, decimal numbers and `DateTimeOffset` instants use exact registered comparators, ISO dates compare lexically, and JSON uses a bounded, validated structural comparator. JSON objects compare by ordinal property name without order significance, arrays retain order, and arbitrary JSON number notation is normalized to an integer significand plus base-10 power for exact equality. Filter match reasons never contain comparison values.
+
 The GUI retains folder, query, filters, sort, offset, and view mode in the active library-state service. That state survives component navigation during the application session and is reset when the active library changes.
 
 ## Import commit protocol

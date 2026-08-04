@@ -101,6 +101,25 @@ public static class LibraryRules
         return value;
     }
 
+    public static UserMetadataFilter ValidateMetadataFilter(UserMetadataFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        var key = NormalizeMetadataKey(filter.Key);
+        var allowed = filter.Kind switch
+        {
+            MetadataValueKind.Text => filter.Operator is MetadataFilterOperator.Equals or MetadataFilterOperator.DoesNotEqual or MetadataFilterOperator.Contains,
+            MetadataValueKind.Number or MetadataValueKind.Date or MetadataValueKind.DateTime => filter.Operator is MetadataFilterOperator.Equals or MetadataFilterOperator.DoesNotEqual or MetadataFilterOperator.LessThan or MetadataFilterOperator.LessThanOrEqual or MetadataFilterOperator.GreaterThan or MetadataFilterOperator.GreaterThanOrEqual,
+            MetadataValueKind.Boolean => filter.Operator is MetadataFilterOperator.Equals or MetadataFilterOperator.DoesNotEqual,
+            MetadataValueKind.Json => filter.Operator is MetadataFilterOperator.Exists or MetadataFilterOperator.DoesNotExist or MetadataFilterOperator.StructurallyEquals or MetadataFilterOperator.DoesNotEqual,
+            _ => false
+        };
+        if (!allowed) throw new LibraryValidationException($"{filter.Operator} is not valid for {filter.Kind} metadata.");
+        var needsValue = filter.Operator is not MetadataFilterOperator.Exists and not MetadataFilterOperator.DoesNotExist;
+        if (needsValue && filter.ComparisonValue is null) throw new LibraryValidationException("The metadata filter requires a comparison value.");
+        var value = needsValue ? ValidateMetadataValue(filter.Kind, filter.ComparisonValue!) : null;
+        return filter with { Key = key, ComparisonValue = value };
+    }
+
     private static void ValidateJson(string value)
     {
         var options = new JsonDocumentOptions

@@ -114,6 +114,11 @@ public sealed class LibraryBrowserSession
     public FileOrigin? Origin { get; set; }
     public DateTime? ImportedFrom { get; set; }
     public DateTime? ImportedThrough { get; set; }
+    public bool MetadataFilterEnabled { get; set; }
+    public string MetadataKey { get; set; } = string.Empty;
+    public MetadataValueKind MetadataKind { get; set; } = MetadataValueKind.Text;
+    public MetadataFilterOperator MetadataOperator { get; set; } = MetadataFilterOperator.Equals;
+    public string MetadataComparisonValue { get; set; } = string.Empty;
     public LibraryFileSort Sort { get; set; } = LibraryFileSort.Name;
     public LibraryBrowserViewMode ViewMode { get; set; } = LibraryBrowserViewMode.List;
     public int Offset { get; set; }

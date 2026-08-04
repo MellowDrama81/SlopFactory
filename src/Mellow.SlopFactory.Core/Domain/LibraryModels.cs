@@ -61,6 +61,20 @@ public enum LibraryMediaKind
     Other = 5
 }
 
+public enum MetadataFilterOperator
+{
+    Equals = 0,
+    DoesNotEqual = 1,
+    Contains = 2,
+    LessThan = 3,
+    LessThanOrEqual = 4,
+    GreaterThan = 5,
+    GreaterThanOrEqual = 6,
+    Exists = 7,
+    DoesNotExist = 8,
+    StructurallyEquals = 9
+}
+
 public enum RecycleBinItemKind
 {
     Folder = 0,
@@ -131,7 +145,14 @@ public sealed record LibraryFileBrowseQuery(
     DateTimeOffset? ImportedBeforeExclusive,
     LibraryFileSort Sort,
     int Offset = 0,
-    int PageSize = 48);
+    int PageSize = 48,
+    UserMetadataFilter? MetadataFilter = null);
+
+public sealed record UserMetadataFilter(
+    string Key,
+    MetadataValueKind Kind,
+    MetadataFilterOperator Operator,
+    string? ComparisonValue);
 
 public sealed record LibraryFileBrowseItem(
     FileRecord File,
@@ -141,7 +162,9 @@ public sealed record LibraryFileBrowseResult(
     IReadOnlyList<LibraryFileBrowseItem> Items,
     int TotalCount,
     int Offset,
-    int PageSize)
+    int PageSize,
+    int MetadataMissingCount = 0,
+    int MetadataIncompatibleTypeCount = 0)
 {
     public bool HasPreviousPage => Offset > 0;
     public bool HasNextPage => Offset + Items.Count < TotalCount;

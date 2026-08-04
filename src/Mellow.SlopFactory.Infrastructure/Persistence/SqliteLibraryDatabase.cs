@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Numerics;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Mellow.SlopFactory.Domain;
 
@@ -260,6 +262,7 @@ internal sealed class SqliteLibraryDatabase
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var folder = await GetFolderAsync(connection, query.FolderId, cancellationToken, transaction).ConfigureAwait(false);
         if (folder.State != LibraryRecordState.Active) throw new RecordNotFoundException("The current folder is not active.");
+        var metadataFilter = query.MetadataFilter is null ? null : LibraryRules.ValidateMetadataFilter(query.MetadataFilter);
 
         var hasSearch = !string.IsNullOrWhiteSpace(query.SearchText);
         var searchPattern = hasSearch ? $"%{EscapeLikePattern(query.SearchText)}%" : string.Empty;
@@ -293,6 +296,8 @@ internal sealed class SqliteLibraryDatabase
         if (query.Origin is not null) conditions.Add("f.origin=$origin");
         if (query.ImportedFromInclusive is not null) conditions.Add("f.imported_at>=$from");
         if (query.ImportedBeforeExclusive is not null) conditions.Add("f.imported_at<$before");
+        var baseWhere = string.Join(" AND ", conditions);
+        if (metadataFilter is not null) conditions.Add(MetadataFilterCondition(metadataFilter));
         var where = string.Join(" AND ", conditions);
 
         void AddParameters(SqliteCommand command)
@@ -302,6 +307,33 @@ internal sealed class SqliteLibraryDatabase
             if (query.Origin is not null) command.Parameters.AddWithValue("$origin", (int)query.Origin.Value);
             if (query.ImportedFromInclusive is not null) command.Parameters.AddWithValue("$from", Format(query.ImportedFromInclusive.Value));
             if (query.ImportedBeforeExclusive is not null) command.Parameters.AddWithValue("$before", Format(query.ImportedBeforeExclusive.Value));
+            if (metadataFilter is not null)
+            {
+                command.Parameters.AddWithValue("$metadataKey", LibraryRules.ComparisonKey(metadataFilter.Key));
+                command.Parameters.AddWithValue("$metadataKind", (int)metadataFilter.Kind);
+                command.Parameters.AddWithValue("$metadataValue", metadataFilter.ComparisonValue is null ? DBNull.Value : metadataFilter.ComparisonValue);
+            }
+        }
+
+        var metadataMissingCount = 0;
+        var metadataIncompatibleTypeCount = 0;
+        if (metadataFilter is not null)
+        {
+            await using var metadataCountCommand = connection.CreateCommand();
+            metadataCountCommand.Transaction = transaction;
+            metadataCountCommand.CommandText = $"""
+                SELECT
+                    COALESCE(SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM metadata_entries m WHERE m.file_id=f.id AND m.key_key=$metadataKey) THEN 1 ELSE 0 END),0),
+                    COALESCE(SUM(CASE WHEN EXISTS (SELECT 1 FROM metadata_entries m WHERE m.file_id=f.id AND m.key_key=$metadataKey)
+                                      AND NOT EXISTS (SELECT 1 FROM metadata_entries m WHERE m.file_id=f.id AND m.key_key=$metadataKey AND m.kind=$metadataKind)
+                                 THEN 1 ELSE 0 END),0)
+                FROM files f WHERE {baseWhere};
+                """;
+            AddParameters(metadataCountCommand);
+            await using var metadataCountReader = await metadataCountCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            await metadataCountReader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            metadataMissingCount = metadataCountReader.GetInt32(0);
+            metadataIncompatibleTypeCount = metadataCountReader.GetInt32(1);
         }
 
         int totalCount;
@@ -354,11 +386,12 @@ internal sealed class SqliteLibraryDatabase
                 var metadataKey = reader.GetString(16);
                 if (metadataKey.Length > 0) reasons.Add($"Matched user metadata: {metadataKey}");
                 else if (reader.GetBoolean(17)) reasons.Add("Matched user metadata");
+                if (metadataFilter is not null) reasons.Add("Matched user metadata filter");
                 items.Add(new LibraryFileBrowseItem(file, reasons));
             }
         }
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new LibraryFileBrowseResult(items, totalCount, query.Offset, query.PageSize);
+        return new LibraryFileBrowseResult(items, totalCount, query.Offset, query.PageSize, metadataMissingCount, metadataIncompatibleTypeCount);
     }
 
     public async Task<IReadOnlyList<FileRecord>> GetFilesForIntegrityScanAsync(CancellationToken cancellationToken)
@@ -1238,6 +1271,11 @@ internal sealed class SqliteLibraryDatabase
     {
         var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        connection.CreateFunction<string, string, bool>("slopfactory_text_equals", (left, right) => string.Equals(left, right, StringComparison.OrdinalIgnoreCase), isDeterministic: true);
+        connection.CreateFunction<string, string, bool>("slopfactory_text_contains", (value, search) => value.Contains(search, StringComparison.OrdinalIgnoreCase), isDeterministic: true);
+        connection.CreateFunction<string, string, int>("slopfactory_number_compare", CompareMetadataNumbers, isDeterministic: true);
+        connection.CreateFunction<string, string, int>("slopfactory_datetime_compare", CompareMetadataDateTimes, isDeterministic: true);
+        connection.CreateFunction<string, string, bool>("slopfactory_json_equal", JsonStructurallyEquals, isDeterministic: true);
         await ExecuteNonQueryAsync(connection, "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;", cancellationToken).ConfigureAwait(false);
         return connection;
     }
@@ -1290,6 +1328,104 @@ internal sealed class SqliteLibraryDatabase
     private static string Format(DateTimeOffset value) => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
     private static DateTimeOffset Parse(string value) => DateTimeOffset.ParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
     private static string EscapeLikePattern(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
+
+    private static string MetadataFilterCondition(UserMetadataFilter filter)
+    {
+        if (filter.Operator == MetadataFilterOperator.DoesNotExist)
+        {
+            return "NOT EXISTS (SELECT 1 FROM metadata_entries m WHERE m.file_id=f.id AND m.key_key=$metadataKey)";
+        }
+        var comparison = filter.Operator switch
+        {
+            MetadataFilterOperator.Exists => "1=1",
+            MetadataFilterOperator.Contains => "slopfactory_text_contains(m.serialized_value,$metadataValue)",
+            MetadataFilterOperator.StructurallyEquals => "slopfactory_json_equal(m.serialized_value,$metadataValue)",
+            MetadataFilterOperator.Equals when filter.Kind == MetadataValueKind.Text => "slopfactory_text_equals(m.serialized_value,$metadataValue)",
+            MetadataFilterOperator.DoesNotEqual when filter.Kind == MetadataValueKind.Text => "NOT slopfactory_text_equals(m.serialized_value,$metadataValue)",
+            MetadataFilterOperator.Equals when filter.Kind == MetadataValueKind.Number => "slopfactory_number_compare(m.serialized_value,$metadataValue)=0",
+            MetadataFilterOperator.DoesNotEqual when filter.Kind == MetadataValueKind.Number => "slopfactory_number_compare(m.serialized_value,$metadataValue)<>0",
+            MetadataFilterOperator.LessThan when filter.Kind == MetadataValueKind.Number => "slopfactory_number_compare(m.serialized_value,$metadataValue)<0",
+            MetadataFilterOperator.LessThanOrEqual when filter.Kind == MetadataValueKind.Number => "slopfactory_number_compare(m.serialized_value,$metadataValue)<=0",
+            MetadataFilterOperator.GreaterThan when filter.Kind == MetadataValueKind.Number => "slopfactory_number_compare(m.serialized_value,$metadataValue)>0",
+            MetadataFilterOperator.GreaterThanOrEqual when filter.Kind == MetadataValueKind.Number => "slopfactory_number_compare(m.serialized_value,$metadataValue)>=0",
+            MetadataFilterOperator.Equals when filter.Kind == MetadataValueKind.Boolean => "slopfactory_text_equals(m.serialized_value,$metadataValue)",
+            MetadataFilterOperator.DoesNotEqual when filter.Kind == MetadataValueKind.Boolean => "NOT slopfactory_text_equals(m.serialized_value,$metadataValue)",
+            MetadataFilterOperator.Equals when filter.Kind == MetadataValueKind.Date => "m.serialized_value=$metadataValue",
+            MetadataFilterOperator.DoesNotEqual when filter.Kind == MetadataValueKind.Date => "m.serialized_value<>$metadataValue",
+            MetadataFilterOperator.LessThan when filter.Kind == MetadataValueKind.Date => "m.serialized_value<$metadataValue",
+            MetadataFilterOperator.LessThanOrEqual when filter.Kind == MetadataValueKind.Date => "m.serialized_value<=$metadataValue",
+            MetadataFilterOperator.GreaterThan when filter.Kind == MetadataValueKind.Date => "m.serialized_value>$metadataValue",
+            MetadataFilterOperator.GreaterThanOrEqual when filter.Kind == MetadataValueKind.Date => "m.serialized_value>=$metadataValue",
+            MetadataFilterOperator.Equals when filter.Kind == MetadataValueKind.DateTime => "slopfactory_datetime_compare(m.serialized_value,$metadataValue)=0",
+            MetadataFilterOperator.DoesNotEqual when filter.Kind == MetadataValueKind.DateTime => "slopfactory_datetime_compare(m.serialized_value,$metadataValue)<>0",
+            MetadataFilterOperator.LessThan when filter.Kind == MetadataValueKind.DateTime => "slopfactory_datetime_compare(m.serialized_value,$metadataValue)<0",
+            MetadataFilterOperator.LessThanOrEqual when filter.Kind == MetadataValueKind.DateTime => "slopfactory_datetime_compare(m.serialized_value,$metadataValue)<=0",
+            MetadataFilterOperator.GreaterThan when filter.Kind == MetadataValueKind.DateTime => "slopfactory_datetime_compare(m.serialized_value,$metadataValue)>0",
+            MetadataFilterOperator.GreaterThanOrEqual when filter.Kind == MetadataValueKind.DateTime => "slopfactory_datetime_compare(m.serialized_value,$metadataValue)>=0",
+            MetadataFilterOperator.DoesNotEqual when filter.Kind == MetadataValueKind.Json => "NOT slopfactory_json_equal(m.serialized_value,$metadataValue)",
+            _ => throw new LibraryValidationException("The metadata filter operator is not supported for this type.")
+        };
+        return $"EXISTS (SELECT 1 FROM metadata_entries m WHERE m.file_id=f.id AND m.key_key=$metadataKey AND m.kind=$metadataKind AND {comparison})";
+    }
+
+    private static int CompareMetadataNumbers(string left, string right) => decimal.Parse(left, NumberStyles.Float, CultureInfo.InvariantCulture).CompareTo(decimal.Parse(right, NumberStyles.Float, CultureInfo.InvariantCulture));
+    private static int CompareMetadataDateTimes(string left, string right) => DateTimeOffset.Parse(left, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).CompareTo(DateTimeOffset.Parse(right, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+
+    private static bool JsonStructurallyEquals(string left, string right)
+    {
+        try
+        {
+            using var leftDocument = JsonDocument.Parse(left);
+            using var rightDocument = JsonDocument.Parse(right);
+            return JsonElementsEqual(leftDocument.RootElement, rightDocument.RootElement);
+        }
+        catch (JsonException) { return false; }
+    }
+
+    private static bool JsonElementsEqual(JsonElement left, JsonElement right)
+    {
+        if (left.ValueKind != right.ValueKind)
+        {
+            if (left.ValueKind == JsonValueKind.Number && right.ValueKind == JsonValueKind.Number) return JsonNumbersEqual(left.GetRawText(), right.GetRawText());
+            return false;
+        }
+        return left.ValueKind switch
+        {
+            JsonValueKind.Object => JsonObjectsEqual(left, right),
+            JsonValueKind.Array => left.GetArrayLength() == right.GetArrayLength() && left.EnumerateArray().Zip(right.EnumerateArray()).All(pair => JsonElementsEqual(pair.First, pair.Second)),
+            JsonValueKind.String => string.Equals(left.GetString(), right.GetString(), StringComparison.Ordinal),
+            JsonValueKind.Number => JsonNumbersEqual(left.GetRawText(), right.GetRawText()),
+            JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null => true,
+            _ => false
+        };
+    }
+
+    private static bool JsonObjectsEqual(JsonElement left, JsonElement right)
+    {
+        var leftProperties = left.EnumerateObject().ToDictionary(property => property.Name, property => property.Value, StringComparer.Ordinal);
+        var rightProperties = right.EnumerateObject().ToDictionary(property => property.Name, property => property.Value, StringComparer.Ordinal);
+        return leftProperties.Count == rightProperties.Count && leftProperties.All(property => rightProperties.TryGetValue(property.Key, out var value) && JsonElementsEqual(property.Value, value));
+    }
+
+    private static bool JsonNumbersEqual(string left, string right) => NormalizeJsonNumber(left) == NormalizeJsonNumber(right);
+
+    private static (BigInteger Significand, BigInteger Power) NormalizeJsonNumber(string value)
+    {
+        var negative = value.Length > 0 && value[0] == '-';
+        var unsigned = negative ? value[1..] : value;
+        var exponentIndex = unsigned.IndexOfAny(['e', 'E']);
+        var mantissa = exponentIndex < 0 ? unsigned : unsigned[..exponentIndex];
+        var exponent = exponentIndex < 0 ? BigInteger.Zero : BigInteger.Parse(unsigned[(exponentIndex + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        var decimalIndex = mantissa.IndexOf('.');
+        var fractionDigits = decimalIndex < 0 ? 0 : mantissa.Length - decimalIndex - 1;
+        var digits = mantissa.Replace(".", string.Empty, StringComparison.Ordinal).TrimStart('0');
+        if (digits.Length == 0) return (BigInteger.Zero, BigInteger.Zero);
+        var trailingZeros = digits.Length - digits.TrimEnd('0').Length;
+        if (trailingZeros > 0) digits = digits[..^trailingZeros];
+        var significand = BigInteger.Parse(digits, CultureInfo.InvariantCulture);
+        if (negative) significand = -significand;
+        return (significand, exponent - fractionDigits + trailingZeros);
+    }
 
     private static async Task ExecuteNonQueryAsync(SqliteConnection connection, string sql, CancellationToken cancellationToken, SqliteTransaction? transaction = null, params (string Name, object Value)[] parameters)
     {

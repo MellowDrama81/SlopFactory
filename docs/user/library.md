@@ -8,6 +8,8 @@ The file browser searches display names, retained original filenames, and typed 
 
 Results can be filtered by detected media category, origin, and an inclusive local import-date range, then sorted by name, newest import, newest library modification, largest size, or media type. Results are shown in pages of 48 files. A match label explains whether a name or metadata caused a hit. Non-sensitive metadata may identify its matching key, while a sensitive entry uses only **Matched user metadata** and never exposes the key or value.
 
+Enable **Filter by typed metadata** to select one key, its required type, and an operator appropriate to that type. Text comparisons ignore case; numbers, dates, and offset-aware date-times support equality and range operators; Booleans support equality; and JSON supports existence plus structural equality. JSON structural equality ignores object-property order and formatting, treats numerically equivalent notation as equal, and preserves array order. A JSON `null` value exists and remains distinct from a missing key. The comparison field is concealed and retained only for the current library session. Results report how many otherwise eligible files lack the key or use it with another type; values are never coerced implicitly.
+
 Opening a file and returning to the Library page restores the current folder, query, scope, filters, sort, page, and list/grid choice for the current application session. Switching libraries starts a separate default browser state.
 
 Raster images and MP4 videos acquire static thumbnails in the background. Until one is ready, or when the platform decoder cannot safely create one, the file keeps its type icon and remains usable. The preview is regenerable device data rather than part of the library.

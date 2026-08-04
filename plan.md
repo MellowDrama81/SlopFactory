@@ -281,7 +281,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The user can retry, deliberately select another known or valid library, or explicitly create a new library.
 - The previous navigation location, library folder, search, filters, sort and view mode are restored.
 - Only the current search state for each remembered library is stored in device-local preferences; SlopFactory keeps no separate recent-search history and requests no provider-backed search suggestions.
-- Sensitive-metadata filter comparison values are masked and memory-only. If an ordinary free-text query produces any sensitive-metadata match, that query is also excluded from restorable device-local search state.
+- If an ordinary free-text query produces any sensitive-metadata match, that query is excluded from any future restorable device-local search state.
 - Such sensitive search and filter state may remain active in memory while navigating within the currently open library, but clears when the library is closed, switched away from, locked or unavailable and when the application exits or restarts.
 - Forgetting a library removes its saved search query and related navigation state, and search queries are never written to diagnostics.
 - A library can have multiple generation tabs open concurrently.
@@ -949,11 +949,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Prompt and safety-category details remain available only through the file or history detail actions governed by their normal disclosure behavior.
 - Results can additionally be filtered by generation model, active or recycled status, **Provider Safety Warning**, **Provider Blocked After Delivery**, and **Has Provider Safety History** as those records are implemented.
 - **Has Provider Safety History** matches any file retaining a provider classification revision, including currently cleared files, without indexing or displaying its category text in ordinary results.
-- A user-metadata filter selects a key, target type, type-appropriate operator and comparison value.
-- It applies only to entries of the selected type and reports separate counts for records excluded because the key is missing or has an incompatible type; it never coerces mixed types implicitly.
-- First-release JSON operators are **Exists**, **Does Not Exist**, **Structurally Equals** and **Does Not Equal**; deeper JSON-path, member-specific and range queries are deferred.
-- JSON structural equality ignores object-property order and insignificant serialization formatting, preserves array order, compares strings and property names case-sensitively, and compares numbers by exact numeric value rather than textual notation.
-- A stored JSON value may be `null`. **Exists** matches it because the metadata entry exists, while **Structurally Equals null** specifically matches that value; a missing metadata key remains a distinct state.
+- Deeper JSON-path, member-specific and range queries are deferred.
 - Provider moderation-category text is not indexed by or displayed through ordinary library search; safety state is discoverable only through the explicit filters and file details.
 - Multi-selection additionally supports export.
 

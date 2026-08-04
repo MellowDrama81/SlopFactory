@@ -52,6 +52,7 @@ h2 { margin-top: 2rem; font-size: 1.15rem; }
 .browser-controls label { display: grid; gap: .4rem; }
 .browser-search { grid-column: span 2; }
 .browser-actions { align-self: end; }
+.metadata-filter-toggle { align-self: center; }
 .browser-summary { margin: 1rem 0; }
 .pagination { justify-content: center; margin-top: 1rem; }
 .empty-panel, .panel, .notice, .inline-form { padding: 1rem 1.2rem; }

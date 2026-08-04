@@ -230,6 +230,29 @@ else
                     <option value="@LibraryFileSort.MediaType">Media type</option>
                 </InputSelect>
             </label>
+            <label class="check metadata-filter-toggle"><InputCheckbox id="metadata-filter-enabled" @bind-Value="_browser.MetadataFilterEnabled" /> Filter by typed metadata</label>
+            @if (_browser.MetadataFilterEnabled)
+            {
+                <label for="metadata-filter-key">Metadata key
+                    <InputText id="metadata-filter-key" maxlength="100" @bind-Value="_browser.MetadataKey" />
+                </label>
+                <label for="metadata-filter-kind">Metadata type
+                    <select id="metadata-filter-kind" value="@_browser.MetadataKind" @onchange="ChangeMetadataFilterKind">
+                        @foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@kind</option> }
+                    </select>
+                </label>
+                <label for="metadata-filter-operator">Operator
+                    <InputSelect id="metadata-filter-operator" @bind-Value="_browser.MetadataOperator">
+                        @foreach (var item in MetadataOperators(_browser.MetadataKind)) { <option value="@item.Operator">@item.Label</option> }
+                    </InputSelect>
+                </label>
+                @if (MetadataFilterNeedsValue)
+                {
+                    <label for="metadata-filter-value">Comparison value
+                        <input id="metadata-filter-value" type="password" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" @bind="_browser.MetadataComparisonValue" />
+                    </label>
+                }
+            }
             <div class="actions browser-actions">
                 <button type="submit" disabled="@_loadingBrowse">Apply</button>
                 <button type="button" class="secondary" @onclick="ClearBrowserAsync" disabled="@_loadingBrowse">Clear search and filters</button>
@@ -250,7 +273,7 @@ else
         }
         else
         {
-            <p class="muted browser-summary" role="status">Showing @(_browseResult.Offset + 1)–@(_browseResult.Offset + _browseResult.Items.Count) of @_browseResult.TotalCount active file(s)@(_browser.Scope == LibraryBrowseScope.EntireLibrary ? " across the library" : " in this folder").</p>
+            <p class="muted browser-summary" role="status">Showing @(_browseResult.Offset + 1)–@(_browseResult.Offset + _browseResult.Items.Count) of @_browseResult.TotalCount active file(s)@(_browser.Scope == LibraryBrowseScope.EntireLibrary ? " across the library" : " in this folder").@(_browser.MetadataFilterEnabled ? $" Among files passing the other filters, {_browseResult.MetadataMissingCount} lack the selected key and {_browseResult.MetadataIncompatibleTypeCount} use an incompatible type." : string.Empty)</p>
             <div class="selection-bar" aria-label="File selection actions">
                 <div class="actions">
                     <button class="secondary" @onclick="SelectCurrentPage">Select this page</button>
@@ -422,7 +445,8 @@ else
     private BulkMetadataPreview? _bulkMetadataPreview;
     private BulkFileOperationResult? _bulkResult;
     private LibraryBrowserSession _browser => LibraryState.BrowserSession;
-    private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null;
+    private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null || _browser.MetadataFilterEnabled;
+    private bool MetadataFilterNeedsValue => _browser.MetadataOperator is not MetadataFilterOperator.Exists and not MetadataFilterOperator.DoesNotExist;
     private int CurrentPage => _browseResult is null ? 1 : (_browseResult.Offset / PageSize) + 1;
     private int PageCount => _browseResult is null ? 1 : Math.Max(1, (int)Math.Ceiling(_browseResult.TotalCount / (double)PageSize));
 
@@ -463,7 +487,7 @@ else
         {
             var from = ParseLocalDate(_browser.ImportedFrom, inclusiveThrough: false);
             var before = ParseLocalDate(_browser.ImportedThrough, inclusiveThrough: true);
-            var query = new LibraryFileBrowseQuery(_contents.Folder.Id, _browser.Scope, _browser.SearchText, _browser.MediaKind, _browser.Origin, from, before, _browser.Sort, _browser.Offset, PageSize);
+            var query = new LibraryFileBrowseQuery(_contents.Folder.Id, _browser.Scope, _browser.SearchText, _browser.MediaKind, _browser.Origin, from, before, _browser.Sort, _browser.Offset, PageSize, BuildMetadataFilter());
             _browseResult = await LibraryState.Workspace.BrowseFilesAsync(query);
             if (_browseResult.TotalCount > 0 && _browser.Offset >= _browseResult.TotalCount)
             {
@@ -494,9 +518,58 @@ else
         _browser.Origin = null;
         _browser.ImportedFrom = null;
         _browser.ImportedThrough = null;
+        _browser.MetadataFilterEnabled = false;
+        _browser.MetadataKey = string.Empty;
+        _browser.MetadataKind = MetadataValueKind.Text;
+        _browser.MetadataOperator = MetadataFilterOperator.Equals;
+        _browser.MetadataComparisonValue = string.Empty;
         _browser.Offset = 0;
         return LoadBrowseAsync();
     }
+
+    private UserMetadataFilter? BuildMetadataFilter() => !_browser.MetadataFilterEnabled
+        ? null
+        : LibraryRules.ValidateMetadataFilter(new UserMetadataFilter(_browser.MetadataKey, _browser.MetadataKind, _browser.MetadataOperator,
+            MetadataFilterNeedsValue ? _browser.MetadataComparisonValue : null));
+
+    private void ChangeMetadataFilterKind(ChangeEventArgs args)
+    {
+        if (!Enum.TryParse<MetadataValueKind>(args.Value?.ToString(), out var kind)) return;
+        _browser.MetadataKind = kind;
+        _browser.MetadataOperator = MetadataOperators(kind)[0].Operator;
+        _browser.MetadataComparisonValue = string.Empty;
+    }
+
+    private static IReadOnlyList<MetadataOperatorChoice> MetadataOperators(MetadataValueKind kind) => kind switch
+    {
+        MetadataValueKind.Text =>
+        [
+            new(MetadataFilterOperator.Equals, "Equals (case-insensitive)"),
+            new(MetadataFilterOperator.DoesNotEqual, "Does not equal"),
+            new(MetadataFilterOperator.Contains, "Contains (case-insensitive)")
+        ],
+        MetadataValueKind.Boolean =>
+        [
+            new(MetadataFilterOperator.Equals, "Equals"),
+            new(MetadataFilterOperator.DoesNotEqual, "Does not equal")
+        ],
+        MetadataValueKind.Json =>
+        [
+            new(MetadataFilterOperator.Exists, "Exists"),
+            new(MetadataFilterOperator.DoesNotExist, "Does not exist"),
+            new(MetadataFilterOperator.StructurallyEquals, "Structurally equals"),
+            new(MetadataFilterOperator.DoesNotEqual, "Does not equal")
+        ],
+        _ =>
+        [
+            new(MetadataFilterOperator.Equals, "Equals"),
+            new(MetadataFilterOperator.DoesNotEqual, "Does not equal"),
+            new(MetadataFilterOperator.LessThan, "Less than"),
+            new(MetadataFilterOperator.LessThanOrEqual, "Less than or equal"),
+            new(MetadataFilterOperator.GreaterThan, "Greater than"),
+            new(MetadataFilterOperator.GreaterThanOrEqual, "Greater than or equal")
+        ]
+    };
 
     private Task PreviousPageAsync()
     {
@@ -1128,4 +1201,5 @@ else
     }
     private sealed record CommonMetadataSummary(string Key, string TypeLabel, string ValueLabel);
     private sealed record BulkMetadataPreview(bool Remove, int ExistingCount, int ExistingSensitiveCount, string Summary);
+    private sealed record MetadataOperatorChoice(MetadataFilterOperator Operator, string Label);
 }
