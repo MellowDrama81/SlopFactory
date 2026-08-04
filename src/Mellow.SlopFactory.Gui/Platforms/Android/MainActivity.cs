@@ -80,10 +80,10 @@ public sealed class MainActivity : MauiAppCompatActivity
         if (ContentResolver is null) return uri.LastPathSegment ?? "shared-file.bin";
         try
         {
-            using var cursor = ContentResolver.Query(uri, [OpenableColumns.DisplayName], null, null, null);
+            using var cursor = ContentResolver.Query(uri, [IOpenableColumns.DisplayName], null, null, null);
             if (cursor is not null && cursor.MoveToFirst())
             {
-                var index = cursor.GetColumnIndex(OpenableColumns.DisplayName);
+                var index = cursor.GetColumnIndex(IOpenableColumns.DisplayName);
                 if (index >= 0 && cursor.GetString(index) is { Length: > 0 } name) return name;
             }
         }
