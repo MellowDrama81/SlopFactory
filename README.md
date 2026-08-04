@@ -21,6 +21,7 @@ The current development build implements the local-library foundation, including
 - directed file links with recycle and restore behavior;
 - searchable aggregate recycling with conflict-aware bulk recovery, persisted retryable-deletion failures, and empty-bin processing;
 - coherent non-mutating integrity scans covering active and recycled managed content while library changes wait;
+- durable missing/changed managed-content health with exact-byte recovery and preserved metadata and links;
 - transactional SQLite schema upgrades; and
 - shared .NET MAUI application projects for Windows and Android.
 

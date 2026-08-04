@@ -570,21 +570,17 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Storage errors provide shortcuts to the recycle bin and storage settings.
 - The user must resolve the storage problem and retry the failed operation explicitly.
 - If the active library becomes read-only or unavailable, the application closes it safely rather than continuing with partial functionality.
-- Managed-file existence is verified before opening, exporting, sending to a provider or generating a preview.
+- Managed-file existence must also be verified before export and provider submission when those workflows are implemented.
 - While a library is open, SlopFactory uses best-effort filesystem watching to detect unexpected external changes to its manifest, database and managed-file tree.
 - Watcher events are advisory because they can be coalesced, duplicated or missed; they mark affected content for revalidation and can recommend a full integrity scan.
 - Expected events from SlopFactory's own atomic operations are correlated and do not generate false external-change warnings.
 - An unexpected manifest or database change pauses mutations and closes the library if validation cannot prove continued consistency.
 - An unexpected managed-file event marks the affected record for existence and hash verification without automatically accepting, deleting or recreating content.
-- Critical operations retain their explicit existence, containment and hash checks regardless of watcher state.
-- When external modification is suspected, the application recalculates and compares the file's content hash.
-- Missing managed files are marked **Missing** and altered managed files are marked **Content Changed**.
-- Records, metadata, links and generation history are preserved while a file is missing or changed.
-- Externally changed bytes are not silently accepted as the original content.
+- Future provider and export operations retain explicit existence, containment and hash checks regardless of watcher state.
 - A **Content Changed** record permits metadata and relationship viewing plus a clearly labelled sandboxed **Inspect Changed Bytes** mode subject to all normal content-safety limits.
 - **Export Changed Bytes** lets the user copy the currently present bytes to an external destination for recovery without updating the library record or attaching a normal provenance sidecar.
-- Ordinary export, **Open Externally**, provider-source selection and provenance-based preview remain unavailable while the record is **Content Changed**.
-- A **Missing** record has no bytes to inspect or export.
+- Ordinary export, **Open Externally**, and provider-source selection remain unavailable while the record is **Content Changed** when those workflows are implemented.
+- A **Missing** record has no bytes to inspect or export when those workflows are implemented.
 - When intentionally supplied replacement bytes match the record's original content hash, the file is restored without changing its generation provenance or marking its content as replaced.
 - When replacement bytes differ, SlopFactory requires confirmation, calculates the new hash, records the replacement timestamp and marks the file **Content Replaced**.
 - Differing-replacement confirmation states that user metadata remains attached by default and summarizes ordinary and sensitive entry counts without revealing sensitive keys or values.
@@ -607,8 +603,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - A file pinned by queued preparation, upload or another active submitted operation cannot be replaced or accepted until the pin is released or the work is cancelled.
 - Healthy, unchanged managed files cannot be overwritten through this workflow; new content must be imported as a separate library file.
 - SlopFactory does not retain hidden content versions or provide undo after a differing replacement is confirmed.
-- A broken record can be recycled when its content cannot be recovered.
-- Preview, export and provider upload are unavailable while managed content is missing.
+- Future export and provider upload are unavailable while managed content is missing.
 - The application does not claim to recover missing bytes when no backup exists.
 
 ## Large File Handling

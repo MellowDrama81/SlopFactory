@@ -10,6 +10,14 @@ public enum LibraryRecordState
     ContentReplaced = 5
 }
 
+public enum FileContentState
+{
+    Healthy = 0,
+    Missing = 1,
+    Changed = 2,
+    Replaced = 3
+}
+
 public enum MetadataValueKind
 {
     Text = 0,
@@ -133,7 +141,14 @@ public sealed record FileRecord(
     DateTimeOffset ImportedAt,
     DateTimeOffset ModifiedAt,
     DateTimeOffset? SourceLastModified,
-    DateTimeOffset? RecycledAt);
+    DateTimeOffset? RecycledAt,
+    FileContentState ContentState = FileContentState.Healthy);
+
+public sealed record FileContentHealth(
+    FileRecord File,
+    string? ObservedContentHash,
+    long? ObservedByteSize,
+    string? ObservedMediaType);
 
 public sealed record LibraryFileBrowseQuery(
     string FolderId,

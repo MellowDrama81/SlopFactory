@@ -382,6 +382,7 @@ else
                             }
                             <span class="file-identity"><strong>@item.File.DisplayName</strong><span>@item.File.MediaType · @FormatBytes(item.File.ByteSize)</span></span>
                         </button>
+                        @if (item.File.ContentState != FileContentState.Healthy) { <span class="content-state-badge">@item.File.ContentState</span> }
                         @if (_browser.Scope == LibraryBrowseScope.EntireLibrary)
                         {
                             <span class="file-location">@FolderPath(item.File.FolderId)</span>

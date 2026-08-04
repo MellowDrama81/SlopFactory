@@ -24,6 +24,23 @@ else
         <div class="notice" role="status">@_message</div>
     }
 
+    <section class="panel content-health-panel" aria-labelledby="content-health-title">
+        <div class="section-heading"><h2 id="content-health-title">Managed content</h2><button class="secondary" disabled="@_verifyingContent" @onclick="VerifyContentAsync">@(_verifyingContent ? "Verifying…" : "Verify now")</button></div>
+        <p><strong>@ContentStateLabel(_file.ContentState)</strong> · Built-in viewing rechecks the managed bytes before use.</p>
+        @if (_file.ContentState == FileContentState.Missing)
+        {
+            <p class="error">The managed file is missing. The file record, user metadata, and links remain preserved.</p>
+        }
+        else if (_file.ContentState == FileContentState.Changed)
+        {
+            <p class="error">The bytes differ from the recorded content and have not been accepted as a replacement. Normal viewing is blocked.</p>
+            @if (_contentHealth?.ObservedContentHash is not null)
+            {
+                <dl><dt>Recorded</dt><dd class="mono">@_file.ContentHash · @_file.ByteSize bytes · @_file.MediaType</dd><dt>Observed</dt><dd class="mono">@_contentHealth.ObservedContentHash · @_contentHealth.ObservedByteSize bytes · @_contentHealth.ObservedMediaType</dd></dl>
+            }
+        }
+    </section>
+
     <section class="detail-grid">
         @if (_mediaSource is not null || _mediaError is not null || _mediaPreparing)
         {
@@ -236,6 +253,7 @@ else
                 @if (_file.SourceLastModified is not null) { <dt>Source last modified</dt><dd>@_file.SourceLastModified.Value.ToLocalTime().ToString("g")</dd> }
                 <dt>Origin</dt><dd>@_file.Origin</dd>
                 <dt>State</dt><dd>@_file.State</dd>
+                <dt>Content state</dt><dd>@ContentStateLabel(_file.ContentState)</dd>
             </dl>
         </article>
 
@@ -371,6 +389,8 @@ else
     private MetadataForm _metadataForm = new();
     private LinkForm _linkForm = new();
     private string? _message;
+    private FileContentHealth? _contentHealth;
+    private bool _verifyingContent;
     private string? _renamingMetadataId;
     private string _renameKey = string.Empty;
     private string? _renamingLinkId;
@@ -399,12 +419,13 @@ else
         if (LibraryState.Workspace is null) return;
         try
         {
-            _file = await LibraryState.Workspace.GetFileAsync(Id);
+            _contentHealth = await LibraryState.Workspace.RevalidateFileContentAsync(Id);
+            _file = _contentHealth.File;
             await StopMediaAsync();
             _mediaError = null;
             _mediaPreparing = false;
             _playbackRate = 1;
-            if (IsPlayableMediaType(_file.MediaType))
+            if (CanUseContent(_file) && IsPlayableMediaType(_file.MediaType))
             {
                 _mediaPreparing = true;
                 try
@@ -425,7 +446,7 @@ else
             _fitImage = true;
             _animatedImagePosterUri = null;
             _animatedImagePlaying = false;
-            if (IsImageMediaType(_file.MediaType))
+            if (CanUseContent(_file) && IsImageMediaType(_file.MediaType))
             {
                 try
                 {
@@ -446,7 +467,7 @@ else
             _showRenderedMarkdown = false;
             ClearTextSearch();
             _pendingExternalLink = null;
-            if (IsTextMediaType(_file.MediaType))
+            if (CanUseContent(_file) && IsTextMediaType(_file.MediaType))
             {
                 try { _textContent = await LibraryState.Workspace.ReadTextFileAsync(Id); }
                 catch (SlopFactoryException exception) { _textError = exception.Message; }
@@ -458,6 +479,22 @@ else
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
     }
+
+    private async Task VerifyContentAsync()
+    {
+        _verifyingContent = true;
+        try { await ReloadAsync(); _message = $"Content verification complete: {ContentStateLabel(_file?.ContentState ?? FileContentState.Missing)}."; }
+        finally { _verifyingContent = false; }
+    }
+
+    private static bool CanUseContent(FileRecord file) => file.ContentState is FileContentState.Healthy or FileContentState.Replaced;
+    private static string ContentStateLabel(FileContentState state) => state switch
+    {
+        FileContentState.Missing => "Missing",
+        FileContentState.Changed => "Content changed",
+        FileContentState.Replaced => "Content replaced",
+        _ => "Healthy"
+    };
 
     private async Task SaveMetadataAsync()
     {

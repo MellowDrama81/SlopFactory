@@ -47,11 +47,76 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetFileAsync(fileId, cancellationToken);
     }
 
+    public Task<FileContentHealth> RevalidateFileContentAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => RevalidateFileContentCoreAsync(fileId, cancellationToken), cancellationToken);
+    }
+
+    private async Task<FileContentHealth> RevalidateFileContentCoreAsync(string fileId, CancellationToken cancellationToken)
+    {
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be revalidated.");
+        var path = _layout.ManagedFilePath(file.ManagedName);
+        if (Directory.Exists(path))
+        {
+            var unsafeEntry = await _database.SetFileContentStateAsync(fileId, FileContentState.Changed, cancellationToken).ConfigureAwait(false);
+            return new FileContentHealth(unsafeEntry, null, null, null);
+        }
+        if (!File.Exists(path))
+        {
+            var missing = await _database.SetFileContentStateAsync(fileId, FileContentState.Missing, cancellationToken).ConfigureAwait(false);
+            return new FileContentHealth(missing, null, null, null);
+        }
+        var info = new FileInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            var unsafeFile = await _database.SetFileContentStateAsync(fileId, FileContentState.Changed, cancellationToken).ConfigureAwait(false);
+            return new FileContentHealth(unsafeFile, null, info.Length, null);
+        }
+        var hash = await Hashing.Sha256Async(path, cancellationToken).ConfigureAwait(false);
+        var mediaType = (await MediaTypeDetector.DetectAsync(path, cancellationToken).ConfigureAwait(false)).MediaType;
+        var matches = info.Length == file.ByteSize && string.Equals(hash, file.ContentHash, StringComparison.Ordinal);
+        var nextState = matches
+            ? file.ContentState == FileContentState.Replaced ? FileContentState.Replaced : FileContentState.Healthy
+            : FileContentState.Changed;
+        var updated = await _database.SetFileContentStateAsync(fileId, nextState, cancellationToken).ConfigureAwait(false);
+        return new FileContentHealth(updated, hash, info.Length, mediaType);
+    }
+
+    private async Task<FileRecord> GetVerifiedContentFileAsync(string fileId, CancellationToken cancellationToken)
+    {
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be viewed.");
+        var path = _layout.ManagedFilePath(file.ManagedName);
+        if (Directory.Exists(path))
+        {
+            _ = await RevalidateFileContentAsync(fileId, cancellationToken).ConfigureAwait(false);
+            throw new LibraryValidationException("The managed path was replaced by an unsafe directory and cannot be used until reviewed.");
+        }
+        if (!File.Exists(path))
+        {
+            _ = await RevalidateFileContentAsync(fileId, cancellationToken).ConfigureAwait(false);
+            throw new LibraryValidationException("The managed file is missing. Its record and metadata have been preserved.");
+        }
+        var info = new FileInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || info.Length != file.ByteSize || !string.Equals(await Hashing.Sha256Async(path, cancellationToken).ConfigureAwait(false), file.ContentHash, StringComparison.Ordinal))
+        {
+            _ = await RevalidateFileContentAsync(fileId, cancellationToken).ConfigureAwait(false);
+            throw new LibraryValidationException("The managed bytes changed outside SlopFactory and cannot be used until reviewed.");
+        }
+        if (file.ContentState is FileContentState.Missing or FileContentState.Changed)
+        {
+            return (await RevalidateFileContentAsync(fileId, cancellationToken).ConfigureAwait(false)).File;
+        }
+        return file;
+    }
+
     public async Task<TextFileContent> ReadTextFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         const int maximumDisplayedCharacters = 1_048_576;
-        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
         if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be viewed.");
         if (!IsTextMediaType(file.MediaType)) throw new LibraryValidationException("This file is not a supported text format.");
         var path = GetManagedFilePath(file);
@@ -92,7 +157,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         if (searchText.EnumerateRunes().Count() > LibraryRules.MaximumTextSearchScalars) throw new LibraryValidationException($"Text search cannot exceed {LibraryRules.MaximumTextSearchScalars} Unicode characters.");
         if (maximumResults is < 1 or > 1_000) throw new LibraryValidationException("The maximum text-search result count must be between 1 and 1,000.");
 
-        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
         if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be searched.");
         if (!IsTextMediaType(file.MediaType)) throw new LibraryValidationException("This file is not a supported text format.");
 
@@ -156,7 +221,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public async Task<RenderedMarkdownContent> RenderMarkdownFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
         if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be rendered.");
         if (file.MediaType != "text/markdown") throw new LibraryValidationException("Rendered view is available only for Markdown files.");
         var text = await ReadTextFileAsync(fileId, cancellationToken).ConfigureAwait(false);
@@ -171,7 +236,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public async Task<ImageFileContent> ReadImageFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
         if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be viewed.");
         if (!IsImageMediaType(file.MediaType)) throw new LibraryValidationException("This file is not a supported built-in image format.");
         if (file.ByteSize > LibraryRules.MaximumInlineImageBytes)
@@ -192,7 +257,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public async Task<MediaPlaybackDescriptor> PrepareMediaPlaybackAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
         if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active media file can be played.");
         if (!IsPlayableMediaType(file.MediaType)) throw new LibraryValidationException("This file is not a supported built-in audio or video format.");
         var path = ValidateRegularManagedFile(file);
@@ -209,7 +274,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         ThrowIfDisposed();
         if (offset < 0 || length < 0) throw new ArgumentOutOfRangeException(nameof(offset), "Media byte ranges cannot be negative.");
         var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
-        if (file.State != LibraryRecordState.Active || !IsPlayableMediaType(file.MediaType)) throw new LibraryValidationException("The media file is no longer available for playback.");
+        if (file.State != LibraryRecordState.Active || file.ContentState is FileContentState.Missing or FileContentState.Changed || !IsPlayableMediaType(file.MediaType)) throw new LibraryValidationException("The media file is no longer available for playback.");
         if (!string.Equals(file.ContentHash, expectedContentHash, StringComparison.Ordinal)) throw new LibraryValidationException("The media file changed after playback was prepared.");
         if (offset > file.ByteSize || length > file.ByteSize - offset) throw new LibraryValidationException("The requested media byte range is outside the file.");
         var path = ValidateRegularManagedFile(file);

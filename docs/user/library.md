@@ -63,6 +63,12 @@ Metadata keys can be renamed without changing their stored type, sensitivity fla
 Changing a display name or user metadata never creates a content copy.
 Metadata additions, updates, renames, and removals advance the file's **Library modified** time without changing its authoritative import time or original bytes.
 
+## Managed-content health
+
+File details show a content-health status and provide **Verify now**. SlopFactory checks that the application-managed path is a regular file, then compares its byte size and SHA-256 hash with the library record. Built-in text, image, audio, and video use performs the same verification before exposing bytes.
+
+If the managed file is absent, the record becomes **Missing**. If bytes differ or the managed path was replaced by an unsafe redirected entry, it becomes **Content changed**. These statuses do not recycle the record: its folder identity, user metadata, and file links remain available, and the broken record can still be recycled normally. Changed bytes are not silently accepted and normal built-in viewing remains blocked. Putting back bytes with the exact recorded size and hash and verifying again restores **Healthy** status. Replacement with different content is not part of this verification action.
+
 ## File links
 
 The file-details page can create a directed, labelled link from the current file to another active file. A file cannot link to itself, while the same pair of files may have multiple links with different labels. Existing active links can be relabelled, reversed, or moved to the recycle bin. SlopFactory blocks a relabel or reversal if it would duplicate an existing directed link.
