@@ -587,6 +587,25 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task ImportRejectsDirectorySourcesWithoutBlockingOtherFiles()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("safe.txt");
+        var directory = temporary.Child("selected-folder");
+        await File.WriteAllTextAsync(source, "safe");
+        Directory.CreateDirectory(directory);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+
+        var results = await workspace.ImportAsync([directory, source], workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(ImportOutcome.Failed, results[0].Outcome);
+        Assert.Contains("Folders cannot", results[0].Error);
+        Assert.Equal(ImportOutcome.Imported, results[1].Outcome);
+        Assert.Single(await workspace.GetActiveFilesAsync());
+    }
+
+    [Fact]
     public async Task TextViewerReadsStrictUtf8AndBoundsDisplayedContent()
     {
         using var temporary = new TemporaryDirectory();

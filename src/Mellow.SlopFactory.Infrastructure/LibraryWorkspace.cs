@@ -727,12 +727,16 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             string? managedPath = null;
             try
             {
-                var info = new FileInfo(sourcePath);
-                if (!info.Exists) throw new FileNotFoundException("The selected source file no longer exists.", sourcePath);
+                var info = ValidateImportSource(sourcePath);
                 var displayName = LibraryRules.NormalizeDisplayName(info.Name, "File name");
                 candidate = new ImportCandidate(info.FullName, displayName, info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero));
                 progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Hashing source", 0, info.Length));
                 var hash = await Hashing.Sha256Async(info.FullName, cancellationToken, bytes => progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Hashing source", bytes, info.Length))).ConfigureAwait(false);
+                var revalidated = ValidateImportSource(info.FullName);
+                if (revalidated.Length != info.Length || revalidated.LastWriteTimeUtc != info.LastWriteTimeUtc)
+                {
+                    throw new IOException("The selected source file changed while it was being prepared for import.");
+                }
                 var matches = await _database.FindByHashAsync(hash, info.Length, cancellationToken).ConfigureAwait(false);
                 if (matches.Count > 0 && !importDuplicates)
                 {
@@ -793,6 +797,17 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             }
         }
         return results;
+    }
+
+    private static FileInfo ValidateImportSource(string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath)) throw new LibraryValidationException("An import source path is required.");
+        var fullPath = Path.GetFullPath(sourcePath);
+        if (Directory.Exists(fullPath)) throw new LibraryValidationException("Folders cannot be imported as individual files.");
+        var info = new FileInfo(fullPath);
+        if (!info.Exists) throw new FileNotFoundException("The selected source file no longer exists.", fullPath);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("Redirected or symbolic-link source files cannot be imported directly.");
+        return info;
     }
 
     public Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default)
