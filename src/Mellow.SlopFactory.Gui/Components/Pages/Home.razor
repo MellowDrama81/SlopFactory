@@ -325,6 +325,15 @@ else
                     else if (_bulkAction == BulkAction.Duplicate)
                     {
                         <p>Each selected file is copied independently with its user metadata. Links are not copied. Name conflicts receive the normal numeric suffix.</p>
+                        @if (_bulkDuplicateEligibility.Count > 0)
+                        {
+                            <ul class="metadata-list">
+                                @foreach (var item in _bulkDuplicateEligibility)
+                                {
+                                    <li><strong>@item.DisplayName</strong><small>@(item.Reason ?? "Eligible")</small></li>
+                                }
+                            </ul>
+                        }
                         @if (_bulkDuplicateSensitiveMetadataCount > 0) { <p>@_bulkDuplicateSensitiveMetadataCount sensitive metadata entr@(_bulkDuplicateSensitiveMetadataCount == 1 ? "y" : "ies") will be copied across the selection; keys and values remain concealed.</p> }
                         <label for="bulk-duplicate-destination">Destination folder
                             <select id="bulk-duplicate-destination" @bind="_bulkDestinationFolderId">
@@ -332,7 +341,7 @@ else
                             </select>
                         </label>
                         @if (_bulkDuplicateProgress is not null) { <p role="status">Duplicating @_bulkDuplicateProgress.CurrentItem of @_bulkDuplicateProgress.TotalItems: @_bulkDuplicateProgress.DisplayName</p> }
-                        <div class="actions"><button disabled="@_busy" @onclick="ConfirmBulkDuplicateAsync">Confirm duplicate</button>@if (_busy) { <button class="secondary" @onclick="CancelBulkDuplicate">Cancel remaining copies</button> }</div>
+                        <div class="actions"><button disabled="@(_busy || !_bulkDuplicateEligibility.Any(item => item.Reason is null))" @onclick="ConfirmBulkDuplicateAsync">Confirm duplicate</button>@if (_busy) { <button class="secondary" @onclick="CancelBulkDuplicate">Cancel remaining copies</button> }</div>
                     }
                     else if (_bulkAction == BulkAction.Recycle)
                     {
@@ -466,6 +475,7 @@ else
     private DuplicateForm _duplicateForm = new();
     private int _duplicateSensitiveMetadataCount;
     private int _bulkDuplicateSensitiveMetadataCount;
+    private IReadOnlyList<BulkDuplicateEligibility> _bulkDuplicateEligibility = [];
     private IReadOnlyList<FolderRecord> _activeFolders = [];
     private readonly Dictionary<string, PreviewThumbnail> _thumbnails = new(StringComparer.Ordinal);
     private CancellationTokenSource? _thumbnailCancellation;
@@ -664,7 +674,19 @@ else
         _bulkDestinationFolderId = _contents?.Folder.Id ?? _activeFolders.FirstOrDefault()?.Id ?? string.Empty;
         _bulkMetadataPreview = null;
         _bulkDuplicateSensitiveMetadataCount = 0;
-        foreach (var fileId in _selectedFileIds) _bulkDuplicateSensitiveMetadataCount += (await LibraryState.Workspace.GetMetadataAsync(fileId)).Count(item => item.IsSensitive);
+        var eligibility = new List<BulkDuplicateEligibility>();
+        foreach (var fileId in _selectedFileIds)
+        {
+            try
+            {
+                var file = await LibraryState.Workspace.GetFileAsync(fileId);
+                var reason = file.State != LibraryRecordState.Active ? "Unavailable because it is not active." : file.ContentState is FileContentState.Missing or FileContentState.Changed ? "Unavailable because managed content is missing or changed." : null;
+                eligibility.Add(new BulkDuplicateEligibility(file.Id, file.DisplayName, reason));
+                if (reason is null) _bulkDuplicateSensitiveMetadataCount += (await LibraryState.Workspace.GetMetadataAsync(fileId)).Count(item => item.IsSensitive);
+            }
+            catch (SlopFactoryException) { eligibility.Add(new BulkDuplicateEligibility(fileId, "Unavailable file", "Unavailable because the record no longer exists.")); }
+        }
+        _bulkDuplicateEligibility = eligibility;
     }
 
     private async Task BeginBulkMetadataAsync()
@@ -773,7 +795,8 @@ else
         var progress = new Progress<BulkDuplicateProgress>(item => _ = InvokeAsync(() => { _bulkDuplicateProgress = item; StateHasChanged(); }));
         try
         {
-            _bulkResult = await LibraryState.Workspace.DuplicateFilesWithProgressAsync(_selectedFileIds.ToArray(), _bulkDestinationFolderId, progress, _bulkDuplicateCancellation.Token);
+            var eligibleIds = _bulkDuplicateEligibility.Where(item => item.Reason is null).Select(item => item.FileId).ToArray();
+            _bulkResult = await LibraryState.Workspace.DuplicateFilesWithProgressAsync(eligibleIds, _bulkDestinationFolderId, progress, _bulkDuplicateCancellation.Token);
             _message = $"Bulk duplicate complete: {_bulkResult.SucceededCount} succeeded; {_bulkResult.FailedCount} failed.";
             _selectedFileIds.Clear();
             CancelBulkAction();
@@ -833,6 +856,7 @@ else
         _bulkMetadataPreview = null;
         _commonMetadata = [];
         _bulkDuplicateProgress = null;
+        _bulkDuplicateEligibility = [];
     }
 
     private string BulkActionTitle() => _bulkAction switch
@@ -1330,6 +1354,7 @@ else
         public bool ImportDuplicates { get; set; }
     }
     private enum BulkAction { None, Move, Duplicate, Recycle, Metadata }
+    private sealed record BulkDuplicateEligibility(string FileId, string DisplayName, string? Reason);
     private sealed class BulkMetadataForm
     {
         public string Key { get; set; } = string.Empty;

@@ -40,6 +40,8 @@ Choose **Duplicate** in the selection bar to copy selected files into one destin
 
 Bulk duplication shows the current file and overall position. **Cancel remaining copies** stops before the next file starts; copies that already completed remain available, while the active copy commits completely or is cleaned up.
 
+The bulk-duplicate review lists every selected file as eligible or excluded. Folders cannot be selected for duplication. Recycled, missing, changed, or no-longer-available files are excluded with an explanation, and only eligible files are submitted.
+
 Bulk metadata review lists keys common to every selected file, identifies mixed types or values, and never reveals an existing sensitive value. Adding or replacing a typed key shows how many existing entries will be overwritten; removal shows how many files currently contain the key. Confirmation processes each file independently and reports any failures by file, so one conflict or unavailable record does not undo successful changes to the others.
 
 Use **Review mark sensitive** or **Review make ordinary** with a metadata key to change that flag across a selection without re-entering values. The review counts entries and missing keys without displaying concealed values. Making metadata ordinary explicitly warns that its values become visible in file details and are eligible for ordinary metadata export when that feature is available.

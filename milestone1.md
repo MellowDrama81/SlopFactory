@@ -75,7 +75,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 - [x] Add a read-only provenance-chain view that stops safely at missing/non-restorable endpoints; verify rename/move does not break ID-based traversal.
 - [x] Make provenance relationships recycle/restore with endpoints and replace permanently deleted sources with a non-restorable identity snapshot; verify neither deletion nor restore creates editable provenance links.
 - [x] Add current-file/overall progress and cancellation for bulk duplication; verify completed copies remain, unstarted copies do not begin, and the active atomic copy either commits or rolls back.
-- [ ] Disable folders and ineligible records in bulk duplicate review with explanations; verify a duplicate never copies generation-history relationships.
+- [x] Disable folders and ineligible records in bulk duplicate review with explanations; verify a duplicate never copies generation-history relationships.
 
 ## Final Milestone 1 verification
 
