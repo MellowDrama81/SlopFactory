@@ -584,17 +584,38 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => DuplicateFilesCoreAsync(fileIds, destinationFolderId, cancellationToken), cancellationToken);
     }
 
-    private async Task<BulkFileOperationResult> DuplicateFilesCoreAsync(IReadOnlyCollection<string> fileIds, string destinationFolderId, CancellationToken cancellationToken)
+    public Task<BulkFileOperationResult> DuplicateFilesWithProgressAsync(IReadOnlyCollection<string> fileIds, string destinationFolderId, IProgress<BulkDuplicateProgress>? progress, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => DuplicateFilesCoreAsync(fileIds, destinationFolderId, cancellationToken, progress), cancellationToken);
+    }
+
+    private async Task<BulkFileOperationResult> DuplicateFilesCoreAsync(IReadOnlyCollection<string> fileIds, string destinationFolderId, CancellationToken cancellationToken, IProgress<BulkDuplicateProgress>? progress = null)
     {
         var destination = await _database.GetFolderContentsAsync(destinationFolderId, cancellationToken).ConfigureAwait(false);
         if (destination.Folder.State != LibraryRecordState.Active) throw new LibraryValidationException("The duplicate destination folder must be active.");
-        return await ProcessFilesAsync(fileIds, async fileId =>
+        var ordered = fileIds.ToArray();
+        var results = new List<BulkFileOperationItemResult>();
+        for (var index = 0; index < ordered.Length; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var fileId = ordered[index];
             var source = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
-            if (source.ContentState is FileContentState.Missing or FileContentState.Changed) throw new LibraryValidationException("Only files with available managed content can be duplicated.");
-            var name = await _database.ResolveAvailableFileNameAsync(destinationFolderId, source.DisplayName, cancellationToken).ConfigureAwait(false);
-            _ = await DuplicateFileCoreAsync(fileId, destinationFolderId, name, cancellationToken).ConfigureAwait(false);
-        }, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new BulkDuplicateProgress(index + 1, ordered.Length, source.DisplayName, false));
+            try
+            {
+                if (source.ContentState is FileContentState.Missing or FileContentState.Changed) throw new LibraryValidationException("Only files with available managed content can be duplicated.");
+                var name = await _database.ResolveAvailableFileNameAsync(destinationFolderId, source.DisplayName, cancellationToken).ConfigureAwait(false);
+                _ = await DuplicateFileCoreAsync(fileId, destinationFolderId, name, cancellationToken).ConfigureAwait(false);
+                results.Add(new BulkFileOperationItemResult(fileId, source.DisplayName, true, null));
+            }
+            catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException)
+            {
+                results.Add(new BulkFileOperationItemResult(fileId, source.DisplayName, false, exception.Message));
+            }
+            progress?.Report(new BulkDuplicateProgress(index + 1, ordered.Length, source.DisplayName, true));
+        }
+        return new BulkFileOperationResult(results);
     }
 
     private async Task<FileRecord> DuplicateFileCoreAsync(string fileId, string destinationFolderId, string displayName, CancellationToken cancellationToken)

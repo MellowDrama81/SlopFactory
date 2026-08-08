@@ -331,7 +331,8 @@ else
                                 @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
                             </select>
                         </label>
-                        <div class="actions"><button disabled="@_busy" @onclick="ConfirmBulkDuplicateAsync">Confirm duplicate</button></div>
+                        @if (_bulkDuplicateProgress is not null) { <p role="status">Duplicating @_bulkDuplicateProgress.CurrentItem of @_bulkDuplicateProgress.TotalItems: @_bulkDuplicateProgress.DisplayName</p> }
+                        <div class="actions"><button disabled="@_busy" @onclick="ConfirmBulkDuplicateAsync">Confirm duplicate</button>@if (_busy) { <button class="secondary" @onclick="CancelBulkDuplicate">Cancel remaining copies</button> }</div>
                     }
                     else if (_bulkAction == BulkAction.Recycle)
                     {
@@ -483,6 +484,8 @@ else
     private BulkMetadataPreview? _bulkMetadataPreview;
     private bool _confirmBulkSensitiveMetadata;
     private BulkFileOperationResult? _bulkResult;
+    private BulkDuplicateProgress? _bulkDuplicateProgress;
+    private CancellationTokenSource? _bulkDuplicateCancellation;
     private LibraryBrowserSession _browser => LibraryState.BrowserSession;
     private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null || _browser.MetadataFilterEnabled;
     private bool MetadataFilterNeedsValue => _browser.MetadataOperator is not MetadataFilterOperator.Exists and not MetadataFilterOperator.DoesNotExist;
@@ -763,8 +766,25 @@ else
     private async Task ConfirmBulkDuplicateAsync()
     {
         if (LibraryState.Workspace is null) return;
-        await RunBulkActionAsync(() => LibraryState.Workspace.DuplicateFilesAsync(_selectedFileIds.ToArray(), _bulkDestinationFolderId));
+        if (_contents is null) return;
+        _busy = true;
+        _bulkDuplicateCancellation?.Dispose();
+        _bulkDuplicateCancellation = new CancellationTokenSource();
+        var progress = new Progress<BulkDuplicateProgress>(item => _ = InvokeAsync(() => { _bulkDuplicateProgress = item; StateHasChanged(); }));
+        try
+        {
+            _bulkResult = await LibraryState.Workspace.DuplicateFilesWithProgressAsync(_selectedFileIds.ToArray(), _bulkDestinationFolderId, progress, _bulkDuplicateCancellation.Token);
+            _message = $"Bulk duplicate complete: {_bulkResult.SucceededCount} succeeded; {_bulkResult.FailedCount} failed.";
+            _selectedFileIds.Clear();
+            CancelBulkAction();
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
+        }
+        catch (OperationCanceledException) { _message = "Bulk duplicate cancelled. Completed copies remain available."; await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true); }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
+        finally { _bulkDuplicateCancellation?.Dispose(); _bulkDuplicateCancellation = null; _bulkDuplicateProgress = null; _busy = false; }
     }
+
+    private void CancelBulkDuplicate() => _bulkDuplicateCancellation?.Cancel();
 
     private async Task ConfirmBulkMetadataAsync()
     {
@@ -812,6 +832,7 @@ else
         _bulkAction = BulkAction.None;
         _bulkMetadataPreview = null;
         _commonMetadata = [];
+        _bulkDuplicateProgress = null;
     }
 
     private string BulkActionTitle() => _bulkAction switch
@@ -921,6 +942,7 @@ else
         foreach (var item in runItems) _activeImportPaths.Add(item.Path);
         _busy = true;
         _importCancellation?.Dispose();
+        _bulkDuplicateCancellation?.Dispose();
         _importCancellation = new CancellationTokenSource();
         var progress = new Progress<ImportProgress>(value =>
         {

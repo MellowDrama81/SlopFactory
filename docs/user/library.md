@@ -38,6 +38,8 @@ When the platform reports available capacity, SlopFactory checks it against the 
 
 Choose **Duplicate** in the selection bar to copy selected files into one destination folder. Each file is handled independently, keeps its user metadata, receives a new identity and managed file, and does not copy editable links. Conflicting names use the normal numeric suffix. The result reports failures without removing unrelated successful copies.
 
+Bulk duplication shows the current file and overall position. **Cancel remaining copies** stops before the next file starts; copies that already completed remain available, while the active copy commits completely or is cleaned up.
+
 Bulk metadata review lists keys common to every selected file, identifies mixed types or values, and never reveals an existing sensitive value. Adding or replacing a typed key shows how many existing entries will be overwritten; removal shows how many files currently contain the key. Confirmation processes each file independently and reports any failures by file, so one conflict or unavailable record does not undo successful changes to the others.
 
 Use **Review mark sensitive** or **Review make ordinary** with a metadata key to change that flag across a selection without re-entering values. The review counts entries and missing keys without displaying concealed values. Making metadata ordinary explicitly warns that its values become visible in file details and are eligible for ordinary metadata export when that feature is available.

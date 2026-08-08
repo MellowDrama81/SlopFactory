@@ -1482,6 +1482,33 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task BulkDuplicateProgressReportsCompletedCopyAndCancellationPreventsLaterCopies()
+    {
+        using var temporary = new TemporaryDirectory();
+        var firstPath = temporary.Child("first.txt");
+        var secondPath = temporary.Child("second.txt");
+        await File.WriteAllTextAsync(firstPath, "first");
+        await File.WriteAllTextAsync(secondPath, "second");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var files = await workspace.ImportAsync([firstPath, secondPath], workspace.Descriptor.RootFolderId);
+        using var cancellation = new CancellationTokenSource();
+        var reports = new List<BulkDuplicateProgress>();
+        var progress = new Progress<BulkDuplicateProgress>(item =>
+        {
+            reports.Add(item);
+            if (item.CurrentItem == 1 && item.Completed) cancellation.Cancel();
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => workspace.DuplicateFilesWithProgressAsync(files.Select(item => item.File!.Id).ToArray(), workspace.Descriptor.RootFolderId, progress, cancellation.Token));
+
+        Assert.Contains(reports, item => item.CurrentItem == 1 && item.Completed);
+        var contents = await workspace.GetFolderContentsAsync(workspace.Descriptor.RootFolderId);
+        Assert.Contains(contents.Files, file => file.DisplayName == "first (2).txt");
+        Assert.DoesNotContain(contents.Files, file => file.DisplayName == "second (2).txt");
+    }
+
+    [Fact]
     public async Task BulkMetadataSensitivityPreservesValuesAndReportsMissingEntries()
     {
         using var temporary = new TemporaryDirectory();

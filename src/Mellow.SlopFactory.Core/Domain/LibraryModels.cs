@@ -261,6 +261,8 @@ public sealed record BulkFileOperationResult(
     public int FailedCount => Items.Count - SucceededCount;
 }
 
+public sealed record BulkDuplicateProgress(int CurrentItem, int TotalItems, string DisplayName, bool Completed);
+
 public sealed record FileLink(
     string Id,
     string SourceFileId,
