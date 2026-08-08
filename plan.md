@@ -509,7 +509,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 - Individual managed files are not exposed through an in-application **Edit in Explorer** workflow.
 - Libraries can use local fixed drives and removable local drives.
-- The application warns before using a cloud-synchronized folder because concurrent synchronization can corrupt or duplicate library state.
 - Online-only placeholder locations are rejected until their contents are fully local.
 - A removable Windows volume uses the same unavailable-volume behavior as Android external storage.
 - Windows locations retain a stable volume identity and resolved absolute path.

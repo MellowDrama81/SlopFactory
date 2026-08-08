@@ -47,6 +47,8 @@ Before either create or open, the factory rejects Windows UNC and network-drive 
 
 The Windows-only settings action uses shell execution only after a rendered user confirmation. It opens the library root without disposing the workspace or relaxing its exclusive lock, and it never exposes a managed-file edit command.
 
+The settings UI uses a conservative known-root heuristic for OneDrive, Dropbox, and Google Drive. A matching path requires an additional confirmation before the normal open/create workflow proceeds. This warning is advisory and does not transform, move, or synchronise a library.
+
 ## Managed-content health
 
 Recycle lifecycle and content health are separate columns. An active record can therefore be **Healthy**, **Missing**, **Changed**, or, after the later replacement workflow, **Replaced** without detaching metadata or changing link endpoints. `RevalidateFileContentAsync` holds the workspace mutation boundary, rejects recycled records, validates the managed path without following reparse points, streams SHA-256, redetects media type, and stores only the resulting health state. Its result returns observed hash, byte size, and detected media type for an explicit comparison UI; missing or unsafe entries do not invent unavailable observations.

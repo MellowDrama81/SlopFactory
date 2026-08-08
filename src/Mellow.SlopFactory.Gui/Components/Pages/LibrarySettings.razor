@@ -71,6 +71,14 @@
             <button class="secondary" disabled="@_busy" @onclick="() => _adoptCandidatePath = null">Cancel</button>
         </div>
     }
+    @if (_cloudSyncCandidatePath is not null)
+    {
+        <div class="inline-form" role="group" aria-label="Confirm cloud-synchronised library location">
+            <span>This location appears to be cloud-synchronised. Concurrent sync activity can corrupt or duplicate a local library. Continue only if you understand that SlopFactory does not provide synchronisation.</span>
+            <button class="danger" disabled="@_busy" @onclick="ConfirmCloudLocationAsync">Use this location</button>
+            <button class="secondary" disabled="@_busy" @onclick="() => _cloudSyncCandidatePath = null">Cancel</button>
+        </div>
+    }
 </section>
 
 <section class="panel">
@@ -195,6 +203,7 @@
     private IReadOnlyList<RecentLibrary> _recentLibraries = [];
     private RecentLibrary? _forgetCandidate;
     private string? _adoptCandidatePath;
+    private string? _cloudSyncCandidatePath;
 #if WINDOWS
     private bool _confirmOpenLocation;
 #endif
@@ -219,6 +228,12 @@
 
     private async Task SwitchAsync()
     {
+        if (IsLikelyCloudSynchronizedPath(_form.Path) && !SamePath(_form.Path, _cloudSyncCandidatePath))
+        {
+            _cloudSyncCandidatePath = _form.Path;
+            _message = "This location appears to be cloud-synchronised. Review the warning before continuing.";
+            return;
+        }
         _busy = true;
         try
         {
@@ -233,6 +248,14 @@
             _adoptCandidatePath = File.Exists(Path.Combine(_form.Path, "slopfactory-library.json")) ? _form.Path : null;
         }
         finally { _busy = false; }
+    }
+
+    private async Task ConfirmCloudLocationAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_cloudSyncCandidatePath)) return;
+        _form.Path = _cloudSyncCandidatePath;
+        await SwitchAsync();
+        _cloudSyncCandidatePath = null;
     }
 
     private async Task ConfirmAdoptionAsync()
@@ -349,6 +372,29 @@
     private static bool IsAvailable(RecentLibrary library) => Directory.Exists(library.Path) && File.Exists(Path.Combine(library.Path, "slopfactory-library.json"));
 
     private static bool SamePath(string left, string? right) => right is not null && string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private static bool IsLikelyCloudSynchronizedPath(string path)
+    {
+        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(path)) return false;
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            var knownRoots = new[]
+            {
+                Environment.GetEnvironmentVariable("OneDrive"),
+                Environment.GetEnvironmentVariable("OneDriveConsumer"),
+                Environment.GetEnvironmentVariable("OneDriveCommercial"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Dropbox"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Google Drive")
+            };
+            return knownRoots.Where(root => !string.IsNullOrWhiteSpace(root)).Any(root =>
+            {
+                var relative = Path.GetRelativePath(Path.GetFullPath(root!), fullPath);
+                return relative == "." || (!Path.IsPathRooted(relative) && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+            });
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException) { return false; }
+    }
 
     private async Task OpenRecentAsync(RecentLibrary library)
     {
