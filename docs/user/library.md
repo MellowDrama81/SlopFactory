@@ -26,6 +26,8 @@ Choose **Manage** beside a file or non-permanent folder to change its display na
 
 Choose **Duplicate** beside an active file to create an independent copy in a selected library folder. The copy receives a new identity and managed file, retains the source's user metadata, and does not inherit its editable file links. Name conflicts must be resolved before the copy is created.
 
+Before a single or bulk duplicate commits, the review reports the number of sensitive metadata entries that will be copied without exposing their keys or values. Copied sensitive entries start concealed with no inherited session reveal state.
+
 Select files on any result page to build one selection across pages. The selection bar can select the current page, clear the selection, or open a review for moving, recycling, or changing user metadata. A move review shows the destination and affected count. A recycle review explains that each file's metadata and owned links follow it into the recycle bin.
 
 Import rechecks each selected regular file immediately after hashing and before its managed copy is committed. A source that disappears, changes during preparation, is a folder, or is a redirected/symbolic-link entry is rejected individually; unrelated selected files can still complete.

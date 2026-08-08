@@ -155,6 +155,7 @@ else
     @if (_duplicatingFileId is not null)
     {
         <EditForm Model="_duplicateForm" OnValidSubmit="DuplicateFileAsync" class="inline-form">
+            @if (_duplicateSensitiveMetadataCount > 0) { <p>@_duplicateSensitiveMetadataCount sensitive metadata entr@(_duplicateSensitiveMetadataCount == 1 ? "y" : "ies") will be copied, but remain concealed.</p> }
             <label for="duplicate-name">Copy name</label>
             <InputText id="duplicate-name" @bind-Value="_duplicateForm.Name" maxlength="255" />
             <label for="duplicate-folder">Destination</label>
@@ -324,6 +325,7 @@ else
                     else if (_bulkAction == BulkAction.Duplicate)
                     {
                         <p>Each selected file is copied independently with its user metadata. Links are not copied. Name conflicts receive the normal numeric suffix.</p>
+                        @if (_bulkDuplicateSensitiveMetadataCount > 0) { <p>@_bulkDuplicateSensitiveMetadataCount sensitive metadata entr@(_bulkDuplicateSensitiveMetadataCount == 1 ? "y" : "ies") will be copied across the selection; keys and values remain concealed.</p> }
                         <label for="bulk-duplicate-destination">Destination folder
                             <select id="bulk-duplicate-destination" @bind="_bulkDestinationFolderId">
                                 @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
@@ -432,7 +434,7 @@ else
                         }
                         <div class="file-actions">
                             <button class="ghost" @onclick="() => BeginFileEdit(item.File)">Manage</button>
-                            <button class="ghost" @onclick="() => BeginDuplicate(item.File)">Duplicate</button>
+                            <button class="ghost" @onclick="() => BeginDuplicateAsync(item.File)">Duplicate</button>
                             <button class="danger ghost" @onclick="() => RecycleFileAsync(item.File.Id)">Recycle</button>
                         </div>
                     </article>
@@ -461,6 +463,8 @@ else
     private FolderForm _newFolder = new();
     private ItemForm _itemForm = new();
     private DuplicateForm _duplicateForm = new();
+    private int _duplicateSensitiveMetadataCount;
+    private int _bulkDuplicateSensitiveMetadataCount;
     private IReadOnlyList<FolderRecord> _activeFolders = [];
     private readonly Dictionary<string, PreviewThumbnail> _thumbnails = new(StringComparer.Ordinal);
     private CancellationTokenSource? _thumbnailCancellation;
@@ -650,11 +654,14 @@ else
         _bulkMetadataPreview = null;
     }
 
-    private void BeginBulkDuplicate()
+    private async Task BeginBulkDuplicate()
     {
+        if (LibraryState.Workspace is null) return;
         _bulkAction = BulkAction.Duplicate;
         _bulkDestinationFolderId = _contents?.Folder.Id ?? _activeFolders.FirstOrDefault()?.Id ?? string.Empty;
         _bulkMetadataPreview = null;
+        _bulkDuplicateSensitiveMetadataCount = 0;
+        foreach (var fileId in _selectedFileIds) _bulkDuplicateSensitiveMetadataCount += (await LibraryState.Workspace.GetMetadataAsync(fileId)).Count(item => item.IsSensitive);
     }
 
     private async Task BeginBulkMetadataAsync()
@@ -1159,13 +1166,14 @@ else
         _itemForm = new();
     }
 
-    private void BeginDuplicate(FileRecord file)
+    private async Task BeginDuplicateAsync(FileRecord file)
     {
         CancelItemEdit();
         _duplicatingFileId = file.Id;
         var extension = Path.GetExtension(file.DisplayName);
         var stem = Path.GetFileNameWithoutExtension(file.DisplayName);
         _duplicateForm = new DuplicateForm { Name = $"{stem} copy{extension}", DestinationFolderId = file.FolderId };
+        _duplicateSensitiveMetadataCount = LibraryState.Workspace is null ? 0 : (await LibraryState.Workspace.GetMetadataAsync(file.Id)).Count(item => item.IsSensitive);
     }
 
     private async Task DuplicateFileAsync()
@@ -1185,6 +1193,7 @@ else
     {
         _duplicatingFileId = null;
         _duplicateForm = new();
+        _duplicateSensitiveMetadataCount = 0;
     }
 
     private async Task CreateFolderAsync()
