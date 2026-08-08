@@ -107,6 +107,8 @@
             }
         </ul>
     }
+    <button class="secondary" disabled="@(_rebuildingPreviews || LibraryState.Workspace is null)" @onclick="RebuildPreviewsAsync">@(_rebuildingPreviews ? "Rebuilding previews…" : "Rebuild library previews")</button>
+    @if (_previewRebuildProgress is not null) { <p class="muted" role="status">Rebuilding @_previewRebuildProgress.DisplayName: @_previewRebuildProgress.ProcessedItems of @_previewRebuildProgress.TotalItems.</p> }
     @if (_forgetCandidate is not null)
     {
         <div class="inline-form" role="group" aria-label="Confirm forgetting library">
@@ -200,6 +202,8 @@
     private PreviewCacheStatus? _cacheStatus;
     private CacheForm _cacheForm = new();
     private bool _confirmClearCache;
+    private bool _rebuildingPreviews;
+    private PreviewRebuildProgress? _previewRebuildProgress;
     private IReadOnlyList<RecentLibrary> _recentLibraries = [];
     private RecentLibrary? _forgetCandidate;
     private string? _adoptCandidatePath;
@@ -432,6 +436,29 @@
         _confirmClearCache = false;
         await ReloadCacheStatusAsync();
         _message = "Preview cache cleared. Original files were not changed.";
+    }
+
+    private async Task RebuildPreviewsAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        _rebuildingPreviews = true;
+        _previewRebuildProgress = null;
+        try
+        {
+            var progress = new Progress<PreviewRebuildProgress>(value =>
+            {
+                _previewRebuildProgress = value;
+                _ = InvokeAsync(StateHasChanged);
+            });
+            var result = await PreviewCache.RebuildLibraryAsync(LibraryState.Workspace, progress);
+            _message = $"Rebuilt {result.RebuiltFiles} of {result.EligibleFiles} eligible previews; {result.UnavailableFiles} could not be generated. Original files were not changed.";
+            await ReloadCacheStatusAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+        }
+        finally { _previewRebuildProgress = null; _rebuildingPreviews = false; }
     }
 
     private static string FormatBytes(long bytes)

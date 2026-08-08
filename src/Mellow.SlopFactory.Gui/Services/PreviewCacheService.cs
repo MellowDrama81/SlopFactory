@@ -152,6 +152,27 @@ public sealed class PreviewCacheService : IDisposable
         finally { _cacheGate.Release(); }
     }
 
+    public async Task<PreviewRebuildResult> RebuildLibraryAsync(ILibraryWorkspace workspace, IProgress<PreviewRebuildProgress>? progress = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        await ForgetLibraryAsync(workspace.Descriptor.LibraryId, cancellationToken).ConfigureAwait(false);
+        var files = (await workspace.GetActiveFilesAsync(cancellationToken).ConfigureAwait(false))
+            .Where(file => (file.MediaType.StartsWith("image/", StringComparison.Ordinal) && file.MediaType != "image/svg+xml") || file.MediaType == "video/mp4")
+            .ToArray();
+        var rebuilt = 0;
+        var unavailable = 0;
+        for (var index = 0; index < files.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var file = files[index];
+            progress?.Report(new PreviewRebuildProgress(index + 1, files.Length, file.DisplayName));
+            var preview = await GetThumbnailAsync(workspace, file, cancellationToken).ConfigureAwait(false);
+            if (preview.DataUri is null) unavailable++;
+            else rebuilt++;
+        }
+        return new PreviewRebuildResult(files.Length, rebuilt, unavailable);
+    }
+
     private async Task<byte[]?> ReadCachedAsync(string path, CancellationToken cancellationToken)
     {
         await _cacheGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -234,3 +255,5 @@ public sealed class PreviewCacheService : IDisposable
 
 public sealed record PreviewThumbnail(string? DataUri, string? Error, bool WasCached);
 public sealed record PreviewCacheStatus(long UseBytes, long LimitBytes);
+public sealed record PreviewRebuildProgress(int ProcessedItems, int TotalItems, string DisplayName);
+public sealed record PreviewRebuildResult(int EligibleFiles, int RebuiltFiles, int UnavailableFiles);

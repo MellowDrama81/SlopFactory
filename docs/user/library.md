@@ -74,6 +74,8 @@ GIF animations open on a static cached frame. **Play animation** explicitly load
 
 **Library settings** shows current preview-cache use and its device-wide limit. The default is 1 GiB on Windows and 256 MiB on Android; it can be set from 64 MiB to 8 GiB. Least-recently-used entries are removed when needed. **Clear preview cache** removes only regenerable thumbnails and posters, never original files, records, metadata, or links.
 
+**Rebuild library previews** first clears the active library's regenerable preview entries, then regenerates eligible image thumbnails and video posters with progress. A decoder failure is reported as an unavailable preview; it never alters the original file or library record.
+
 You can attach typed user metadata as text, number, Boolean, date, date-time, or JSON. Metadata keys are case-insensitively unique per file. The `slopfactory.` prefix is reserved for system data.
 
 **Date** is a calendar date. **Date-time** requires an explicit UTC offset: its original offset-bearing value is retained for faithful editing, while file details also show the same instant in the device's local time. Date-time filtering and comparison use the UTC instant, so equivalent values match across devices.

@@ -19,7 +19,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 - [ ] Represent failed opens as remembered **Corrupt** entries with a sanitized stage/diagnostic identifier and Retry, Choose Another Library, Forget, and Windows Open Location actions; verify no automatic repair or mutation occurs.
 - [ ] Mark a full scan as recommended after watcher overflow, unsafe volume removal, or storage inconsistency, and offer Start/Defer without automatically scanning; verify each trigger.
 - [ ] Persist and resume a content-free integrity-scan checkpoint; verify resumed scanning does not repeat completed entries and cancellation leaves a valid checkpoint.
-- [ ] Add derived-preview clear/rebuild actions to Library settings; verify they never modify managed media, records, metadata, links, or recycle-bin entries.
+- [x] Add derived-preview clear/rebuild actions to Library settings; verify they never modify managed media, records, metadata, links, or recycle-bin entries.
 
 ## Android storage and permissions
 
