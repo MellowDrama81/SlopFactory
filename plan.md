@@ -493,8 +493,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - A shared logical format is an implementation consistency guarantee, not a supported Windows-to-Android transfer, migration or synchronization feature.
 - Provider response snapshots use structured JSON only when their provider-specific shape cannot be normalized.
 - File operations use no-follow behavior where available and verify that resolved targets remain inside the expected library directory before reading, replacing or deleting them.
-- Detectable hard-linked managed files are rejected because modifying their bytes could alter content outside SlopFactory's ownership.
-- A redirection or hard link introduced into managed storage through external tampering blocks the affected operation and is reported by the integrity scan.
 - A corrupt library remains closed and is marked **Corrupt** in the library switcher.
 - Corruption details include the location, failed validation stage and a sanitized diagnostic ID.
 - Corrupt-library actions are **Retry**, **Choose Another Library**, **Forget Library** and, on Windows, **Open Location**.

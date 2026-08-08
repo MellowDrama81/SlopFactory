@@ -75,7 +75,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             return new FileContentHealth(missing, null, null, null);
         }
         var info = new FileInfo(path);
-        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path))
         {
             var unsafeFile = await _database.SetFileContentStateAsync(fileId, FileContentState.Changed, cancellationToken).ConfigureAwait(false);
             return new FileContentHealth(unsafeFile, null, info.Length, null);
@@ -106,7 +106,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             throw new LibraryValidationException("The managed file is missing. Its record and metadata have been preserved.");
         }
         var info = new FileInfo(path);
-        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || info.Length != file.ByteSize || !string.Equals(await Hashing.Sha256Async(path, cancellationToken).ConfigureAwait(false), file.ContentHash, StringComparison.Ordinal))
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path) || info.Length != file.ByteSize || !string.Equals(await Hashing.Sha256Async(path, cancellationToken).ConfigureAwait(false), file.ContentHash, StringComparison.Ordinal))
         {
             _ = await RevalidateFileContentAsync(fileId, cancellationToken).ConfigureAwait(false);
             throw new LibraryValidationException("The managed bytes changed outside SlopFactory and cannot be used until reviewed.");
@@ -172,7 +172,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             if (File.Exists(managedPath))
             {
                 var existing = new FileInfo(managedPath);
-                if ((existing.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("The managed path is redirected and cannot be replaced safely.");
+                if ((existing.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(managedPath)) throw new LibraryValidationException("The managed path is redirected or hard-linked and cannot be replaced safely.");
                 rollbackPath = _layout.StagingFilePath($"replacement-rollback-{LibraryRules.NewId()}.tmp");
                 File.Move(managedPath, rollbackPath);
             }
@@ -404,7 +404,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         if (Directory.Exists(path)) throw new LibraryValidationException("The managed media path is not a regular file.");
         if (!File.Exists(path)) throw new LibraryValidationException("The managed media file is missing.");
         var info = new FileInfo(path);
-        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("Redirected managed media files cannot be played.");
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path)) throw new LibraryValidationException("Redirected or hard-linked managed media files cannot be played.");
         if (info.Length != file.ByteSize) throw new LibraryValidationException("The managed media size no longer matches the library record.");
         return path;
     }
@@ -1109,9 +1109,9 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                     else
                     {
                         var info = new FileInfo(path);
-                        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+                        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path))
                         {
-                            findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.UnsafeManagedEntry, file.Id, file.ByteSize, null, "The recorded managed path is a symbolic link or reparse point."));
+                            findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.UnsafeManagedEntry, file.Id, file.ByteSize, null, "The recorded managed path is a symbolic link, reparse point, or hard link."));
                         }
                         else
                         {
@@ -1248,7 +1248,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         ThrowIfDisposed();
         var path = _layout.ManagedFilePath(file.ManagedName);
         if (Directory.Exists(path) || !File.Exists(path)) throw new FileNotFoundException("The managed file is missing or is not a regular file.", path);
-        if ((new FileInfo(path).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("The managed file path is a symbolic link or reparse point.");
+        if ((new FileInfo(path).Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path)) throw new LibraryValidationException("The managed file path is a symbolic link, reparse point, or hard link.");
         return path;
     }
 
@@ -1323,7 +1323,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         if (Directory.Exists(path)) throw new IOException("The managed file path was replaced by a directory; deletion is paused for review.");
         if (!File.Exists(path)) return;
         var info = new FileInfo(path);
-        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("The managed file path is a symbolic link or reparse point; deletion is paused for review.");
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path)) throw new IOException("The managed file path is a symbolic link, reparse point, or hard link; deletion is paused for review.");
         File.Delete(path);
     }
 
@@ -1344,7 +1344,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             if (Directory.Exists(path)) return $"Managed content for '{file.DisplayName}' was replaced by a directory and cannot be restored.";
             if (!File.Exists(path)) return $"Managed content for '{file.DisplayName}' is missing and cannot be restored.";
             var info = new FileInfo(path);
-            if ((info.Attributes & FileAttributes.ReparsePoint) != 0) return $"Managed content for '{file.DisplayName}' is a symbolic link or reparse point and cannot be restored.";
+            if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path)) return $"Managed content for '{file.DisplayName}' is a symbolic link, reparse point, or hard link and cannot be restored.";
             return null;
         }
         catch (UnauthorizedAccessException)

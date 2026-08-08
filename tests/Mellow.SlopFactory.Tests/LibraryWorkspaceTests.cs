@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure;
@@ -1277,6 +1278,28 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task DetectableManagedHardLinksAreBlockedAndReported()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.txt");
+        var externalPath = temporary.Child("external.txt");
+        await File.WriteAllTextAsync(sourcePath, "same bytes");
+        await File.WriteAllTextAsync(externalPath, "same bytes");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var managedPath = workspace.GetManagedFilePath(file);
+        File.Delete(managedPath);
+        CreateHardLink(managedPath, externalPath);
+
+        Assert.Equal(FileContentState.Changed, (await workspace.RevalidateFileContentAsync(file.Id)).File.ContentState);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReadTextFileAsync(file.Id));
+        var report = await workspace.RunIntegrityScanAsync();
+        Assert.Contains(report.Findings, finding => finding.Kind == LibraryIntegrityIssueKind.UnsafeManagedEntry && finding.RecordId == file.Id);
+    }
+
+    [Fact]
     public async Task LibraryBrowserSearchesNamesAndTypedMetadataWithoutDisclosingSensitiveKeys()
     {
         using var temporary = new TemporaryDirectory();
@@ -1407,4 +1430,13 @@ public sealed class LibraryWorkspaceTests
         foreach (var file in Directory.EnumerateFiles(sourcePath)) File.Copy(file, Path.Combine(destinationPath, Path.GetFileName(file)));
         foreach (var directory in Directory.EnumerateDirectories(sourcePath)) DirectoryCopy(directory, Path.Combine(destinationPath, Path.GetFileName(directory)));
     }
+
+    private static void CreateHardLink(string linkPath, string existingPath)
+    {
+        if (!CreateHardLinkNative(linkPath, existingPath, IntPtr.Zero)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkNative(string fileName, string existingFileName, IntPtr securityAttributes);
 }
