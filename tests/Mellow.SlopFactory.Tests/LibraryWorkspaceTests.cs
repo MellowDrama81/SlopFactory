@@ -792,6 +792,28 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task RasterImageTechnicalPropertiesReadBoundedJpegOrientationWithoutChangingManagedBytes()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("oriented.jpg");
+        var jpeg = Convert.FromHexString("FFD8FFE100224578696600004D4D002A00000008000101120003000000010006000000000000FFC00011080001000103011100021100031100FFD9");
+        await File.WriteAllBytesAsync(sourcePath, jpeg);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var managedPath = workspace.GetManagedFilePath(file);
+        var originalBytes = await File.ReadAllBytesAsync(managedPath);
+
+        var properties = await workspace.GetImageTechnicalPropertiesAsync(file.Id);
+
+        Assert.Equal(1, properties.Width);
+        Assert.Equal(1, properties.Height);
+        Assert.Equal(6, properties.Orientation);
+        Assert.Equal(originalBytes, await File.ReadAllBytesAsync(managedPath));
+        Assert.Equal(file.ContentHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(managedPath))).ToLowerInvariant());
+    }
+
+    [Fact]
     public async Task RasterImageViewerRejectsUnsafeDeclaredDimensionsBeforeBrowserDecode()
     {
         using var temporary = new TemporaryDirectory();

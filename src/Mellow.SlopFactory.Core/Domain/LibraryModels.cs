@@ -369,7 +369,8 @@ public sealed record ImageFileContent(
 
 public sealed record ImageTechnicalProperties(
     int? Width,
-    int? Height);
+    int? Height,
+    int? Orientation = null);
 
 public sealed record MediaPlaybackDescriptor(
     string FileId,

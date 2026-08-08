@@ -161,7 +161,7 @@ else
                     <div class="image-viewport">
                         @if (_file.MediaType != "image/gif" || _animatedImagePlaying || _animatedImagePosterUri is not null)
                         {
-                            <img src="@(_file.MediaType == "image/gif" && !_animatedImagePlaying ? _animatedImagePosterUri : _imageDataUri)" alt="Preview of @_file.DisplayName" class="@(_fitImage ? "fit-image" : "actual-image")" style="transform: rotate(@(_imageRotation)deg) scale(@(_imageZoom / 100d));" />
+                            <img src="@(_file.MediaType == "image/gif" && !_animatedImagePlaying ? _animatedImagePosterUri : _imageDataUri)" alt="Preview of @_file.DisplayName" class="@(_fitImage ? "fit-image" : "actual-image")" style="transform: @ImageTransform;" />
                         }
                         else
                         {
@@ -477,6 +477,15 @@ else
     private bool _showTextEditor;
     private TextCopyForm _textCopyForm = new();
     private int SensitiveMetadataCount => _metadata.Count(item => item.IsSensitive);
+    private int ImageOrientationRotation => _imageTechnicalProperties?.Orientation switch
+    {
+        3 or 4 => 180,
+        5 or 6 => 90,
+        7 or 8 => 270,
+        _ => 0
+    };
+    private int ImageOrientationScaleX => _imageTechnicalProperties?.Orientation is 2 or 4 or 5 or 7 ? -1 : 1;
+    private string ImageTransform => $"rotate({_imageRotation + ImageOrientationRotation}deg) scaleX({ImageOrientationScaleX}) scale({_imageZoom / 100d})";
 
     protected override void OnInitialized() => LibraryState.Changed += OnLibraryStateChanged;
 

@@ -51,7 +51,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 ## Viewers, format handling, and technical metadata
 
 - [ ] Add an unsupported-format detail state that shows safe system information and offers export/external opening when those actions exist; verify unsupported content is never sent to an inappropriate built-in viewer.
-- [ ] Add bounded orientation extraction for supported raster images and apply it only to temporary viewing representation; verify original managed bytes and recorded hash do not change.
+- [x] Add bounded orientation extraction for supported raster images and apply it only to temporary viewing representation; verify original managed bytes and recorded hash do not change.
 - [ ] Add bounded audio/video probing for duration, codecs, channel count, sample rate, frame rate, and dimensions where applicable; verify malformed media reports unavailable properties without rejecting stored bytes.
 - [ ] Move technical properties into a read-only system-metadata model separate from user metadata; verify they cannot be edited, searched as user values, or copied into diagnostics.
 - [ ] Add background progress/cancellation for thumbnail and media-metadata extraction; verify cancellation leaves original content and records unchanged.

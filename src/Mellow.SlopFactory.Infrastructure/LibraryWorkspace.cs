@@ -394,7 +394,8 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             read += count;
         }
         var (width, height) = ImageSafetyInspector.ReadDimensions(bytes.AsSpan(0, read), file.MediaType);
-        return new ImageTechnicalProperties(width, height);
+        var orientation = ImageSafetyInspector.ReadOrientation(bytes.AsSpan(0, read), file.MediaType);
+        return new ImageTechnicalProperties(width, height, orientation);
     }
 
     public async Task<MediaPlaybackDescriptor> PrepareMediaPlaybackAsync(string fileId, CancellationToken cancellationToken = default)

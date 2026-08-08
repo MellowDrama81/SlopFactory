@@ -64,7 +64,7 @@ User metadata is not copied by default. **Copy user metadata** includes non-sens
 
 PNG, JPEG, WebP, and GIF files up to 32 MiB open in the built-in raster image viewer. Controls switch between fit and actual size, zoom from 25% to 400%, pan oversized images, and rotate the view in 90-degree steps. Rotation and other viewing controls never rewrite the managed bytes. The viewer verifies the current byte size and SHA-256 hash before display.
 
-For supported raster images, file details also show dimensions read from a bounded technical-metadata probe after verifying the managed bytes. SVG dimensions remain unavailable rather than being inferred from potentially complex markup. SlopFactory does not extract location, device, author, face, or other descriptive embedded metadata.
+For supported raster images, file details also show dimensions read from a bounded technical-metadata probe after verifying the managed bytes. JPEG viewing also respects a bounded EXIF orientation value, including mirrored orientations, only in the temporary viewer. It never rewrites the imported file. SVG dimensions remain unavailable rather than being inferred from potentially complex markup. SlopFactory does not extract location, device, author, face, or other descriptive embedded metadata.
 
 SVG files use the same viewing controls only after SlopFactory parses and sanitizes them. The sanitizer removes scripts, event handlers, foreign elements and namespaces, embedded styles, and non-local references before the image enters the WebView. Sanitization changes only the temporary viewing representation, not the original managed SVG.
 
