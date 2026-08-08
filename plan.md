@@ -931,8 +931,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Unavailable, timezone-ambiguous or demonstrably invalid source timestamps remain unknown rather than being guessed or substituted.
 - Source timestamps never replace SlopFactory's authoritative creation and modification timeline.
 - User metadata supports text, number, Boolean, **Date**, **Date-Time** and JSON values.
-- **Date** stores a calendar date without a time zone. **Date-Time** requires an explicit UTC offset, is normalized to a UTC instant for persistence and comparison, and displays in the device's local time zone.
-- **Date-Time** also retains the originally entered offset for faithful editing and detail display; the device-local rendering does not overwrite that stored offset.
 - Timezone-free or daylight-saving-ambiguous date-time input is not accepted silently; the user must supply or select an offset.
 - **Date-Time** metadata sorting, equality and range filtering compare normalized UTC instants across devices; **Date** values compare as calendar dates and are never converted through a time zone.
 - A text or serialized JSON value is limited to 1 MiB of UTF-8 data; JSON is limited to 32 levels of nesting and 100,000 total object, array and scalar nodes.

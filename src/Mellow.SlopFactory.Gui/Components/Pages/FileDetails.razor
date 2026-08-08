@@ -325,7 +325,14 @@ else
                     {
                         <li>
                             <div><strong>@item.Key</strong><small>@item.Kind @(item.IsSensitive ? "· Sensitive" : string.Empty)</small></div>
-                            <code>@(item.IsSensitive && !_revealed.Contains(item.Id) ? "••••••" : item.SerializedValue)</code>
+                            @if (item.IsSensitive && !_revealed.Contains(item.Id))
+                            {
+                                <code>••••••</code>
+                            }
+                            else
+                            {
+                                <div><code>@item.SerializedValue</code>@if (item.Kind == MetadataValueKind.DateTime) { <small>Local time: @FormatMetadataLocalTime(item.SerializedValue)</small> }</div>
+                            }
                             @if (item.IsSensitive)
                             {
                                 <button class="ghost" @onclick="() => ToggleReveal(item.Id)">@(_revealed.Contains(item.Id) ? "Conceal" : "Reveal for session")</button>
@@ -597,6 +604,9 @@ else
         };
         return expectedExtensions.Length > 0 && !expectedExtensions.Contains(displayExtension, StringComparer.OrdinalIgnoreCase);
     }
+    private static string FormatMetadataLocalTime(string serializedValue) => DateTimeOffset.TryParse(serializedValue, out var value)
+        ? value.ToLocalTime().ToString("g")
+        : "Unavailable";
     private static string ContentStateLabel(FileContentState state) => state switch
     {
         FileContentState.Missing => "Missing",

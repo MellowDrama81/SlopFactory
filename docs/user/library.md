@@ -64,6 +64,8 @@ GIF animations open on a static cached frame. **Play animation** explicitly load
 
 You can attach typed user metadata as text, number, Boolean, date, date-time, or JSON. Metadata keys are case-insensitively unique per file. The `slopfactory.` prefix is reserved for system data.
 
+**Date** is a calendar date. **Date-time** requires an explicit UTC offset: its original offset-bearing value is retained for faithful editing, while file details also show the same instant in the device's local time. Date-time filtering and comparison use the UTC instant, so equivalent values match across devices.
+
 Mark an entry **Sensitive** to conceal its value in the interface. **Reveal for session** reveals only that entry in the running application session. This flag is a display safeguard, not encryption.
 
 Metadata keys can be renamed without changing their stored type, sensitivity flag, or value.

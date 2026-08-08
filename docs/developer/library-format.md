@@ -95,6 +95,8 @@ The bytes are written under `.staging`, hashed, and moved to a new opaque manage
 
 Metadata mutations and the owning file's `modified_at` update share one SQLite transaction. They do not rewrite `imported_at`, `source_last_modified`, or managed content.
 
+Date-time metadata persists the exact validated offset-bearing input rather than a local display conversion. SQLite comparison parses those values as `DateTimeOffset` instants, while the UI separately derives a device-local display. The raw stored value remains available for editing, so changing devices never overwrites the user-entered offset.
+
 `SetMetadataSensitivityForFilesAsync` uses the same selection mutation boundary and invokes a per-file transactional `is_sensitive` update. It changes neither the metadata key, value, nor type. Missing or unavailable entries return independent bulk-operation failures, allowing other selected records to retain their completed flag change.
 
 ## Text search and Markdown rendering
