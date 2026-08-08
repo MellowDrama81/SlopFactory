@@ -224,6 +224,12 @@ internal sealed class SqliteLibraryDatabase
         return new LibraryDescriptor(libraryId, displayName, rootPath, reader.GetString(3), reader.GetString(4), schemaVersion);
     }
 
+    public async Task UpdateLibraryIdAsync(string libraryId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "UPDATE library_info SET library_id=$id WHERE singleton=1;", cancellationToken, null, ("$id", libraryId)).ConfigureAwait(false);
+    }
+
     public async Task<LibraryFolderContents> GetFolderContentsAsync(string folderId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);

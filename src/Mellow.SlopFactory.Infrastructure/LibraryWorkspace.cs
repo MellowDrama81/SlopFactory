@@ -1194,6 +1194,31 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         if (integrityFindings.Count > 0) throw new LibraryValidationException("The library database no longer passes its integrity check.");
     }
 
+    public Task AdoptAsIndependentLibraryAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => AdoptAsIndependentLibraryCoreAsync(cancellationToken), cancellationToken);
+    }
+
+    private async Task AdoptAsIndependentLibraryCoreAsync(CancellationToken cancellationToken)
+    {
+        var newLibraryId = LibraryRules.NewId();
+        var previousManifest = _manifest;
+        var adoptedManifest = previousManifest with { LibraryId = newLibraryId };
+        await _database.UpdateLibraryIdAsync(newLibraryId, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await LibraryManifestStore.WriteAsync(_layout, adoptedManifest, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await _database.UpdateLibraryIdAsync(previousManifest.LibraryId, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+        _manifest = adoptedManifest;
+        Descriptor = Descriptor with { LibraryId = newLibraryId };
+    }
+
     public Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

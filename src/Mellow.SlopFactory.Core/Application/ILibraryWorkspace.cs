@@ -63,6 +63,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<RecycleBinOperationResult> EmptyRecycleBinAsync(CancellationToken cancellationToken = default);
     Task<LibraryIntegrityReport> RunIntegrityScanAsync(IProgress<LibraryIntegrityScanProgress>? progress = null, CancellationToken cancellationToken = default);
     Task ValidateOpenLibraryAsync(CancellationToken cancellationToken = default);
+    Task AdoptAsIndependentLibraryAsync(CancellationToken cancellationToken = default);
     Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default);
     string GetManagedFilePath(FileRecord file);
 }
@@ -71,4 +72,5 @@ public interface ILibraryWorkspaceFactory
 {
     Task<ILibraryWorkspace> CreateAsync(string rootPath, string displayName = "SlopFactory Library", CancellationToken cancellationToken = default);
     Task<ILibraryWorkspace> OpenAsync(string rootPath, CancellationToken cancellationToken = default);
+    Task<ILibraryWorkspace> AdoptCopyAsync(string rootPath, CancellationToken cancellationToken = default);
 }

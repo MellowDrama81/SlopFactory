@@ -91,6 +91,42 @@ public sealed class AppLibraryState : IAsyncDisposable
         }
     }
 
+    public async Task AdoptCopyAsync(string path)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!_locations.IsAllowedPath(path)) throw new LibraryValidationException("That location is not an allowed application library location.");
+            var fullPath = Path.GetFullPath(path);
+            var inspection = await _factory.OpenAsync(fullPath).ConfigureAwait(false);
+            string copiedLibraryId;
+            try { copiedLibraryId = inspection.Descriptor.LibraryId; }
+            finally { await inspection.DisposeAsync().ConfigureAwait(false); }
+            var sourceStillAvailable = Workspace is not null
+                && string.Equals(Workspace.Descriptor.LibraryId, copiedLibraryId, StringComparison.Ordinal)
+                && !SamePath(Workspace.Descriptor.RootPath, fullPath)
+                && Directory.Exists(Workspace.Descriptor.RootPath);
+            sourceStillAvailable |= _recentLibraries.GetAll().Any(item => string.Equals(item.LibraryId, copiedLibraryId, StringComparison.Ordinal)
+                && !SamePath(item.Path, fullPath) && Directory.Exists(item.Path));
+            if (!sourceStillAvailable) throw new LibraryValidationException("Only an available copied library with the same ID as another known library can be adopted.");
+
+            var replacement = await _factory.AdoptCopyAsync(fullPath).ConfigureAwait(false);
+            var previous = Workspace;
+            Workspace = replacement;
+            ActivePath = fullPath;
+            Error = null;
+            BrowserSession = new LibraryBrowserSession();
+            Preferences.Default.Set("active_library_path", fullPath);
+            _recentLibraries.RecordOpened(replacement.Descriptor);
+            if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public async Task CloseInvalidLibraryAsync(ILibraryWorkspace expectedWorkspace, string message)
     {
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -114,6 +150,8 @@ public sealed class AppLibraryState : IAsyncDisposable
         if (Workspace is not null) await Workspace.DisposeAsync().ConfigureAwait(false);
         _gate.Dispose();
     }
+
+    private static bool SamePath(string left, string right) => string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
 }
 

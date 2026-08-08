@@ -79,6 +79,10 @@ While a library is open, SlopFactory watches its managed-media directory as a be
 
 The manifest and SQLite database receive stricter treatment. A detected change waits for any current SlopFactory mutation, pauses later mutations at the same boundary, and revalidates the required entries, exact open-library identity, and database integrity. If that validation fails—or those critical files can no longer be monitored—the active library is closed instead of continuing against uncertain state. Its remembered location remains visible so you can inspect or relink it deliberately; SlopFactory does not silently create or open another library.
 
+## Copied libraries
+
+SlopFactory rejects opening a second available location with the same library ID as an existing library. This prevents two directory copies from being mistaken for synchronized libraries. If you intentionally copied a library and need the copy to diverge, choose **Adopt copied library** after the duplicate-location warning and confirm it. Adoption gives the selected copy a new persistent library ID without copying, moving, or deleting its managed files, folders, metadata, links, or local history. The original and adopted copies then remain permanently independent.
+
 ## File links
 
 The file-details page can create a directed, labelled link from the current file to another active file. A file cannot link to itself, while the same pair of files may have multiple links with different labels. Existing active links can be relabelled, reversed, or moved to the recycle bin. SlopFactory blocks a relabel or reversal if it would duplicate an existing directed link.

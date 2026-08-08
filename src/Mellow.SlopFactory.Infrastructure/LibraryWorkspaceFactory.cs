@@ -88,6 +88,21 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         }
     }
 
+    public async Task<ILibraryWorkspace> AdoptCopyAsync(string rootPath, CancellationToken cancellationToken = default)
+    {
+        var workspace = await OpenAsync(rootPath, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await workspace.AdoptAsIndependentLibraryAsync(cancellationToken).ConfigureAwait(false);
+            return workspace;
+        }
+        catch
+        {
+            await workspace.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     private static FileStream AcquireLock(LibraryLayout layout)
     {
         try

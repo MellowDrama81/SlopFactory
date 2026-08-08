@@ -1245,6 +1245,38 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task AdoptingACopiedLibraryAssignsANewIdentityAndPreservesLocalRecords()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(sourcePath, "copied content");
+        var originalRoot = temporary.Child("original-library");
+        var copiedRoot = temporary.Child("copied-library");
+        var factory = new LibraryWorkspaceFactory();
+        string originalLibraryId;
+        string fileId;
+        await using (var original = await factory.CreateAsync(originalRoot))
+        {
+            originalLibraryId = original.Descriptor.LibraryId;
+            var file = Assert.Single(await original.ImportAsync([sourcePath], original.Descriptor.RootFolderId)).File!;
+            fileId = file.Id;
+            await original.SetMetadataAsync(file.Id, "Retained", MetadataValueKind.Text, "value", false);
+        }
+        DirectoryCopy(originalRoot, copiedRoot);
+
+        await using (var adopted = await factory.AdoptCopyAsync(copiedRoot))
+        {
+            Assert.NotEqual(originalLibraryId, adopted.Descriptor.LibraryId);
+            Assert.Equal("copied content", (await adopted.ReadTextFileAsync(fileId)).Content);
+            Assert.Equal("value", Assert.Single(await adopted.GetMetadataAsync(fileId)).SerializedValue);
+        }
+
+        await using var reopened = await factory.OpenAsync(copiedRoot);
+        Assert.NotEqual(originalLibraryId, reopened.Descriptor.LibraryId);
+        Assert.Equal("copied content", (await reopened.ReadTextFileAsync(fileId)).Content);
+    }
+
+    [Fact]
     public async Task LibraryBrowserSearchesNamesAndTypedMetadataWithoutDisclosingSensitiveKeys()
     {
         using var temporary = new TemporaryDirectory();
@@ -1367,5 +1399,12 @@ public sealed class LibraryWorkspaceTests
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
     {
         public void Report(T value) => report(value);
+    }
+
+    private static void DirectoryCopy(string sourcePath, string destinationPath)
+    {
+        Directory.CreateDirectory(destinationPath);
+        foreach (var file in Directory.EnumerateFiles(sourcePath)) File.Copy(file, Path.Combine(destinationPath, Path.GetFileName(file)));
+        foreach (var directory in Directory.EnumerateDirectories(sourcePath)) DirectoryCopy(directory, Path.Combine(destinationPath, Path.GetFileName(directory)));
     }
 }

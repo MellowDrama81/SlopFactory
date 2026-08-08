@@ -48,6 +48,14 @@
         <p class="muted">An empty location becomes a new library. A valid existing SlopFactory library is opened. A non-empty unrelated directory is rejected. Existing data is never moved or copied.</p>
         <button type="submit" disabled="@(_busy || _scanning)">@(_busy ? "Switching…" : "Open this library")</button>
     </EditForm>
+    @if (_adoptCandidatePath is not null)
+    {
+        <div class="inline-form" role="group" aria-label="Confirm adopting copied library">
+            <span>The selected location could be a copy of another available library. Adopting it assigns a new permanent ID, keeps its files and records, and makes it independent from the original.</span>
+            <button class="danger" disabled="@_busy" @onclick="ConfirmAdoptionAsync">Adopt copied library</button>
+            <button class="secondary" disabled="@_busy" @onclick="() => _adoptCandidatePath = null">Cancel</button>
+        </div>
+    }
 </section>
 
 <section class="panel">
@@ -168,6 +176,7 @@
     private bool _confirmClearCache;
     private IReadOnlyList<RecentLibrary> _recentLibraries = [];
     private RecentLibrary? _forgetCandidate;
+    private string? _adoptCandidatePath;
 
     private string IntegrityHeading => _scanReport switch
     {
@@ -195,6 +204,27 @@
             await LibraryState.SwitchAsync(_form.Path);
             _nameForm.Name = LibraryState.Workspace!.Descriptor.DisplayName;
             _message = $"Opened {LibraryState.Workspace!.Descriptor.DisplayName}.";
+            ReloadRecentLibraries();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _adoptCandidatePath = File.Exists(Path.Combine(_form.Path, "slopfactory-library.json")) ? _form.Path : null;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ConfirmAdoptionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_adoptCandidatePath)) return;
+        _busy = true;
+        try
+        {
+            await LibraryState.AdoptCopyAsync(_adoptCandidatePath);
+            _form.Path = LibraryState.ActivePath ?? _adoptCandidatePath;
+            _nameForm.Name = LibraryState.Workspace?.Descriptor.DisplayName ?? string.Empty;
+            _message = "The copied library was adopted as an independent library. Existing media and local records were preserved.";
+            _adoptCandidatePath = null;
             ReloadRecentLibraries();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
