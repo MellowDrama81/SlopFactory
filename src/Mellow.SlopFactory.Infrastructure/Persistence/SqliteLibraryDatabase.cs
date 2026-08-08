@@ -105,6 +105,12 @@ internal sealed class SqliteLibraryDatabase
                 replaced_at TEXT NULL
             );
 
+            CREATE TABLE file_derivation_provenance (
+                file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+                source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,
+                origin INTEGER NOT NULL
+            );
+
             CREATE TABLE file_links (
                 id TEXT PRIMARY KEY,
                 source_file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
@@ -199,6 +205,10 @@ internal sealed class SqliteLibraryDatabase
         if (fromVersion < 6)
         {
             await ExecuteNonQueryAsync(connection, "CREATE TABLE file_content_provenance (file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,original_content_hash TEXT NOT NULL,original_byte_size INTEGER NOT NULL CHECK(original_byte_size >= 0),original_media_type TEXT NOT NULL,replaced_at TEXT NULL);", cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 7)
+        {
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE file_derivation_provenance (file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,origin INTEGER NOT NULL);", cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -869,6 +879,7 @@ internal sealed class SqliteLibraryDatabase
         await ExecuteNonQueryAsync(connection,
             "INSERT INTO metadata_entries(id,file_id,key,key_key,kind,serialized_value,is_sensitive) SELECT lower(hex(randomblob(16))),$duplicate,key,key_key,kind,serialized_value,is_sensitive FROM metadata_entries WHERE file_id=$source;",
             cancellationToken, transaction, ("$duplicate", duplicate.Id), ("$source", sourceFileId)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "INSERT INTO file_derivation_provenance(file_id,source_file_id,origin) VALUES($file,$source,$origin);", cancellationToken, transaction, ("$file", duplicate.Id), ("$source", sourceFileId), ("$origin", (int)duplicate.Origin)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return duplicate;
     }
@@ -896,6 +907,7 @@ internal sealed class SqliteLibraryDatabase
                 "INSERT INTO metadata_entries(id,file_id,key,key_key,kind,serialized_value,is_sensitive) SELECT lower(hex(randomblob(16))),$copy,key,key_key,kind,serialized_value,is_sensitive FROM metadata_entries WHERE file_id=$source AND ($includeSensitive=1 OR is_sensitive=0);",
                 cancellationToken, transaction, ("$copy", copy.Id), ("$source", sourceFileId), ("$includeSensitive", includeSensitiveMetadata ? 1 : 0)).ConfigureAwait(false);
         }
+        await ExecuteNonQueryAsync(connection, "INSERT INTO file_derivation_provenance(file_id,source_file_id,origin) VALUES($file,$source,$origin);", cancellationToken, transaction, ("$file", copy.Id), ("$source", sourceFileId), ("$origin", (int)copy.Origin)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return copy;
     }
@@ -930,6 +942,17 @@ internal sealed class SqliteLibraryDatabase
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return new FileContentProvenance(file.ContentHash, file.ByteSize, file.MediaType, null);
         return new FileContentProvenance(reader.GetString(0), reader.GetInt64(1), reader.GetString(2), reader.IsDBNull(3) ? null : Parse(reader.GetString(3)));
+    }
+
+    public async Task<FileDerivationProvenance?> GetFileDerivationProvenanceAsync(string fileId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT source_file_id,origin FROM file_derivation_provenance WHERE file_id=$id;";
+        command.Parameters.AddWithValue("$id", fileId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
+        return new FileDerivationProvenance(reader.IsDBNull(0) ? null : reader.GetString(0), (FileOrigin)reader.GetInt32(1));
     }
 
     public async Task<FileRecord> AcceptFileContentAsync(string fileId, string contentHash, long byteSize, string mediaType, bool restoresOriginal, bool clearUserMetadata, CancellationToken cancellationToken)

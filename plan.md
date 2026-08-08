@@ -857,7 +857,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Cancelling prevents files which have not started, retains completed duplicates and waits for the current atomic copy to finish or roll back safely.
 - Folders and ineligible file records remain disabled with explanations in a bulk duplicate action.
 - A duplicate does not copy the source's generation-history relationship.
-- A read-only provenance relationship identifies the source file from which the duplicate was made.
 
 ## Naming Rules
 
@@ -956,10 +955,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 - Link labels are trimmed, normalized to Unicode NFC, limited to 200 Unicode scalar values, and cannot contain control characters or line breaks.
 - Generation source/output relationships are stored in structured generation history rather than as editable user-created links.
-- A text file created through **Edit as Copy** has a read-only provenance relationship to its source file.
-- A file created through **Duplicate** has a read-only provenance relationship to its source file.
-- Copy provenance always points to the immediate source used for that **Duplicate** or **Edit as Copy** action, not automatically to the earliest ancestor.
-- SlopFactory does not materialize transitive provenance links when a copy is copied again.
 - A **Provenance Chain** view traverses the immediate read-only relationships in order and stops at a missing endpoint or non-restorable source snapshot.
 - Generation provenance relationships can be displayed alongside user-created links but are read-only.
 - Read-only **Duplicate** and **Edit as Copy** provenance relationships become inactive and recycle with the same endpoint rules as user-created file links.

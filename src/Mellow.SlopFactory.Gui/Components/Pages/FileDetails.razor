@@ -319,6 +319,7 @@ else
                 <dt>Content state</dt><dd>@ContentStateLabel(_file.ContentState)</dd>
                 @if (_imageTechnicalProperties?.Width is not null && _imageTechnicalProperties.Height is not null) { <dt>Image dimensions</dt><dd>@_imageTechnicalProperties.Width × @_imageTechnicalProperties.Height pixels</dd> }
                 @if (_contentProvenance?.ReplacedAt is not null) { <dt>Content replaced</dt><dd>@_contentProvenance.ReplacedAt.Value.ToLocalTime().ToString("g")</dd> }
+                @if (_derivationProvenance?.SourceFileId is not null) { <dt>Derived from</dt><dd class="mono">@_derivationProvenance.SourceFileId</dd> }
             </dl>
         </article>
 
@@ -470,6 +471,7 @@ else
     private string? _message;
     private FileContentHealth? _contentHealth;
     private FileContentProvenance? _contentProvenance;
+    private FileDerivationProvenance? _derivationProvenance;
     private bool _verifyingContent;
     private ChangedContentInspection? _changedInspection;
     private TextFileContent? _changedText;
@@ -523,6 +525,7 @@ else
             _changedInspection = null;
             _changedText = null;
             _contentProvenance = await LibraryState.Workspace.GetFileContentProvenanceAsync(Id);
+            _derivationProvenance = await LibraryState.Workspace.GetFileDerivationProvenanceAsync(Id);
             await StopMediaAsync();
             _mediaError = null;
             _mediaPreparing = false;

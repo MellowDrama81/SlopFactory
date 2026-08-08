@@ -191,6 +191,10 @@ public sealed record FileContentProvenance(
     string OriginalMediaType,
     DateTimeOffset? ReplacedAt);
 
+public sealed record FileDerivationProvenance(
+    string? SourceFileId,
+    FileOrigin Origin);
+
 public sealed record ChangedContentInspection(
     FileRecord File,
     string ActualContentHash,

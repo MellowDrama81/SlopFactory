@@ -59,6 +59,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetFileContentProvenanceAsync(fileId, cancellationToken);
     }
 
+    public Task<FileDerivationProvenance?> GetFileDerivationProvenanceAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetFileDerivationProvenanceAsync(fileId, cancellationToken);
+    }
+
     private async Task<FileContentHealth> RevalidateFileContentCoreAsync(string fileId, CancellationToken cancellationToken)
     {
         var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);

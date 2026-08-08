@@ -66,6 +66,8 @@ PNG, JPEG, WebP, and GIF files up to 32 MiB open in the built-in raster image vi
 
 For a detected format without a built-in viewer, SlopFactory shows **Preview unavailable** and retains its safe system information. It does not try to open the file as text, image, audio, or video based on its filename. Export and external-open controls will appear in this state when those actions are available.
 
+Files made with **Duplicate** or **Edit as Copy** show a read-only source file ID in System information. This direct provenance does not create an editable file link or cause a chain of indirect source relationships.
+
 For supported raster images, file details also show dimensions read from a bounded technical-metadata probe after verifying the managed bytes. JPEG viewing also respects a bounded EXIF orientation value, including mirrored orientations, only in the temporary viewer. It never rewrites the imported file. SVG dimensions remain unavailable rather than being inferred from potentially complex markup. SlopFactory does not extract location, device, author, face, or other descriptive embedded metadata.
 
 SVG files use the same viewing controls only after SlopFactory parses and sanitizes them. The sanitizer removes scripts, event handlers, foreign elements and namespaces, embedded styles, and non-local references before the image enters the WebView. Sanitization changes only the temporary viewing representation, not the original managed SVG.
