@@ -97,6 +97,14 @@ else
     </section>
 
     <section class="detail-grid">
+        @if (CanUseContent(_file) && PreviewKind == BuiltInPreviewKind.Unsupported)
+        {
+            <article class="panel">
+                <h2>Preview unavailable</h2>
+                <p>SlopFactory has no built-in viewer for the detected <code>@_file.MediaType</code> content. It has not opened the file in an inappropriate viewer.</p>
+                <p class="muted">Safe system information remains available below. Export and external-open actions will appear here when those features are available.</p>
+            </article>
+        }
         @if (_mediaSource is not null || _mediaError is not null || _mediaPreparing)
         {
             <article class="panel media-panel">
@@ -477,6 +485,7 @@ else
     private bool _showTextEditor;
     private TextCopyForm _textCopyForm = new();
     private int SensitiveMetadataCount => _metadata.Count(item => item.IsSensitive);
+    private BuiltInPreviewKind PreviewKind => _file is null ? BuiltInPreviewKind.Unsupported : BuiltInPreviewCapabilities.ForMediaType(_file.MediaType);
     private int ImageOrientationRotation => _imageTechnicalProperties?.Orientation switch
     {
         3 or 4 => 180,
@@ -518,7 +527,7 @@ else
             _mediaError = null;
             _mediaPreparing = false;
             _playbackRate = 1;
-            if (CanUseContent(_file) && IsPlayableMediaType(_file.MediaType))
+            if (CanUseContent(_file) && PreviewKind == BuiltInPreviewKind.Media)
             {
                 _mediaPreparing = true;
                 try
@@ -540,7 +549,7 @@ else
             _fitImage = true;
             _animatedImagePosterUri = null;
             _animatedImagePlaying = false;
-            if (CanUseContent(_file) && IsImageMediaType(_file.MediaType))
+            if (CanUseContent(_file) && PreviewKind == BuiltInPreviewKind.Image)
             {
                 try
                 {
@@ -562,7 +571,7 @@ else
             _showRenderedMarkdown = false;
             ClearTextSearch();
             _pendingExternalLink = null;
-            if (CanUseContent(_file) && IsTextMediaType(_file.MediaType))
+            if (CanUseContent(_file) && PreviewKind == BuiltInPreviewKind.Text)
             {
                 try { _textContent = await LibraryState.Workspace.ReadTextFileAsync(Id); }
                 catch (SlopFactoryException exception) { _textError = exception.Message; }
@@ -952,9 +961,6 @@ else
         await StopMediaAsync();
     }
     private void Back() => Navigation.NavigateTo("/");
-    private static bool IsTextMediaType(string mediaType) => mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || mediaType is "application/json" or "application/xml";
-    private static bool IsImageMediaType(string mediaType) => mediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif" or "image/svg+xml";
-    private static bool IsPlayableMediaType(string mediaType) => mediaType is "audio/mpeg" or "audio/wav" or "audio/aac" or "audio/mp4" or "audio/flac" or "audio/ogg" or "video/mp4";
     private string FileName(string fileId) => fileId == _file?.Id ? _file.DisplayName : _availableFiles.FirstOrDefault(file => file.Id == fileId)?.DisplayName ?? $"Unavailable file {fileId[..Math.Min(8, fileId.Length)]}";
 
     private sealed class MetadataForm

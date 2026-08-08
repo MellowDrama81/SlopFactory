@@ -12,6 +12,19 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class LibraryWorkspaceTests
 {
+    [Theory]
+    [InlineData("text/plain", BuiltInPreviewKind.Text)]
+    [InlineData("application/json", BuiltInPreviewKind.Text)]
+    [InlineData("image/jpeg", BuiltInPreviewKind.Image)]
+    [InlineData("audio/wav", BuiltInPreviewKind.Media)]
+    [InlineData("video/mp4", BuiltInPreviewKind.Media)]
+    [InlineData("application/pdf", BuiltInPreviewKind.Unsupported)]
+    [InlineData("application/octet-stream", BuiltInPreviewKind.Unsupported)]
+    public void BuiltInPreviewCapabilitiesAllowOnlySupportedDetectedMediaTypes(string mediaType, BuiltInPreviewKind expected)
+    {
+        Assert.Equal(expected, BuiltInPreviewCapabilities.ForMediaType(mediaType));
+    }
+
     [Fact]
     public async Task CreateInitializesManifestDatabaseAndPermanentFolders()
     {

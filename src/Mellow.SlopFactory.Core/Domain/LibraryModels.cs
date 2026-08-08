@@ -18,6 +18,26 @@ public enum FileContentState
     Replaced = 3
 }
 
+public enum BuiltInPreviewKind
+{
+    Unsupported = 0,
+    Text = 1,
+    Image = 2,
+    Media = 3
+}
+
+public static class BuiltInPreviewCapabilities
+{
+    public static BuiltInPreviewKind ForMediaType(string mediaType)
+    {
+        if (string.IsNullOrWhiteSpace(mediaType)) return BuiltInPreviewKind.Unsupported;
+        if (mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || mediaType is "application/json" or "application/xml") return BuiltInPreviewKind.Text;
+        if (mediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif" or "image/svg+xml") return BuiltInPreviewKind.Image;
+        if (mediaType is "audio/mpeg" or "audio/wav" or "audio/aac" or "audio/mp4" or "audio/flac" or "audio/ogg" or "video/mp4") return BuiltInPreviewKind.Media;
+        return BuiltInPreviewKind.Unsupported;
+    }
+}
+
 public enum MetadataValueKind
 {
     Text = 0,

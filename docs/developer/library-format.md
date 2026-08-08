@@ -63,6 +63,8 @@ Built-in text, image, and media preparation first perform an independent existen
 
 Supported raster image details use a separate bounded 1 MiB header probe after ordinary managed-content verification. The probe reports only width and height for PNG, JPEG, GIF, and WebP, plus the JPEG EXIF orientation value when present and valid; SVG dimensions remain unavailable. The orientation is used solely to compose the temporary viewer transform and is never persisted or written to managed content. The probe does not expose EXIF/XMP/IPTC descriptive data such as GPS, device, author, or person information.
 
+`BuiltInPreviewCapabilities` is the single detected-media-type allow-list for detail-page viewers. Unsupported types receive a preview-unavailable state and safe system information; they must not flow into any built-in text, image, or media path. Future export/external-open actions should use that same state as their action host.
+
 Managed-content replacement is restricted to active **Missing** and **Changed** records. Review validates a regular, non-reparse candidate, hashes it, detects its media type, reads metadata counts, and freezes those facts for confirmation. Commit revalidates both the record and candidate. Exact original identity produces **Healthy**; different identity requires an explicit flag and produces **Replaced**.
 
 On the first acceptance, `file_content_provenance` captures the then-recorded identity with `ON CONFLICT DO NOTHING`; later replacements cannot rewrite it. The current hash, size, type, health state, replacement timestamp, and optional deletion of all user metadata commit in one SQLite transaction. Folder identity and link ownership are unchanged.
