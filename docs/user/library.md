@@ -88,6 +88,8 @@ For concealed metadata, assistive technology receives the entry key, type, conce
 
 Any revealed sensitive metadata is concealed again if the library changes, closes, or becomes unavailable, and is never retained after app restart.
 
+After revealing a sensitive value, **Copy value** explicitly copies it and warns that operating-system clipboard history may retain it. SlopFactory does not automatically clear the clipboard because doing so could overwrite content you copy later.
+
 Metadata keys can be renamed without changing their stored type, sensitivity flag, or value.
 
 Changing a display name or user metadata never creates a content copy.

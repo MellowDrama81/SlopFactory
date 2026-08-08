@@ -338,6 +338,7 @@ else
                             @if (item.IsSensitive)
                             {
                                 <button class="ghost" aria-label="@(_revealed.Contains(item.Id) ? $"Conceal {item.Key}" : $"Reveal {item.Key} for this session")" @onclick="() => ToggleReveal(item.Id)">@(_revealed.Contains(item.Id) ? "Conceal" : "Reveal for session")</button>
+                                @if (_revealed.Contains(item.Id)) { <button class="ghost" @onclick="() => CopySensitiveMetadataAsync(item.SerializedValue)">Copy value</button> }
                             }
                             <button class="ghost" @onclick="() => BeginRename(item)">Rename key</button>
                             <button class="danger ghost" @onclick="() => RemoveMetadataAsync(item.Key)">Remove</button>
@@ -905,6 +906,12 @@ else
     }
 
     private void ToggleReveal(string id) { if (!_revealed.Add(id)) _revealed.Remove(id); }
+
+    private async Task CopySensitiveMetadataAsync(string value)
+    {
+        await Clipboard.Default.SetTextAsync(value);
+        _message = "Sensitive value copied. Your operating system's clipboard history may retain it.";
+    }
 
     private void OnLibraryStateChanged(object? sender, EventArgs args) => _ = InvokeAsync(() =>
     {

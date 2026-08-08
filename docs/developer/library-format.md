@@ -111,6 +111,8 @@ Date-time metadata persists the exact validated offset-bearing input rather than
 
 File-detail reveal state is component memory only. The component clears it whenever `AppLibraryState` raises its library-state change event and unsubscribes on disposal; it is therefore not persisted across library switch/close/unavailability or application restart.
 
+Sensitive-value copy is available only while that entry is revealed and uses the platform clipboard directly. The completion message contains no value, and the application does not log clipboard content or attempt automatic clipboard clearing.
+
 `SetMetadataSensitivityForFilesAsync` uses the same selection mutation boundary and invokes a per-file transactional `is_sensitive` update. It changes neither the metadata key, value, nor type. Missing or unavailable entries return independent bulk-operation failures, allowing other selected records to retain their completed flag change.
 
 ## Text search and Markdown rendering
