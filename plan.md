@@ -508,7 +508,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ### Windows
 
 - Individual managed files are not exposed through an in-application **Edit in Explorer** workflow.
-- Libraries can use local fixed drives and removable local drives.
 - A removable Windows volume uses the same unavailable-volume behavior as Android external storage.
 - Windows locations retain a stable volume identity and resolved absolute path.
 - Writability, exclusive locking and required filesystem capabilities are revalidated before creating or opening a library.

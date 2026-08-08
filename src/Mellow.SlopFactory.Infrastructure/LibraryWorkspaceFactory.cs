@@ -126,7 +126,9 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             if (string.IsNullOrWhiteSpace(root)) throw new LibraryValidationException("The library location must be on a local volume.");
             try
             {
-                if (new DriveInfo(root).DriveType == DriveType.Network) throw new LibraryValidationException("Network locations cannot host a SlopFactory library.");
+                var driveType = new DriveInfo(root).DriveType;
+                if (driveType == DriveType.Network) throw new LibraryValidationException("Network locations cannot host a SlopFactory library.");
+                if (driveType is not (DriveType.Fixed or DriveType.Removable)) throw new LibraryValidationException("Libraries must use a fixed or removable local storage volume.");
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
             {

@@ -43,7 +43,7 @@ An ordinary open rejects a second available path with the same library ID. `Adop
 
 Adoption generates a new opaque library ID, updates `library_info`, atomically replaces the manifest with that ID, and finally updates the in-memory descriptor. If the manifest write fails, the database ID is restored before the operation fails. No media bytes, file records, folders, metadata, links, or other local rows are copied, regenerated, or deleted: the existing copied library becomes an independent library in place.
 
-Before either create or open, the factory rejects Windows UNC and network-drive paths and an existing redirected root directory. This validates the same local-storage constraint independently of the MAUI location picker, so a caller cannot bypass it with a direct factory call.
+Before either create or open, the factory accepts only Windows fixed or removable local volumes and rejects UNC/network paths, unsupported drive types, and an existing redirected root directory. This validates the same local-storage constraint independently of the MAUI location picker, so a caller cannot bypass it with a direct factory call.
 
 On Windows, the same factory validation rejects an existing root marked `FileAttributes.Offline`, which identifies an online-only placeholder rather than locally available library storage.
 
