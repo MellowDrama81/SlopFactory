@@ -1,3 +1,4 @@
+using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 
 namespace Mellow.SlopFactory.Gui.Services;
@@ -11,6 +12,8 @@ public sealed class ManagedContentWatchService : IDisposable
     private readonly Dictionary<string, CancellationTokenSource> _pending = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly Dictionary<string, ManagedContentWatchNotice> _notices = new(StringComparer.Ordinal);
     private FileSystemWatcher? _watcher;
+    private FileSystemWatcher? _libraryWatcher;
+    private CancellationTokenSource? _libraryValidation;
     private string? _libraryId;
     private bool _started;
 
@@ -41,6 +44,10 @@ public sealed class ManagedContentWatchService : IDisposable
         {
             _watcher?.Dispose();
             _watcher = null;
+            _libraryWatcher?.Dispose();
+            _libraryWatcher = null;
+            _libraryValidation?.Cancel();
+            _libraryValidation = null;
             foreach (var cancellation in _pending.Values) { cancellation.Cancel(); cancellation.Dispose(); }
             _pending.Clear();
             _notices.Clear();
@@ -63,9 +70,64 @@ public sealed class ManagedContentWatchService : IDisposable
                     _watcher.Renamed += OnManagedPathChanged;
                     _watcher.Error += OnWatcherError;
                 }
+                _libraryWatcher = new FileSystemWatcher(workspace.Descriptor.RootPath)
+                {
+                    IncludeSubdirectories = false,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.Attributes,
+                    EnableRaisingEvents = true
+                };
+                _libraryWatcher.Changed += OnLibraryPathChanged;
+                _libraryWatcher.Created += OnLibraryPathChanged;
+                _libraryWatcher.Deleted += OnLibraryPathChanged;
+                _libraryWatcher.Renamed += OnLibraryPathChanged;
+                _libraryWatcher.Error += OnLibraryWatcherError;
             }
         }
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnLibraryPathChanged(object sender, FileSystemEventArgs args)
+    {
+        var name = Path.GetFileName(args.FullPath);
+        if (!string.Equals(name, "slopfactory-library.json", OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+            && !string.Equals(name, "library.sqlite3", OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
+        CancellationTokenSource cancellation;
+        string? expectedLibraryId;
+        lock (_gate)
+        {
+            _libraryValidation?.Cancel();
+            cancellation = new CancellationTokenSource();
+            _libraryValidation = cancellation;
+            expectedLibraryId = _libraryId;
+        }
+        _ = ValidateLibraryChangeAsync(expectedLibraryId, cancellation);
+    }
+
+    private async Task ValidateLibraryChangeAsync(string? expectedLibraryId, CancellationTokenSource cancellation)
+    {
+        try
+        {
+            var workspace = _libraries.Workspace;
+            if (workspace is null || expectedLibraryId is null || workspace.Descriptor.LibraryId != expectedLibraryId) return;
+            try
+            {
+                await workspace.ValidateOpenLibraryAsync(cancellation.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+            {
+                await _libraries.CloseInvalidLibraryAsync(workspace, "The active library changed outside SlopFactory and was closed to protect its consistency. Review its location before reopening it.").ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_libraryValidation, cancellation)) _libraryValidation = null;
+            }
+            cancellation.Dispose();
+        }
     }
 
     private void OnManagedPathChanged(object sender, FileSystemEventArgs args)
@@ -122,12 +184,25 @@ public sealed class ManagedContentWatchService : IDisposable
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnLibraryWatcherError(object sender, ErrorEventArgs args)
+    {
+        ILibraryWorkspace? workspace;
+        lock (_gate)
+        {
+            if (!ReferenceEquals(sender, _libraryWatcher)) return;
+            workspace = _libraries.Workspace;
+        }
+        if (workspace is not null) _ = _libraries.CloseInvalidLibraryAsync(workspace, "SlopFactory could no longer monitor the active library's manifest and database, so it was closed as a precaution.");
+    }
+
     public void Dispose()
     {
         if (_started) _libraries.Changed -= OnLibraryChanged;
         lock (_gate)
         {
             _watcher?.Dispose();
+            _libraryWatcher?.Dispose();
+            _libraryValidation?.Cancel();
             foreach (var cancellation in _pending.Values) { cancellation.Cancel(); cancellation.Dispose(); }
             _pending.Clear();
         }

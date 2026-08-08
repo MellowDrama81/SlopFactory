@@ -91,6 +91,24 @@ public sealed class AppLibraryState : IAsyncDisposable
         }
     }
 
+    public async Task CloseInvalidLibraryAsync(ILibraryWorkspace expectedWorkspace, string message)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!ReferenceEquals(Workspace, expectedWorkspace)) return;
+            Workspace = null;
+            Error = message;
+            BrowserSession = new LibraryBrowserSession();
+            await expectedWorkspace.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (Workspace is not null) await Workspace.DisposeAsync().ConfigureAwait(false);

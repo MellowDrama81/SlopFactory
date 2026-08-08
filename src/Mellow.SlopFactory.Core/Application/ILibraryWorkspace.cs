@@ -62,6 +62,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<RecycleBinOperationResult> PermanentlyDeleteRecycleBinItemsAsync(IReadOnlyCollection<RecycleBinItemReference> items, CancellationToken cancellationToken = default);
     Task<RecycleBinOperationResult> EmptyRecycleBinAsync(CancellationToken cancellationToken = default);
     Task<LibraryIntegrityReport> RunIntegrityScanAsync(IProgress<LibraryIntegrityScanProgress>? progress = null, CancellationToken cancellationToken = default);
+    Task ValidateOpenLibraryAsync(CancellationToken cancellationToken = default);
     Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default);
     string GetManagedFilePath(FileRecord file);
 }

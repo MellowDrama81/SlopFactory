@@ -1177,6 +1177,23 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return new LibraryIntegrityReport(Descriptor.LibraryId, Descriptor.SchemaVersion, startedAt, DateTimeOffset.UtcNow, complete && !cancelled, cancelled, findings);
     }
 
+    public Task ValidateOpenLibraryAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => ValidateOpenLibraryCoreAsync(cancellationToken), cancellationToken);
+    }
+
+    private async Task ValidateOpenLibraryCoreAsync(CancellationToken cancellationToken)
+    {
+        _layout.ValidateRequiredEntries();
+        var manifest = await LibraryManifestStore.ReadAsync(_layout, cancellationToken).ConfigureAwait(false);
+        if (manifest != _manifest) throw new LibraryValidationException("The library manifest changed outside SlopFactory.");
+        var descriptor = await _database.ValidateAndDescribeAsync(manifest, _layout.RootPath, cancellationToken).ConfigureAwait(false);
+        if (descriptor != Descriptor) throw new LibraryValidationException("The library database identity changed outside SlopFactory.");
+        var integrityFindings = await _database.CheckIntegrityAsync(cancellationToken).ConfigureAwait(false);
+        if (integrityFindings.Count > 0) throw new LibraryValidationException("The library database no longer passes its integrity check.");
+    }
+
     public Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

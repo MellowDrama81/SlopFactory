@@ -77,6 +77,8 @@ File details continue to show the immutable original identity beside the current
 
 While a library is open, SlopFactory watches its managed-media directory as a best-effort early warning. Events are debounced and mapped through opaque managed filenames. Expected file creation from a completed import or copy is revalidated as healthy and remains silent. A missing or changed record produces a global **Managed content needs review** notice linking to file details. Filesystem watcher overflow or a failed revalidation recommends the explicit full integrity scan because operating-system watcher events can be coalesced or missed.
 
+The manifest and SQLite database receive stricter treatment. A detected change waits for any current SlopFactory mutation, pauses later mutations at the same boundary, and revalidates the required entries, exact open-library identity, and database integrity. If that validation fails—or those critical files can no longer be monitored—the active library is closed instead of continuing against uncertain state. Its remembered location remains visible so you can inspect or relink it deliberately; SlopFactory does not silently create or open another library.
+
 ## File links
 
 The file-details page can create a directed, labelled link from the current file to another active file. A file cannot link to itself, while the same pair of files may have multiple links with different labels. Existing active links can be relabelled, reversed, or moved to the recycle bin. SlopFactory blocks a relabel or reversal if it would duplicate an existing directed link.

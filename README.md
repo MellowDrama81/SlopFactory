@@ -24,6 +24,7 @@ The current development build implements the local-library foundation, including
 - durable missing/changed managed-content health with exact-byte recovery and preserved metadata and links;
 - reviewed permanent managed-content replacement with immutable original identity and optional transactional metadata clearing;
 - debounced managed-media watching with silent validation of expected writes and global external-change review notices;
+- fail-closed manifest/database watching with mutation-bound identity and integrity revalidation;
 - transactional SQLite schema upgrades; and
 - shared .NET MAUI application projects for Windows and Android.
 

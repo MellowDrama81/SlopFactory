@@ -571,8 +571,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The user must resolve the storage problem and retry the failed operation explicitly.
 - If the active library becomes read-only or unavailable, the application closes it safely rather than continuing with partial functionality.
 - Managed-file existence must also be verified before export and provider submission when those workflows are implemented.
-- Best-effort watching must additionally detect unexpected manifest and database changes.
-- An unexpected manifest or database change pauses mutations and closes the library if validation cannot prove continued consistency.
 - Future provider and export operations retain explicit existence, containment and hash checks regardless of watcher state.
 - A **Content Changed** record permits metadata and relationship viewing plus a clearly labelled sandboxed **Inspect Changed Bytes** mode subject to all normal content-safety limits.
 - **Export Changed Bytes** lets the user copy the currently present bytes to an external destination for recovery without updating the library record or attaching a normal provenance sidecar.

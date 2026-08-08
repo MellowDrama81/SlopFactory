@@ -1217,6 +1217,34 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task OpenLibraryValidationRejectsUnexpectedManifestOrDatabaseIdentityChanges()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        await workspace.ValidateOpenLibraryAsync();
+
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("SlopFactory Library", "External rename", StringComparison.Ordinal));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ValidateOpenLibraryAsync());
+
+        await File.WriteAllTextAsync(manifestPath, manifest);
+        await workspace.ValidateOpenLibraryAsync();
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE library_info SET display_name='External database rename' WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ValidateOpenLibraryAsync());
+    }
+
+    [Fact]
     public async Task LibraryBrowserSearchesNamesAndTypedMetadataWithoutDisclosingSensitiveKeys()
     {
         using var temporary = new TemporaryDirectory();
