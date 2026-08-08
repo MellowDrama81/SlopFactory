@@ -193,7 +193,10 @@ public sealed record FileContentProvenance(
 
 public sealed record FileDerivationProvenance(
     string? SourceFileId,
-    FileOrigin Origin);
+    FileOrigin Origin,
+    FileIdentitySnapshot? DeletedSource = null);
+
+public sealed record FileIdentitySnapshot(string DisplayName, string MediaType, string ContentHash);
 
 public sealed record FileDerivationChainEntry(
     FileRecord File,

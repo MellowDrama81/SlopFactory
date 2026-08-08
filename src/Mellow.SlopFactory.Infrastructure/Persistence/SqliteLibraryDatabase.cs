@@ -108,7 +108,10 @@ internal sealed class SqliteLibraryDatabase
             CREATE TABLE file_derivation_provenance (
                 file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
                 source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,
-                origin INTEGER NOT NULL
+                origin INTEGER NOT NULL,
+                deleted_source_name TEXT NULL,
+                deleted_source_media_type TEXT NULL,
+                deleted_source_content_hash TEXT NULL
             );
 
             CREATE TABLE file_links (
@@ -209,6 +212,10 @@ internal sealed class SqliteLibraryDatabase
         if (fromVersion < 7)
         {
             await ExecuteNonQueryAsync(connection, "CREATE TABLE file_derivation_provenance (file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,origin INTEGER NOT NULL);", cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 8)
+        {
+            await ExecuteNonQueryAsync(connection, "ALTER TABLE file_derivation_provenance ADD COLUMN deleted_source_name TEXT NULL; ALTER TABLE file_derivation_provenance ADD COLUMN deleted_source_media_type TEXT NULL; ALTER TABLE file_derivation_provenance ADD COLUMN deleted_source_content_hash TEXT NULL;", cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -948,11 +955,12 @@ internal sealed class SqliteLibraryDatabase
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT source_file_id,origin FROM file_derivation_provenance WHERE file_id=$id;";
+        command.CommandText = "SELECT source_file_id,origin,deleted_source_name,deleted_source_media_type,deleted_source_content_hash FROM file_derivation_provenance WHERE file_id=$id;";
         command.Parameters.AddWithValue("$id", fileId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
-        return new FileDerivationProvenance(reader.IsDBNull(0) ? null : reader.GetString(0), (FileOrigin)reader.GetInt32(1));
+        var snapshot = reader.IsDBNull(2) ? null : new FileIdentitySnapshot(reader.GetString(2), reader.GetString(3), reader.GetString(4));
+        return new FileDerivationProvenance(reader.IsDBNull(0) ? null : reader.GetString(0), (FileOrigin)reader.GetInt32(1), snapshot);
     }
 
     public async Task<FileRecord> AcceptFileContentAsync(string fileId, string contentHash, long byteSize, string mediaType, bool restoresOriginal, bool clearUserMetadata, CancellationToken cancellationToken)
@@ -1247,6 +1255,8 @@ internal sealed class SqliteLibraryDatabase
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var file = await GetFileAsync(connection, fileId, cancellationToken, transaction).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "UPDATE file_derivation_provenance SET source_file_id=NULL,deleted_source_name=$name,deleted_source_media_type=$media,deleted_source_content_hash=$hash WHERE source_file_id=$id;", cancellationToken, transaction, ("$id", fileId), ("$name", file.DisplayName), ("$media", file.MediaType), ("$hash", file.ContentHash)).ConfigureAwait(false);
         var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM files WHERE id=$id AND state=2;", cancellationToken, transaction, ("$id", fileId)).ConfigureAwait(false);
         if (deleted == 0) throw new LibraryValidationException("The pending file aggregate could not be found for permanent deletion.");
         await ExecuteNonQueryAsync(connection, "DELETE FROM permanent_deletion_failures WHERE record_kind=1 AND record_id=$id;", cancellationToken, transaction, ("$id", fileId)).ConfigureAwait(false);

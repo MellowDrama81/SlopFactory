@@ -74,9 +74,14 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         for (var depth = 0; depth < 128 && seen.Add(current.Id); depth++)
         {
             var provenance = await _database.GetFileDerivationProvenanceAsync(current.Id, cancellationToken).ConfigureAwait(false);
-            entries.Add(new FileDerivationChainEntry(current, provenance?.Origin));
+            entries.Add(new FileDerivationChainEntry(current, current.State == LibraryRecordState.Active ? provenance?.Origin : null));
+            if (current.State != LibraryRecordState.Active) break;
             if (provenance?.SourceFileId is not { } sourceId) break;
-            try { current = await _database.GetFileAsync(sourceId, cancellationToken).ConfigureAwait(false); }
+            try
+            {
+                current = await _database.GetFileAsync(sourceId, cancellationToken).ConfigureAwait(false);
+                if (current.State != LibraryRecordState.Active) break;
+            }
             catch (LibraryValidationException) { break; }
         }
         return entries;

@@ -665,6 +665,32 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task DerivationRelationshipHidesWhileRecycledRestoresWithEndpointsAndSnapshotsPermanentSource()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(sourcePath, "source");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var source = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var copy = await workspace.DuplicateFileAsync(source.Id, workspace.Descriptor.RootFolderId, "copy.txt");
+
+        await workspace.RecycleFileAsync(source.Id);
+        Assert.Single(await workspace.GetFileDerivationChainAsync(copy.Id));
+        await workspace.RestoreFileAsync(source.Id);
+        Assert.Equal(2, (await workspace.GetFileDerivationChainAsync(copy.Id)).Count);
+        await workspace.RecycleFileAsync(copy.Id);
+        Assert.Single(await workspace.GetFileDerivationChainAsync(copy.Id));
+        await workspace.RestoreFileAsync(copy.Id);
+        await workspace.RecycleFileAsync(source.Id);
+        await workspace.PermanentlyDeleteFileAsync(source.Id);
+
+        var provenance = await workspace.GetFileDerivationProvenanceAsync(copy.Id);
+        Assert.Null(provenance!.SourceFileId);
+        Assert.Equal(new FileIdentitySnapshot(source.DisplayName, source.MediaType, source.ContentHash), provenance.DeletedSource);
+    }
+
+    [Fact]
     public async Task ImportRejectsDirectorySourcesWithoutBlockingOtherFiles()
     {
         using var temporary = new TemporaryDirectory();
@@ -1233,15 +1259,15 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 7", "\"schemaVersion\": 1", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 1", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(7, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycledLinksAsync());
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
         Assert.False(File.Exists(databasePath + ".upgrade-backup"));
-        Assert.Contains("\"schemaVersion\": 7", await File.ReadAllTextAsync(manifestPath));
+        Assert.Contains("\"schemaVersion\": 8", await File.ReadAllTextAsync(manifestPath));
     }
 
     [Fact]
@@ -1262,11 +1288,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 7", "\"schemaVersion\": 2", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 2", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(7, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
     }
 
@@ -1296,12 +1322,12 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 7", "\"schemaVersion\": 3", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 3", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
         var file = await upgraded.GetFileAsync(fileId);
-        Assert.Equal(7, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
         Assert.Equal("current-name.txt", file.OriginalFileName);
     }
 
@@ -1329,11 +1355,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 7", "\"schemaVersion\": 4", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 4", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(7, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
         Assert.Equal(FileContentState.Healthy, (await upgraded.GetFileAsync(fileId)).ContentState);
     }
 
@@ -1365,12 +1391,12 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 7", "\"schemaVersion\": 5", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 5", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
         var provenance = await upgraded.GetFileContentProvenanceAsync(fileId);
-        Assert.Equal(7, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
         Assert.Equal(originalHash, provenance.OriginalContentHash);
         Assert.Null(provenance.ReplacedAt);
     }
