@@ -896,6 +896,17 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public void JsonMetadataValidationDoesNotEchoSensitiveInput()
+    {
+        var invalid = Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateMetadataValue(MetadataValueKind.Json, "{\"secret-token\": }"));
+        var duplicate = Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateMetadataValue(MetadataValueKind.Json, "{\"secret-token\":1,\"secret-token\":2}"));
+
+        Assert.Contains("line", invalid.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret-token", invalid.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-token", duplicate.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task IntegrityScanHashesRecycledManagedFilesWithoutMutatingRecords()
     {
         using var temporary = new TemporaryDirectory();

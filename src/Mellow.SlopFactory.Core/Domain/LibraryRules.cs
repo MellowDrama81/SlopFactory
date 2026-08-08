@@ -128,8 +128,17 @@ public static class LibraryRules
             CommentHandling = JsonCommentHandling.Disallow,
             MaxDepth = 32
         };
-        using var document = JsonDocument.Parse(value, options);
-        ValidateJsonElement(document.RootElement, 0, new JsonNodeCounter());
+        try
+        {
+            using var document = JsonDocument.Parse(value, options);
+            ValidateJsonElement(document.RootElement, 0, new JsonNodeCounter());
+        }
+        catch (JsonException exception)
+        {
+            var line = exception.LineNumber is { } lineNumber ? lineNumber + 1 : 1;
+            var column = exception.BytePositionInLine is { } bytePosition ? bytePosition + 1 : 1;
+            throw new LibraryValidationException($"JSON metadata is invalid at line {line}, column {column}.");
+        }
     }
 
     private static void ValidateJsonElement(JsonElement element, int depth, JsonNodeCounter counter)
@@ -146,7 +155,7 @@ public static class LibraryRules
             {
                 if (!names.Add(property.Name))
                 {
-                    throw new LibraryValidationException($"JSON object contains duplicate property '{property.Name}'.");
+                    throw new LibraryValidationException("JSON metadata contains a duplicate property name.");
                 }
                 ValidateJsonElement(property.Value, depth + 1, counter);
             }

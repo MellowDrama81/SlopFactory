@@ -90,6 +90,8 @@ Any revealed sensitive metadata is concealed again if the library changes, close
 
 After revealing a sensitive value, **Copy value** explicitly copies it and warns that operating-system clipboard history may retain it. SlopFactory does not automatically clear the clipboard because doing so could overwrite content you copy later.
 
+Invalid JSON metadata reports only a validation category and line/column. It does not repeat JSON tokens, property names, or value excerpts.
+
 Metadata keys can be renamed without changing their stored type, sensitivity flag, or value.
 
 Changing a display name or user metadata never creates a content copy.

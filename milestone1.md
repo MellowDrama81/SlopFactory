@@ -66,7 +66,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 - [x] Make concealed metadata accessible as key, type, and concealed state without value or length, then expose the normal value only after session reveal; verify with accessibility-tree tests.
 - [ ] Clear session reveals when the library closes, switches, locks, becomes unavailable, or the app restarts; verify each lifecycle transition.
 - [x] Add explicit sensitive-value copy with clipboard-retention warning and ensure no value enters diagnostics, history, notifications, or automatic clipboard-clearing logic; verify logging fixtures.
-- [ ] Add sensitive JSON validation errors that report only error class and position, never tokens/property names/value excerpts; verify malformed sensitive JSON fixtures.
+- [x] Add sensitive JSON validation errors that report only error class and position, never tokens/property names/value excerpts; verify malformed sensitive JSON fixtures.
 - [ ] Add duplicate-review disclosure of sensitive metadata counts and clear copied reveal state; verify no sensitive key/value is rendered in single or bulk duplication review.
 
 ## Provenance and organisation
