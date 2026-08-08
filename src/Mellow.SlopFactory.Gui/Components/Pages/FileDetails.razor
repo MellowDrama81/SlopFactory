@@ -38,6 +38,15 @@ else
             {
                 <dl><dt>Recorded</dt><dd class="mono">@_file.ContentHash · @_file.ByteSize bytes · @_file.MediaType</dd><dt>Observed</dt><dd class="mono">@_contentHealth.ObservedContentHash · @_contentHealth.ObservedByteSize bytes · @_contentHealth.ObservedMediaType</dd></dl>
             }
+            <button class="secondary" disabled="@_inspectingChangedContent" @onclick="InspectChangedContentAsync">@(_inspectingChangedContent ? "Inspecting…" : "Inspect changed bytes")</button>
+            @if (_changedInspection is not null)
+            {
+                <div class="notice" role="status">
+                    <p><strong>Changed-byte inspection</strong> does not accept or alter the file.</p>
+                    <dl><dt>Actual bytes</dt><dd class="mono">@_changedInspection.ActualContentHash · @_changedInspection.ActualByteSize bytes · @_changedInspection.ActualMediaType</dd></dl>
+                    @if (_changedText is not null) { <pre class="text-viewer">@_changedText.Content</pre><p class="muted">@(_changedText.IsTruncated ? "Only the first 1,048,576 characters are shown." : "Read-only text inspection.")</p> }
+                </div>
+            }
         }
         else if (_file.ContentState == FileContentState.Replaced && _contentProvenance is not null)
         {
@@ -433,6 +442,9 @@ else
     private FileContentHealth? _contentHealth;
     private FileContentProvenance? _contentProvenance;
     private bool _verifyingContent;
+    private ChangedContentInspection? _changedInspection;
+    private TextFileContent? _changedText;
+    private bool _inspectingChangedContent;
     private ManagedContentReplacementReview? _replacementReview;
     private string? _replacementSourcePath;
     private bool _clearMetadataAfterReplacement;
@@ -467,6 +479,8 @@ else
         {
             _contentHealth = await LibraryState.Workspace.RevalidateFileContentAsync(Id);
             _file = _contentHealth.File;
+            _changedInspection = null;
+            _changedText = null;
             _contentProvenance = await LibraryState.Workspace.GetFileContentProvenanceAsync(Id);
             await StopMediaAsync();
             _mediaError = null;
@@ -532,6 +546,22 @@ else
         _verifyingContent = true;
         try { await ReloadAsync(); _message = $"Content verification complete: {ContentStateLabel(_file?.ContentState ?? FileContentState.Missing)}."; }
         finally { _verifyingContent = false; }
+    }
+
+    private async Task InspectChangedContentAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        _inspectingChangedContent = true;
+        try
+        {
+            _changedInspection = await LibraryState.Workspace.InspectChangedContentAsync(Id);
+            _changedText = _changedInspection.ActualMediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || _changedInspection.ActualMediaType is "application/json" or "application/xml"
+                ? await LibraryState.Workspace.ReadChangedTextFileAsync(Id)
+                : null;
+            _message = null;
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+        finally { _inspectingChangedContent = false; }
     }
 
     private static bool CanUseContent(FileRecord file) => file.ContentState is FileContentState.Healthy or FileContentState.Replaced;

@@ -118,6 +118,28 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return file;
     }
 
+    public async Task<ChangedContentInspection> InspectChangedContentAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active || file.ContentState != FileContentState.Changed) throw new LibraryValidationException("Only changed active managed content can be inspected.");
+        var path = _layout.ManagedFilePath(file.ManagedName);
+        if (Directory.Exists(path) || !File.Exists(path)) throw new LibraryValidationException("Changed content is no longer available to inspect.");
+        var info = new FileInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path)) throw new LibraryValidationException("Changed content is redirected or hard-linked and cannot be inspected safely.");
+        var hash = await Hashing.Sha256Async(path, cancellationToken).ConfigureAwait(false);
+        var mediaType = (await MediaTypeDetector.DetectAsync(path, cancellationToken).ConfigureAwait(false)).MediaType;
+        return new ChangedContentInspection(file, hash, info.Length, mediaType);
+    }
+
+    public async Task<TextFileContent> ReadChangedTextFileAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        var inspection = await InspectChangedContentAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (!IsTextMediaType(inspection.ActualMediaType)) throw new LibraryValidationException("The changed bytes are not a supported text format.");
+        var path = _layout.ManagedFilePath(inspection.File.ManagedName);
+        return await ReadTextContentAsync(path, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<ManagedContentReplacementReview> ReviewManagedContentReplacementAsync(string fileId, string? sourcePath, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -211,11 +233,15 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public async Task<TextFileContent> ReadTextFileAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        const int maximumDisplayedCharacters = 1_048_576;
         var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
         if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active file can be viewed.");
         if (!IsTextMediaType(file.MediaType)) throw new LibraryValidationException("This file is not a supported text format.");
-        var path = GetManagedFilePath(file);
+        return await ReadTextContentAsync(GetManagedFilePath(file), cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<TextFileContent> ReadTextContentAsync(string path, CancellationToken cancellationToken)
+    {
+        const int maximumDisplayedCharacters = 1_048_576;
         try
         {
             await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65_536, FileOptions.Asynchronous | FileOptions.SequentialScan);

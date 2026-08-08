@@ -10,6 +10,8 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<FolderRecord>> GetActiveFoldersAsync(CancellationToken cancellationToken = default);
     Task<FileRecord> GetFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<FileContentHealth> RevalidateFileContentAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<ChangedContentInspection> InspectChangedContentAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<TextFileContent> ReadChangedTextFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<FileContentProvenance> GetFileContentProvenanceAsync(string fileId, CancellationToken cancellationToken = default);
     Task<ManagedContentReplacementReview> ReviewManagedContentReplacementAsync(string fileId, string? sourcePath, CancellationToken cancellationToken = default);
     Task<FileRecord> CommitManagedContentReplacementAsync(ManagedContentReplacementReview review, string? sourcePath, bool confirmDifferingReplacement, bool clearUserMetadata, CancellationToken cancellationToken = default);

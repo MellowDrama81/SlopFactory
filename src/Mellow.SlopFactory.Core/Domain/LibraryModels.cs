@@ -171,6 +171,12 @@ public sealed record FileContentProvenance(
     string OriginalMediaType,
     DateTimeOffset? ReplacedAt);
 
+public sealed record ChangedContentInspection(
+    FileRecord File,
+    string ActualContentHash,
+    long ActualByteSize,
+    string ActualMediaType);
+
 public sealed record LibraryFileBrowseQuery(
     string FolderId,
     LibraryBrowseScope Scope,

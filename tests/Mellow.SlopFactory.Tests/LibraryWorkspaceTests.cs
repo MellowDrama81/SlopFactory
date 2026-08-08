@@ -920,6 +920,28 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task ChangedTextCanBeInspectedWithoutAcceptingIt()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("changed-inspection.txt");
+        await File.WriteAllTextAsync(source, "recorded bytes");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        await File.WriteAllTextAsync(workspace.GetManagedFilePath(file), "changed bytes");
+
+        Assert.Equal(FileContentState.Changed, (await workspace.RevalidateFileContentAsync(file.Id)).File.ContentState);
+        var inspection = await workspace.InspectChangedContentAsync(file.Id);
+        var text = await workspace.ReadChangedTextFileAsync(file.Id);
+
+        Assert.NotEqual(file.ContentHash, inspection.ActualContentHash);
+        Assert.Equal("text/plain", inspection.ActualMediaType);
+        Assert.Equal("changed bytes", text.Content);
+        Assert.Equal(FileContentState.Changed, (await workspace.GetFileAsync(file.Id)).ContentState);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReadTextFileAsync(file.Id));
+    }
+
+    [Fact]
     public async Task ManagedContentReplacementPreservesImmutableOriginalAndRequiresDifferingConfirmation()
     {
         using var temporary = new TemporaryDirectory();
