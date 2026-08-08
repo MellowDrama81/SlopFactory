@@ -861,7 +861,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - After its SHA-256 digest and byte size are verified, a newly imported file inherits any existing shared provider safety classification for the same bytes in the active library.
 - Import review identifies a known classification when preflight has already verified the bytes; otherwise the completion summary reports the inherited classification after copying and hashing finishes.
 - Bulk-import preflight groups candidates whose content hashes match existing library files.
-- **Skip Duplicates** is the default bulk choice, with **Import All Anyway** and per-file overrides available before confirmation.
 - The running copy phase does not interrupt the user with a separate modal for each duplicate already resolved during preflight.
 - Duplicate detection includes matching files in the recycle bin and labels them **Recycled Match** rather than treating them as active existing content.
 - A recycled match offers **Restore Existing**, **Import Anyway**, and **Skip** and is never restored automatically.

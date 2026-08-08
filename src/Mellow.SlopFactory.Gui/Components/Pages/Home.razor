@@ -61,12 +61,13 @@ else
             <InputSelect id="import-folder" @bind-Value="_importForm.DestinationFolderId" disabled="@_busy">
                 @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
             </InputSelect>
-            <label class="check"><InputCheckbox @bind-Value="_importForm.ImportDuplicates" disabled="@_busy" /> Import byte-identical files as separate records instead of skipping them</label>
+            <label class="check"><InputCheckbox @bind-Value="_importForm.ImportDuplicates" @bind-Value:after="ApplyDuplicateChoiceToPending" disabled="@_busy" /> Import all byte-identical files as separate records instead of skipping them</label>
             <ul class="metadata-list">
                 @foreach (var candidate in _pendingImports)
                 {
                     <li>
                         <div><strong>@candidate.DisplayName</strong><small>@(candidate.ByteSize is null ? "Size unavailable until import" : FormatBytes(candidate.ByteSize.Value))@(!string.IsNullOrWhiteSpace(candidate.RelativeFolder) ? $" · {candidate.RelativeFolder}" : string.Empty)</small></div>
+                        <label class="check"><input type="checkbox" checked="@candidate.ImportDuplicates" @onchange="args => SetImportDuplicate(candidate.Path, args)" disabled="@_busy" /> Import this item if it is a duplicate</label>
                         <button class="ghost danger" disabled="@_busy" @onclick="() => RemovePendingImport(candidate.Path)">Remove</button>
                     </li>
                 }
@@ -935,6 +936,14 @@ else
         }
     }
 
+    private void ApplyDuplicateChoiceToPending() => _pendingImports = _pendingImports.Select(item => item with { ImportDuplicates = _importForm.ImportDuplicates }).ToList();
+
+    private void SetImportDuplicate(string path, ChangeEventArgs args)
+    {
+        var index = _pendingImports.FindIndex(item => SameSourcePath(item.Path, path));
+        if (index >= 0) _pendingImports[index] = _pendingImports[index] with { ImportDuplicates = args.Value is bool selected && selected };
+    }
+
     private void OnIncomingImportsChanged(object? sender, EventArgs args) => _ = InvokeAsync(() =>
     {
         DrainIncomingImports();
@@ -958,7 +967,7 @@ else
             {
                 var destinationId = await ResolveImportFolderAsync(workspace, _importForm.DestinationFolderId, item.RelativeFolder, cancellationToken);
                 var mappedProgress = new DelegatingProgress<ImportProgress>(value => progress.Report(value with { ItemIndex = index + 1, TotalItems = items.Count, DisplayName = item.DisplayName }));
-                var result = AssertSingleImportResult(await workspace.ImportWithProgressAsync([item.Path], destinationId, _importForm.ImportDuplicates, mappedProgress, cancellationToken));
+                var result = AssertSingleImportResult(await workspace.ImportWithProgressAsync([item.Path], destinationId, item.ImportDuplicates, mappedProgress, cancellationToken));
                 results.Add(result);
                 if (result.Outcome == ImportOutcome.Cancelled)
                 {
@@ -1234,7 +1243,7 @@ else
         public string Name { get; set; } = string.Empty;
         public string DestinationFolderId { get; set; } = string.Empty;
     }
-    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize, bool IsTemporary, string? RelativeFolder);
+    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize, bool IsTemporary, string? RelativeFolder, bool ImportDuplicates = false);
     private sealed class DelegatingProgress<T>(Action<T> report) : IProgress<T>
     {
         public void Report(T value) => report(value);

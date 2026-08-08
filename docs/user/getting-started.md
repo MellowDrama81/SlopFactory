@@ -26,7 +26,7 @@ Library settings keeps a device-local **Recent libraries** list showing each lib
 3. Select **Import files**.
 4. Choose one or more files in the operating-system picker.
 
-SlopFactory then opens **Review import** without copying anything into the library. Choose any available recent library as the target, choose an active destination folder within it, remove unwanted selections, and decide whether byte-identical files should be skipped or imported as independent records. Changing the target opens that library normally without moving data. **Import files** begins only after this review.
+SlopFactory then opens **Review import** without copying anything into the library. Choose any available recent library as the target, choose an active destination folder within it, and remove unwanted selections. **Import all byte-identical files** applies a default choice to the current review, while each item also has its own **Import this item if it is a duplicate** control. Changing the target opens that library normally without moving data. **Import files** begins only after this review.
 
 SlopFactory copies every successful import into managed storage and calculates a SHA-256 content hash. It never treats the selected external file as its managed copy.
 
