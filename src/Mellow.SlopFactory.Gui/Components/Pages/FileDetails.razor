@@ -477,6 +477,8 @@ else
     private TextCopyForm _textCopyForm = new();
     private int SensitiveMetadataCount => _metadata.Count(item => item.IsSensitive);
 
+    protected override void OnInitialized() => LibraryState.Changed += OnLibraryStateChanged;
+
     protected override async Task OnParametersSetAsync()
     {
         await LibraryState.InitializeAsync();
@@ -903,6 +905,12 @@ else
     }
 
     private void ToggleReveal(string id) { if (!_revealed.Add(id)) _revealed.Remove(id); }
+
+    private void OnLibraryStateChanged(object? sender, EventArgs args) => _ = InvokeAsync(() =>
+    {
+        _revealed.Clear();
+        StateHasChanged();
+    });
     private void FitImage() { _fitImage = true; _imageZoom = 100; }
     private void ActualImageSize() { _fitImage = false; _imageZoom = 100; }
     private void RotateImage() => _imageRotation = (_imageRotation + 90) % 360;
@@ -922,7 +930,11 @@ else
         _mediaSource = null;
         _registerMediaElement = false;
     }
-    public async ValueTask DisposeAsync() => await StopMediaAsync();
+    public async ValueTask DisposeAsync()
+    {
+        LibraryState.Changed -= OnLibraryStateChanged;
+        await StopMediaAsync();
+    }
     private void Back() => Navigation.NavigateTo("/");
     private static bool IsTextMediaType(string mediaType) => mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || mediaType is "application/json" or "application/xml";
     private static bool IsImageMediaType(string mediaType) => mediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif" or "image/svg+xml";

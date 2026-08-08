@@ -109,6 +109,8 @@ Date-time metadata persists the exact validated offset-bearing input rather than
 
 `SensitiveMetadataDisclosureService` stores only a device-local acknowledgement flag. File-detail and bulk metadata mutations consult the same service before first creating or marking sensitive data, so neither workflow can bypass the disclosure. The service stores no metadata key or value.
 
+File-detail reveal state is component memory only. The component clears it whenever `AppLibraryState` raises its library-state change event and unsubscribes on disposal; it is therefore not persisted across library switch/close/unavailability or application restart.
+
 `SetMetadataSensitivityForFilesAsync` uses the same selection mutation boundary and invokes a per-file transactional `is_sensitive` update. It changes neither the metadata key, value, nor type. Missing or unavailable entries return independent bulk-operation failures, allowing other selected records to retain their completed flag change.
 
 ## Text search and Markdown rendering

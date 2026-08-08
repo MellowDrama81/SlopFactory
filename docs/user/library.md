@@ -86,6 +86,8 @@ The first attempt to create or bulk-mark sensitive metadata explains that the se
 
 For concealed metadata, assistive technology receives the entry key, type, concealed state, and **Reveal for session** action—not the masked value or its length. After reveal, the ordinary value is available until you conceal it or leave that page.
 
+Any revealed sensitive metadata is concealed again if the library changes, closes, or becomes unavailable, and is never retained after app restart.
+
 Metadata keys can be renamed without changing their stored type, sensitivity flag, or value.
 
 Changing a display name or user metadata never creates a content copy.
