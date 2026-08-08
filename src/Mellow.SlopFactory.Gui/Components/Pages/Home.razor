@@ -108,7 +108,21 @@ else
                         <div><strong>@result.Candidate.DisplayName</strong><small>@ImportOutcomeLabel(result.Outcome)@(!string.IsNullOrWhiteSpace(result.Error) ? $" Â· {result.Error}" : string.Empty)</small></div>
                         @if (result.Outcome == ImportOutcome.DuplicateSkipped)
                         {
-                            @foreach (var match in result.Matches.Take(3)) { <button class="ghost" @onclick="() => OpenFile(match.Id)">Open existing @match.DisplayName</button> }
+                            @foreach (var match in result.Matches.Take(3))
+                            {
+                                if (match.State == LibraryRecordState.Recycled)
+                                {
+                                    <button class="ghost" @onclick="() => RestoreDuplicateAsync(match.Id)">Restore existing @match.DisplayName</button>
+                                }
+                                else if (match.State == LibraryRecordState.Active)
+                                {
+                                    <button class="ghost" @onclick="() => OpenFile(match.Id)">Open existing @match.DisplayName</button>
+                                }
+                                else
+                                {
+                                    <span class="muted">Matching record is pending permanent deletion and cannot be restored.</span>
+                                }
+                            }
                         }
                         else if (result.File is not null)
                         {
@@ -908,6 +922,18 @@ else
         var item = _pendingImports.FirstOrDefault(candidate => SameSourcePath(candidate.Path, path));
         _pendingImports.RemoveAll(candidate => SameSourcePath(candidate.Path, path));
         if (item?.IsTemporary == true) await IncomingImports.DiscardAsync(new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, true, item.RelativeFolder));
+    }
+
+    private async Task RestoreDuplicateAsync(string fileId)
+    {
+        if (LibraryState.Workspace is null || _contents is null) return;
+        try
+        {
+            await LibraryState.Workspace.RestoreFileAsync(fileId);
+            _message = "The matching recycled file was restored.";
+            await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
     }
     private void CancelImport() => _importCancellation?.Cancel();
     private async Task CancelImportReview()

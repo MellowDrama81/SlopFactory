@@ -30,7 +30,7 @@ SlopFactory then opens **Review import** without copying anything into the libra
 
 SlopFactory copies every successful import into managed storage and calculates a SHA-256 content hash. It never treats the selected external file as its managed copy.
 
-When the same bytes already exist in the library, the default import skips the duplicate and reports it in the completion summary. A failed file does not undo files that already imported successfully.
+When the same bytes already exist in the library, the default import skips the duplicate and reports it in the completion summary. An active match can be opened directly. A recycled match offers **Restore existing**, which uses the normal restore checks for names, managed content, and link dependencies; a record pending permanent deletion is identified as unavailable for restore. A failed file does not undo files that already imported successfully.
 
 Hashing and managed copying show the current file, item count, stage, and byte progress. **Cancel remaining import** removes the active staging copy, keeps files which already committed, and marks the active and not-yet-started items cancelled. The per-file results distinguish imported, duplicate-skipped, failed, and cancelled items. Imported records and skipped matches provide direct open actions.
 
