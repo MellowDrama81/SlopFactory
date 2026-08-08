@@ -68,6 +68,8 @@ Supported raster image details use a separate bounded 1 MiB header probe after o
 
 Schema version 7 adds `file_derivation_provenance`. Duplicate and Edit as Copy insert one transactional, direct source relationship with the derived record; it is a read-only relationship, not a `file_links` row. The source reference uses `ON DELETE SET NULL`, preserving the provenance record while allowing later permanent-deletion handling to supply an identity snapshot.
 
+`GetFileDerivationChainAsync` resolves direct source IDs only, starts with the selected file, and limits traversal to 128 distinct IDs. It returns the available prefix if a source row has been cleared or cannot be resolved; no editable link is synthesized. The detail page renders this read-only chain separately from user links.
+
 Managed-content replacement is restricted to active **Missing** and **Changed** records. Review validates a regular, non-reparse candidate, hashes it, detects its media type, reads metadata counts, and freezes those facts for confirmation. Commit revalidates both the record and candidate. Exact original identity produces **Healthy**; different identity requires an explicit flag and produces **Replaced**.
 
 On the first acceptance, `file_content_provenance` captures the then-recorded identity with `ON CONFLICT DO NOTHING`; later replacements cannot rewrite it. The current hash, size, type, health state, replacement timestamp, and optional deletion of all user metadata commit in one SQLite transaction. Folder identity and link ownership are unchanged.

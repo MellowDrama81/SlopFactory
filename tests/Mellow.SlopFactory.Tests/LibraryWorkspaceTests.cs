@@ -644,6 +644,27 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task DerivationChainUsesImmediateSourceIdsAcrossRenameAndMove()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("original.txt");
+        await File.WriteAllTextAsync(sourcePath, "source");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var source = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var folder = await workspace.CreateFolderAsync(workspace.Descriptor.RootFolderId, "Copies");
+        var firstCopy = await workspace.DuplicateFileAsync(source.Id, folder.Id, "first.txt");
+        var secondCopy = await workspace.DuplicateFileAsync(firstCopy.Id, folder.Id, "second.txt");
+        await workspace.RenameFileAsync(firstCopy.Id, "renamed.txt");
+        await workspace.MoveFileAsync(firstCopy.Id, workspace.Descriptor.RootFolderId);
+
+        var chain = await workspace.GetFileDerivationChainAsync(secondCopy.Id);
+
+        Assert.Equal([secondCopy.Id, firstCopy.Id, source.Id], chain.Select(entry => entry.File.Id));
+        Assert.Equal([FileOrigin.UserCopy, FileOrigin.UserCopy, null], chain.Select(entry => entry.DerivedBy));
+    }
+
+    [Fact]
     public async Task ImportRejectsDirectorySourcesWithoutBlockingOtherFiles()
     {
         using var temporary = new TemporaryDirectory();

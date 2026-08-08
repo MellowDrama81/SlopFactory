@@ -68,6 +68,8 @@ For a detected format without a built-in viewer, SlopFactory shows **Preview una
 
 Files made with **Duplicate** or **Edit as Copy** show a read-only source file ID in System information. This direct provenance does not create an editable file link or cause a chain of indirect source relationships.
 
+When a file has more than one copy ancestor, **Provenance chain** lists the file and each immediate source in order. The chain uses stable internal IDs, so moves and renames do not break it, and it stops safely when a source is unavailable.
+
 For supported raster images, file details also show dimensions read from a bounded technical-metadata probe after verifying the managed bytes. JPEG viewing also respects a bounded EXIF orientation value, including mirrored orientations, only in the temporary viewer. It never rewrites the imported file. SVG dimensions remain unavailable rather than being inferred from potentially complex markup. SlopFactory does not extract location, device, author, face, or other descriptive embedded metadata.
 
 SVG files use the same viewing controls only after SlopFactory parses and sanitizes them. The sanitizer removes scripts, event handlers, foreign elements and namespaces, embedded styles, and non-local references before the image enters the WebView. Sanitization changes only the temporary viewing representation, not the original managed SVG.

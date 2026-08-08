@@ -65,6 +65,23 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetFileDerivationProvenanceAsync(fileId, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<FileDerivationChainEntry>> GetFileDerivationChainAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var entries = new List<FileDerivationChainEntry>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var current = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        for (var depth = 0; depth < 128 && seen.Add(current.Id); depth++)
+        {
+            var provenance = await _database.GetFileDerivationProvenanceAsync(current.Id, cancellationToken).ConfigureAwait(false);
+            entries.Add(new FileDerivationChainEntry(current, provenance?.Origin));
+            if (provenance?.SourceFileId is not { } sourceId) break;
+            try { current = await _database.GetFileAsync(sourceId, cancellationToken).ConfigureAwait(false); }
+            catch (LibraryValidationException) { break; }
+        }
+        return entries;
+    }
+
     private async Task<FileContentHealth> RevalidateFileContentCoreAsync(string fileId, CancellationToken cancellationToken)
     {
         var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);

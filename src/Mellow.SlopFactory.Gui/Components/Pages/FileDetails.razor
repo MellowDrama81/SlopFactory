@@ -323,6 +323,20 @@ else
             </dl>
         </article>
 
+        @if (_derivationChain.Count > 1)
+        {
+            <article class="panel">
+                <h2>Provenance chain</h2>
+                <ol>
+                    @foreach (var entry in _derivationChain)
+                    {
+                        <li><span>@entry.File.DisplayName</span> <small class="muted">@entry.File.Id · @entry.File.State @(entry.DerivedBy is null ? string.Empty : $"· {entry.DerivedBy}")</small></li>
+                    }
+                </ol>
+                <p class="muted">This read-only chain follows only immediate copy sources and stops when no source can be restored.</p>
+            </article>
+        }
+
         <article class="panel">
             <h2>User metadata</h2>
             @if (_metadata.Count == 0)
@@ -472,6 +486,7 @@ else
     private FileContentHealth? _contentHealth;
     private FileContentProvenance? _contentProvenance;
     private FileDerivationProvenance? _derivationProvenance;
+    private IReadOnlyList<FileDerivationChainEntry> _derivationChain = [];
     private bool _verifyingContent;
     private ChangedContentInspection? _changedInspection;
     private TextFileContent? _changedText;
@@ -526,6 +541,7 @@ else
             _changedText = null;
             _contentProvenance = await LibraryState.Workspace.GetFileContentProvenanceAsync(Id);
             _derivationProvenance = await LibraryState.Workspace.GetFileDerivationProvenanceAsync(Id);
+            _derivationChain = await LibraryState.Workspace.GetFileDerivationChainAsync(Id);
             await StopMediaAsync();
             _mediaError = null;
             _mediaPreparing = false;

@@ -195,6 +195,10 @@ public sealed record FileDerivationProvenance(
     string? SourceFileId,
     FileOrigin Origin);
 
+public sealed record FileDerivationChainEntry(
+    FileRecord File,
+    FileOrigin? DerivedBy);
+
 public sealed record ChangedContentInspection(
     FileRecord File,
     string ActualContentHash,

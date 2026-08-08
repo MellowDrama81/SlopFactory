@@ -955,7 +955,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 - Link labels are trimmed, normalized to Unicode NFC, limited to 200 Unicode scalar values, and cannot contain control characters or line breaks.
 - Generation source/output relationships are stored in structured generation history rather than as editable user-created links.
-- A **Provenance Chain** view traverses the immediate read-only relationships in order and stops at a missing endpoint or non-restorable source snapshot.
 - Generation provenance relationships can be displayed alongside user-created links but are read-only.
 - Read-only **Duplicate** and **Edit as Copy** provenance relationships become inactive and recycle with the same endpoint rules as user-created file links.
 - They restore automatically when both endpoint files are active again.
