@@ -770,9 +770,12 @@ public sealed class LibraryWorkspaceTests
         var file = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
 
         var image = await workspace.ReadImageFileAsync(file.Id);
+        var properties = await workspace.GetImageTechnicalPropertiesAsync(file.Id);
 
         Assert.Equal("image/png", image.MediaType);
         Assert.Equal(png, image.Bytes);
+        Assert.Equal(1, properties.Width);
+        Assert.Equal(1, properties.Height);
         await File.WriteAllBytesAsync(workspace.GetManagedFilePath(file), [0x89, 0x50, 0x4E, 0x47]);
         await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReadImageFileAsync(file.Id));
     }

@@ -308,6 +308,7 @@ else
                 <dt>Origin</dt><dd>@_file.Origin</dd>
                 <dt>State</dt><dd>@_file.State</dd>
                 <dt>Content state</dt><dd>@ContentStateLabel(_file.ContentState)</dd>
+                @if (_imageTechnicalProperties?.Width is not null && _imageTechnicalProperties.Height is not null) { <dt>Image dimensions</dt><dd>@_imageTechnicalProperties.Width × @_imageTechnicalProperties.Height pixels</dd> }
                 @if (_contentProvenance?.ReplacedAt is not null) { <dt>Content replaced</dt><dd>@_contentProvenance.ReplacedAt.Value.ToLocalTime().ToString("g")</dd> }
             </dl>
         </article>
@@ -436,6 +437,7 @@ else
     private MarkdownExternalLink? _pendingExternalLink;
     private string? _imageDataUri;
     private string? _imageError;
+    private ImageTechnicalProperties? _imageTechnicalProperties;
     private ManagedMediaSource? _mediaSource;
     private string? _mediaError;
     private bool _mediaPreparing;
@@ -514,6 +516,7 @@ else
             }
             _imageDataUri = null;
             _imageError = null;
+            _imageTechnicalProperties = null;
             _imageZoom = 100;
             _imageRotation = 0;
             _fitImage = true;
@@ -523,6 +526,7 @@ else
             {
                 try
                 {
+                    _imageTechnicalProperties = await LibraryState.Workspace.GetImageTechnicalPropertiesAsync(Id);
                     var image = await LibraryState.Workspace.ReadImageFileAsync(Id);
                     _imageDataUri = $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}";
                     if (_file.MediaType == "image/gif")

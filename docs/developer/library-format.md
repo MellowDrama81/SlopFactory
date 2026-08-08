@@ -55,6 +55,8 @@ Built-in text, image, and media preparation first perform an independent existen
 
 `InspectChangedContentAsync` is deliberately separate from normal content access. It is available only for an active **Changed** record and requires an extant regular, non-reparse, non-hard-linked file. It streams the actual SHA-256, size, and detected media type without mutating the record. `ReadChangedTextFileAsync` additionally uses the same bounded UTF-8-only reader as the ordinary text viewer; it does not convert the content into accepted library bytes or make it available to provider, export, or external-opening workflows.
 
+Supported raster image details use a separate bounded 1 MiB header probe after ordinary managed-content verification. The probe reports only width and height for PNG, JPEG, GIF, and WebP; SVG dimensions remain unavailable. It does not persist or expose EXIF/XMP/IPTC descriptive data such as GPS, device, author, or person information.
+
 Managed-content replacement is restricted to active **Missing** and **Changed** records. Review validates a regular, non-reparse candidate, hashes it, detects its media type, reads metadata counts, and freezes those facts for confirmation. Commit revalidates both the record and candidate. Exact original identity produces **Healthy**; different identity requires an explicit flag and produces **Replaced**.
 
 On the first acceptance, `file_content_provenance` captures the then-recorded identity with `ON CONFLICT DO NOTHING`; later replacements cannot rewrite it. The current hash, size, type, health state, replacement timestamp, and optional deletion of all user metadata commit in one SQLite transaction. Folder identity and link ownership are unchanged.

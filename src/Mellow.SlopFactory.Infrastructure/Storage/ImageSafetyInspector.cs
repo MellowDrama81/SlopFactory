@@ -13,14 +13,7 @@ internal static class ImageSafetyInspector
     public static void Validate(ReadOnlySpan<byte> bytes, string mediaType)
     {
         if (mediaType == "image/svg+xml") return;
-        var (width, height, frames) = mediaType switch
-        {
-            "image/png" => ReadPng(bytes),
-            "image/jpeg" => ReadJpeg(bytes),
-            "image/gif" => ReadGif(bytes),
-            "image/webp" => ReadWebP(bytes),
-            _ => throw new LibraryValidationException("This image format is not supported by the built-in viewer.")
-        };
+        var (width, height, frames) = ReadProperties(bytes, mediaType);
         if (width < 1 || height < 1) throw new LibraryValidationException("The image dimensions could not be validated safely.");
         if (width > MaximumDimension || height > MaximumDimension || (long)width * height > MaximumPixels)
         {
@@ -31,6 +24,23 @@ internal static class ImageSafetyInspector
             throw new LibraryValidationException("Preview Too Complex or Large: the animation exceeds the safe viewer limit.");
         }
     }
+
+    public static (int Width, int Height) ReadDimensions(ReadOnlySpan<byte> bytes, string mediaType)
+    {
+        if (mediaType == "image/svg+xml") return default;
+        var (width, height, _) = ReadProperties(bytes, mediaType);
+        if (width < 1 || height < 1) throw new LibraryValidationException("The image dimensions could not be read from the bounded technical metadata probe.");
+        return (width, height);
+    }
+
+    private static (int Width, int Height, int Frames) ReadProperties(ReadOnlySpan<byte> bytes, string mediaType) => mediaType switch
+        {
+            "image/png" => ReadPng(bytes),
+            "image/jpeg" => ReadJpeg(bytes),
+            "image/gif" => ReadGif(bytes),
+            "image/webp" => ReadWebP(bytes),
+            _ => throw new LibraryValidationException("This image format is not supported by the built-in viewer.")
+        };
 
     private static (int Width, int Height, int Frames) ReadPng(ReadOnlySpan<byte> bytes)
     {

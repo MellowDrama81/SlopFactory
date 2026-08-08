@@ -376,6 +376,27 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return new ImageFileContent(file.MediaType, file.MediaType == "image/svg+xml" ? SvgSanitizer.Sanitize(bytes) : bytes);
     }
 
+    public async Task<ImageTechnicalProperties> GetImageTechnicalPropertiesAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (!IsImageMediaType(file.MediaType)) throw new LibraryValidationException("Technical image properties are available only for supported images.");
+        if (file.MediaType == "image/svg+xml") return new ImageTechnicalProperties(null, null);
+        var path = GetManagedFilePath(file);
+        var probeLength = (int)Math.Min(file.ByteSize, 1_048_576);
+        var bytes = new byte[probeLength];
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65_536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var read = 0;
+        while (read < bytes.Length)
+        {
+            var count = await stream.ReadAsync(bytes.AsMemory(read), cancellationToken).ConfigureAwait(false);
+            if (count == 0) break;
+            read += count;
+        }
+        var (width, height) = ImageSafetyInspector.ReadDimensions(bytes.AsSpan(0, read), file.MediaType);
+        return new ImageTechnicalProperties(width, height);
+    }
+
     public async Task<MediaPlaybackDescriptor> PrepareMediaPlaybackAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

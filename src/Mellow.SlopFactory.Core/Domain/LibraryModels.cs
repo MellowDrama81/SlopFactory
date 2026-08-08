@@ -367,6 +367,10 @@ public sealed record ImageFileContent(
     string MediaType,
     byte[] Bytes);
 
+public sealed record ImageTechnicalProperties(
+    int? Width,
+    int? Height);
+
 public sealed record MediaPlaybackDescriptor(
     string FileId,
     string MediaType,
