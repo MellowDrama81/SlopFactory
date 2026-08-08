@@ -507,9 +507,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ### Windows
 
-- Healthy libraries provide **Open Library Location** from the advanced storage and diagnostics interface.
-- Before opening Explorer, SlopFactory warns that the directory is application-managed, internal filenames may not match display names, and external modification is unsupported.
-- Opening Explorer does not release the library's exclusive lock or grant an external application permission to edit through SlopFactory.
 - Individual managed files are not exposed through an in-application **Edit in Explorer** workflow.
 - Libraries can use local fixed drives and removable local drives.
 - The application warns before using a cloud-synchronized folder because concurrent synchronization can corrupt or duplicate library state.

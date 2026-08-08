@@ -45,6 +45,8 @@ Adoption generates a new opaque library ID, updates `library_info`, atomically r
 
 Before either create or open, the factory rejects Windows UNC and network-drive paths and an existing redirected root directory. This validates the same local-storage constraint independently of the MAUI location picker, so a caller cannot bypass it with a direct factory call.
 
+The Windows-only settings action uses shell execution only after a rendered user confirmation. It opens the library root without disposing the workspace or relaxing its exclusive lock, and it never exposes a managed-file edit command.
+
 ## Managed-content health
 
 Recycle lifecycle and content health are separate columns. An active record can therefore be **Healthy**, **Missing**, **Changed**, or, after the later replacement workflow, **Replaced** without detaching metadata or changing link endpoints. `RevalidateFileContentAsync` holds the workspace mutation boundary, rejects recycled records, validates the managed path without following reparse points, streams SHA-256, redetects media type, and stores only the resulting health state. Its result returns observed hash, byte size, and detected media type for an explicit comparison UI; missing or unsafe entries do not invent unavailable observations.

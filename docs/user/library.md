@@ -2,6 +2,8 @@
 
 On Windows, libraries must use a local drive. Network/UNC paths and redirected directory entries are rejected because SlopFactory requires reliable local locking and atomic file operations. On Android, choose one of the offered app-specific storage locations.
 
+On Windows, **Open library location** is available in Library settings after a warning that the directory and its opaque filenames are application-managed. It opens the location for inspection only; it does not release the library lock or make external edits supported.
+
 ## Browsing
 
 The Library page lists child folders and active files in the current folder. The breadcrumb path moves directly to any ancestor. Each file shows its detected media type and byte size. Choose **List** or **Grid** without changing any files.

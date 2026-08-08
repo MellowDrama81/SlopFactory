@@ -31,6 +31,20 @@
             <InputText id="library-name" @bind-Value="_nameForm.Name" maxlength="255" />
             <button type="submit" disabled="@(_busy || _scanning)">Rename library</button>
         </EditForm>
+#if WINDOWS
+        @if (!_confirmOpenLocation)
+        {
+            <button class="secondary" disabled="@(_busy || _scanning)" @onclick="() => _confirmOpenLocation = true">Open library location</button>
+        }
+        else
+        {
+            <div class="inline-form" role="group" aria-label="Confirm opening library location">
+                <span>This is an application-managed directory. Internal filenames may not match display names, and editing or moving entries outside SlopFactory is unsupported.</span>
+                <button class="secondary" @onclick="OpenLibraryLocationAsync">Open location</button>
+                <button class="secondary" @onclick="() => _confirmOpenLocation = false">Cancel</button>
+            </div>
+        }
+#endif
     }
 
     <EditForm Model="_form" OnValidSubmit="SwitchAsync" class="stack-form">
@@ -181,6 +195,9 @@
     private IReadOnlyList<RecentLibrary> _recentLibraries = [];
     private RecentLibrary? _forgetCandidate;
     private string? _adoptCandidatePath;
+#if WINDOWS
+    private bool _confirmOpenLocation;
+#endif
 
     private string IntegrityHeading => _scanReport switch
     {
@@ -251,6 +268,27 @@
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
     }
+
+#if WINDOWS
+    private Task OpenLibraryLocationAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LibraryState.ActivePath)) return Task.CompletedTask;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = LibraryState.ActivePath,
+                UseShellExecute = true
+            });
+            _confirmOpenLocation = false;
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or UnauthorizedAccessException)
+        {
+            _message = exception.Message;
+        }
+        return Task.CompletedTask;
+    }
+#endif
 
     private async Task StartIntegrityScanAsync()
     {
