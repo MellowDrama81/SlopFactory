@@ -32,6 +32,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             libraryLock = AcquireLock(layout);
             Directory.CreateDirectory(layout.ManagedPath);
             Directory.CreateDirectory(layout.StagingPath);
+            ValidateStorageCapabilities(layout);
             var libraryId = LibraryRules.NewId();
             var rootFolderId = LibraryRules.NewId();
             var generatedFolderId = LibraryRules.NewId();
@@ -78,6 +79,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             }
             Directory.CreateDirectory(layout.StagingPath);
             layout.ValidateManagedDirectories();
+            ValidateStorageCapabilities(layout);
             var currentManifest = await UpgradeIfRequiredAsync(layout, lockedManifest, cancellationToken).ConfigureAwait(false);
             var database = new SqliteLibraryDatabase(layout.DatabasePath);
             var descriptor = await database.ValidateAndDescribeAsync(currentManifest, layout.RootPath, cancellationToken).ConfigureAwait(false);
@@ -114,6 +116,31 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         catch (IOException exception)
         {
             throw new LibraryLockedException($"The library is already open by another process: {exception.Message}");
+        }
+    }
+
+    private static void ValidateStorageCapabilities(LibraryLayout layout)
+    {
+        var temporary = layout.StagingFilePath($"capability-{Guid.NewGuid():N}.tmp");
+        var committed = layout.StagingFilePath($"capability-{Guid.NewGuid():N}.probe");
+        try
+        {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.WriteThrough))
+            {
+                stream.WriteByte(0x53);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, committed, overwrite: false);
+            File.Delete(committed);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            throw new LibraryValidationException("The library location does not support the required writable atomic file operations.");
+        }
+        finally
+        {
+            TryDelete(temporary);
+            TryDelete(committed);
         }
     }
 

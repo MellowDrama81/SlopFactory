@@ -2,6 +2,8 @@
 
 On Windows, libraries must use a fixed or removable local drive. Network/UNC paths, unsupported volume types, and redirected directory entries are rejected because SlopFactory requires reliable local locking and atomic file operations. On Android, choose one of the offered app-specific storage locations.
 
+Before opening or creating a library, SlopFactory verifies that its location can create, durably write, atomically rename, and remove a temporary file. A location that fails this probe is not opened or used for a new library.
+
 Before using a Windows location which appears to be inside OneDrive, Dropbox, or Google Drive, SlopFactory requires a separate confirmation. Cloud synchronisation is not supported and can corrupt or duplicate a library if it modifies files concurrently.
 
 Windows locations marked by the operating system as online-only placeholders are rejected until they are made fully available on the local device.

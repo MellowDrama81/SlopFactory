@@ -45,6 +45,8 @@ Adoption generates a new opaque library ID, updates `library_info`, atomically r
 
 Before either create or open, the factory accepts only Windows fixed or removable local volumes and rejects UNC/network paths, unsupported drive types, and an existing redirected root directory. This validates the same local-storage constraint independently of the MAUI location picker, so a caller cannot bypass it with a direct factory call.
 
+After obtaining the exclusive lock, `ValidateStorageCapabilities` creates a unique staging probe, performs a write-through byte write, atomically renames it within staging, and removes it. Failure is a validation error and cleanup attempts remove both names. Creation invokes the probe before database/manifest creation, while opening invokes it before schema work.
+
 On Windows, the same factory validation rejects an existing root marked `FileAttributes.Offline`, which identifies an online-only placeholder rather than locally available library storage.
 
 The Windows-only settings action uses shell execution only after a rendered user confirmation. It opens the library root without disposing the workspace or relaxing its exclusive lock, and it never exposes a managed-file edit command.

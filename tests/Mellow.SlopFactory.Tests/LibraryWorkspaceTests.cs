@@ -25,6 +25,7 @@ public sealed class LibraryWorkspaceTests
         Assert.True(File.Exists(System.IO.Path.Combine(root, "slopfactory-library.json")));
         Assert.True(File.Exists(System.IO.Path.Combine(root, "library.sqlite3")));
         Assert.True(Directory.Exists(System.IO.Path.Combine(root, "media")));
+        Assert.Empty(Directory.EnumerateFiles(System.IO.Path.Combine(root, ".staging")));
         var contents = await workspace.GetFolderContentsAsync(workspace.Descriptor.RootFolderId);
         Assert.Contains(contents.Folders, folder => folder.Id == workspace.Descriptor.GeneratedFolderId && folder.Name == "Generated");
         var libraryId = workspace.Descriptor.LibraryId;
