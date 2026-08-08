@@ -24,6 +24,11 @@ else
         <div class="notice" role="status">@_message</div>
     }
 
+    @if (HasDisplayExtensionMismatch(_file))
+    {
+        <div class="notice error" role="status">The display-name extension <code>@Path.GetExtension(_file.DisplayName)</code> does not match the detected @(_file.MediaType) content. SlopFactory uses the detected bytes for viewing and safety decisions.</div>
+    }
+
     <section class="panel content-health-panel" aria-labelledby="content-health-title">
         <div class="section-heading"><h2 id="content-health-title">Managed content</h2><button class="secondary" disabled="@_verifyingContent" @onclick="VerifyContentAsync">@(_verifyingContent ? "Verifying…" : "Verify now")</button></div>
         <p><strong>@ContentStateLabel(_file.ContentState)</strong> · Built-in viewing rechecks the managed bytes before use.</p>
@@ -565,6 +570,33 @@ else
     }
 
     private static bool CanUseContent(FileRecord file) => file.ContentState is FileContentState.Healthy or FileContentState.Replaced;
+    private static bool HasDisplayExtensionMismatch(FileRecord file)
+    {
+        var displayExtension = Path.GetExtension(file.DisplayName);
+        var expectedExtensions = file.MediaType switch
+        {
+            "image/png" => new[] { ".png" },
+            "image/jpeg" => new[] { ".jpg", ".jpeg" },
+            "image/webp" => new[] { ".webp" },
+            "image/gif" => new[] { ".gif" },
+            "image/svg+xml" => new[] { ".svg" },
+            "application/pdf" => new[] { ".pdf" },
+            "text/plain" => new[] { ".txt" },
+            "text/markdown" => new[] { ".md", ".markdown" },
+            "application/json" => new[] { ".json" },
+            "application/xml" => new[] { ".xml" },
+            "text/csv" => new[] { ".csv" },
+            "audio/mpeg" => new[] { ".mp3" },
+            "audio/wav" => new[] { ".wav" },
+            "audio/flac" => new[] { ".flac" },
+            "audio/ogg" => new[] { ".ogg", ".opus" },
+            "audio/aac" => new[] { ".aac" },
+            "audio/mp4" => new[] { ".m4a" },
+            "video/mp4" => new[] { ".mp4" },
+            _ => []
+        };
+        return expectedExtensions.Length > 0 && !expectedExtensions.Contains(displayExtension, StringComparer.OrdinalIgnoreCase);
+    }
     private static string ContentStateLabel(FileContentState state) => state switch
     {
         FileContentState.Missing => "Missing",

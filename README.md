@@ -26,6 +26,7 @@ The current development build implements the local-library foundation, including
 - coherent non-mutating integrity scans covering active and recycled managed content while library changes wait;
 - durable missing/changed managed-content health with exact-byte recovery, explicit safe changed-byte inspection, and preserved metadata and links;
 - reviewed permanent managed-content replacement with immutable original identity and optional transactional metadata clearing;
+- detected-byte format classification with persistent display-extension mismatch warnings;
 - debounced managed-media watching with silent validation of expected writes and global external-change review notices;
 - fail-closed manifest/database watching with mutation-bound identity and integrity revalidation;
 - Windows managed-file hard-link detection and containment safeguards;

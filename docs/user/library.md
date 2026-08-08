@@ -30,6 +30,8 @@ Use **Review mark sensitive** or **Review make ordinary** with a metadata key to
 
 Open a file to view its immutable system information, including its SHA-256 content hash, media type, origin, import time, and current state.
 
+If a display-name extension conflicts with the media type detected from the imported bytes, file details retain a persistent warning. Renaming a file never changes its detected type, viewer choice, provider compatibility, or safety classification.
+
 SlopFactory retains the filename supplied at import separately from the editable display name. Renaming a file does not change that original filename, and either name can locate the file through Library search. Copies retain the imported ancestor's original filename; an edited text copy starts with its own chosen filename.
 
 Supported UTF-8 text, Markdown, JSON, XML, CSV, and common source-code files open in a read-only, wrapping text viewer. Text can be selected and copied normally. To keep the interface responsive, the plain-text viewer displays at most the first 1,048,576 characters and identifies a truncated display; the complete managed file remains unchanged.

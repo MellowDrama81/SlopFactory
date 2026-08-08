@@ -600,7 +600,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - File types are detected using available provider content types, file signatures and filename extensions rather than trusting the extension alone.
 - Detected media type and active-content classification are read-only system metadata and cannot be overridden by the user.
 - Renaming a file's display name or extension never changes its viewer, provider compatibility, preview behavior or safety classification.
-- When a display extension conflicts with the detected content, the library shows a persistent mismatch warning while continuing to classify by bytes.
 - For an unsupported format, the application displays its metadata and allows the user to export it or open it using another installed application.
 - Imported and generated files retain their original bytes and are not automatically transcoded.
 - The first release also does not offer hidden or temporary resizing, recompression or transcoding merely to satisfy provider input limits; validation explains the violated constraint and requires a separately converted file to be imported.
