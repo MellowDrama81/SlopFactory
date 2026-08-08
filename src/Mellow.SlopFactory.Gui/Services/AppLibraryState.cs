@@ -31,6 +31,12 @@ public sealed class AppLibraryState : IAsyncDisposable
         try
         {
             if (IsInitialized) return;
+            if (PlatformRuntimeSupport.GetUnsupportedMessage() is { } unsupportedMessage)
+            {
+                Error = unsupportedMessage;
+                IsInitialized = true;
+                return;
+            }
             var path = Preferences.Default.Get("active_library_path", _locations.DefaultPath);
             try
             {

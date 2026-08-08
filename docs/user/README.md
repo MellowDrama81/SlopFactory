@@ -1,6 +1,6 @@
 # SlopFactory user documentation
 
-SlopFactory is a local-first media library being built for Windows and Android. This documentation describes behavior that is implemented and verified in the current development build. Planned provider connections and AI generation are not available yet.
+SlopFactory is a local-first media library being built for Windows 10 version 22H2 (build 19045) or later and Android 8.0 (API level 26) or later. This documentation describes behavior that is implemented and verified in the current development build. Planned provider connections and AI generation are not available yet.
 
 ## Available documentation
 

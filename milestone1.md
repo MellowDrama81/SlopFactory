@@ -4,7 +4,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 
 ## Platform shell and baseline UI
 
-- [ ] Enforce the documented minimum Windows and Android versions at startup, show a blocking unsupported-version message, and verify the decision logic with platform-version unit tests.
+- [x] Enforce the documented minimum Windows and Android versions at startup, show a blocking unsupported-version message, and verify the decision logic with platform-version unit tests.
 - [ ] Add device-local Follow System, Light, and Dark theme settings that apply immediately and survive restart; verify preference persistence and manual Windows high-contrast behavior.
 - [ ] Make all primary library workflows usable at phone width, tablet width, and desktop width without clipped controls; verify with fixed viewport UI tests and manual touch checks.
 - [ ] Add visible keyboard focus, keyboard activation, and focus restoration for primary library/recycle-bin controls; verify with keyboard-driven UI tests on Windows.

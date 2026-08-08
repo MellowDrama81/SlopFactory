@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
-    <TargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFrameworks>net10.0-android;net10.0-windows10.0.22621.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>Mellow.SlopFactory.Gui</RootNamespace>
     <UseMaui>true</UseMaui>
@@ -10,8 +10,8 @@
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
-    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.19045.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.19045.0</TargetPlatformMinVersion>
   </PropertyGroup>
   <ItemGroup>
     <MauiIcon Include="Resources\AppIcon\appicon.svg" Color="#171A21" />

@@ -37,6 +37,16 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public void PlatformVersionPolicyEnforcesDocumentedMinimums()
+    {
+        Assert.False(PlatformVersionPolicy.IsSupported(SupportedPlatform.Windows, new Version(10, 0, 19044)));
+        Assert.True(PlatformVersionPolicy.IsSupported(SupportedPlatform.Windows, new Version(10, 0, 19045)));
+        Assert.True(PlatformVersionPolicy.IsSupported(SupportedPlatform.Windows, new Version(10, 0, 22000)));
+        Assert.False(PlatformVersionPolicy.IsSupported(SupportedPlatform.Android, new Version(25, 0)));
+        Assert.True(PlatformVersionPolicy.IsSupported(SupportedPlatform.Android, new Version(26, 0)));
+    }
+
+    [Fact]
     public async Task OpenRejectsConcurrentWriterAndSucceedsAfterDispose()
     {
         using var temporary = new TemporaryDirectory();
