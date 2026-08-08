@@ -4,6 +4,7 @@
 @inject ILibraryLocationService Locations
 @inject PreviewCacheService PreviewCache
 @inject IRecentLibraryService RecentLibraries
+@using Mellow.SlopFactory.Application
 
 <PageTitle>Library settings · SlopFactory</PageTitle>
 
@@ -140,6 +141,8 @@
             <h3>@IntegrityHeading</h3>
             <p>Started @_scanReport.StartedAt.ToLocalTime().ToString("g"); finished @_scanReport.FinishedAt.ToLocalTime().ToString("g").</p>
             @if (_scanReport.WasCancelled) { <p class="error">This is an incomplete partial result because the scan was cancelled.</p> }
+            <p class="muted">JSON export includes: library ID, schema version, scan times/status, finding category, opaque record ID, byte counts, and summary. It excludes names, paths, hashes, metadata, prompts, credentials, and file bytes.</p>
+            <button class="secondary" disabled="@_exportingScan" @onclick="ExportIntegrityReportAsync">@(_exportingScan ? "Preparing export…" : "Export findings as JSON")</button>
             @if (_scanReport.Findings.Count > 0)
             {
                 <ul class="integrity-findings">
@@ -171,6 +174,7 @@
     private CancellationTokenSource? _scanCancellation;
     private LibraryIntegrityScanProgress? _scanProgress;
     private LibraryIntegrityReport? _scanReport;
+    private bool _exportingScan;
     private PreviewCacheStatus? _cacheStatus;
     private CacheForm _cacheForm = new();
     private bool _confirmClearCache;
@@ -278,6 +282,25 @@
     }
 
     private void CancelIntegrityScan() => _scanCancellation?.Cancel();
+
+    private async Task ExportIntegrityReportAsync()
+    {
+        if (_scanReport is null) return;
+        _exportingScan = true;
+        try
+        {
+            var fileName = $"slopfactory-integrity-{_scanReport.StartedAt:yyyyMMdd-HHmmss}.json";
+            var path = Path.Combine(FileSystem.CacheDirectory, fileName);
+            await File.WriteAllTextAsync(path, IntegrityReportExporter.SerializeDefault(_scanReport));
+            await Share.Default.RequestAsync(new ShareFileRequest("Export integrity findings", new ShareFile(path, "application/json")));
+            _message = "The JSON integrity report is ready to save or share. It contains only the default diagnostic fields.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+        }
+        finally { _exportingScan = false; }
+    }
 
     private void ReloadRecentLibraries() => _recentLibraries = RecentLibraries.GetAll();
 

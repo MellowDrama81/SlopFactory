@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure;
 using Xunit;
@@ -58,6 +60,24 @@ public sealed class LibraryWorkspaceTests
 
         await Assert.ThrowsAsync<LibraryValidationException>(() => factory.CreateAsync(temporary.Path));
         Assert.True(File.Exists(temporary.Child("unrelated.txt")));
+    }
+
+    [Fact]
+    public void DefaultIntegrityReportExportContainsOnlyDefaultDiagnosticFields()
+    {
+        var report = new LibraryIntegrityReport("library-id", 6, new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 8, 8, 0, 1, 0, TimeSpan.Zero), true, false,
+            [new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManagedFileHashMismatch, "opaque-record", 10, 11, "The managed file content hash differs from its database record.")]);
+
+        using var document = JsonDocument.Parse(IntegrityReportExporter.SerializeDefault(report));
+        var root = document.RootElement;
+
+        Assert.Equal("slopfactory.integrity-report/v1", root.GetProperty("format").GetString());
+        Assert.Equal("library-id", root.GetProperty("libraryId").GetString());
+        var finding = root.GetProperty("findings")[0];
+        Assert.Equal("ManagedFileHashMismatch", finding.GetProperty("category").GetString());
+        Assert.False(root.TryGetProperty("contentHash", out _));
+        Assert.False(root.TryGetProperty("displayName", out _));
+        Assert.False(root.TryGetProperty("managedPath", out _));
     }
 
     [Fact]
