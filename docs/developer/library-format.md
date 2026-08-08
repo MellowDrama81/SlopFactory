@@ -93,6 +93,8 @@ The bytes are written under `.staging`, hashed, and moved to a new opaque manage
 
 Metadata mutations and the owning file's `modified_at` update share one SQLite transaction. They do not rewrite `imported_at`, `source_last_modified`, or managed content.
 
+`SetMetadataSensitivityForFilesAsync` uses the same selection mutation boundary and invokes a per-file transactional `is_sensitive` update. It changes neither the metadata key, value, nor type. Missing or unavailable entries return independent bulk-operation failures, allowing other selected records to retain their completed flag change.
+
 ## Text search and Markdown rendering
 
 `SearchTextFileAsync` streams strict UTF-8 through bounded character buffers and scans the complete active managed file without building a content index or loading the file into memory. Searches are single-line, limited to 256 Unicode scalars, optionally case-sensitive, and count all overlapping occurrences. Only a caller-bounded set of snippets is retained; the default UI retains 200 while continuing to count later matches. Buffer overlap preserves matches crossing read boundaries and provides bounded surrounding context.

@@ -968,8 +968,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Before **Duplicate** commits, its review summarizes the number of sensitive metadata entries that will be copied without revealing their keys or values; a multi-file duplication uses one aggregate disclosure rather than per-file prompts.
 - Copied entries retain their **Sensitive** flags and start concealed with no inherited session reveal state.
 - Sensitive JSON validation shows the error kind and line/column and may highlight the location inside the secure editor, but summary messages and diagnostics never echo offending tokens, property names or value excerpts.
-- Bulk editing can mark or unmark a common metadata key as **Sensitive** across selected files after previewing and confirming the affected count.
-- Removing sensitivity warns that the values will become visible in ordinary file details and eligible for inclusion through the ordinary user-metadata sidecar opt-in rather than the additional sensitive-metadata opt-in.
 - Copying a file within the library also copies its user metadata.
 - Metadata is not embedded into exported file bytes.
 

@@ -1016,6 +1016,20 @@ internal sealed class SqliteLibraryDatabase
         return result;
     }
 
+    public async Task SetMetadataSensitivityAsync(string fileId, string key, bool isSensitive, CancellationToken cancellationToken)
+    {
+        var normalizedKey = LibraryRules.NormalizeMetadataKey(key);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var file = await GetFileAsync(connection, fileId, cancellationToken, transaction).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Metadata can be changed only on an active file.");
+        var changed = await ExecuteNonQueryWithCountAsync(connection, "UPDATE metadata_entries SET is_sensitive=$sensitive WHERE file_id=$file AND key_key=$key;", cancellationToken, transaction,
+            ("$sensitive", isSensitive ? 1 : 0), ("$file", fileId), ("$key", LibraryRules.ComparisonKey(normalizedKey))).ConfigureAwait(false);
+        if (changed == 0) throw new RecordNotFoundException("Metadata entry not found.");
+        await TouchFileAsync(connection, transaction, fileId, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task RemoveMetadataAsync(string fileId, string key, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);

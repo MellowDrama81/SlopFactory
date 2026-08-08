@@ -789,6 +789,13 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => ProcessFilesAsync(fileIds, fileId => _database.SetMetadataAsync(fileId, normalizedKey, kind, validValue, isSensitive, cancellationToken), cancellationToken), cancellationToken);
     }
 
+    public Task<BulkFileOperationResult> SetMetadataSensitivityForFilesAsync(IReadOnlyCollection<string> fileIds, string key, bool isSensitive, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var normalizedKey = LibraryRules.NormalizeMetadataKey(key);
+        return RunMutationAsync(() => ProcessFilesAsync(fileIds, fileId => _database.SetMetadataSensitivityAsync(fileId, normalizedKey, isSensitive, cancellationToken), cancellationToken), cancellationToken);
+    }
+
     public Task RemoveMetadataAsync(string fileId, string key, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

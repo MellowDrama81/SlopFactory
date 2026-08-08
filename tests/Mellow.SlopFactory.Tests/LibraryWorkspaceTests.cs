@@ -1324,6 +1324,34 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task BulkMetadataSensitivityPreservesValuesAndReportsMissingEntries()
+    {
+        using var temporary = new TemporaryDirectory();
+        var firstPath = temporary.Child("first.txt");
+        var secondPath = temporary.Child("second.txt");
+        await File.WriteAllTextAsync(firstPath, "first");
+        await File.WriteAllTextAsync(secondPath, "second");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var first = Assert.Single(await workspace.ImportAsync([firstPath], workspace.Descriptor.RootFolderId)).File!;
+        var second = Assert.Single(await workspace.ImportAsync([secondPath], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.SetMetadataAsync(first.Id, "Private", MetadataValueKind.Json, "{\"preserve\":true}", false);
+
+        var marked = await workspace.SetMetadataSensitivityForFilesAsync([first.Id, second.Id], "Private", true);
+
+        Assert.Equal(1, marked.SucceededCount);
+        Assert.Equal(1, marked.FailedCount);
+        var sensitive = Assert.Single(await workspace.GetMetadataAsync(first.Id));
+        Assert.True(sensitive.IsSensitive);
+        Assert.Equal(MetadataValueKind.Json, sensitive.Kind);
+        Assert.Equal("{\"preserve\":true}", sensitive.SerializedValue);
+
+        var ordinary = await workspace.SetMetadataSensitivityForFilesAsync([first.Id], "Private", false);
+        Assert.Equal(1, ordinary.SucceededCount);
+        Assert.False(Assert.Single(await workspace.GetMetadataAsync(first.Id)).IsSensitive);
+    }
+
+    [Fact]
     public async Task LibraryBrowserSearchesNamesAndTypedMetadataWithoutDisclosingSensitiveKeys()
     {
         using var temporary = new TemporaryDirectory();

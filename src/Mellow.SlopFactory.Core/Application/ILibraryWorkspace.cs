@@ -40,6 +40,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default);
     Task<MetadataEntry> SetMetadataAsync(string fileId, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default);
     Task<BulkFileOperationResult> SetMetadataForFilesAsync(IReadOnlyCollection<string> fileIds, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default);
+    Task<BulkFileOperationResult> SetMetadataSensitivityForFilesAsync(IReadOnlyCollection<string> fileIds, string key, bool isSensitive, CancellationToken cancellationToken = default);
     Task<MetadataEntry> RenameMetadataAsync(string fileId, string currentKey, string newKey, CancellationToken cancellationToken = default);
     Task RemoveMetadataAsync(string fileId, string key, CancellationToken cancellationToken = default);
     Task<BulkFileOperationResult> RemoveMetadataFromFilesAsync(IReadOnlyCollection<string> fileIds, string key, CancellationToken cancellationToken = default);

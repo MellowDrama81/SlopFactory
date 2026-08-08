@@ -344,13 +344,15 @@ else
                         <div class="actions">
                             <button disabled="@_busy" @onclick="ReviewBulkMetadataSetAsync">Review add or replace</button>
                             <button class="danger ghost" disabled="@_busy" @onclick="ReviewBulkMetadataRemovalAsync">Review removal</button>
+                            <button class="secondary" disabled="@_busy" @onclick="() => ReviewBulkMetadataSensitivityAsync(true)">Review mark sensitive</button>
+                            <button class="secondary" disabled="@_busy" @onclick="() => ReviewBulkMetadataSensitivityAsync(false)">Review make ordinary</button>
                         </div>
                         @if (_bulkMetadataPreview is not null)
                         {
                             <div class="notice" role="status">
                                 <p>@_bulkMetadataPreview.Summary</p>
                                 @if (_bulkMetadataPreview.ExistingSensitiveCount > 0) { <p>@_bulkMetadataPreview.ExistingSensitiveCount existing sensitive value(s) remain concealed in this preview.</p> }
-                                <button class="@(_bulkMetadataPreview.Remove ? "danger" : string.Empty)" disabled="@_busy" @onclick="ConfirmBulkMetadataAsync">@(_bulkMetadataPreview.Remove ? "Confirm removal" : "Confirm metadata change")</button>
+                                <button class="@(_bulkMetadataPreview.Action == BulkMetadataAction.Remove ? "danger" : string.Empty)" disabled="@_busy" @onclick="ConfirmBulkMetadataAsync">@BulkMetadataConfirmationLabel()</button>
                             </div>
                         }
                     }
@@ -671,7 +673,7 @@ else
             var key = LibraryRules.NormalizeMetadataKey(_bulkMetadata.Key);
             _ = LibraryRules.ValidateMetadataValue(_bulkMetadata.Kind, _bulkMetadata.Value);
             var entries = await GetSelectedMetadataKeyAsync(key);
-            _bulkMetadataPreview = new BulkMetadataPreview(false, entries.Count, entries.Count(item => item.IsSensitive),
+            _bulkMetadataPreview = new BulkMetadataPreview(BulkMetadataAction.Set, entries.Count, entries.Count(item => item.IsSensitive),
                 $"Set '{key}' as {_bulkMetadata.Kind} on {_selectedFileIds.Count} file(s), replacing {entries.Count} existing entr{(entries.Count == 1 ? "y" : "ies")}.");
             _message = null;
         }
@@ -685,8 +687,22 @@ else
         {
             var key = LibraryRules.NormalizeMetadataKey(_bulkMetadata.Key);
             var entries = await GetSelectedMetadataKeyAsync(key);
-            _bulkMetadataPreview = new BulkMetadataPreview(true, entries.Count, entries.Count(item => item.IsSensitive),
+            _bulkMetadataPreview = new BulkMetadataPreview(BulkMetadataAction.Remove, entries.Count, entries.Count(item => item.IsSensitive),
                 $"Remove '{key}' from {entries.Count} of the {_selectedFileIds.Count} selected file(s). Files without that key remain unchanged.");
+            _message = null;
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; _bulkMetadataPreview = null; }
+    }
+
+    private async Task ReviewBulkMetadataSensitivityAsync(bool isSensitive)
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            var key = LibraryRules.NormalizeMetadataKey(_bulkMetadata.Key);
+            var entries = await GetSelectedMetadataKeyAsync(key);
+            _bulkMetadataPreview = new BulkMetadataPreview(isSensitive ? BulkMetadataAction.MarkSensitive : BulkMetadataAction.MarkOrdinary, entries.Count, entries.Count(item => item.IsSensitive),
+                $"Mark {entries.Count} existing '{key}' entr{(entries.Count == 1 ? "y" : "ies")} as {(isSensitive ? "sensitive" : "ordinary")}. {_selectedFileIds.Count - entries.Count} selected file(s) without that key will remain unchanged." + (isSensitive ? string.Empty : " Making metadata ordinary exposes its values in file details and makes it eligible for ordinary metadata export when export is available."));
             _message = null;
         }
         catch (SlopFactoryException exception) { _message = exception.Message; _bulkMetadataPreview = null; }
@@ -726,9 +742,13 @@ else
     {
         if (LibraryState.Workspace is null || _bulkMetadataPreview is null) return;
         var workspace = LibraryState.Workspace;
-        await RunBulkActionAsync(() => _bulkMetadataPreview.Remove
-            ? workspace.RemoveMetadataFromFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key)
-            : workspace.SetMetadataForFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key, _bulkMetadata.Kind, _bulkMetadata.Value, _bulkMetadata.IsSensitive));
+        await RunBulkActionAsync(() => _bulkMetadataPreview.Action switch
+        {
+            BulkMetadataAction.Remove => workspace.RemoveMetadataFromFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key),
+            BulkMetadataAction.MarkSensitive => workspace.SetMetadataSensitivityForFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key, true),
+            BulkMetadataAction.MarkOrdinary => workspace.SetMetadataSensitivityForFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key, false),
+            _ => workspace.SetMetadataForFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key, _bulkMetadata.Kind, _bulkMetadata.Value, _bulkMetadata.IsSensitive)
+        });
     }
 
     private async Task RunBulkActionAsync(Func<Task<BulkFileOperationResult>> action)
@@ -760,6 +780,14 @@ else
         BulkAction.Duplicate => "Review bulk duplicate",
         BulkAction.Recycle => "Review bulk recycle",
         _ => "Review bulk metadata"
+    };
+
+    private string BulkMetadataConfirmationLabel() => _bulkMetadataPreview?.Action switch
+    {
+        BulkMetadataAction.Remove => "Confirm removal",
+        BulkMetadataAction.MarkSensitive => "Confirm mark sensitive",
+        BulkMetadataAction.MarkOrdinary => "Confirm make ordinary",
+        _ => "Confirm metadata change"
     };
 
     private static string TruncateMetadataValue(string value) => value.Length <= 80 ? value : $"{value[..80]}…";
@@ -1226,6 +1254,7 @@ else
         public bool IsSensitive { get; set; }
     }
     private sealed record CommonMetadataSummary(string Key, string TypeLabel, string ValueLabel);
-    private sealed record BulkMetadataPreview(bool Remove, int ExistingCount, int ExistingSensitiveCount, string Summary);
+    private enum BulkMetadataAction { Set, Remove, MarkSensitive, MarkOrdinary }
+    private sealed record BulkMetadataPreview(BulkMetadataAction Action, int ExistingCount, int ExistingSensitiveCount, string Summary);
     private sealed record MetadataOperatorChoice(MetadataFilterOperator Operator, string Label);
 }
