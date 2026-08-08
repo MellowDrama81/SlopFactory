@@ -19,7 +19,7 @@ dotnet restore SlopFactory.slnx --configfile NuGet.Config
 dotnet test tests\Mellow.SlopFactory.Tests\Mellow.SlopFactory.Tests.csproj --no-restore
 ```
 
-The current 54 tests cover initialization, manifest/database creation, copied-library adoption, hard-link rejection, and open-library identity revalidation, exclusive locking, invalid library entries, safe managed import, hashing, progress, cancellation cleanup, single and bulk duplicate handling, folder/file organization, reviewed multi-file operations, bulk metadata sensitivity changes, and typed metadata ownership and filtering.
+The current 55 tests cover initialization, manifest/database creation, copied-library adoption, local-storage path rejection, hard-link rejection, and open-library identity revalidation, exclusive locking, invalid library entries, safe managed import, hashing, progress, cancellation cleanup, single and bulk duplicate handling, folder/file organization, reviewed multi-file operations, bulk metadata sensitivity changes, and typed metadata ownership and filtering.
 
 They also cover bounded text, Markdown, raster-image, SVG and media viewing; managed-content health, safe changed-byte inspection, and replacement; editable links; aggregate recycling, restoration and retryable permanent deletion; coherent integrity scans; and version 1 through version 5 upgrades to schema v6 with rollback cleanup.
 

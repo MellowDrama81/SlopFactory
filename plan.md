@@ -518,7 +518,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Opening Explorer does not release the library's exclusive lock or grant an external application permission to edit through SlopFactory.
 - Individual managed files are not exposed through an in-application **Edit in Explorer** workflow.
 - Libraries can use local fixed drives and removable local drives.
-- UNC paths, mapped network drives and other remote filesystems are rejected.
 - The application warns before using a cloud-synchronized folder because concurrent synchronization can corrupt or duplicate library state.
 - Online-only placeholder locations are rejected until their contents are fully local.
 - A removable Windows volume uses the same unavailable-volume behavior as Android external storage.

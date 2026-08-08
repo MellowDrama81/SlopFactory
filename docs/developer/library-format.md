@@ -43,6 +43,8 @@ An ordinary open rejects a second available path with the same library ID. `Adop
 
 Adoption generates a new opaque library ID, updates `library_info`, atomically replaces the manifest with that ID, and finally updates the in-memory descriptor. If the manifest write fails, the database ID is restored before the operation fails. No media bytes, file records, folders, metadata, links, or other local rows are copied, regenerated, or deleted: the existing copied library becomes an independent library in place.
 
+Before either create or open, the factory rejects Windows UNC and network-drive paths and an existing redirected root directory. This validates the same local-storage constraint independently of the MAUI location picker, so a caller cannot bypass it with a direct factory call.
+
 ## Managed-content health
 
 Recycle lifecycle and content health are separate columns. An active record can therefore be **Healthy**, **Missing**, **Changed**, or, after the later replacement workflow, **Replaced** without detaching metadata or changing link endpoints. `RevalidateFileContentAsync` holds the workspace mutation boundary, rejects recycled records, validates the managed path without following reparse points, streams SHA-256, redetects media type, and stores only the resulting health state. Its result returns observed hash, byte size, and detected media type for an explicit comparison UI; missing or unsafe entries do not invent unavailable observations.

@@ -61,6 +61,17 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task CreateRejectsWindowsNetworkPath()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var factory = new LibraryWorkspaceFactory();
+
+        var exception = await Assert.ThrowsAsync<LibraryValidationException>(() => factory.CreateAsync(@"\\example.invalid\SlopFactory\Library"));
+
+        Assert.Contains("Network locations", exception.Message);
+    }
+
+    [Fact]
     public async Task OpeningRejectsManagedDirectoryReplacedByARegularFile()
     {
         using var temporary = new TemporaryDirectory();

@@ -13,6 +13,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         var normalizedName = LibraryRules.NormalizeDisplayName(displayName, "Library name");
         var fullPath = Path.GetFullPath(rootPath);
+        ValidateLocalStoragePath(fullPath);
         var createdRoot = !Directory.Exists(fullPath);
         if (createdRoot)
         {
@@ -57,6 +58,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
     public async Task<ILibraryWorkspace> OpenAsync(string rootPath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        ValidateLocalStoragePath(Path.GetFullPath(rootPath));
         var layout = new LibraryLayout(rootPath);
         layout.ValidateExistingRoot();
         var initialManifest = await LibraryManifestStore.ReadAsync(layout, cancellationToken).ConfigureAwait(false);
@@ -112,6 +114,29 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         catch (IOException exception)
         {
             throw new LibraryLockedException($"The library is already open by another process: {exception.Message}");
+        }
+    }
+
+    private static void ValidateLocalStoragePath(string fullPath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            if (new Uri(fullPath).IsUnc) throw new LibraryValidationException("Network locations cannot host a SlopFactory library.");
+            var root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrWhiteSpace(root)) throw new LibraryValidationException("The library location must be on a local volume.");
+            try
+            {
+                if (new DriveInfo(root).DriveType == DriveType.Network) throw new LibraryValidationException("Network locations cannot host a SlopFactory library.");
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                throw new LibraryValidationException("The library location's storage volume could not be validated.");
+            }
+        }
+
+        if (Directory.Exists(fullPath) && (new DirectoryInfo(fullPath).Attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new LibraryValidationException("A redirected directory cannot host a SlopFactory library.");
         }
     }
 

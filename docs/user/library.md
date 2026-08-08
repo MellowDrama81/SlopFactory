@@ -1,5 +1,7 @@
 # Managing the local library
 
+On Windows, libraries must use a local drive. Network/UNC paths and redirected directory entries are rejected because SlopFactory requires reliable local locking and atomic file operations. On Android, choose one of the offered app-specific storage locations.
+
 ## Browsing
 
 The Library page lists child folders and active files in the current folder. The breadcrumb path moves directly to any ancestor. Each file shows its detected media type and byte size. Choose **List** or **Grid** without changing any files.
