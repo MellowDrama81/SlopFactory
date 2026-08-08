@@ -138,6 +138,10 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         {
             throw new LibraryValidationException("A redirected directory cannot host a SlopFactory library.");
         }
+        if (OperatingSystem.IsWindows() && Directory.Exists(fullPath) && (new DirectoryInfo(fullPath).Attributes & FileAttributes.Offline) != 0)
+        {
+            throw new LibraryValidationException("This library location is an online-only placeholder. Make it fully available on this device before opening it.");
+        }
     }
 
     private static async Task<LibraryManifest> UpgradeIfRequiredAsync(LibraryLayout layout, LibraryManifest manifest, CancellationToken cancellationToken)

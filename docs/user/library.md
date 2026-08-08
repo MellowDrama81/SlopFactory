@@ -4,6 +4,8 @@ On Windows, libraries must use a local drive. Network/UNC paths and redirected d
 
 Before using a Windows location which appears to be inside OneDrive, Dropbox, or Google Drive, SlopFactory requires a separate confirmation. Cloud synchronisation is not supported and can corrupt or duplicate a library if it modifies files concurrently.
 
+Windows locations marked by the operating system as online-only placeholders are rejected until they are made fully available on the local device.
+
 On Windows, **Open library location** is available in Library settings after a warning that the directory and its opaque filenames are application-managed. It opens the location for inspection only; it does not release the library lock or make external edits supported.
 
 ## Browsing
