@@ -555,7 +555,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Storage Failure Handling
 
-- The application checks available space before imports and downloads when the expected size is known. This check is advisory because available space can change during an operation.
 - A storage write failure aborts the operation, removes its temporary files where possible and does not create a successful library record.
 - Previously committed files and records are preserved.
 - Affected imports and generations are marked as failed with a clear storage error.

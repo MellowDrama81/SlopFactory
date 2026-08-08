@@ -730,6 +730,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 var info = ValidateImportSource(sourcePath);
                 var displayName = LibraryRules.NormalizeDisplayName(info.Name, "File name");
                 candidate = new ImportCandidate(info.FullName, displayName, info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero));
+                EnsureImportStorageAvailable(info.Length);
                 progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Hashing source", 0, info.Length));
                 var hash = await Hashing.Sha256Async(info.FullName, cancellationToken, bytes => progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Hashing source", bytes, info.Length))).ConfigureAwait(false);
                 var revalidated = ValidateImportSource(info.FullName);
@@ -808,6 +809,27 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         if (!info.Exists) throw new FileNotFoundException("The selected source file no longer exists.", fullPath);
         if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("Redirected or symbolic-link source files cannot be imported directly.");
         return info;
+    }
+
+    private void EnsureImportStorageAvailable(long requiredBytes)
+    {
+        if (requiredBytes < 0) throw new LibraryValidationException("The selected source file has an invalid size.");
+        long available;
+        try
+        {
+            var root = Path.GetPathRoot(_layout.RootPath);
+            if (string.IsNullOrWhiteSpace(root)) return;
+            available = new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // Capacity checks are advisory. The copy itself remains authoritative when the platform cannot report free space.
+            return;
+        }
+        if (available < requiredBytes)
+        {
+            throw new IOException($"There is not enough available storage to import this file. At least {requiredBytes:N0} bytes are required for the managed copy.");
+        }
     }
 
     public Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default)

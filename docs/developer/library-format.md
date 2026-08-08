@@ -140,3 +140,5 @@ The workspace owns a single asynchronous mutation gate. Every current mutating A
 ## Import source revalidation
 
 Imports accept only individual regular files. `ImportCoreAsync` normalizes the selected path, rejects directories and reparse-point sources, records the source identity used for review, hashes it, and checks its length and last-write timestamp again before duplicate resolution and copying. The staged copy is independently hashed and compared with the preflight hash and size before it can become a managed file. A source that changes, disappears, or is redirected fails only its own import result and never creates a file record or leaves managed staging bytes behind.
+
+For sources with a known byte size, `EnsureImportStorageAvailable` checks the containing volume's reported free space before hashing or staging. Failure to obtain capacity is non-blocking because it is only advisory; a reported shortage fails the individual import before any write. Copy and database commit remain transactional cleanup boundaries because free space can change after the check.
