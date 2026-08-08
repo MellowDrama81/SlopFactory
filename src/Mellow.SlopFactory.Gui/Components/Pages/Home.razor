@@ -5,6 +5,7 @@
 @inject PreviewCacheService PreviewCache
 @inject IncomingImportService IncomingImports
 @inject IRecentLibraryService RecentLibraries
+@inject ISensitiveMetadataDisclosureService SensitiveDisclosure
 
 <PageTitle>Library · SlopFactory</PageTitle>
 
@@ -370,6 +371,10 @@ else
                                 <button class="@(_bulkMetadataPreview.Action == BulkMetadataAction.Remove ? "danger" : string.Empty)" disabled="@_busy" @onclick="ConfirmBulkMetadataAsync">@BulkMetadataConfirmationLabel()</button>
                             </div>
                         }
+                        @if (_confirmBulkSensitiveMetadata)
+                        {
+                            <div class="notice" role="status"><p><strong>Sensitive metadata</strong> is concealed by SlopFactory display, search-state, and future export safeguards, but it is not encrypted.</p><button @onclick="ConfirmBulkSensitiveDisclosureAsync">I understand — continue</button><button class="secondary" @onclick="() => _confirmBulkSensitiveMetadata = false">Cancel</button></div>
+                        }
                     }
                 </section>
             }
@@ -472,6 +477,7 @@ else
     private BulkMetadataForm _bulkMetadata = new();
     private IReadOnlyList<CommonMetadataSummary> _commonMetadata = [];
     private BulkMetadataPreview? _bulkMetadataPreview;
+    private bool _confirmBulkSensitiveMetadata;
     private BulkFileOperationResult? _bulkResult;
     private LibraryBrowserSession _browser => LibraryState.BrowserSession;
     private bool HasBrowserCriteria => !string.IsNullOrWhiteSpace(_browser.SearchText) || _browser.Scope != LibraryBrowseScope.CurrentFolder || _browser.MediaKind != LibraryMediaKind.Any || _browser.Origin is not null || _browser.ImportedFrom is not null || _browser.ImportedThrough is not null || _browser.MetadataFilterEnabled;
@@ -756,6 +762,11 @@ else
     private async Task ConfirmBulkMetadataAsync()
     {
         if (LibraryState.Workspace is null || _bulkMetadataPreview is null) return;
+        if ((_bulkMetadataPreview.Action == BulkMetadataAction.MarkSensitive || (_bulkMetadataPreview.Action == BulkMetadataAction.Set && _bulkMetadata.IsSensitive)) && !SensitiveDisclosure.IsAcknowledged)
+        {
+            _confirmBulkSensitiveMetadata = true;
+            return;
+        }
         var workspace = LibraryState.Workspace;
         await RunBulkActionAsync(() => _bulkMetadataPreview.Action switch
         {
@@ -764,6 +775,13 @@ else
             BulkMetadataAction.MarkOrdinary => workspace.SetMetadataSensitivityForFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key, false),
             _ => workspace.SetMetadataForFilesAsync(_selectedFileIds.ToArray(), _bulkMetadata.Key, _bulkMetadata.Kind, _bulkMetadata.Value, _bulkMetadata.IsSensitive)
         });
+    }
+
+    private async Task ConfirmBulkSensitiveDisclosureAsync()
+    {
+        SensitiveDisclosure.Acknowledge();
+        _confirmBulkSensitiveMetadata = false;
+        await ConfirmBulkMetadataAsync();
     }
 
     private async Task RunBulkActionAsync(Func<Task<BulkFileOperationResult>> action)

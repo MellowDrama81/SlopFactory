@@ -82,6 +82,8 @@ You can attach typed user metadata as text, number, Boolean, date, date-time, or
 
 Mark an entry **Sensitive** to conceal its value in the interface. **Reveal for session** reveals only that entry in the running application session. This flag is a display safeguard, not encryption.
 
+The first attempt to create or bulk-mark sensitive metadata explains that the setting affects SlopFactory display, search-state, and future export safeguards but does not encrypt the stored value. You must acknowledge that explanation once on the device before the change proceeds.
+
 Metadata keys can be renamed without changing their stored type, sensitivity flag, or value.
 
 Changing a display name or user metadata never creates a content copy.

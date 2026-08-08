@@ -4,6 +4,7 @@
 @inject ManagedMediaResourceService MediaResources
 @inject PreviewCacheService PreviewCache
 @inject IJSRuntime JavaScript
+@inject ISensitiveMetadataDisclosureService SensitiveDisclosure
 @implements IAsyncDisposable
 
 <PageTitle>File details · SlopFactory</PageTitle>
@@ -354,7 +355,7 @@ else
                 </ul>
             }
 
-            <EditForm Model="_metadataForm" OnValidSubmit="SaveMetadataAsync" class="stack-form">
+            <EditForm Model="_metadataForm" OnValidSubmit="ReviewMetadataAsync" class="stack-form">
                 <label for="metadata-key">Key</label>
                 <InputText id="metadata-key" @bind-Value="_metadataForm.Key" maxlength="100" />
                 <label for="metadata-kind">Type</label>
@@ -366,6 +367,10 @@ else
                 <label class="check"><InputCheckbox @bind-Value="_metadataForm.IsSensitive" /> Sensitive</label>
                 <button type="submit">Add or update metadata</button>
             </EditForm>
+            @if (_confirmSensitiveMetadata)
+            {
+                <div class="notice" role="status"><p><strong>Sensitive metadata</strong> is concealed by SlopFactory's display, search-state, and future export safeguards, but it is not encrypted.</p><button @onclick="ConfirmSensitiveMetadataAsync">I understand — save sensitive metadata</button><button class="secondary" @onclick="() => _confirmSensitiveMetadata = false">Cancel</button></div>
+            }
         </article>
 
         <article class="panel">
@@ -451,6 +456,7 @@ else
     private bool _animatedImagePlaying;
     private readonly HashSet<string> _revealed = new(StringComparer.Ordinal);
     private MetadataForm _metadataForm = new();
+    private bool _confirmSensitiveMetadata;
     private LinkForm _linkForm = new();
     private string? _message;
     private FileContentHealth? _contentHealth;
@@ -664,6 +670,23 @@ else
         _replacementReview = null;
         _replacementSourcePath = null;
         _clearMetadataAfterReplacement = false;
+    }
+
+    private Task ReviewMetadataAsync()
+    {
+        if (_metadataForm.IsSensitive && !SensitiveDisclosure.IsAcknowledged)
+        {
+            _confirmSensitiveMetadata = true;
+            return Task.CompletedTask;
+        }
+        return SaveMetadataAsync();
+    }
+
+    private async Task ConfirmSensitiveMetadataAsync()
+    {
+        SensitiveDisclosure.Acknowledge();
+        _confirmSensitiveMetadata = false;
+        await SaveMetadataAsync();
     }
 
     private async Task SaveMetadataAsync()

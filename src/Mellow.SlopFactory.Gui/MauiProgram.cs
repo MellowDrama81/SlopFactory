@@ -17,6 +17,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ManagedMediaResourceService>();
         builder.Services.AddSingleton<PreviewCacheService>();
         builder.Services.AddSingleton<IRecentLibraryService, RecentLibraryService>();
+        builder.Services.AddSingleton<ISensitiveMetadataDisclosureService, SensitiveMetadataDisclosureService>();
         builder.Services.AddSingleton<IncomingImportService>();
         builder.Services.AddSingleton<ManagedContentWatchService>();
 #if DEBUG
