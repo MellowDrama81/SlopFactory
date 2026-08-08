@@ -870,14 +870,11 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## Library Organization
 
-- A duplicate does not copy the source's generation-history relationship.
-- A read-only provenance relationship identifies the source file from which the duplicate was made.
-- Multi-selection can duplicate a group of eligible active files into one selected destination folder.
-- Each selected file is duplicated as an independent atomic operation and uses the normal numeric-suffix rule for name conflicts.
 - Bulk-duplicate progress identifies the current file and overall completion count.
 - Cancelling prevents files which have not started, retains completed duplicates and waits for the current atomic copy to finish or roll back safely.
-- Per-file failures do not remove successful duplicates and produce a completion summary.
 - Folders and ineligible file records remain disabled with explanations in a bulk duplicate action.
+- A duplicate does not copy the source's generation-history relationship.
+- A read-only provenance relationship identifies the source file from which the duplicate was made.
 
 ## Naming Rules
 

@@ -33,6 +33,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<FileRecord> MoveFileAsync(string fileId, string destinationFolderId, CancellationToken cancellationToken = default);
     Task<BulkFileOperationResult> MoveFilesAsync(IReadOnlyCollection<string> fileIds, string destinationFolderId, CancellationToken cancellationToken = default);
     Task<FileRecord> DuplicateFileAsync(string fileId, string destinationFolderId, string displayName, CancellationToken cancellationToken = default);
+    Task<BulkFileOperationResult> DuplicateFilesAsync(IReadOnlyCollection<string> fileIds, string destinationFolderId, CancellationToken cancellationToken = default);
     Task<FileRecord> CreateEditedTextCopyAsync(string fileId, string destinationFolderId, string displayName, string content, TextCopyFormat format, bool copyUserMetadata, bool includeSensitiveMetadata, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ImportResult>> ImportAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates = false, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ImportResult>> ImportWithProgressAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates, IProgress<ImportProgress>? progress, CancellationToken cancellationToken = default);

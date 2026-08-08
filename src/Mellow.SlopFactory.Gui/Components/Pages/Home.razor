@@ -284,6 +284,7 @@ else
                 {
                     <div class="actions">
                         <button class="secondary" @onclick="BeginBulkMove">Move</button>
+                        <button class="secondary" @onclick="BeginBulkDuplicate">Duplicate</button>
                         <button class="secondary" @onclick="BeginBulkMetadataAsync">Metadata</button>
                         <button class="danger" @onclick="BeginBulkRecycle">Recycle</button>
                     </div>
@@ -303,6 +304,16 @@ else
                             </select>
                         </label>
                         <div class="actions"><button disabled="@_busy" @onclick="ConfirmBulkMoveAsync">Confirm move</button></div>
+                    }
+                    else if (_bulkAction == BulkAction.Duplicate)
+                    {
+                        <p>Each selected file is copied independently with its user metadata. Links are not copied. Name conflicts receive the normal numeric suffix.</p>
+                        <label for="bulk-duplicate-destination">Destination folder
+                            <select id="bulk-duplicate-destination" @bind="_bulkDestinationFolderId">
+                                @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
+                            </select>
+                        </label>
+                        <div class="actions"><button disabled="@_busy" @onclick="ConfirmBulkDuplicateAsync">Confirm duplicate</button></div>
                     }
                     else if (_bulkAction == BulkAction.Recycle)
                     {
@@ -616,6 +627,13 @@ else
         _bulkMetadataPreview = null;
     }
 
+    private void BeginBulkDuplicate()
+    {
+        _bulkAction = BulkAction.Duplicate;
+        _bulkDestinationFolderId = _contents?.Folder.Id ?? _activeFolders.FirstOrDefault()?.Id ?? string.Empty;
+        _bulkMetadataPreview = null;
+    }
+
     private async Task BeginBulkMetadataAsync()
     {
         if (LibraryState.Workspace is null) return;
@@ -698,6 +716,12 @@ else
         await RunBulkActionAsync(() => LibraryState.Workspace.RecycleFilesAsync(_selectedFileIds.ToArray()));
     }
 
+    private async Task ConfirmBulkDuplicateAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        await RunBulkActionAsync(() => LibraryState.Workspace.DuplicateFilesAsync(_selectedFileIds.ToArray(), _bulkDestinationFolderId));
+    }
+
     private async Task ConfirmBulkMetadataAsync()
     {
         if (LibraryState.Workspace is null || _bulkMetadataPreview is null) return;
@@ -733,6 +757,7 @@ else
     private string BulkActionTitle() => _bulkAction switch
     {
         BulkAction.Move => "Review bulk move",
+        BulkAction.Duplicate => "Review bulk duplicate",
         BulkAction.Recycle => "Review bulk recycle",
         _ => "Review bulk metadata"
     };
@@ -1192,7 +1217,7 @@ else
         public string DestinationFolderId { get; set; } = string.Empty;
         public bool ImportDuplicates { get; set; }
     }
-    private enum BulkAction { None, Move, Recycle, Metadata }
+    private enum BulkAction { None, Move, Duplicate, Recycle, Metadata }
     private sealed class BulkMetadataForm
     {
         public string Key { get; set; } = string.Empty;

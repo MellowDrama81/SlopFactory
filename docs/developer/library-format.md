@@ -83,6 +83,8 @@ Files are never loaded completely into memory by the import or hashing implement
 
 Duplication streams the managed source through a staging file while calculating SHA-256 again. The calculated digest and byte count must match the source record before the staged bytes are committed under a new opaque managed name. The new `UserCopy` file row and copied user-metadata rows commit in one database transaction; failure removes the new managed bytes. User-created links are not copied.
 
+`DuplicateFilesAsync` holds the workspace mutation gate for the reviewed selection and processes every selected active file independently. It resolves each destination name immediately before its own copy using the standard numeric-suffix rule. Missing, changed, recycled, or otherwise unavailable sources return a per-file failure, while completed copies remain committed. Cancellation follows the same safe boundary as the underlying streamed copy.
+
 ## Edited text copies
 
 `CreateEditedTextCopyAsync` encodes edited content as strict UTF-8 without a byte-order mark and enforces a 4 MiB UTF-8 editor boundary. Preserved JSON and XML content passes bounded structured validation before any file is written; DTD processing and external XML resolution are disabled. Plain-text and Markdown choices assign controlled `.txt` and `.md` managed extensions.

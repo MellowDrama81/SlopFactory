@@ -507,11 +507,30 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => DuplicateFileCoreAsync(fileId, destinationFolderId, displayName, cancellationToken), cancellationToken);
     }
 
+    public Task<BulkFileOperationResult> DuplicateFilesAsync(IReadOnlyCollection<string> fileIds, string destinationFolderId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => DuplicateFilesCoreAsync(fileIds, destinationFolderId, cancellationToken), cancellationToken);
+    }
+
+    private async Task<BulkFileOperationResult> DuplicateFilesCoreAsync(IReadOnlyCollection<string> fileIds, string destinationFolderId, CancellationToken cancellationToken)
+    {
+        var destination = await _database.GetFolderContentsAsync(destinationFolderId, cancellationToken).ConfigureAwait(false);
+        if (destination.Folder.State != LibraryRecordState.Active) throw new LibraryValidationException("The duplicate destination folder must be active.");
+        return await ProcessFilesAsync(fileIds, async fileId =>
+        {
+            var source = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+            if (source.ContentState is FileContentState.Missing or FileContentState.Changed) throw new LibraryValidationException("Only files with available managed content can be duplicated.");
+            var name = await _database.ResolveAvailableFileNameAsync(destinationFolderId, source.DisplayName, cancellationToken).ConfigureAwait(false);
+            _ = await DuplicateFileCoreAsync(fileId, destinationFolderId, name, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<FileRecord> DuplicateFileCoreAsync(string fileId, string destinationFolderId, string displayName, CancellationToken cancellationToken)
     {
         var normalizedName = LibraryRules.NormalizeDisplayName(displayName, "File name");
         var source = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
-        if (source.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active, healthy file can be duplicated.");
+        if (source.State != LibraryRecordState.Active || source.ContentState is FileContentState.Missing or FileContentState.Changed) throw new LibraryValidationException("Only an active file with available managed content can be duplicated.");
 
         var duplicateId = LibraryRules.NewId();
         var managedName = duplicateId + Path.GetExtension(source.ManagedName);

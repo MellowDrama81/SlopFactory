@@ -13,6 +13,7 @@ The current development build implements the local-library foundation, including
 - Android share intents and Windows file activation/drag-and-drop routed through private staging and the same explicit import review;
 - virtual folders and breadcrumbs, plus paged library-wide search, filters, stable sorting, and list/grid views;
 - cross-page file selection with reviewed bulk move, recycle, and typed user-metadata operations;
+- reviewed bulk duplication with per-file outcomes and safe name conflict handling;
 - retained original filenames, privacy-safe typed-metadata match explanations, and strict type-aware metadata filters;
 - a read-only UTF-8 viewer with full-file search, sanitized rendered Markdown, confirmed external links, and a non-destructive **Edit as Copy** workflow;
 - a verified image viewer with fit, zoom, pan, viewing rotation, and sanitized SVG;

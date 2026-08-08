@@ -20,6 +20,8 @@ Choose **Duplicate** beside an active file to create an independent copy in a se
 
 Select files on any result page to build one selection across pages. The selection bar can select the current page, clear the selection, or open a review for moving, recycling, or changing user metadata. A move review shows the destination and affected count. A recycle review explains that each file's metadata and owned links follow it into the recycle bin.
 
+Choose **Duplicate** in the selection bar to copy selected files into one destination folder. Each file is handled independently, keeps its user metadata, receives a new identity and managed file, and does not copy editable links. Conflicting names use the normal numeric suffix. The result reports failures without removing unrelated successful copies.
+
 Bulk metadata review lists keys common to every selected file, identifies mixed types or values, and never reveals an existing sensitive value. Adding or replacing a typed key shows how many existing entries will be overwritten; removal shows how many files currently contain the key. Confirmation processes each file independently and reports any failures by file, so one conflict or unavailable record does not undo successful changes to the others.
 
 ## File details and metadata

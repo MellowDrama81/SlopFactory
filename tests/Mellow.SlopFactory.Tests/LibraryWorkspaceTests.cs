@@ -1300,6 +1300,30 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task BulkDuplicateUsesIndependentOutcomesAndNumericSuffixes()
+    {
+        using var temporary = new TemporaryDirectory();
+        var firstPath = temporary.Child("first.txt");
+        var secondPath = temporary.Child("second.txt");
+        await File.WriteAllTextAsync(firstPath, "first");
+        await File.WriteAllTextAsync(secondPath, "second");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var first = Assert.Single(await workspace.ImportAsync([firstPath], workspace.Descriptor.RootFolderId)).File!;
+        var second = Assert.Single(await workspace.ImportAsync([secondPath], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.SetMetadataAsync(first.Id, "Copied", MetadataValueKind.Text, "yes", false);
+        await workspace.RecycleFileAsync(second.Id);
+
+        var result = await workspace.DuplicateFilesAsync([first.Id, second.Id], workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(1, result.SucceededCount);
+        Assert.Equal(1, result.FailedCount);
+        var copied = Assert.Single(await workspace.GetActiveFilesAsync(), file => file.Origin == FileOrigin.UserCopy);
+        Assert.Equal("first (2).txt", copied.DisplayName);
+        Assert.Equal("yes", Assert.Single(await workspace.GetMetadataAsync(copied.Id)).SerializedValue);
+    }
+
+    [Fact]
     public async Task LibraryBrowserSearchesNamesAndTypedMetadataWithoutDisclosingSensitiveKeys()
     {
         using var temporary = new TemporaryDirectory();
