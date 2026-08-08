@@ -63,7 +63,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 - [ ] Implement bulk metadata type-normalization preview and commit; verify convertible entries change independently, incompatible entries remain unchanged, and sensitivity flags are preserved.
 - [x] Add first-use Sensitive disclosure explaining display/search/export safeguards and non-encryption; verify acknowledgement is device-local and does not reveal a value.
 - [ ] Replace sensitive-value edit/filter controls with masked secure-entry controls that disable autocomplete/autocorrect where supported; verify rendered accessibility attributes and platform behavior.
-- [ ] Make concealed metadata accessible as key, type, and concealed state without value or length, then expose the normal value only after session reveal; verify with accessibility-tree tests.
+- [x] Make concealed metadata accessible as key, type, and concealed state without value or length, then expose the normal value only after session reveal; verify with accessibility-tree tests.
 - [ ] Clear session reveals when the library closes, switches, locks, becomes unavailable, or the app restarts; verify each lifecycle transition.
 - [ ] Add explicit sensitive-value copy with clipboard-retention warning and ensure no value enters diagnostics, history, notifications, or automatic clipboard-clearing logic; verify logging fixtures.
 - [ ] Add sensitive JSON validation errors that report only error class and position, never tokens/property names/value excerpts; verify malformed sensitive JSON fixtures.

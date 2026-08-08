@@ -329,7 +329,7 @@ else
                             <div><strong>@item.Key</strong><small>@item.Kind @(item.IsSensitive ? "· Sensitive" : string.Empty)</small></div>
                             @if (item.IsSensitive && !_revealed.Contains(item.Id))
                             {
-                                <code>••••••</code>
+                                <code aria-label="@($"{item.Key}, {item.Kind}, concealed sensitive metadata")" aria-hidden="false">••••••</code>
                             }
                             else
                             {
@@ -337,7 +337,7 @@ else
                             }
                             @if (item.IsSensitive)
                             {
-                                <button class="ghost" @onclick="() => ToggleReveal(item.Id)">@(_revealed.Contains(item.Id) ? "Conceal" : "Reveal for session")</button>
+                                <button class="ghost" aria-label="@(_revealed.Contains(item.Id) ? $"Conceal {item.Key}" : $"Reveal {item.Key} for this session")" @onclick="() => ToggleReveal(item.Id)">@(_revealed.Contains(item.Id) ? "Conceal" : "Reveal for session")</button>
                             }
                             <button class="ghost" @onclick="() => BeginRename(item)">Rename key</button>
                             <button class="danger ghost" @onclick="() => RemoveMetadataAsync(item.Key)">Remove</button>
