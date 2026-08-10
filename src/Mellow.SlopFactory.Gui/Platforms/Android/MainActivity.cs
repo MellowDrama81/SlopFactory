@@ -16,10 +16,73 @@ namespace Mellow.SlopFactory.Gui;
 [IntentFilter(new[] { Intent.ActionSendMultiple }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "*/*")]
 public sealed class MainActivity : MauiAppCompatActivity
 {
+    private const int PickTreeRequest = 4101;
+    private const int CreateDocumentRequest = 4102;
+    private TaskCompletionSource<Android.Net.Uri?>? _pickTreeCompletion;
+    private TaskCompletionSource<Android.Net.Uri?>? _createDocumentCompletion;
+    public static MainActivity? Current { get; private set; }
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+        Current = this;
         QueueSharedContent(Intent);
+    }
+
+    protected override void OnDestroy()
+    {
+        if (ReferenceEquals(Current, this)) Current = null;
+        _pickTreeCompletion?.TrySetCanceled();
+        _createDocumentCompletion?.TrySetCanceled();
+        base.OnDestroy();
+    }
+
+    public Task<Android.Net.Uri?> PickDocumentTreeAsync(CancellationToken cancellationToken)
+    {
+        if (_pickTreeCompletion is not null) throw new InvalidOperationException("A document-tree picker is already open.");
+        _pickTreeCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancellationToken.Register(() => _pickTreeCompletion?.TrySetCanceled(cancellationToken));
+        var intent = new Intent(Intent.ActionOpenDocumentTree);
+        intent.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantPersistableUriPermission | ActivityFlags.GrantPrefixUriPermission);
+        StartActivityForResult(intent, PickTreeRequest);
+        return _pickTreeCompletion.Task;
+    }
+
+    public Task<Android.Net.Uri?> CreateDocumentAsync(string displayName, string mediaType, CancellationToken cancellationToken)
+    {
+        if (_createDocumentCompletion is not null) throw new InvalidOperationException("A create-document picker is already open.");
+        _createDocumentCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancellationToken.Register(() => _createDocumentCompletion?.TrySetCanceled(cancellationToken));
+        var intent = new Intent(Intent.ActionCreateDocument);
+        intent.SetType(string.IsNullOrWhiteSpace(mediaType) ? "application/octet-stream" : mediaType);
+        intent.PutExtra(Intent.ExtraTitle, displayName);
+        intent.AddCategory(Intent.CategoryOpenable);
+        intent.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission);
+        StartActivityForResult(intent, CreateDocumentRequest);
+        return _createDocumentCompletion.Task;
+    }
+
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        var uri = resultCode == Result.Ok ? data?.Data : null;
+        if (requestCode == PickTreeRequest)
+        {
+            var completion = _pickTreeCompletion;
+            _pickTreeCompletion = null;
+            if (uri is not null)
+            {
+                try { ContentResolver?.TakePersistableUriPermission(uri, data?.Flags is { } flags ? flags & (ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission) : ActivityFlags.GrantReadUriPermission); }
+                catch (Java.Lang.SecurityException) { }
+            }
+            completion?.TrySetResult(uri);
+        }
+        else if (requestCode == CreateDocumentRequest)
+        {
+            var completion = _createDocumentCompletion;
+            _createDocumentCompletion = null;
+            completion?.TrySetResult(uri);
+        }
     }
 
     protected override void OnNewIntent(Intent? intent)

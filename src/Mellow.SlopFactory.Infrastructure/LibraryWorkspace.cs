@@ -426,6 +426,49 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return new ImageTechnicalProperties(width, height, orientation);
     }
 
+    public async Task<MediaTechnicalProperties> GetMediaTechnicalPropertiesAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        if (!IsPlayableMediaType(file.MediaType)) throw new LibraryValidationException("Technical media properties are available only for supported audio and video files.");
+        return await MediaTechnicalInspector.InspectAsync(ValidateRegularManagedFile(file), file.MediaType, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FileSystemMetadata> GetSystemMetadataAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var properties = new List<SystemMetadataProperty>
+        {
+            new("mediaType", "Detected media type", file.MediaType),
+            new("byteSize", "Byte size", file.ByteSize.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            new("contentState", "Content state", file.ContentState.ToString())
+        };
+        if (IsImageMediaType(file.MediaType) && ContentActionPolicy.CanUseManagedContent(file))
+        {
+            var image = await GetImageTechnicalPropertiesAsync(fileId, cancellationToken).ConfigureAwait(false);
+            properties.Add(new("width", "Width", image.Width?.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            properties.Add(new("height", "Height", image.Height?.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            properties.Add(new("orientation", "Orientation", image.Orientation?.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        else if (IsPlayableMediaType(file.MediaType) && ContentActionPolicy.CanUseManagedContent(file))
+        {
+            var media = await GetMediaTechnicalPropertiesAsync(fileId, cancellationToken).ConfigureAwait(false);
+            properties.AddRange(new[]
+            {
+                new SystemMetadataProperty("duration", "Duration", media.Duration?.ToString()),
+                new SystemMetadataProperty("audioCodec", "Audio codec", media.AudioCodec),
+                new SystemMetadataProperty("videoCodec", "Video codec", media.VideoCodec),
+                new SystemMetadataProperty("channels", "Channels", media.ChannelCount?.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new SystemMetadataProperty("sampleRate", "Sample rate", media.SampleRate?.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new SystemMetadataProperty("frameRate", "Frame rate", media.FrameRate?.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new SystemMetadataProperty("width", "Width", media.Width?.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new SystemMetadataProperty("height", "Height", media.Height?.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            });
+        }
+        return new FileSystemMetadata(file.Id, properties);
+    }
+
     public async Task<MediaPlaybackDescriptor> PrepareMediaPlaybackAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -800,7 +843,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             {
                 var info = ValidateImportSource(sourcePath);
                 var displayName = LibraryRules.NormalizeDisplayName(info.Name, "File name");
-                candidate = new ImportCandidate(info.FullName, displayName, info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero));
+                candidate = new ImportCandidate(info.FullName, displayName, info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero), WindowsZoneClassifier.Read(info.FullName));
                 EnsureImportStorageAvailable(info.Length);
                 progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Hashing source", 0, info.Length));
                 var hash = await Hashing.Sha256Async(info.FullName, cancellationToken, bytes => progress?.Report(new ImportProgress(itemIndex + 1, paths.Length, displayName, "Hashing source", bytes, info.Length))).ConfigureAwait(false);
@@ -828,6 +871,9 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 {
                     throw new IOException("The source file changed while it was being imported.");
                 }
+
+                if (OperatingSystem.IsWindows()) File.SetAttributes(stagingPath, FileAttributes.Normal);
+                else File.SetUnixFileMode(stagingPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 
                 File.Move(stagingPath, managedPath, false);
                 stagingPath = null;
@@ -903,6 +949,309 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
     }
 
+    public async Task<RecursiveImportInventory> BuildRecursiveImportInventoryAsync(IEnumerable<string> sourcePaths, bool includeHiddenFiles = false, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(sourcePaths);
+        var candidates = new List<ImportSourceSnapshot>();
+        var skipped = new Dictionary<ImportInventorySkipReason, int>();
+        var folders = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        const int maximumEntries = 100_000;
+
+        void Skip(ImportInventorySkipReason reason) => skipped[reason] = skipped.GetValueOrDefault(reason) + 1;
+
+        foreach (var selectedPath in sourcePaths.Select(Path.GetFullPath).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (File.Exists(selectedPath))
+            {
+                AddFile(selectedPath, string.Empty);
+                continue;
+            }
+            if (!Directory.Exists(selectedPath)) { Skip(ImportInventorySkipReason.Inaccessible); continue; }
+            var rootInfo = new DirectoryInfo(selectedPath);
+            if (IsAlwaysExcluded(rootInfo.Attributes)) { Skip(ImportInventorySkipReason.RedirectedOrReparse); continue; }
+            var rootRelative = LibraryRules.NormalizeDisplayName(rootInfo.Name, "Imported folder name");
+            var pending = new Stack<(string Path, string Relative, int Depth)>();
+            pending.Push((rootInfo.FullName, rootRelative, 0));
+            while (pending.Count > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var current = pending.Pop();
+                if (current.Depth > 64 || candidates.Count >= maximumEntries) { Skip(ImportInventorySkipReason.LimitExceeded); continue; }
+                folders.Add(current.Relative);
+                IEnumerable<string> entries;
+                try { entries = Directory.EnumerateFileSystemEntries(current.Path).ToArray(); }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { Skip(ImportInventorySkipReason.Inaccessible); continue; }
+                foreach (var entry in entries)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    FileAttributes attributes;
+                    try { attributes = File.GetAttributes(entry); }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { Skip(ImportInventorySkipReason.Inaccessible); continue; }
+                    if ((attributes & (FileAttributes.ReparsePoint | FileAttributes.System)) != 0) { Skip((attributes & FileAttributes.ReparsePoint) != 0 ? ImportInventorySkipReason.RedirectedOrReparse : ImportInventorySkipReason.ProtectedOrSystem); continue; }
+                    if ((attributes & FileAttributes.Hidden) != 0 && !includeHiddenFiles) { Skip(ImportInventorySkipReason.Hidden); continue; }
+                    if ((attributes & FileAttributes.Directory) != 0)
+                    {
+                        pending.Push((entry, Path.Combine(current.Relative, Path.GetFileName(entry)), current.Depth + 1));
+                    }
+                    else AddFile(entry, current.Relative);
+                }
+            }
+        }
+
+        var hashed = new List<(ImportSourceSnapshot Snapshot, string Hash)>(candidates.Count);
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var hash = await Hashing.Sha256Async(candidate.SourcePath, cancellationToken).ConfigureAwait(false);
+            hashed.Add((candidate with { ContentHash = hash }, hash));
+        }
+        candidates = hashed.Select(item => item.Snapshot).ToList();
+        var duplicateGroups = new List<ImportDuplicateGroup>();
+        foreach (var group in hashed.GroupBy(item => (item.Snapshot.ByteSize, item.Hash)).Where(group => group.Count() > 1))
+        {
+            var matches = await _database.FindByHashAsync(group.Key.Hash, group.Key.ByteSize, cancellationToken).ConfigureAwait(false);
+            duplicateGroups.Add(new ImportDuplicateGroup(group.Key.ByteSize, group.Key.Hash, group.Select(item => item.Snapshot.SourcePath).ToArray(), matches));
+        }
+        foreach (var group in hashed.GroupBy(item => (item.Snapshot.ByteSize, item.Hash)).Where(group => group.Count() == 1))
+        {
+            var matches = await _database.FindByHashAsync(group.Key.Hash, group.Key.ByteSize, cancellationToken).ConfigureAwait(false);
+            if (matches.Count > 0) duplicateGroups.Add(new ImportDuplicateGroup(group.Key.ByteSize, group.Key.Hash, group.Select(item => item.Snapshot.SourcePath).ToArray(), matches));
+        }
+        var conflicts = candidates.GroupBy(candidate => Path.Combine(candidate.RelativeFolder, candidate.DisplayName), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .Where(group => group.Count() > 1).Select(group => group.Key).OrderBy(value => value, StringComparer.Ordinal).ToArray();
+        var inventoryId = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', candidates.OrderBy(item => item.SourcePath, StringComparer.Ordinal).Select(item => $"{item.SourcePath}\0{item.ByteSize}\0{item.LastWriteTime:O}")))));
+        return new RecursiveImportInventory(inventoryId, DateTimeOffset.UtcNow, candidates, folders.OrderBy(value => value, StringComparer.Ordinal).ToArray(), duplicateGroups, skipped, conflicts, Descriptor.LibraryId);
+
+        void AddFile(string path, string relative)
+        {
+            if (candidates.Count >= maximumEntries) { Skip(ImportInventorySkipReason.LimitExceeded); return; }
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists) { Skip(ImportInventorySkipReason.Inaccessible); return; }
+                if (IsAlwaysExcluded(info.Attributes)) { Skip((info.Attributes & FileAttributes.ReparsePoint) != 0 ? ImportInventorySkipReason.RedirectedOrReparse : ImportInventorySkipReason.ProtectedOrSystem); return; }
+                if ((info.Attributes & FileAttributes.Hidden) != 0 && !includeHiddenFiles) { Skip(ImportInventorySkipReason.Hidden); return; }
+                candidates.Add(new ImportSourceSnapshot(info.FullName, LibraryRules.NormalizeDisplayName(info.Name, "File name"), relative, info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero), null, WindowsZoneClassifier.Read(info.FullName)));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or SlopFactoryException) { Skip(ImportInventorySkipReason.Inaccessible); }
+        }
+
+        static bool IsAlwaysExcluded(FileAttributes attributes) => (attributes & (FileAttributes.ReparsePoint | FileAttributes.System | FileAttributes.Device)) != 0;
+    }
+
+    public Task<IReadOnlyList<ImportResult>> ImportConfirmedInventoryAsync(RecursiveImportInventory inventory, IReadOnlyList<ConfirmedImportCandidate> candidates, string destinationFolderId, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => ImportConfirmedInventoryCoreAsync(inventory, candidates, destinationFolderId, progress, cancellationToken), cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ImportResult>> ImportConfirmedInventoryCoreAsync(RecursiveImportInventory inventory, IReadOnlyList<ConfirmedImportCandidate> candidates, string destinationFolderId, IProgress<ImportProgress>? progress, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(inventory);
+        ArgumentNullException.ThrowIfNull(candidates);
+        if (inventory.LibraryId is not null && !string.Equals(inventory.LibraryId, Descriptor.LibraryId, StringComparison.Ordinal)) throw new LibraryValidationException("An import inventory cannot be committed to a different library.");
+        var frozen = inventory.Candidates.ToDictionary(item => item.SourcePath, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        if (candidates.Any(item => !frozen.ContainsKey(item.Snapshot.SourcePath))) throw new LibraryValidationException("The confirmed import contains a source that was not in the reviewed inventory.");
+        var results = new List<ImportResult>(candidates.Count);
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            var confirmed = candidates[index];
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = frozen[confirmed.Snapshot.SourcePath];
+            try
+            {
+                var current = ValidateImportSource(snapshot.SourcePath);
+                if (current.Length != snapshot.ByteSize)
+                    throw new IOException("The selected source changed after import review.");
+                if (new DateTimeOffset(current.LastWriteTimeUtc, TimeSpan.Zero) != snapshot.LastWriteTime)
+                {
+                    var currentHash = await Hashing.Sha256Async(current.FullName, cancellationToken).ConfigureAwait(false);
+                    if (snapshot.ContentHash is null || !string.Equals(currentHash, snapshot.ContentHash, StringComparison.Ordinal)) throw new IOException("The selected source changed after import review.");
+                }
+                if (confirmed.DuplicateChoice == ImportDuplicateChoice.RestoreExisting)
+                {
+                    if (confirmed.ExistingFileId is null) throw new LibraryValidationException("Choose a recycled duplicate to restore.");
+                    var existing = await _database.GetFileAsync(confirmed.ExistingFileId, cancellationToken).ConfigureAwait(false);
+                    if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled duplicate can be restored during import.");
+                    var restoration = await GetRecycleBinRestorePreviewAsync([new RecycleBinItemReference(RecycleBinItemKind.File, existing.Id)], cancellationToken).ConfigureAwait(false);
+                    if (!restoration.Items.Single().CanRestore) throw new LibraryValidationException("The recycled duplicate cannot be restored until its normal restoration conflicts are resolved.");
+                    await RestoreFileCoreAsync(existing.Id, cancellationToken).ConfigureAwait(false);
+                    results.Add(new ImportResult(new ImportCandidate(snapshot.SourcePath, snapshot.DisplayName, snapshot.ByteSize, snapshot.LastWriteTime, snapshot.SourceZone), existing with { State = LibraryRecordState.Active }, ImportOutcome.DuplicateSkipped, [existing], null));
+                    continue;
+                }
+                var target = await ResolveInventoryFolderAsync(destinationFolderId, snapshot.RelativeFolder, cancellationToken).ConfigureAwait(false);
+                var itemResult = (await ImportCoreAsync([snapshot.SourcePath], target.FolderId, confirmed.DuplicateChoice == ImportDuplicateChoice.ImportAnyway, progress, true, cancellationToken).ConfigureAwait(false)).Single();
+                results.Add(itemResult);
+                if (itemResult.Outcome != ImportOutcome.Imported)
+                {
+                    foreach (var createdId in target.CreatedFolderIds.Reverse()) await _database.DeleteEmptyActiveFolderAsync(createdId, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+            {
+                results.Add(new ImportResult(new ImportCandidate(snapshot.SourcePath, snapshot.DisplayName, snapshot.ByteSize, snapshot.LastWriteTime, snapshot.SourceZone), null, ImportOutcome.Failed, [], exception.Message));
+            }
+        }
+        return results;
+    }
+
+    private async Task<(string FolderId, IReadOnlyList<string> CreatedFolderIds)> ResolveInventoryFolderAsync(string destinationFolderId, string relativeFolder, CancellationToken cancellationToken)
+    {
+        var current = destinationFolderId;
+        var created = new List<string>();
+        try
+        {
+            foreach (var raw in relativeFolder.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries))
+            {
+                var name = LibraryRules.NormalizeDisplayName(raw, "Imported folder name");
+                var contents = await _database.GetFolderContentsAsync(current, cancellationToken).ConfigureAwait(false);
+                var existing = contents.Folders.FirstOrDefault(folder => string.Equals(LibraryRules.ComparisonKey(folder.Name), LibraryRules.ComparisonKey(name), StringComparison.Ordinal));
+                if (existing is not null) current = existing.Id;
+                else
+                {
+                    var folder = await _database.CreateFolderAsync(current, name, cancellationToken).ConfigureAwait(false);
+                    current = folder.Id;
+                    created.Add(current);
+                }
+            }
+            return (current, created);
+        }
+        catch
+        {
+            foreach (var createdId in created.AsEnumerable().Reverse()) await _database.DeleteEmptyActiveFolderAsync(createdId, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    public Task<FileExportResult> ExportFileAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default) =>
+        ExportCoreAsync(fileId, destinationPath, collisionChoice, changedBytes: false, progress, cancellationToken);
+
+    public Task<FileExportResult> ExportChangedBytesAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default) =>
+        ExportCoreAsync(fileId, destinationPath, collisionChoice, changedBytes: true, progress, cancellationToken);
+
+    public async Task<BulkExportPreflight> BuildBulkExportPreflightAsync(IReadOnlyCollection<string> fileIds, string destinationDirectory, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(fileIds);
+        var directory = Path.GetFullPath(destinationDirectory);
+        if (!Directory.Exists(directory)) throw new LibraryValidationException("Choose an existing export directory.");
+        if ((new DirectoryInfo(directory).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("A redirected directory cannot be used for bulk export.");
+        var items = new List<BulkExportPreflightItem>();
+        foreach (var fileId in fileIds.Distinct(StringComparer.Ordinal))
+        {
+            var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+            var safeName = SafeExportName(file.DisplayName);
+            var destination = Path.Combine(directory, safeName);
+            var reason = ContentActionPolicy.CanUseManagedContent(file) ? null : "Missing or changed content cannot be exported normally.";
+            items.Add(new BulkExportPreflightItem(file.Id, file.DisplayName, safeName, destination, File.Exists(destination), false, reason));
+        }
+        var comparison = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var collisions = items.GroupBy(item => item.SafeFileName, comparison).Where(group => group.Count() > 1).SelectMany(group => group.Select(item => item.FileId)).ToHashSet(StringComparer.Ordinal);
+        items = items.Select(item => item with { HasSelectionCollision = collisions.Contains(item.FileId), BlockingReason = collisions.Contains(item.FileId) ? "Two selected files map to the same safe destination name." : item.BlockingReason }).ToList();
+        var previewId = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', items.Select(item => $"{item.FileId}\0{item.SafeFileName}\0{item.DestinationExists}")))));
+        return new BulkExportPreflight(previewId, directory, items, Descriptor.LibraryId);
+    }
+
+    public async Task<BulkExportResult> ExportFilesAsync(BulkExportPreflight preflight, IReadOnlyDictionary<string, ExportCollisionChoice> collisionChoices, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(preflight);
+        ArgumentNullException.ThrowIfNull(collisionChoices);
+        if (preflight.LibraryId is not null && !string.Equals(preflight.LibraryId, Descriptor.LibraryId, StringComparison.Ordinal)) throw new LibraryValidationException("A bulk-export review cannot be committed from a different library.");
+        var results = new List<FileExportResult>(preflight.Items.Count);
+        for (var index = 0; index < preflight.Items.Count; index++)
+        {
+            var item = preflight.Items[index];
+            if (cancellationToken.IsCancellationRequested)
+            {
+                results.AddRange(preflight.Items.Skip(index).Select(remaining => new FileExportResult(remaining.FileId, remaining.DestinationPath, FileExportOutcome.Cancelled, 0, null, null)));
+                break;
+            }
+            if (item.BlockingReason is not null) { results.Add(new(item.FileId, item.DestinationPath, FileExportOutcome.Failed, 0, null, item.BlockingReason)); continue; }
+            var choice = collisionChoices.GetValueOrDefault(item.FileId, ExportCollisionChoice.Fail);
+            progress?.Report(new ImportProgress(index + 1, preflight.Items.Count, item.DisplayName, "Exporting", 0, 1));
+            var result = await ExportFileAsync(item.FileId, item.DestinationPath, choice, cancellationToken: cancellationToken).ConfigureAwait(false);
+            results.Add(result);
+            progress?.Report(new ImportProgress(index + 1, preflight.Items.Count, item.DisplayName, result.Outcome.ToString(), result.BytesWritten, Math.Max(result.BytesWritten, 1)));
+        }
+        return new BulkExportResult(results);
+    }
+
+    private static string SafeExportName(string displayName)
+    {
+        var name = Path.GetFileName(displayName.Trim());
+        foreach (var character in Path.GetInvalidFileNameChars()) name = name.Replace(character, '_');
+        name = name.TrimEnd(' ', '.');
+        if (string.IsNullOrWhiteSpace(name) || name is "." or "..") name = "export.bin";
+        return name;
+    }
+
+    private async Task<FileExportResult> ExportCoreAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice, bool changedBytes, IProgress<long>? progress, CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        string? temporary = null;
+        try
+        {
+            var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+            if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Only active files can be exported.");
+            if (!changedBytes && !ContentActionPolicy.CanUseManagedContent(file)) throw new LibraryValidationException("Missing or changed managed content cannot be exported normally.");
+            if (changedBytes && file.ContentState != FileContentState.Changed) throw new LibraryValidationException("Export Changed Bytes is available only for changed managed content.");
+            var source = changedBytes ? ValidatePresentSafeManagedFile(file) : ValidateRegularManagedFile(file);
+            var destination = Path.GetFullPath(destinationPath);
+            var parent = Path.GetDirectoryName(destination) ?? throw new LibraryValidationException("The export destination must have a parent directory.");
+            Directory.CreateDirectory(parent);
+            if ((new DirectoryInfo(parent).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("A redirected directory cannot be used as an export destination.");
+            if (Directory.Exists(destination)) throw new LibraryValidationException("The export destination is a directory.");
+            if (File.Exists(destination) && collisionChoice == ExportCollisionChoice.Fail) throw new NameConflictException("A file already exists at the export destination.");
+            if (File.Exists(destination) && (new FileInfo(destination).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("A redirected file cannot be replaced during export.");
+            temporary = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.slopfactory-exporting");
+            var copied = await Hashing.CopyAndHashAsync(source, temporary, cancellationToken, bytes => progress?.Report(bytes)).ConfigureAwait(false);
+            var expectedHash = changedBytes ? await Hashing.Sha256Async(source, cancellationToken).ConfigureAwait(false) : file.ContentHash;
+            if (!string.Equals(copied.Hash, expectedHash, StringComparison.Ordinal) || copied.Bytes != new FileInfo(source).Length) throw new IOException("Export verification failed; the destination was not committed.");
+            File.Move(temporary, destination, collisionChoice == ExportCollisionChoice.Replace);
+            temporary = null;
+            return new FileExportResult(file.Id, destination, FileExportOutcome.Exported, copied.Bytes, copied.Hash, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new FileExportResult(fileId, destinationPath, FileExportOutcome.Cancelled, 0, null, null);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException or ArgumentException)
+        {
+            return new FileExportResult(fileId, destinationPath, FileExportOutcome.Failed, 0, null, exception.Message);
+        }
+        finally { TryDelete(temporary); }
+    }
+
+    public async Task<ExternalOpenCopy> CreateExternalOpenCopyAsync(string fileId, string temporaryDirectory, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var file = await GetVerifiedContentFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var safety = ContentActionPolicy.GetExternalOpenSafety(file);
+        if (safety is ExternalOpenSafety.BlockedActiveContent or ExternalOpenSafety.BlockedUnavailableContent) throw new LibraryValidationException("This content cannot be opened in another application safely.");
+        var root = Path.GetFullPath(temporaryDirectory);
+        Directory.CreateDirectory(root);
+        if ((new DirectoryInfo(root).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("The temporary external-open directory cannot be redirected.");
+        var safeName = $"{Guid.NewGuid():N}-{Path.GetFileName(file.DisplayName)}";
+        var path = Path.Combine(root, safeName);
+        var copied = await Hashing.CopyAndHashAsync(ValidateRegularManagedFile(file), path, cancellationToken).ConfigureAwait(false);
+        if (copied.Bytes != file.ByteSize || !string.Equals(copied.Hash, file.ContentHash, StringComparison.Ordinal)) { TryDelete(path); throw new IOException("The external-open copy could not be verified."); }
+        File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.ReadOnly);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        return new ExternalOpenCopy(file.Id, path, file.MediaType, true);
+    }
+
+    private string ValidatePresentSafeManagedFile(FileRecord file)
+    {
+        var path = _layout.ManagedFilePath(file.ManagedName);
+        if (Directory.Exists(path) || !File.Exists(path)) throw new LibraryValidationException("The managed media path is not a present regular file.");
+        var info = new FileInfo(path);
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path)) throw new LibraryValidationException("Redirected or hard-linked managed media cannot be exported.");
+        return path;
+    }
+
     public Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -934,6 +1283,64 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         ThrowIfDisposed();
         return RunMutationAsync(() => _database.RemoveMetadataAsync(fileId, key, cancellationToken), cancellationToken);
+    }
+
+    public async Task<MetadataNormalizationPreview> PreviewMetadataNormalizationAsync(IReadOnlyCollection<string> fileIds, string key, MetadataValueKind targetKind, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(fileIds);
+        var normalizedKey = LibraryRules.NormalizeMetadataKey(key);
+        var items = new List<MetadataNormalizationItem>();
+        foreach (var fileId in fileIds.Distinct(StringComparer.Ordinal))
+        {
+            var entry = (await _database.GetMetadataAsync(fileId, cancellationToken).ConfigureAwait(false)).FirstOrDefault(value => string.Equals(LibraryRules.ComparisonKey(value.Key), LibraryRules.ComparisonKey(normalizedKey), StringComparison.Ordinal));
+            if (entry is null) continue;
+            try
+            {
+                var value = ConvertMetadataValue(entry, targetKind);
+                items.Add(new MetadataNormalizationItem(fileId, entry.Id, entry.IsSensitive ? "Sensitive metadata" : entry.Key, entry.Kind, targetKind, entry.IsSensitive, true, entry.IsSensitive ? null : value, null));
+            }
+            catch (LibraryValidationException exception)
+            {
+                items.Add(new MetadataNormalizationItem(fileId, entry.Id, entry.IsSensitive ? "Sensitive metadata" : entry.Key, entry.Kind, targetKind, entry.IsSensitive, false, null, exception.Message));
+            }
+        }
+        var previewId = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', items.Select(item => $"{item.FileId}\0{item.MetadataId}\0{item.TargetKind}\0{item.NormalizedValue}")))));
+        return new MetadataNormalizationPreview(previewId, items, Descriptor.LibraryId);
+    }
+
+    public Task<BulkFileOperationResult> CommitMetadataNormalizationAsync(MetadataNormalizationPreview preview, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(preview);
+        if (preview.LibraryId is not null && !string.Equals(preview.LibraryId, Descriptor.LibraryId, StringComparison.Ordinal)) throw new LibraryValidationException("A metadata-normalization preview cannot be committed to a different library.");
+        return RunMutationAsync(() => CommitMetadataNormalizationCoreAsync(preview, cancellationToken), cancellationToken);
+    }
+
+    private async Task<BulkFileOperationResult> CommitMetadataNormalizationCoreAsync(MetadataNormalizationPreview preview, CancellationToken cancellationToken)
+    {
+        var results = new List<BulkFileOperationItemResult>();
+        foreach (var item in preview.Items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var file = await _database.GetFileAsync(item.FileId, cancellationToken).ConfigureAwait(false);
+            if (!item.IsConvertible) { results.Add(new(file.Id, file.DisplayName, false, item.Error ?? "The value is not convertible.")); continue; }
+            var current = (await _database.GetMetadataAsync(item.FileId, cancellationToken).ConfigureAwait(false)).FirstOrDefault(entry => entry.Id == item.MetadataId);
+            if (current is null || current.Kind != item.SourceKind || current.IsSensitive != item.IsSensitive) { results.Add(new(file.Id, file.DisplayName, false, "The metadata changed after review.")); continue; }
+            var normalizedValue = item.IsSensitive ? ConvertMetadataValue(current, item.TargetKind) : item.NormalizedValue ?? throw new LibraryValidationException("The reviewed normalized value is unavailable.");
+            await _database.SetMetadataAsync(item.FileId, current.Key, item.TargetKind, normalizedValue, current.IsSensitive, cancellationToken).ConfigureAwait(false);
+            results.Add(new(file.Id, file.DisplayName, true, null));
+        }
+        return new BulkFileOperationResult(results);
+    }
+
+    private static string ConvertMetadataValue(MetadataEntry entry, MetadataValueKind targetKind)
+    {
+        if (entry.Kind == targetKind) return LibraryRules.ValidateMetadataValue(targetKind, entry.SerializedValue);
+        var value = entry.SerializedValue;
+        if (targetKind == MetadataValueKind.Text) return LibraryRules.ValidateMetadataValue(targetKind, value);
+        if (entry.Kind != MetadataValueKind.Text) throw new LibraryValidationException("Only text values can be normalized to a different structured metadata type.");
+        return LibraryRules.ValidateMetadataValue(targetKind, value);
     }
 
     public Task<BulkFileOperationResult> RemoveMetadataFromFilesAsync(IReadOnlyCollection<string> fileIds, string key, CancellationToken cancellationToken = default)
@@ -1170,8 +1577,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public async Task<LibraryIntegrityReport> RunIntegrityScanAsync(IProgress<LibraryIntegrityScanProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var startedAt = DateTimeOffset.UtcNow;
-        var findings = new List<LibraryIntegrityFinding>();
+        var checkpointPath = _layout.StagingFilePath("integrity-scan-checkpoint.json");
+        var checkpoint = await ReadIntegrityCheckpointAsync(checkpointPath).ConfigureAwait(false);
+        if (checkpoint is not null && !string.Equals(checkpoint.LibraryId, Descriptor.LibraryId, StringComparison.Ordinal)) checkpoint = null;
+        var startedAt = checkpoint?.StartedAt ?? DateTimeOffset.UtcNow;
+        var findings = checkpoint?.Findings.ToList() ?? [];
+        var completedFileIds = checkpoint?.CompletedFileIds.ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
         var processed = 0;
         var total = 4;
         var complete = true;
@@ -1254,6 +1665,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             foreach (var file in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (completedFileIds.Contains(file.Id)) { processed++; continue; }
                 progress?.Report(new LibraryIntegrityScanProgress(processed, total, "Hashing managed files"));
                 var path = _layout.ManagedFilePath(file.ManagedName);
                 try
@@ -1294,6 +1706,8 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                     findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.ManagedFileInaccessible, file.Id, file.ByteSize, null, "The recorded managed file could not be read safely."));
                 }
                 processed++;
+                completedFileIds.Add(file.Id);
+                await WriteIntegrityCheckpointAsync(checkpointPath, new IntegrityScanCheckpoint(Descriptor.LibraryId, startedAt, completedFileIds.OrderBy(id => id, StringComparer.Ordinal).ToArray(), findings.Where(finding => finding.RecordId is not null).ToArray())).ConfigureAwait(false);
             }
 
             foreach (var path in managedEntries)
@@ -1327,15 +1741,47 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         {
             complete = false;
             cancelled = true;
+            await WriteIntegrityCheckpointAsync(checkpointPath, new IntegrityScanCheckpoint(Descriptor.LibraryId, startedAt, completedFileIds.OrderBy(id => id, StringComparer.Ordinal).ToArray(), findings.Where(finding => finding.RecordId is not null).ToArray())).ConfigureAwait(false);
         }
+
         finally
         {
             if (mutationGateHeld) _mutationGate.Release();
         }
 
+        if (!cancelled) TryDelete(checkpointPath);
         progress?.Report(new LibraryIntegrityScanProgress(processed, Math.Max(total, processed), cancelled ? "Scan cancelled" : "Scan finished"));
         return new LibraryIntegrityReport(Descriptor.LibraryId, Descriptor.SchemaVersion, startedAt, DateTimeOffset.UtcNow, complete && !cancelled, cancelled, findings);
     }
+
+    private static async Task<IntegrityScanCheckpoint?> ReadIntegrityCheckpointAsync(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            return await JsonSerializer.DeserializeAsync<IntegrityScanCheckpoint>(stream, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) { TryDelete(path); return null; }
+    }
+
+    private static async Task WriteIntegrityCheckpointAsync(string path, IntegrityScanCheckpoint checkpoint)
+    {
+        var temporary = path + ".tmp";
+        try
+        {
+            await using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 16 * 1024, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(stream, checkpoint, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                await stream.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, path, true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { TryDelete(temporary); }
+    }
+
+    private sealed record IntegrityScanCheckpoint(string LibraryId, DateTimeOffset StartedAt, IReadOnlyList<string> CompletedFileIds, IReadOnlyList<LibraryIntegrityFinding> Findings);
 
     public Task ValidateOpenLibraryAsync(CancellationToken cancellationToken = default)
     {
@@ -1410,6 +1856,327 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         if (Directory.Exists(path) || !File.Exists(path)) throw new FileNotFoundException("The managed file is missing or is not a regular file.", path);
         if ((new FileInfo(path).Attributes & FileAttributes.ReparsePoint) != 0 || ManagedFileSafety.HasMultipleLinks(path)) throw new LibraryValidationException("The managed file path is a symbolic link, reparse point, or hard link.");
         return path;
+    }
+
+    public Task<IReadOnlyList<Connection>> GetActiveConnectionsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetActiveConnectionsAsync(cancellationToken);
+    }
+
+    public Task<IReadOnlyList<Connection>> GetRecycledConnectionsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetRecycledConnectionsAsync(cancellationToken);
+    }
+
+    public Task<Connection> GetConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetConnectionAsync(connectionId, cancellationToken);
+    }
+
+    public Task<Connection> CreateConnectionAsync(string label, ProviderType providerType, string baseUrl, string credentialHeaderName, string authPrefix, int? timeoutSeconds = null, IReadOnlyList<ConnectionHeader>? additionalHeaders = null, GenericConnectionModalitySettings? genericModalitySettings = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.CreateConnectionAsync(label, providerType, baseUrl, credentialHeaderName, authPrefix, timeoutSeconds, additionalHeaders, genericModalitySettings, cancellationToken), cancellationToken);
+    }
+
+    public Task<Connection> UpdateConnectionAsync(string connectionId, string label, string baseUrl, string credentialHeaderName, string authPrefix, int? timeoutSeconds = null, IReadOnlyList<ConnectionHeader>? additionalHeaders = null, GenericConnectionModalitySettings? genericModalitySettings = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.UpdateConnectionAsync(connectionId, label, baseUrl, credentialHeaderName, authPrefix, timeoutSeconds, additionalHeaders, genericModalitySettings, cancellationToken), cancellationToken);
+    }
+
+    public Task<Connection> SetConnectionCredentialStateAsync(string connectionId, bool hasCredential, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.SetConnectionCredentialStateAsync(connectionId, hasCredential, cancellationToken), cancellationToken);
+    }
+
+    public Task<Connection> SetConnectionTestResultAsync(string connectionId, bool success, string message, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.SetConnectionTestResultAsync(connectionId, success, message, cancellationToken), cancellationToken);
+    }
+
+    public Task<Connection> ChangeConnectionProviderTypeAsync(string connectionId, ProviderType providerType, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.ChangeConnectionProviderTypeAsync(connectionId, providerType, cancellationToken), cancellationToken);
+    }
+
+    public Task<ModelCatalogue> GetModelCatalogueAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetModelCatalogueAsync(connectionId, cancellationToken);
+    }
+
+    public Task<ModelCatalogue> RefreshModelCatalogueAsync(string connectionId, IReadOnlyList<ProviderModelInfo> discoveredModels, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RefreshModelCatalogueAsync(connectionId, discoveredModels, cancellationToken), cancellationToken);
+    }
+
+    public Task<ModelCatalogue> MarkModelCatalogueRefreshFailedAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.MarkModelCatalogueRefreshFailedAsync(connectionId, cancellationToken), cancellationToken);
+    }
+
+    public Task RecycleConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RecycleConnectionAsync(connectionId, cancellationToken), cancellationToken);
+    }
+
+    public Task RestoreConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RestoreConnectionAsync(connectionId, cancellationToken), cancellationToken);
+    }
+
+    public Task PermanentlyDeleteConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.PermanentlyDeleteConnectionAsync(connectionId, cancellationToken), cancellationToken);
+    }
+
+    public Task<IReadOnlyList<Model>> GetActiveModelsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetActiveModelsAsync(cancellationToken);
+    }
+
+    public Task<IReadOnlyList<Model>> GetRecycledModelsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetRecycledModelsAsync(cancellationToken);
+    }
+
+    public Task<Model> GetModelAsync(string modelId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetModelAsync(modelId, cancellationToken);
+    }
+
+    public Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.CreateModelAsync(label, connectionId, providerModelId, mode, supportsSystemInstructions, cancellationToken), cancellationToken);
+    }
+
+    public Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.UpdateModelAsync(modelId, label, providerModelId, mode, supportsSystemInstructions, cancellationToken), cancellationToken);
+    }
+
+    public Task RecycleModelAsync(string modelId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RecycleModelAsync(modelId, cancellationToken), cancellationToken);
+    }
+
+    public Task RestoreModelAsync(string modelId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RestoreModelAsync(modelId, cancellationToken), cancellationToken);
+    }
+
+    public Task PermanentlyDeleteModelAsync(string modelId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.PermanentlyDeleteModelAsync(modelId, cancellationToken), cancellationToken);
+    }
+
+    public Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetGenerationHistoryAsync(cancellationToken);
+    }
+
+    public Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetGenerationRecordAsync(generationId, cancellationToken);
+    }
+
+    public Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => RecordTextGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultTexts, errorMessage, systemInstructions, promptTokens, completionTokens, sourceFileId, cancellationToken), cancellationToken);
+    }
+
+    public Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => RecordImageGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultImages, errorMessage, cancellationToken), cancellationToken);
+    }
+
+    public Task<IReadOnlyList<SavedGenerationSetting>> GetActiveSavedSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetActiveSavedSettingsAsync(cancellationToken);
+    }
+
+    public Task<IReadOnlyList<SavedGenerationSetting>> GetRecycledSavedSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetRecycledSavedSettingsAsync(cancellationToken);
+    }
+
+    public Task<SavedGenerationSetting> GetSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetSavedSettingAsync(savedSettingId, cancellationToken);
+    }
+
+    public Task<SavedGenerationSetting> CreateSavedSettingAsync(string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.CreateSavedSettingAsync(title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceFileId, cancellationToken), cancellationToken);
+    }
+
+    public Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.UpdateSavedSettingAsync(savedSettingId, title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceFileId, cancellationToken), cancellationToken);
+    }
+
+    public Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RecycleSavedSettingAsync(savedSettingId, cancellationToken), cancellationToken);
+    }
+
+    public Task RestoreSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RestoreSavedSettingAsync(savedSettingId, cancellationToken), cancellationToken);
+    }
+
+    public Task PermanentlyDeleteSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.PermanentlyDeleteSavedSettingAsync(savedSettingId, cancellationToken), cancellationToken);
+    }
+
+    private async Task<GenerationRecord> RecordTextGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions, int? promptTokens, int? completionTokens, string? sourceFileId, CancellationToken cancellationToken)
+    {
+        var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
+        var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
+        var resultFileIds = new List<string>();
+
+        if (resultTexts is { Count: > 0 })
+        {
+            var utf8 = new UTF8Encoding(false, true);
+            var safeLabel = new string(model.Label.Select(character => character is '/' or '\\' ? '_' : character).ToArray());
+            var baseName = $"{safeLabel} {DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.md";
+
+            foreach (var text in resultTexts)
+            {
+                byte[] bytes;
+                try { bytes = utf8.GetBytes(text); }
+                catch (EncoderFallbackException) { throw new LibraryValidationException("Generated text contains an invalid Unicode sequence."); }
+
+                var fileId = LibraryRules.NewId();
+                var managedName = fileId + ".md";
+                var stagingPath = _layout.StagingFilePath(fileId + ".generating");
+                var managedPath = _layout.ManagedFilePath(managedName);
+                var resolvedName = await _database.ResolveAvailableFileNameAsync(destinationFolderId, baseName, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await using (var stream = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65_536, FileOptions.Asynchronous | FileOptions.WriteThrough))
+                    {
+                        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+                    File.Move(stagingPath, managedPath, false);
+                    stagingPath = string.Empty;
+                    var now = DateTimeOffset.UtcNow;
+                    var record = new FileRecord(fileId, destinationFolderId, resolvedName, resolvedName, managedName, hash, bytes.LongLength, "text/markdown",
+                        FileOrigin.Generated, LibraryRecordState.Active, now, now, null, null);
+                    try
+                    {
+                        await _database.InsertImportedFileAsync(record, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        TryDelete(managedPath);
+                        throw;
+                    }
+                    managedPath = string.Empty;
+                    resultFileIds.Add(fileId);
+                }
+                finally
+                {
+                    TryDelete(stagingPath);
+                    TryDelete(managedPath);
+                }
+            }
+        }
+
+        var status = resultFileIds.Count > 0 ? GenerationStatus.Completed : GenerationStatus.Failed;
+        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, resultFileIds, promptTokens, completionTokens, sourceFileId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<GenerationRecord> RecordImageGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, CancellationToken cancellationToken)
+    {
+        var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
+        var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
+        var resultFileIds = new List<string>();
+
+        if (resultImages is { Count: > 0 })
+        {
+            var safeLabel = new string(model.Label.Select(character => character is '/' or '\\' ? '_' : character).ToArray());
+            var baseName = $"{safeLabel} {DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}";
+
+            foreach (var bytes in resultImages)
+            {
+                var fileId = LibraryRules.NewId();
+                var stagingPath = _layout.StagingFilePath(fileId + ".generating");
+                var managedPath = string.Empty;
+                try
+                {
+                    await using (var stream = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65_536, FileOptions.Asynchronous | FileOptions.WriteThrough))
+                    {
+                        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    var (mediaType, extension) = await MediaTypeDetector.DetectAsync(stagingPath, cancellationToken).ConfigureAwait(false);
+                    var managedName = fileId + extension;
+                    managedPath = _layout.ManagedFilePath(managedName);
+                    var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+                    File.Move(stagingPath, managedPath, false);
+                    stagingPath = string.Empty;
+                    var resolvedName = await _database.ResolveAvailableFileNameAsync(destinationFolderId, baseName + extension, cancellationToken).ConfigureAwait(false);
+                    var now = DateTimeOffset.UtcNow;
+                    var record = new FileRecord(fileId, destinationFolderId, resolvedName, resolvedName, managedName, hash, bytes.LongLength, mediaType,
+                        FileOrigin.Generated, LibraryRecordState.Active, now, now, null, null);
+                    try
+                    {
+                        await _database.InsertImportedFileAsync(record, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        TryDelete(managedPath);
+                        throw;
+                    }
+                    managedPath = string.Empty;
+                    resultFileIds.Add(fileId);
+                }
+                finally
+                {
+                    TryDelete(stagingPath);
+                    TryDelete(managedPath);
+                }
+            }
+        }
+
+        var status = resultFileIds.Count > 0 ? GenerationStatus.Completed : GenerationStatus.Failed;
+        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, null, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()

@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure;
+using Mellow.SlopFactory.Gui.Services;
 using Xunit;
 
 namespace Mellow.SlopFactory.Tests;
@@ -73,6 +74,32 @@ public sealed class LibraryWorkspaceTests
 
         await using var reopened = await factory.OpenAsync(root);
         Assert.Equal(first.Descriptor.LibraryId, reopened.Descriptor.LibraryId);
+    }
+
+    [Fact]
+    public async Task OpenRevalidatesRootStorageCapabilitiesWithoutLeavingProbeArtifacts()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+
+        await using (var reopened = await factory.OpenAsync(root)) { }
+
+        Assert.Empty(Directory.EnumerateFiles(root, ".slopfactory-capability-*", SearchOption.TopDirectoryOnly));
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(root, ".staging"), "capability-*", SearchOption.TopDirectoryOnly));
+    }
+
+    [Fact]
+    public async Task FailedCreateCleansUpEveryNewLibraryArtifact()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("cancelled-library");
+        var factory = new LibraryWorkspaceFactory();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => factory.CreateAsync(root, cancellationToken: new CancellationToken(canceled: true)));
+
+        Assert.False(Directory.Exists(root));
     }
 
     [Fact]
@@ -1259,15 +1286,15 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 1", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 1", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycledLinksAsync());
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
         Assert.False(File.Exists(databasePath + ".upgrade-backup"));
-        Assert.Contains("\"schemaVersion\": 8", await File.ReadAllTextAsync(manifestPath));
+        Assert.Contains("\"schemaVersion\": 18", await File.ReadAllTextAsync(manifestPath));
     }
 
     [Fact]
@@ -1288,11 +1315,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 2", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 2", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
     }
 
@@ -1322,12 +1349,12 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 3", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 3", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
         var file = await upgraded.GetFileAsync(fileId);
-        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
         Assert.Equal("current-name.txt", file.OriginalFileName);
     }
 
@@ -1355,11 +1382,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 4", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 4", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
         Assert.Equal(FileContentState.Healthy, (await upgraded.GetFileAsync(fileId)).ContentState);
     }
 
@@ -1391,14 +1418,156 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 5", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 5", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
         var provenance = await upgraded.GetFileContentProvenanceAsync(fileId);
-        Assert.Equal(8, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
         Assert.Equal(originalHash, provenance.OriginalContentHash);
         Assert.Null(provenance.ReplacedAt);
+    }
+
+    [Fact]
+    public async Task OpeningVersionFourteenLibraryAddsModelCatalogueCache()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        string connectionId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            var connection = await created.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+            connectionId = connection.Id;
+        }
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE connection_model_catalogue; ALTER TABLE connections DROP COLUMN catalogue_retrieved_at; ALTER TABLE connections DROP COLUMN catalogue_possibly_stale; UPDATE library_info SET schema_version=14 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 14", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        var catalogue = await upgraded.GetModelCatalogueAsync(connectionId);
+        Assert.Null(catalogue.RetrievedAt);
+        Assert.False(catalogue.PossiblyStale);
+        Assert.Empty(catalogue.Entries);
+        var refreshed = await upgraded.RefreshModelCatalogueAsync(connectionId, [new ProviderModelInfo("gpt-4o", "GPT-4o")]);
+        Assert.Equal("gpt-4o", Assert.Single(refreshed.Entries).ProviderModelId);
+    }
+
+    [Fact]
+    public async Task OpeningVersionFifteenLibraryAddsConnectionTimeoutOverride()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        string connectionId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            var connection = await created.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+            connectionId = connection.Id;
+        }
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "ALTER TABLE connections DROP COLUMN timeout_seconds; UPDATE library_info SET schema_version=15 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 15", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        var reloaded = await upgraded.GetConnectionAsync(connectionId);
+        Assert.Null(reloaded.TimeoutSeconds);
+        var updated = await upgraded.UpdateConnectionAsync(connectionId, reloaded.Label, reloaded.BaseUrl, reloaded.CredentialHeaderName, reloaded.AuthPrefix, 45);
+        Assert.Equal(45, updated.TimeoutSeconds);
+    }
+
+    [Fact]
+    public async Task OpeningVersionSixteenLibraryAddsConnectionHeaders()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        string connectionId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            var connection = await created.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+            connectionId = connection.Id;
+        }
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE connection_headers; UPDATE library_info SET schema_version=16 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 16", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        var reloaded = await upgraded.GetConnectionAsync(connectionId);
+        Assert.Empty(reloaded.AdditionalHeaders!);
+        var updated = await upgraded.UpdateConnectionAsync(connectionId, reloaded.Label, reloaded.BaseUrl, reloaded.CredentialHeaderName, reloaded.AuthPrefix, reloaded.TimeoutSeconds, [new ConnectionHeader("X-Organization", "org_123")]);
+        Assert.Equal("X-Organization", Assert.Single(updated.AdditionalHeaders!).Name);
+    }
+
+    [Fact]
+    public async Task OpeningVersionSeventeenLibraryAddsGenericModalitySettings()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        string connectionId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            var connection = await created.CreateConnectionAsync("Connection", ProviderType.GenericOpenAiCompatible, "https://gateway.example.com", "Authorization", "Bearer");
+            connectionId = connection.Id;
+        }
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "ALTER TABLE connections DROP COLUMN generic_models_enabled; ALTER TABLE connections DROP COLUMN generic_models_path; ALTER TABLE connections DROP COLUMN generic_text_enabled; ALTER TABLE connections DROP COLUMN generic_text_path; ALTER TABLE connections DROP COLUMN generic_image_enabled; ALTER TABLE connections DROP COLUMN generic_image_path; UPDATE library_info SET schema_version=17 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 17", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        var reloaded = await upgraded.GetConnectionAsync(connectionId);
+        Assert.True(reloaded.GenericModalitySettings!.ModelsEnabled);
+        Assert.True(reloaded.GenericModalitySettings!.TextGenerationEnabled);
+        Assert.True(reloaded.GenericModalitySettings!.ImageGenerationEnabled);
+        var updated = await upgraded.UpdateConnectionAsync(connectionId, reloaded.Label, reloaded.BaseUrl, reloaded.CredentialHeaderName, reloaded.AuthPrefix, reloaded.TimeoutSeconds, reloaded.AdditionalHeaders,
+            new GenericConnectionModalitySettings(true, null, false, null, true, "v2/images/generations"));
+        Assert.False(updated.GenericModalitySettings!.TextGenerationEnabled);
+        Assert.Equal("v2/images/generations", updated.GenericModalitySettings!.ImageGenerationPathOverride);
     }
 
     [Fact]
@@ -1682,9 +1851,698 @@ public sealed class LibraryWorkspaceTests
         await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.BrowseFilesAsync(Query(new UserMetadataFilter("Rating", MetadataValueKind.Number, MetadataFilterOperator.Contains, "1"))));
     }
 
+    [Fact]
+    public async Task RecursiveImportInventoryIsNonMutatingBoundedAndFreezesCandidates()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source");
+        Directory.CreateDirectory(Path.Combine(source, "nested"));
+        await File.WriteAllTextAsync(Path.Combine(source, "visible.txt"), "visible");
+        await File.WriteAllTextAsync(Path.Combine(source, "nested", "child.txt"), "child");
+        var hidden = Path.Combine(source, "hidden.txt");
+        await File.WriteAllTextAsync(hidden, "hidden");
+        File.SetAttributes(hidden, File.GetAttributes(hidden) | FileAttributes.Hidden);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+
+        var inventory = await workspace.BuildRecursiveImportInventoryAsync([source]);
+
+        Assert.Equal(2, inventory.EligibleCount);
+        Assert.Equal(1, inventory.SkippedCounts[ImportInventorySkipReason.Hidden]);
+        Assert.Contains(inventory.VirtualFolders, folder => folder.EndsWith("nested", StringComparison.Ordinal));
+        Assert.Empty(await workspace.GetActiveFilesAsync());
+        Assert.Single((await workspace.GetFolderContentsAsync(workspace.Descriptor.RootFolderId)).Folders);
+
+        await File.WriteAllTextAsync(Path.Combine(source, "appeared-later.txt"), "later");
+        var selected = inventory.Candidates.Select(candidate => new ConfirmedImportCandidate(candidate, ImportDuplicateChoice.ImportAnyway)).ToArray();
+        var results = await workspace.ImportConfirmedInventoryAsync(inventory, selected, workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(2, results.Count(result => result.Outcome == ImportOutcome.Imported));
+        Assert.DoesNotContain(await workspace.GetActiveFilesAsync(), file => file.DisplayName == "appeared-later.txt");
+    }
+
+    [Fact]
+    public async Task RecursiveImportInventoryIncludesHiddenFilesOnlyWhenExplicitlyRequested()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source");
+        Directory.CreateDirectory(source);
+        var hidden = Path.Combine(source, "hidden.txt");
+        await File.WriteAllTextAsync(hidden, "hidden");
+        File.SetAttributes(hidden, File.GetAttributes(hidden) | FileAttributes.Hidden);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+
+        var defaultInventory = await workspace.BuildRecursiveImportInventoryAsync([source]);
+        var includedInventory = await workspace.BuildRecursiveImportInventoryAsync([source], includeHiddenFiles: true);
+
+        Assert.Empty(defaultInventory.Candidates);
+        Assert.Equal(1, defaultInventory.SkippedCounts[ImportInventorySkipReason.Hidden]);
+        Assert.Single(includedInventory.Candidates);
+        Assert.Equal("hidden.txt", includedInventory.Candidates[0].DisplayName);
+    }
+
+    [Fact]
+    public async Task ActiveDuplicatePreflightSupportsSkipAndImportAnywayWithoutMutatingTheExistingRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("duplicate.txt");
+        await File.WriteAllTextAsync(source, "duplicate content");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var existing = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var inventory = await workspace.BuildRecursiveImportInventoryAsync([source]);
+        var match = Assert.Single(Assert.Single(inventory.DuplicateGroups).LibraryMatches);
+        Assert.Equal(existing.Id, match.Id);
+        Assert.Equal(LibraryRecordState.Active, match.State);
+
+        var skipped = await workspace.ImportConfirmedInventoryAsync(inventory, [new ConfirmedImportCandidate(Assert.Single(inventory.Candidates), ImportDuplicateChoice.Skip)], workspace.Descriptor.RootFolderId);
+        var imported = await workspace.ImportConfirmedInventoryAsync(inventory, [new ConfirmedImportCandidate(Assert.Single(inventory.Candidates), ImportDuplicateChoice.ImportAnyway)], workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(ImportOutcome.DuplicateSkipped, Assert.Single(skipped).Outcome);
+        Assert.Equal(ImportOutcome.Imported, Assert.Single(imported).Outcome);
+        Assert.Equal(2, (await workspace.GetActiveFilesAsync()).Count);
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetFileAsync(existing.Id)).State);
+    }
+
+    [Fact]
+    public async Task RecycledDuplicatePreflightRestoresOnlyThroughTheNormalRestorePreview()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("recycled-duplicate.txt");
+        await File.WriteAllTextAsync(source, "duplicate content");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var existing = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.RecycleFileAsync(existing.Id);
+        var inventory = await workspace.BuildRecursiveImportInventoryAsync([source]);
+        var match = Assert.Single(Assert.Single(inventory.DuplicateGroups).LibraryMatches);
+        Assert.Equal(LibraryRecordState.Recycled, match.State);
+
+        var result = await workspace.ImportConfirmedInventoryAsync(inventory, [new ConfirmedImportCandidate(Assert.Single(inventory.Candidates), ImportDuplicateChoice.RestoreExisting, existing.Id)], workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(ImportOutcome.DuplicateSkipped, Assert.Single(result).Outcome);
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetFileAsync(existing.Id)).State);
+        Assert.Single(await workspace.GetActiveFilesAsync());
+    }
+
+    [Fact]
+    public async Task PendingDeletionDuplicatePreflightCannotRestoreButCanImportANewRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("pending-duplicate.txt");
+        await File.WriteAllTextAsync(source, "duplicate content");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var existing = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        await workspace.RecycleFileAsync(existing.Id);
+        var managedPath = workspace.GetManagedFilePath(existing);
+        File.Delete(managedPath);
+        Directory.CreateDirectory(managedPath);
+        var deletion = await workspace.PermanentlyDeleteRecycleBinItemsAsync([new RecycleBinItemReference(RecycleBinItemKind.File, existing.Id)]);
+        Assert.False(Assert.Single(deletion.Items).Succeeded);
+        var inventory = await workspace.BuildRecursiveImportInventoryAsync([source]);
+        var match = Assert.Single(Assert.Single(inventory.DuplicateGroups).LibraryMatches);
+        Assert.Equal(LibraryRecordState.PendingPermanentDeletion, match.State);
+
+        var result = await workspace.ImportConfirmedInventoryAsync(inventory, [new ConfirmedImportCandidate(Assert.Single(inventory.Candidates), ImportDuplicateChoice.ImportAnyway)], workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(ImportOutcome.Imported, Assert.Single(result).Outcome);
+        Assert.Single(await workspace.GetActiveFilesAsync());
+    }
+
+    [Fact]
+    public async Task ConfirmedInventoryRejectsChangedSourceIndependently()
+    {
+        using var temporary = new TemporaryDirectory();
+        var first = temporary.Child("first.txt");
+        var second = temporary.Child("second.txt");
+        await File.WriteAllTextAsync(first, "first");
+        await File.WriteAllTextAsync(second, "second");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var inventory = await workspace.BuildRecursiveImportInventoryAsync([first, second]);
+        await File.AppendAllTextAsync(first, " changed");
+
+        var results = await workspace.ImportConfirmedInventoryAsync(inventory, inventory.Candidates.Select(candidate => new ConfirmedImportCandidate(candidate, ImportDuplicateChoice.ImportAnyway)).ToArray(), workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(ImportOutcome.Failed, results.Single(result => result.Candidate.DisplayName == "first.txt").Outcome);
+        Assert.Equal(ImportOutcome.Imported, results.Single(result => result.Candidate.DisplayName == "second.txt").Outcome);
+    }
+
+    [Fact]
+    public async Task ExportIsVerifiedAtomicAndChangedBytesRemainRecoveryOnly()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "original");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var destination = temporary.Child("export.txt");
+
+        var exported = await workspace.ExportFileAsync(file.Id, destination);
+
+        Assert.Equal(FileExportOutcome.Exported, exported.Outcome);
+        Assert.Equal("original", await File.ReadAllTextAsync(destination));
+        Assert.Equal(file.ContentHash, exported.ContentHash);
+        var conflict = await workspace.ExportFileAsync(file.Id, destination);
+        Assert.Equal(FileExportOutcome.Failed, conflict.Outcome);
+        Assert.Equal("original", await File.ReadAllTextAsync(destination));
+
+        await File.WriteAllTextAsync(workspace.GetManagedFilePath(file), "changed bytes");
+        await workspace.RevalidateFileContentAsync(file.Id);
+        Assert.Equal(FileExportOutcome.Failed, (await workspace.ExportFileAsync(file.Id, temporary.Child("normal.txt"))).Outcome);
+        var recovery = await workspace.ExportChangedBytesAsync(file.Id, temporary.Child("recovery.txt"));
+        Assert.Equal(FileExportOutcome.Exported, recovery.Outcome);
+        Assert.Equal("changed bytes", await File.ReadAllTextAsync(temporary.Child("recovery.txt")));
+        Assert.Equal(FileContentState.Changed, (await workspace.GetFileAsync(file.Id)).ContentState);
+        Assert.Equal(file.ContentHash, (await workspace.GetFileContentProvenanceAsync(file.Id)).OriginalContentHash);
+    }
+
+    [Fact]
+    public async Task ExternalOpenUsesReadOnlyCopyAndNeverManagedPath()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "safe");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+
+        var copy = await workspace.CreateExternalOpenCopyAsync(file.Id, temporary.Child("external"));
+
+        Assert.NotEqual(workspace.GetManagedFilePath(file), copy.Path);
+        Assert.True(copy.IsReadOnly);
+        Assert.True((File.GetAttributes(copy.Path) & FileAttributes.ReadOnly) != 0);
+        Assert.Equal("safe", await File.ReadAllTextAsync(copy.Path));
+    }
+
+    [Fact]
+    public async Task WaveTechnicalMetadataIsReadOnlyAndMalformedMediaIsStored()
+    {
+        using var temporary = new TemporaryDirectory();
+        var wave = temporary.Child("tone.wav");
+        var bytes = new byte[48];
+        "RIFF"u8.CopyTo(bytes); BitConverter.GetBytes(40).CopyTo(bytes, 4); "WAVEfmt "u8.CopyTo(bytes.AsSpan(8));
+        BitConverter.GetBytes(16).CopyTo(bytes, 16); BitConverter.GetBytes((short)1).CopyTo(bytes, 20); BitConverter.GetBytes((short)2).CopyTo(bytes, 22);
+        BitConverter.GetBytes(48_000).CopyTo(bytes, 24); BitConverter.GetBytes(192_000).CopyTo(bytes, 28); BitConverter.GetBytes((short)4).CopyTo(bytes, 32); BitConverter.GetBytes((short)16).CopyTo(bytes, 34);
+        "data"u8.CopyTo(bytes.AsSpan(36)); BitConverter.GetBytes(4).CopyTo(bytes, 40);
+        await File.WriteAllBytesAsync(wave, bytes);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([wave], workspace.Descriptor.RootFolderId)).File!;
+
+        var properties = await workspace.GetMediaTechnicalPropertiesAsync(file.Id);
+        var system = await workspace.GetSystemMetadataAsync(file.Id);
+
+        Assert.True(properties.IsAvailable);
+        Assert.Equal(2, properties.ChannelCount);
+        Assert.Equal(48_000, properties.SampleRate);
+        Assert.Contains(system.Properties, item => item.Key == "audioCodec");
+        Assert.Empty(await workspace.GetMetadataAsync(file.Id));
+    }
+
+    [Fact]
+    public async Task MetadataNormalizationCommitsConvertibleValuesIndependentlyAndPreservesSensitivity()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var source1 = temporary.Child("one.txt");
+        var source2 = temporary.Child("two.txt");
+        await File.WriteAllTextAsync(source1, "one");
+        await File.WriteAllTextAsync(source2, "two");
+        var files = (await workspace.ImportAsync([source1, source2], workspace.Descriptor.RootFolderId)).Select(result => result.File!).ToArray();
+        await workspace.SetMetadataAsync(files[0].Id, "rating", MetadataValueKind.Text, "12.5", true);
+        await workspace.SetMetadataAsync(files[1].Id, "rating", MetadataValueKind.Text, "not a number", false);
+
+        var preview = await workspace.PreviewMetadataNormalizationAsync(files.Select(file => file.Id).ToArray(), "rating", MetadataValueKind.Number);
+        var result = await workspace.CommitMetadataNormalizationAsync(preview);
+
+        Assert.Equal(1, result.SucceededCount);
+        Assert.Equal(1, result.FailedCount);
+        var converted = Assert.Single(await workspace.GetMetadataAsync(files[0].Id));
+        Assert.Equal(MetadataValueKind.Number, converted.Kind);
+        Assert.True(converted.IsSensitive);
+        Assert.Equal(MetadataValueKind.Text, Assert.Single(await workspace.GetMetadataAsync(files[1].Id)).Kind);
+    }
+
+    [Fact]
+    public async Task RecursiveInventoryCancellationCreatesNoLibraryArtifacts()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source");
+        Directory.CreateDirectory(source);
+        for (var index = 0; index < 20; index++) await File.WriteAllTextAsync(Path.Combine(source, $"{index}.txt"), new string('x', 4096));
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => workspace.BuildRecursiveImportInventoryAsync([source], cancellationToken: cancellation.Token));
+
+        Assert.Empty(await workspace.GetActiveFilesAsync());
+        Assert.Single((await workspace.GetFolderContentsAsync(workspace.Descriptor.RootFolderId)).Folders);
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(workspace.Descriptor.RootPath, "media")));
+    }
+
+    [Fact]
+    public async Task IntegrityCheckpointResumesWithoutRepeatingCompletedRecords()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sources = new[] { temporary.Child("one.txt"), temporary.Child("two.txt") };
+        await File.WriteAllTextAsync(sources[0], "one");
+        await File.WriteAllTextAsync(sources[1], "two");
+        var files = (await workspace.ImportAsync(sources, workspace.Descriptor.RootFolderId)).Select(result => result.File!).ToArray();
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<LibraryIntegrityScanProgress>(value => { if (value.Stage == "Hashing managed files" && value.ProcessedItems >= 5) cancellation.Cancel(); });
+
+        var partial = await workspace.RunIntegrityScanAsync(progress, cancellation.Token);
+
+        Assert.True(partial.WasCancelled);
+        using var checkpoint = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(workspace.Descriptor.RootPath, ".staging", "integrity-scan-checkpoint.json")));
+        var completedId = checkpoint.RootElement.GetProperty("CompletedFileIds")[0].GetString();
+        var completedFile = files.Single(file => file.Id == completedId);
+        await File.WriteAllTextAsync(workspace.GetManagedFilePath(completedFile), "changed after checkpoint");
+        var resumed = await workspace.RunIntegrityScanAsync();
+        Assert.True(resumed.IsComplete);
+        Assert.DoesNotContain(resumed.Findings, finding => finding.RecordId == completedFile.Id);
+        Assert.False(File.Exists(Path.Combine(workspace.Descriptor.RootPath, ".staging", "integrity-scan-checkpoint.json")));
+    }
+
+    [Fact]
+    public async Task ActiveContentSafetyUsesDetectedBytesNotDisplayExtension()
+    {
+        using var temporary = new TemporaryDirectory();
+        var disguised = temporary.Child("harmless.txt");
+        await File.WriteAllBytesAsync(disguised, [0x4D, 0x5A, 0, 0, 0, 0, 0, 0]);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([disguised], workspace.Descriptor.RootFolderId)).File!;
+
+        Assert.Equal("application/x-msdownload", file.MediaType);
+        Assert.Equal(ExternalOpenSafety.BlockedActiveContent, ContentActionPolicy.GetExternalOpenSafety(file));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateExternalOpenCopyAsync(file.Id, temporary.Child("external")));
+    }
+
+    [Fact]
+    public async Task CancelledExportLeavesNoDestinationOrPartialFile()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("large.bin");
+        await File.WriteAllBytesAsync(source, RandomNumberGenerator.GetBytes(2 * 1024 * 1024));
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var destination = temporary.Child("cancelled.bin");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var result = await workspace.ExportFileAsync(file.Id, destination, cancellationToken: cancellation.Token);
+
+        Assert.Equal(FileExportOutcome.Cancelled, result.Outcome);
+        Assert.False(File.Exists(destination));
+        Assert.DoesNotContain(Directory.EnumerateFiles(temporary.Path), path => path.EndsWith(".slopfactory-exporting", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ImportDoesNotCopyWindowsZoneUrlsOrAlternateStreams()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("download.txt");
+        await File.WriteAllTextAsync(source, "content");
+        await File.WriteAllTextAsync(source + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=https://secret.example/path\r\nReferrerUrl=https://private.example/\r\n");
+        await File.WriteAllTextAsync(source + ":secret", "alternate");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+
+        var result = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId));
+
+        Assert.Equal(SourceZoneClassification.Internet, result.Candidate.SourceZone);
+        Assert.Equal("content", await File.ReadAllTextAsync(workspace.GetManagedFilePath(result.File!)));
+        Assert.False(File.Exists(workspace.GetManagedFilePath(result.File!) + ":Zone.Identifier"));
+        Assert.False(File.Exists(workspace.GetManagedFilePath(result.File!) + ":secret"));
+    }
+
+    [Fact]
+    public async Task ImportStoresManagedBytesWithSlopFactoryControlledAttributesAndPermissions()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("attributes.txt");
+        await File.WriteAllTextAsync(source, "content");
+        if (OperatingSystem.IsWindows()) File.SetAttributes(source, File.GetAttributes(source) | FileAttributes.Hidden | FileAttributes.ReadOnly);
+        else File.SetUnixFileMode(source, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        try
+        {
+            var factory = new LibraryWorkspaceFactory();
+            await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+
+            var result = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId));
+            var managedPath = workspace.GetManagedFilePath(result.File!);
+
+            Assert.Equal("content", await File.ReadAllTextAsync(managedPath));
+            if (OperatingSystem.IsWindows()) Assert.Equal(0, (int)(File.GetAttributes(managedPath) & (FileAttributes.Hidden | FileAttributes.ReadOnly | FileAttributes.System | FileAttributes.ReparsePoint)));
+            else Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(managedPath));
+        }
+        finally
+        {
+            if (OperatingSystem.IsWindows() && File.Exists(source)) File.SetAttributes(source, FileAttributes.Normal);
+        }
+    }
+
+    [Fact]
+    public async Task ReviewedOperationsCannotCrossLibraryBoundaries()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var first = await factory.CreateAsync(temporary.Child("first-library"));
+        await using var second = await factory.CreateAsync(temporary.Child("second-library"));
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "12");
+        var inventory = await first.BuildRecursiveImportInventoryAsync([source]);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => second.ImportConfirmedInventoryAsync(inventory, inventory.Candidates.Select(item => new ConfirmedImportCandidate(item, ImportDuplicateChoice.ImportAnyway)).ToArray(), second.Descriptor.RootFolderId));
+
+        var file = Assert.Single(await first.ImportAsync([source], first.Descriptor.RootFolderId)).File!;
+        await first.SetMetadataAsync(file.Id, "rating", MetadataValueKind.Text, "12", false);
+        var normalization = await first.PreviewMetadataNormalizationAsync([file.Id], "rating", MetadataValueKind.Number);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => second.CommitMetadataNormalizationAsync(normalization));
+    }
+
+    [Fact]
+    public async Task BulkExportPreflightRequiresExplicitCollisionChoicesAndNeverRenamesSilently()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sources = new[] { temporary.Child("one.txt"), temporary.Child("two.txt") };
+        await File.WriteAllTextAsync(sources[0], "one");
+        await File.WriteAllTextAsync(sources[1], "two");
+        var files = (await workspace.ImportAsync(sources, workspace.Descriptor.RootFolderId)).Select(result => result.File!).ToArray();
+        var destination = temporary.Child("exports");
+        Directory.CreateDirectory(destination);
+        await File.WriteAllTextAsync(Path.Combine(destination, "one.txt"), "existing");
+
+        var preflight = await workspace.BuildBulkExportPreflightAsync(files.Select(file => file.Id).ToArray(), destination);
+        var result = await workspace.ExportFilesAsync(preflight, new Dictionary<string, ExportCollisionChoice>());
+
+        Assert.Equal(1, result.ExportedCount);
+        Assert.Equal(1, result.FailedCount);
+        Assert.Equal("existing", await File.ReadAllTextAsync(Path.Combine(destination, "one.txt")));
+        Assert.Equal("two", await File.ReadAllTextAsync(Path.Combine(destination, "two.txt")));
+        Assert.Equal(2, Directory.EnumerateFiles(destination).Count());
+    }
+
+    [Fact]
+    public async Task FailedConfirmedImportDoesNotLeaveReviewedVirtualFolders()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("nested.txt");
+        await File.WriteAllTextAsync(source, "before");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var inventory = await workspace.BuildRecursiveImportInventoryAsync([source]);
+        inventory = inventory with { Candidates = inventory.Candidates.Select(candidate => candidate with { RelativeFolder = Path.Combine("parent", "child") }).ToArray() };
+        await File.AppendAllTextAsync(source, " after review");
+
+        var result = await workspace.ImportConfirmedInventoryAsync(inventory, inventory.Candidates.Select(candidate => new ConfirmedImportCandidate(candidate, ImportDuplicateChoice.ImportAnyway)).ToArray(), workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(ImportOutcome.Failed, Assert.Single(result).Outcome);
+        var root = await workspace.GetFolderContentsAsync(workspace.Descriptor.RootFolderId);
+        Assert.DoesNotContain(root.Folders, folder => folder.Name == "parent");
+    }
+
+    [Fact]
+    public async Task MalformedMediaReportsUnavailableWithoutRejectingStoredBytes()
+    {
+        using var temporary = new TemporaryDirectory();
+        var malformed = temporary.Child("malformed.wav");
+        await File.WriteAllBytesAsync(malformed, "RIFF1234WAVE"u8.ToArray());
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([malformed], workspace.Descriptor.RootFolderId)).File!;
+
+        var properties = await workspace.GetMediaTechnicalPropertiesAsync(file.Id);
+
+        Assert.False(properties.IsAvailable);
+        Assert.True(File.Exists(workspace.GetManagedFilePath(file)));
+        Assert.Equal(FileContentState.Healthy, (await workspace.GetFileAsync(file.Id)).ContentState);
+    }
+
+    [Fact]
+    public async Task CancelledMediaTechnicalProbeLeavesManagedBytesAndRecordUnchanged()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("cancelled.wav");
+        await File.WriteAllBytesAsync(source, "RIFF0000WAVEfmt "u8.ToArray());
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var managedPath = workspace.GetManagedFilePath(file);
+        var originalBytes = await File.ReadAllBytesAsync(managedPath);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => workspace.GetMediaTechnicalPropertiesAsync(file.Id, cancellation.Token));
+
+        Assert.Equal(originalBytes, await File.ReadAllBytesAsync(managedPath));
+        var current = await workspace.GetFileAsync(file.Id);
+        Assert.Equal(file.ContentHash, current.ContentHash);
+        Assert.Equal(file.ByteSize, current.ByteSize);
+        Assert.Equal(FileContentState.Healthy, current.ContentState);
+    }
+
+    [Fact]
+    public async Task MissingContentRejectsNormalExportAndExternalOpen()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "content");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        File.Delete(workspace.GetManagedFilePath(file));
+        await workspace.RevalidateFileContentAsync(file.Id);
+
+        Assert.Equal(FileExportOutcome.Failed, (await workspace.ExportFileAsync(file.Id, temporary.Child("export.txt"))).Outcome);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateExternalOpenCopyAsync(file.Id, temporary.Child("external")));
+    }
+
+    [Fact]
+    public async Task TimestampOnlyChangeAfterInventoryIsAcceptedWhenBytesStillMatch()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "unchanged bytes");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var inventory = await workspace.BuildRecursiveImportInventoryAsync([source]);
+        File.SetLastWriteTimeUtc(source, File.GetLastWriteTimeUtc(source).AddMinutes(2));
+
+        var results = await workspace.ImportConfirmedInventoryAsync(inventory, inventory.Candidates.Select(candidate => new ConfirmedImportCandidate(candidate, ImportDuplicateChoice.ImportAnyway)).ToArray(), workspace.Descriptor.RootFolderId);
+
+        Assert.Equal(ImportOutcome.Imported, Assert.Single(results).Outcome);
+    }
+
+    [Fact]
+    public async Task UnavailableActiveLibraryClosesSafelyAndPreservesTheRememberedLocation()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        var recent = new TestRecentLibraries();
+        await using var state = new AppLibraryState(factory, new TestLocations(root), recent, new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(root);
+        var activeWorkspace = Assert.IsAssignableFrom<ILibraryWorkspace>(state.Workspace);
+
+        await state.CloseUnavailableLibraryAsync(activeWorkspace, "not-writable");
+
+        Assert.Null(state.Workspace);
+        Assert.Equal(Path.GetFullPath(root), state.ActivePath);
+        var remembered = Assert.Single(recent.Entries);
+        Assert.Equal(RememberedLibraryState.Unavailable, remembered.State);
+        Assert.Equal("not-writable", remembered.FailureStage);
+        await using var reopened = await factory.OpenAsync(root);
+        Assert.Equal(remembered.LibraryId, reopened.Descriptor.LibraryId);
+    }
+
+    [Fact]
+    public async Task SensitiveRevealsClearWhenTheLibrarySwitchesOrBecomesUnavailable()
+    {
+        using var temporary = new TemporaryDirectory();
+        var firstRoot = temporary.Child("first-library");
+        var secondRoot = temporary.Child("second-library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var first = await factory.CreateAsync(firstRoot)) { }
+        await using (var second = await factory.CreateAsync(secondRoot)) { }
+        var recent = new TestRecentLibraries();
+        await using var state = new AppLibraryState(factory, new TestLocations(firstRoot, secondRoot), recent, new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        using var reveals = new SensitiveRevealSessionService(state);
+
+        await state.SwitchAsync(firstRoot);
+        reveals.Toggle("metadata-first");
+        await state.SwitchAsync(secondRoot);
+        Assert.False(reveals.IsRevealed("metadata-first"));
+
+        reveals.Toggle("metadata-second");
+        var activeWorkspace = Assert.IsAssignableFrom<ILibraryWorkspace>(state.Workspace);
+        await state.CloseUnavailableLibraryAsync(activeWorkspace, "not-writable");
+        Assert.False(reveals.IsRevealed("metadata-second"));
+    }
+
+    [Fact]
+    public async Task RelinkAcceptsTheSameLibraryIdOnlyAfterItsOriginalLocationIsUnavailable()
+    {
+        using var temporary = new TemporaryDirectory();
+        var originalRoot = temporary.Child("original-library");
+        var replacementRoot = temporary.Child("moved-library");
+        var factory = new LibraryWorkspaceFactory();
+        LibraryDescriptor descriptor;
+        await using (var original = await factory.CreateAsync(originalRoot))
+        {
+            descriptor = original.Descriptor;
+        }
+        DirectoryCopy(originalRoot, replacementRoot);
+        var recent = new TestRecentLibraries();
+        recent.Entries.Add(new RecentLibrary(descriptor.LibraryId, descriptor.DisplayName, originalRoot, DateTimeOffset.UtcNow));
+        await using var state = new AppLibraryState(factory, new TestLocations(originalRoot, replacementRoot), recent, new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+
+        await state.RelinkAsync(descriptor.LibraryId, replacementRoot);
+
+        Assert.NotNull(state.Workspace);
+        Assert.Equal(Path.GetFullPath(replacementRoot), state.ActivePath);
+        var remembered = Assert.Single(recent.Entries);
+        Assert.Equal(descriptor.LibraryId, remembered.LibraryId);
+        Assert.Equal(Path.GetFullPath(replacementRoot), remembered.Path);
+    }
+
+    [Fact]
+    public async Task RelinkRejectsAReplacementWhileTheOriginalLocationIsStillAvailable()
+    {
+        using var temporary = new TemporaryDirectory();
+        var originalRoot = temporary.Child("original-library");
+        var factory = new LibraryWorkspaceFactory();
+        LibraryDescriptor descriptor;
+        await using (var original = await factory.CreateAsync(originalRoot))
+        {
+            descriptor = original.Descriptor;
+        }
+        var recent = new TestRecentLibraries();
+        recent.Entries.Add(new RecentLibrary(descriptor.LibraryId, descriptor.DisplayName, originalRoot, DateTimeOffset.UtcNow));
+        await using var state = new AppLibraryState(factory, new TestLocations(originalRoot), recent, new TestAvailabilityProbe(isAvailable: true), new TestPreferenceStore());
+
+        var exception = await Assert.ThrowsAsync<LibraryValidationException>(() => state.RelinkAsync(descriptor.LibraryId, temporary.Child("replacement")));
+
+        Assert.Contains("only while its original remembered location is unavailable", exception.Message, StringComparison.Ordinal);
+        Assert.Null(state.Workspace);
+        Assert.Equal(originalRoot, Assert.Single(recent.Entries).Path);
+    }
+
+    [Fact]
+    public async Task RelinkRejectsAReplacementWithADifferentPermanentLibraryId()
+    {
+        using var temporary = new TemporaryDirectory();
+        var originalRoot = temporary.Child("original-library");
+        var replacementRoot = temporary.Child("other-library");
+        var factory = new LibraryWorkspaceFactory();
+        LibraryDescriptor originalDescriptor;
+        await using (var original = await factory.CreateAsync(originalRoot))
+        {
+            originalDescriptor = original.Descriptor;
+        }
+        await using (var replacement = await factory.CreateAsync(replacementRoot)) { }
+        var recent = new TestRecentLibraries();
+        recent.Entries.Add(new RecentLibrary(originalDescriptor.LibraryId, originalDescriptor.DisplayName, originalRoot, DateTimeOffset.UtcNow));
+        await using var state = new AppLibraryState(factory, new TestLocations(originalRoot, replacementRoot), recent, new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+
+        var exception = await Assert.ThrowsAsync<LibraryValidationException>(() => state.RelinkAsync(originalDescriptor.LibraryId, replacementRoot));
+
+        Assert.Contains("different permanent ID", exception.Message, StringComparison.Ordinal);
+        Assert.Null(state.Workspace);
+        await using var reopened = await factory.OpenAsync(replacementRoot);
+    }
+
+    [Fact]
+    public async Task FailedOpenBecomesASanitizedCorruptRememberedEntryWithoutAutomaticRepair()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("corrupt-library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        Directory.Delete(Path.Combine(root, "media"));
+        var recent = new TestRecentLibraries();
+        await using var state = new AppLibraryState(factory, new TestLocations(root), recent, new TestAvailabilityProbe(isAvailable: true), new TestPreferenceStore());
+
+        await state.InitializeAsync();
+
+        Assert.Null(state.Workspace);
+        Assert.Contains("No automatic repair was attempted", state.Error, StringComparison.Ordinal);
+        var remembered = Assert.Single(recent.Entries);
+        Assert.Equal(RememberedLibraryState.Corrupt, remembered.State);
+        Assert.Equal("open", remembered.FailureStage);
+        Assert.Matches("^[a-f0-9]{12}$", remembered.DiagnosticId!);
+        Assert.False(Directory.Exists(Path.Combine(root, "media")));
+    }
+
+    [Fact]
+    public void DeferringAnIntegrityScanRecommendationDismissesItWithoutStartingAScan()
+    {
+        var recommendation = new IntegrityScanRecommendationService();
+        recommendation.Recommend(IntegrityScanRecommendationReason.WatcherOverflow);
+
+        recommendation.Defer();
+
+        Assert.False(recommendation.IsRecommended);
+        Assert.Empty(recommendation.Reasons);
+    }
+
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
     {
         public void Report(T value) => report(value);
+    }
+
+    private sealed class TestLocations(params string[] paths) : ILibraryLocationService
+    {
+        public string DefaultPath => paths[0];
+        public bool IsAllowedPath(string candidate) => paths.Any(path => string.Equals(Path.GetFullPath(path), Path.GetFullPath(candidate), StringComparison.Ordinal));
+    }
+
+    private sealed class TestAvailabilityProbe(bool isAvailable) : ILibraryAvailabilityProbe
+    {
+        public bool IsAvailable(string path, string? expectedVolumeIdentity, out string failureStage)
+        {
+            failureStage = isAvailable ? string.Empty : "not-writable";
+            return isAvailable;
+        }
+    }
+
+    private sealed class TestPreferenceStore : IAppPreferenceStore
+    {
+        private readonly Dictionary<string, string> _values = [];
+        public string ReadString(string key, string defaultValue) => _values.TryGetValue(key, out var value) ? value : defaultValue;
+        public void WriteString(string key, string value) => _values[key] = value;
+    }
+
+    private sealed class TestRecentLibraries : IRecentLibraryService
+    {
+        public List<RecentLibrary> Entries { get; } = [];
+        public IReadOnlyList<RecentLibrary> GetAll() => Entries;
+        public void RecordOpened(LibraryDescriptor descriptor)
+        {
+            Entries.RemoveAll(entry => entry.LibraryId == descriptor.LibraryId);
+            Entries.Add(new RecentLibrary(descriptor.LibraryId, descriptor.DisplayName, descriptor.RootPath, DateTimeOffset.UtcNow));
+        }
+        public void RecordFailure(string path, string displayName, string? libraryId, RememberedLibraryState state, string failureStage, string diagnosticId)
+        {
+            Entries.RemoveAll(entry => entry.LibraryId == libraryId);
+            Entries.Add(new RecentLibrary(libraryId!, displayName, path, DateTimeOffset.UtcNow, null, state, failureStage, diagnosticId));
+        }
+        public void ValidateNoOverlap(string candidatePath) { }
     }
 
     private static void DirectoryCopy(string sourcePath, string destinationPath)

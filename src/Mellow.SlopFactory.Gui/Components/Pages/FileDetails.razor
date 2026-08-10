@@ -5,92 +5,113 @@
 @inject PreviewCacheService PreviewCache
 @inject IJSRuntime JavaScript
 @inject ISensitiveMetadataDisclosureService SensitiveDisclosure
+@inject ISensitiveRevealSessionService SensitiveReveals
+@inject IPlatformFileActionService PlatformFiles
 @implements IAsyncDisposable
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
 
-<PageTitle>File details · SlopFactory</PageTitle>
+<PageTitle>@Strings["FileDetailsPageTitle"]</PageTitle>
 
 @if (_file is null)
 {
-    <section class="center-state"><h1>Loading file</h1></section>
+    <section class="center-state"><h1>@Strings["LoadingFile"]</h1></section>
 }
 else
 {
     <header class="page-header">
-        <div><p class="eyebrow">File details</p><h1>@_file.DisplayName</h1><p class="muted">@_file.MediaType · @_file.ByteSize bytes</p></div>
-        <button class="secondary" @onclick="Back">Back to library</button>
+        <div><p class="eyebrow">@Strings["FileDetails"]</p><h1>@_file.DisplayName</h1><p class="muted">@Strings["FileDetailsMeta", _file.MediaType, _file.ByteSize]</p></div>
+        <div class="actions">
+            @if (ContentActionPolicy.CanUseManagedContent(_file))
+            {
+                <button class="secondary" disabled="@_fileActionBusy" @onclick="ExportAsync">@Strings["Export"]</button>
+                @if (ContentActionPolicy.GetExternalOpenSafety(_file) != ExternalOpenSafety.BlockedActiveContent) { <button class="secondary" disabled="@_fileActionBusy" @onclick="ReviewExternalOpenAsync">@Strings["OpenInAnotherApp"]</button> }
+            }
+            @if (_file.ContentState == FileContentState.Changed) { <button class="secondary" disabled="@_fileActionBusy" @onclick="ExportChangedBytesAsync">@Strings["ExportChangedBytes"]</button> }
+            <button class="secondary" @onclick="Back">@Strings["BackToLibrary"]</button>
+        </div>
     </header>
 
     @if (!string.IsNullOrWhiteSpace(_message))
     {
         <div class="notice" role="status">@_message</div>
     }
+    @if (_confirmExternalOpen)
+    {
+        <section class="notice" role="dialog" aria-labelledby="external-open-warning-title">
+            <h2 id="external-open-warning-title">@Strings["OpenTemporaryCopy"]</h2>
+            <p>@Strings["ExternalOpenWarning"]</p>
+            <button @onclick="OpenExternallyAsync">@Strings["Continue"]</button><button class="secondary" @onclick="() => _confirmExternalOpen = false">@Strings["Cancel"]</button>
+        </section>
+    }
 
     @if (HasDisplayExtensionMismatch(_file))
     {
-        <div class="notice error" role="status">The display-name extension <code>@Path.GetExtension(_file.DisplayName)</code> does not match the detected @(_file.MediaType) content. SlopFactory uses the detected bytes for viewing and safety decisions.</div>
+        <div class="notice error" role="status">@Strings["ExtensionMismatch", Path.GetExtension(_file.DisplayName), _file.MediaType]</div>
     }
 
     <section class="panel content-health-panel" aria-labelledby="content-health-title">
-        <div class="section-heading"><h2 id="content-health-title">Managed content</h2><button class="secondary" disabled="@_verifyingContent" @onclick="VerifyContentAsync">@(_verifyingContent ? "Verifying…" : "Verify now")</button></div>
-        <p><strong>@ContentStateLabel(_file.ContentState)</strong> · Built-in viewing rechecks the managed bytes before use.</p>
+        <div class="section-heading"><h2 id="content-health-title">@Strings["ManagedContent"]</h2><button class="secondary" disabled="@_verifyingContent" @onclick="VerifyContentAsync">@(_verifyingContent ? Strings["Verifying"] : Strings["VerifyNow"])</button></div>
+        <p>@Strings["BuiltInViewingVerifiesContent", ContentStateLabel(_file.ContentState)]</p>
         @if (_file.ContentState == FileContentState.Missing)
         {
-            <p class="error">The managed file is missing. The file record, user metadata, and links remain preserved.</p>
+            <p class="error">@Strings["ManagedFileMissing"]</p>
         }
         else if (_file.ContentState == FileContentState.Changed)
         {
-            <p class="error">The bytes differ from the recorded content and have not been accepted as a replacement. Normal viewing is blocked.</p>
+            <p class="error">@Strings["ContentChanged"]</p>
             @if (_contentHealth?.ObservedContentHash is not null)
             {
-                <dl><dt>Recorded</dt><dd class="mono">@_file.ContentHash · @_file.ByteSize bytes · @_file.MediaType</dd><dt>Observed</dt><dd class="mono">@_contentHealth.ObservedContentHash · @_contentHealth.ObservedByteSize bytes · @_contentHealth.ObservedMediaType</dd></dl>
+                <dl><dt>@Strings["Recorded"]</dt><dd class="mono">@Strings["ContentIdentity", _file.ContentHash, _file.ByteSize, _file.MediaType]</dd><dt>@Strings["Observed"]</dt><dd class="mono">@Strings["ContentIdentity", _contentHealth.ObservedContentHash ?? string.Empty, _contentHealth.ObservedByteSize ?? 0, _contentHealth.ObservedMediaType ?? string.Empty]</dd></dl>
             }
-            <button class="secondary" disabled="@_inspectingChangedContent" @onclick="InspectChangedContentAsync">@(_inspectingChangedContent ? "Inspecting…" : "Inspect changed bytes")</button>
+            <button class="secondary" disabled="@_inspectingChangedContent" @onclick="InspectChangedContentAsync">@(_inspectingChangedContent ? Strings["InspectingChangedBytes"] : Strings["InspectChangedBytes"])</button>
             @if (_changedInspection is not null)
             {
                 <div class="notice" role="status">
-                    <p><strong>Changed-byte inspection</strong> does not accept or alter the file.</p>
-                    <dl><dt>Actual bytes</dt><dd class="mono">@_changedInspection.ActualContentHash · @_changedInspection.ActualByteSize bytes · @_changedInspection.ActualMediaType</dd></dl>
-                    @if (_changedText is not null) { <pre class="text-viewer">@_changedText.Content</pre><p class="muted">@(_changedText.IsTruncated ? "Only the first 1,048,576 characters are shown." : "Read-only text inspection.")</p> }
+                    <p>@Strings["ChangedByteInspectionDescription", Strings["ChangedByteInspection"]]</p>
+                    <dl><dt>@Strings["ActualBytes"]</dt><dd class="mono">@Strings["ContentIdentity", _changedInspection.ActualContentHash, _changedInspection.ActualByteSize, _changedInspection.ActualMediaType]</dd></dl>
+                    @if (_changedText is not null) { <pre class="text-viewer">@_changedText.Content</pre><p class="muted">@(_changedText.IsTruncated ? Strings["ChangedTextTruncated"] : Strings["ReadOnlyTextInspection"])</p> }
                 </div>
             }
         }
         else if (_file.ContentState == FileContentState.Replaced && _contentProvenance is not null)
         {
-            <p>The current bytes were accepted as a permanent replacement. The recorded original identity remains available for comparison.</p>
+            <p>@Strings["ReplacementAcceptedDescription"]</p>
             <dl>
-                <dt>Recorded original</dt><dd class="mono">@_contentProvenance.OriginalContentHash · @_contentProvenance.OriginalByteSize bytes · @_contentProvenance.OriginalMediaType</dd>
-                <dt>Current replacement</dt><dd class="mono">@_file.ContentHash · @_file.ByteSize bytes · @_file.MediaType</dd>
-                @if (_contentProvenance.ReplacedAt is not null) { <dt>Replaced</dt><dd>@_contentProvenance.ReplacedAt.Value.ToLocalTime().ToString("g")</dd> }
+                <dt>@Strings["RecordedOriginal"]</dt><dd class="mono">@Strings["ContentIdentity", _contentProvenance.OriginalContentHash, _contentProvenance.OriginalByteSize, _contentProvenance.OriginalMediaType]</dd>
+                <dt>@Strings["CurrentReplacement"]</dt><dd class="mono">@Strings["ContentIdentity", _file.ContentHash, _file.ByteSize, _file.MediaType]</dd>
+                @if (_contentProvenance.ReplacedAt is not null) { <dt>@Strings["Replaced"]</dt><dd>@_contentProvenance.ReplacedAt.Value.ToLocalTime().ToString("g")</dd> }
             </dl>
         }
         @if (_file.ContentState is FileContentState.Missing or FileContentState.Changed)
         {
             <div class="actions">
-                <button disabled="@_replacingContent" @onclick="ChooseReplacementAsync">Choose replacement file</button>
-                @if (_file.ContentState == FileContentState.Changed) { <button class="secondary" disabled="@_replacingContent" @onclick="ReviewCurrentBytesAsync">Accept current bytes as replacement</button> }
+                <button disabled="@_replacingContent" @onclick="ChooseReplacementAsync">@Strings["ChooseReplacementFile"]</button>
+                @if (_file.ContentState == FileContentState.Changed) { <button class="secondary" disabled="@_replacingContent" @onclick="ReviewCurrentBytesAsync">@Strings["AcceptCurrentBytes"]</button> }
             </div>
         }
         @if (_replacementReview is not null)
         {
             <div class="notice replacement-review" role="status">
-                <h3>Review managed-content replacement</h3>
+                <h3>@Strings["ReviewManagedReplacement"]</h3>
                 <dl>
-                    <dt>Recorded original</dt><dd class="mono">@_replacementReview.OriginalContentHash · @_replacementReview.OriginalByteSize bytes · @_replacementReview.OriginalMediaType</dd>
-                    <dt>Candidate</dt><dd class="mono">@_replacementReview.CandidateContentHash · @_replacementReview.CandidateByteSize bytes · @_replacementReview.CandidateMediaType</dd>
+                    <dt>@Strings["RecordedOriginal"]</dt><dd class="mono">@Strings["ContentIdentity", _replacementReview.OriginalContentHash, _replacementReview.OriginalByteSize, _replacementReview.OriginalMediaType]</dd>
+                    <dt>@Strings["Candidate"]</dt><dd class="mono">@Strings["ContentIdentity", _replacementReview.CandidateContentHash, _replacementReview.CandidateByteSize, _replacementReview.CandidateMediaType]</dd>
                 </dl>
                 @if (_replacementReview.RestoresOriginal)
                 {
-                    <p>The candidate exactly restores the recorded original bytes. Original provenance and user metadata will remain unchanged.</p>
+                    <p>@Strings["CandidateRestoresOriginal"]</p>
                 }
                 else
                 {
-                    <p class="error">This permanently accepts different bytes without retaining a hidden previous version. The stable file ID, folder, links, and original provenance remain; current content metadata changes.</p>
-                    <p>@_replacementReview.OrdinaryMetadataCount ordinary and @_replacementReview.SensitiveMetadataCount sensitive user-metadata entrie(s) are attached. Sensitive keys and values remain concealed.</p>
-                    <label class="check"><input type="checkbox" @bind="_clearMetadataAfterReplacement" /> Clear all user metadata after replacement</label>
+                    <p class="error">@Strings["PermanentReplacementWarning"]</p>
+                    <p>@Strings["ReplacementMetadataSummary", _replacementReview.OrdinaryMetadataCount, _replacementReview.SensitiveMetadataCount]</p>
+                    <label class="check"><input type="checkbox" @bind="_clearMetadataAfterReplacement" /> @Strings["ClearMetadataAfterReplacement"]</label>
                 }
                 <div class="actions">
-                    <button class="@(_replacementReview.RestoresOriginal ? string.Empty : "danger")" disabled="@_replacingContent" @onclick="CommitReplacementAsync">@(_replacementReview.RestoresOriginal ? "Restore original content" : "Confirm permanent replacement")</button>
-                    <button class="secondary" disabled="@_replacingContent" @onclick="CancelReplacementReview">Cancel</button>
+                    <button class="@(_replacementReview.RestoresOriginal ? string.Empty : "danger")" disabled="@_replacingContent" @onclick="CommitReplacementAsync">@(_replacementReview.RestoresOriginal ? Strings["RestoreOriginalContent"] : Strings["ConfirmPermanentReplacement"])</button>
+                    <button class="secondary" disabled="@_replacingContent" @onclick="CancelReplacementReview">@Strings["Cancel"]</button>
                 </div>
             </div>
         }
@@ -100,18 +121,18 @@ else
         @if (CanUseContent(_file) && PreviewKind == BuiltInPreviewKind.Unsupported)
         {
             <article class="panel">
-                <h2>Preview unavailable</h2>
-                <p>SlopFactory has no built-in viewer for the detected <code>@_file.MediaType</code> content. It has not opened the file in an inappropriate viewer.</p>
-                <p class="muted">Safe system information remains available below. Export and external-open actions will appear here when those features are available.</p>
+                <h2>@Strings["PreviewUnavailable"]</h2>
+                <p>@Strings["UnsupportedViewer", _file.MediaType]</p>
+                <p class="muted">@Strings["SafeSystemInformation"]</p>
             </article>
         }
         @if (_mediaSource is not null || _mediaError is not null || _mediaPreparing)
         {
             <article class="panel media-panel">
-                <h2>@(_file.MediaType.StartsWith("video/", StringComparison.Ordinal) ? "Video viewer" : "Audio player")</h2>
+                <h2>@(_file.MediaType.StartsWith("video/", StringComparison.Ordinal) ? Strings["VideoViewer"] : Strings["AudioPlayer"])</h2>
                 @if (_mediaPreparing)
                 {
-                    <p class="muted" role="status">Verifying managed media before playback...</p>
+                    <p class="muted" role="status">@Strings["VerifyingMedia"]</p>
                 }
                 else if (_mediaError is not null)
                 {
@@ -120,28 +141,28 @@ else
                 else if (_file.MediaType.StartsWith("video/", StringComparison.Ordinal))
                 {
                     <video @ref="_mediaElement" src="@_mediaSource!.Uri" controls preload="metadata" class="media-viewer">
-                        This platform cannot play the video format.
+                        @Strings["VideoFormatUnsupported"]
                     </video>
                 }
                 else
                 {
                     <audio @ref="_mediaElement" src="@_mediaSource!.Uri" controls preload="metadata" class="media-viewer">
-                        This platform cannot play the audio format.
+                        @Strings["AudioFormatUnsupported"]
                     </audio>
                 }
                 @if (_mediaSource is not null)
                 {
                     <div class="media-tools">
-                        <label for="playback-rate">Playback speed</label>
+                        <label for="playback-rate">@Strings["PlaybackSpeed"]</label>
                         <select id="playback-rate" value="@_playbackRate" @onchange="ChangePlaybackRateAsync">
-                            <option value="0.5">0.5x</option>
-                            <option value="0.75">0.75x</option>
-                            <option value="1">Normal</option>
-                            <option value="1.25">1.25x</option>
-                            <option value="1.5">1.5x</option>
-                            <option value="2">2x</option>
+                            <option value="0.5">@Strings["PlaybackRateHalf"]</option>
+                            <option value="0.75">@Strings["PlaybackRateThreeQuarters"]</option>
+                            <option value="1">@Strings["Normal"]</option>
+                            <option value="1.25">@Strings["PlaybackRateOneAndQuarter"]</option>
+                            <option value="1.5">@Strings["PlaybackRateOneAndHalf"]</option>
+                            <option value="2">@Strings["PlaybackRateDouble"]</option>
                         </select>
-                        <span class="muted">Use the built-in controls for seeking, volume, mute, captions when available, and video full screen.</span>
+                        <span class="muted">@Strings["MediaControlsGuidance"]</span>
                     </div>
                 }
             </article>
@@ -149,34 +170,34 @@ else
         @if (_imageDataUri is not null || _imageError is not null)
         {
             <article class="panel image-panel">
-                <h2>Image viewer</h2>
+                <h2>@Strings["ImageViewer"]</h2>
                 @if (_imageError is not null)
                 {
                     <p class="error">@_imageError</p>
                 }
                 else
                 {
-                    <div class="image-tools" aria-label="Image view controls">
+                    <div class="image-tools" aria-label="@Strings["ImageViewControls"]">
                         @if (_file.MediaType == "image/gif")
                         {
-                            <button class="ghost" @onclick="ToggleAnimatedImage">@(_animatedImagePlaying ? "Pause animation" : "Play animation")</button>
+                            <button class="ghost" @onclick="ToggleAnimatedImage">@(_animatedImagePlaying ? Strings["PauseAnimation"] : Strings["PlayAnimation"])</button>
                         }
-                        <button class="ghost" @onclick="FitImage">Fit</button>
-                        <button class="ghost" @onclick="ActualImageSize">Actual size</button>
-                        <label>Zoom <input type="range" min="25" max="400" step="25" @bind="_imageZoom" @bind:event="oninput" /> @_imageZoom%</label>
-                        <button class="ghost" @onclick="RotateImage">Rotate 90°</button>
+                        <button class="ghost" @onclick="FitImage">@Strings["Fit"]</button>
+                        <button class="ghost" @onclick="ActualImageSize">@Strings["ActualSize"]</button>
+                        <label>@Strings["Zoom"] <input type="range" min="25" max="400" step="25" @bind="_imageZoom" @bind:event="oninput" /> @_imageZoom%</label>
+                        <button class="ghost" @onclick="RotateImage">@Strings["RotateImage"]</button>
                     </div>
                     <div class="image-viewport">
                         @if (_file.MediaType != "image/gif" || _animatedImagePlaying || _animatedImagePosterUri is not null)
                         {
-                            <img src="@(_file.MediaType == "image/gif" && !_animatedImagePlaying ? _animatedImagePosterUri : _imageDataUri)" alt="Preview of @_file.DisplayName" class="@(_fitImage ? "fit-image" : "actual-image")" style="transform: @ImageTransform;" />
+                            <img src="@(_file.MediaType == "image/gif" && !_animatedImagePlaying ? _animatedImagePosterUri : _imageDataUri)" alt="@Strings["ImagePreviewAlt", _file.DisplayName]" class="@(_fitImage ? "fit-image" : "actual-image")" style="transform: @ImageTransform;" />
                         }
                         else
                         {
-                            <p class="muted">Animation paused. Choose Play animation to decode it.</p>
+                            <p class="muted">@Strings["AnimationPaused"]</p>
                         }
                     </div>
-                    <p class="muted">Viewing controls do not modify the managed image.</p>
+                    <p class="muted">@Strings["ViewingDoesNotModify"]</p>
                 }
             </article>
         }
@@ -184,28 +205,28 @@ else
         @if (_textContent is not null || _textError is not null)
         {
             <article class="panel text-panel">
-                <h2>Text viewer</h2>
+                <h2>@Strings["TextViewer"]</h2>
                 @if (_textError is not null)
                 {
                     <p class="error">@_textError</p>
                 }
                 else
                 {
-                    <p class="muted">Read-only · @_textContent!.EncodingName@(_textContent.IsTruncated ? " · Showing the first 1,048,576 characters" : string.Empty)</p>
+                    <p class="muted">@Strings["ReadOnlyTextSummary", _textContent!.EncodingName, _textContent.IsTruncated ? Strings["TextContentTruncatedSuffix"] : string.Empty]</p>
                     <div class="text-tools">
                         @if (_file.MediaType == "text/markdown")
                         {
-                            <div class="view-toggle" aria-label="Markdown view">
-                                <button class="@(!_showRenderedMarkdown ? string.Empty : "secondary")" aria-pressed="@(!_showRenderedMarkdown)" @onclick="ShowPlainText">Plain text</button>
-                                <button class="@(_showRenderedMarkdown ? string.Empty : "secondary")" aria-pressed="@_showRenderedMarkdown" @onclick="ShowRenderedMarkdownAsync" disabled="@_textContent.IsTruncated">Rendered Markdown</button>
+                            <div class="view-toggle" aria-label="@Strings["MarkdownView"]">
+                                <button class="@(!_showRenderedMarkdown ? string.Empty : "secondary")" aria-pressed="@(!_showRenderedMarkdown)" @onclick="ShowPlainText">@Strings["PlainText"]</button>
+                                <button class="@(_showRenderedMarkdown ? string.Empty : "secondary")" aria-pressed="@_showRenderedMarkdown" @onclick="ShowRenderedMarkdownAsync" disabled="@_textContent.IsTruncated">@Strings["RenderedMarkdown"]</button>
                             </div>
                         }
                         <EditForm Model="_textSearchForm" OnValidSubmit="SearchTextAsync" class="text-search-form">
-                            <label for="text-search">Find in file</label>
+                            <label for="text-search">@Strings["FindInFile"]</label>
                             <InputText id="text-search" @bind-Value="_textSearchForm.SearchText" maxlength="256" />
-                            <label class="check"><InputCheckbox @bind-Value="_textSearchForm.MatchCase" /> Match case</label>
-                            <button type="submit" disabled="@_searchingText">@(_searchingText ? "Searching…" : "Find")</button>
-                            @if (_textSearchResult is not null) { <button type="button" class="secondary" @onclick="ClearTextSearch">Clear</button> }
+                            <label class="check"><InputCheckbox @bind-Value="_textSearchForm.MatchCase" /> @Strings["MatchCase"]</label>
+                            <button type="submit" disabled="@_searchingText">@(_searchingText ? Strings["Searching"] : Strings["Find"])</button>
+                            @if (_textSearchResult is not null) { <button type="button" class="secondary" @onclick="ClearTextSearch">@Strings["Clear"]</button> }
                         </EditForm>
                     </div>
 
@@ -217,7 +238,7 @@ else
                         }
                         else if (_markdownContent is null)
                         {
-                            <p class="muted" aria-live="polite">Rendering Markdown…</p>
+                            <p class="muted" aria-live="polite">@Strings["RenderingMarkdown"]</p>
                         }
                         else
                         {
@@ -225,12 +246,12 @@ else
                             @if (_markdownContent.ExternalLinks.Count > 0)
                             {
                                 <section class="markdown-links" aria-labelledby="markdown-links-title">
-                                    <h3 id="markdown-links-title">External links</h3>
-                                    <p class="muted">Markdown links are inert in the rendered document. Review the destination before opening one in another application.</p>
+                                    <h3 id="markdown-links-title">@Strings["ExternalLinks"]</h3>
+                                    <p class="muted">@Strings["MarkdownLinksInert"]</p>
                                     <ul>
                                         @foreach (var link in _markdownContent.ExternalLinks)
                                         {
-                                            <li><span>@link.Label</span><code>@link.Destination</code><button class="ghost" @onclick="() => ReviewExternalLink(link)">Review link</button></li>
+                                            <li><span>@link.Label</span><code>@link.Destination</code><button class="ghost" @onclick="() => ReviewExternalLink(link)">@Strings["ReviewLink"]</button></li>
                                         }
                                     </ul>
                                 </section>
@@ -245,19 +266,19 @@ else
                     @if (_textSearchResult is not null)
                     {
                         <section class="text-search-results" aria-live="polite" aria-labelledby="text-search-results-title">
-                            <h3 id="text-search-results-title">Search results</h3>
+                            <h3 id="text-search-results-title">@Strings["SearchResults"]</h3>
                             @if (_textSearchResult.TotalMatches == 0)
                             {
-                                <p>No matches found in the complete file.</p>
+                                <p>@Strings["NoMatchesFound"]</p>
                             }
                             else
                             {
                                 var selected = _textSearchResult.Matches[_selectedSearchIndex];
                                 <div class="selection-bar">
-                                    <span>Match @(_selectedSearchIndex + 1) of @_textSearchResult.TotalMatches@(_textSearchResult.ResultsTruncated ? " · First 200 available for navigation" : string.Empty)</span>
-                                    <div class="actions"><button class="secondary" @onclick="PreviousTextMatch">Previous</button><button class="secondary" @onclick="NextTextMatch">Next</button></div>
+                                    <span>@Strings["TextSearchMatchSummary", _selectedSearchIndex + 1, _textSearchResult.TotalMatches, _textSearchResult.ResultsTruncated ? Strings["FirstNavigationMatches"] : string.Empty]</span>
+                                    <div class="actions"><button class="secondary" @onclick="PreviousTextMatch">@Strings["Previous"]</button><button class="secondary" @onclick="NextTextMatch">@Strings["Next"]</button></div>
                                 </div>
-                                <p class="muted">Character offset @selected.CharacterOffset@(_textContent.IsTruncated && selected.CharacterOffset >= _textContent.Content.Length ? " · Beyond the displayed plain-text prefix" : string.Empty)</p>
+                                <p class="muted">@Strings["CharacterOffset", selected.CharacterOffset, _textContent.IsTruncated && selected.CharacterOffset >= _textContent.Content.Length ? Strings["BeyondDisplayedTextPrefix"] : string.Empty]</p>
                                 <pre class="text-search-snippet">@selected.Snippet[..selected.MatchStart]<mark>@selected.Snippet.Substring(selected.MatchStart, selected.MatchLength)</mark>@selected.Snippet[(selected.MatchStart + selected.MatchLength)..]</pre>
                             }
                         </section>
@@ -266,40 +287,40 @@ else
                     @if (_pendingExternalLink is not null)
                     {
                         <section class="panel external-link-review" role="dialog" aria-labelledby="external-link-review-title">
-                            <h3 id="external-link-review-title">Open external link?</h3>
-                            <p>Another application will receive this destination:</p>
+                            <h3 id="external-link-review-title">@Strings["OpenExternalLink"]</h3>
+                            <p>@Strings["ExternalLinkDestinationNotice"]</p>
                             <code>@_pendingExternalLink.Destination</code>
-                            <div class="actions"><button @onclick="OpenReviewedExternalLinkAsync">Open externally</button><button class="secondary" @onclick="CancelExternalLink">Cancel</button></div>
+                            <div class="actions"><button @onclick="OpenReviewedExternalLinkAsync">@Strings["OpenExternally"]</button><button class="secondary" @onclick="CancelExternalLink">@Strings["Cancel"]</button></div>
                         </section>
                     }
                     @if (!_showTextEditor)
                     {
-                        <button @onclick="BeginTextEdit" disabled="@_textContent.IsTruncated">Edit as Copy</button>
-                        @if (_textContent.IsTruncated) { <p class="muted">This file is too large to open in the built-in editor.</p> }
+                        <button @onclick="BeginTextEdit" disabled="@_textContent.IsTruncated">@Strings["EditAsCopy"]</button>
+                        @if (_textContent.IsTruncated) { <p class="muted">@Strings["TextTooLargeForEditor"]</p> }
                     }
                     else
                     {
                         <EditForm Model="_textCopyForm" OnValidSubmit="SaveTextCopyAsync" class="stack-form text-editor">
-                            <label for="edited-content">Edited content</label>
+                            <label for="edited-content">@Strings["EditedContent"]</label>
                             <InputTextArea id="edited-content" @bind-Value="_textCopyForm.Content" />
-                            <label for="edited-name">New file name</label>
+                            <label for="edited-name">@Strings["NewFileName"]</label>
                             <InputText id="edited-name" @bind-Value="_textCopyForm.DisplayName" maxlength="255" />
-                            <label for="edited-folder">Destination folder</label>
+                            <label for="edited-folder">@Strings["BulkDestinationFolder"]</label>
                             <InputSelect id="edited-folder" @bind-Value="_textCopyForm.DestinationFolderId">
                                 @foreach (var folder in _availableFolders) { <option value="@folder.Id">@folder.Name</option> }
                             </InputSelect>
-                            <label for="edited-format">Format</label>
+                            <label for="edited-format">@Strings["Format"]</label>
                             <InputSelect id="edited-format" @bind-Value="_textCopyForm.Format">
-                                <option value="@TextCopyFormat.PreserveSourceFormat">Preserve source format</option>
-                                <option value="@TextCopyFormat.PlainText">Plain text</option>
-                                <option value="@TextCopyFormat.Markdown">Markdown</option>
+                                <option value="@TextCopyFormat.PreserveSourceFormat">@Strings["PreserveSourceFormat"]</option>
+                                <option value="@TextCopyFormat.PlainText">@Strings["PlainTextFormat"]</option>
+                                <option value="@TextCopyFormat.Markdown">@Strings["Markdown"]</option>
                             </InputSelect>
-                            <label class="check"><InputCheckbox @bind-Value="_textCopyForm.CopyUserMetadata" /> Copy user metadata</label>
+                            <label class="check"><InputCheckbox @bind-Value="_textCopyForm.CopyUserMetadata" /> @Strings["CopyUserMetadata"]</label>
                             @if (_textCopyForm.CopyUserMetadata && SensitiveMetadataCount > 0)
                             {
-                                <label class="check"><InputCheckbox @bind-Value="_textCopyForm.IncludeSensitiveMetadata" /> Include @SensitiveMetadataCount sensitive metadata entr@(SensitiveMetadataCount == 1 ? "y" : "ies")</label>
+                                <label class="check"><InputCheckbox @bind-Value="_textCopyForm.IncludeSensitiveMetadata" /> @Strings["IncludeSensitiveMetadataCount", SensitiveMetadataCount]</label>
                             }
-                            <div class="actions"><button type="submit">Save edited copy</button><button type="button" class="secondary" @onclick="CancelTextEdit">Cancel</button></div>
+                            <div class="actions"><button type="submit">@Strings["SaveEditedCopy"]</button><button type="button" class="secondary" @onclick="CancelTextEdit">@Strings["Cancel"]</button></div>
                         </EditForm>
                     }
                 }
@@ -307,42 +328,44 @@ else
         }
 
         <article class="panel">
-            <h2>System information</h2>
+            <div class="section-heading"><h2>@Strings["SystemInformation"]</h2>@if (_technicalMetadataLoading) { <button class="secondary" @onclick="CancelTechnicalMetadata">@Strings["CancelTechnicalMetadata"]</button> }</div>
+            @if (_technicalMetadataLoading) { <p role="status">@Strings["ReadingTechnicalMetadata"]</p> }
             <dl>
-                <dt>Content hash</dt><dd class="mono">SHA-256 @_file.ContentHash</dd>
-                <dt>Original filename</dt><dd>@_file.OriginalFileName</dd>
-                <dt>Imported</dt><dd>@_file.ImportedAt.ToLocalTime().ToString("g")</dd>
-                <dt>Library modified</dt><dd>@_file.ModifiedAt.ToLocalTime().ToString("g")</dd>
-                @if (_file.SourceLastModified is not null) { <dt>Source last modified</dt><dd>@_file.SourceLastModified.Value.ToLocalTime().ToString("g")</dd> }
-                <dt>Origin</dt><dd>@_file.Origin</dd>
-                <dt>State</dt><dd>@_file.State</dd>
-                <dt>Content state</dt><dd>@ContentStateLabel(_file.ContentState)</dd>
-                @if (_imageTechnicalProperties?.Width is not null && _imageTechnicalProperties.Height is not null) { <dt>Image dimensions</dt><dd>@_imageTechnicalProperties.Width × @_imageTechnicalProperties.Height pixels</dd> }
-                @if (_contentProvenance?.ReplacedAt is not null) { <dt>Content replaced</dt><dd>@_contentProvenance.ReplacedAt.Value.ToLocalTime().ToString("g")</dd> }
-                @if (_derivationProvenance?.SourceFileId is not null) { <dt>Derived from</dt><dd class="mono">@_derivationProvenance.SourceFileId</dd> }
-                @if (_derivationProvenance?.DeletedSource is { } deletedSource) { <dt>Deleted source</dt><dd>@deletedSource.DisplayName · @deletedSource.MediaType · <span class="mono">@deletedSource.ContentHash</span></dd> }
+                <dt>@Strings["ContentHash"]</dt><dd class="mono">@Strings["ContentHashSummary", _file.ContentHash]</dd>
+                <dt>@Strings["OriginalFilename"]</dt><dd>@_file.OriginalFileName</dd>
+                <dt>@Strings["Imported"]</dt><dd>@_file.ImportedAt.ToLocalTime().ToString("g")</dd>
+                <dt>@Strings["LibraryModified"]</dt><dd>@_file.ModifiedAt.ToLocalTime().ToString("g")</dd>
+                @if (_file.SourceLastModified is not null) { <dt>@Strings["SourceLastModified"]</dt><dd>@_file.SourceLastModified.Value.ToLocalTime().ToString("g")</dd> }
+                <dt>@Strings["Origin"]</dt><dd>@FormatOrigin(_file.Origin)</dd>
+                <dt>@Strings["State"]</dt><dd>@FormatRecordState(_file.State)</dd>
+                <dt>@Strings["ContentState"]</dt><dd>@ContentStateLabel(_file.ContentState)</dd>
+                @foreach (var property in _systemMetadata?.Properties.Where(property => property.Key is not ("mediaType" or "byteSize" or "contentState") && property.Value is not null) ?? []) { <dt>@property.DisplayName</dt><dd>@property.Value</dd> }
+                @if (_imageTechnicalProperties?.Width is not null && _imageTechnicalProperties.Height is not null) { <dt>@Strings["ImageDimensions"]</dt><dd>@Strings["ImageDimensionsValue", _imageTechnicalProperties.Width, _imageTechnicalProperties.Height]</dd> }
+                @if (_contentProvenance?.ReplacedAt is not null) { <dt>@Strings["ContentReplaced"]</dt><dd>@_contentProvenance.ReplacedAt.Value.ToLocalTime().ToString("g")</dd> }
+                @if (_derivationProvenance?.SourceFileId is not null) { <dt>@Strings["DerivedFrom"]</dt><dd class="mono">@_derivationProvenance.SourceFileId</dd> }
+                @if (_derivationProvenance?.DeletedSource is { } deletedSource) { <dt>@Strings["DeletedSource"]</dt><dd>@Strings["DeletedSourceSummary", deletedSource.DisplayName, deletedSource.MediaType, deletedSource.ContentHash]</dd> }
             </dl>
         </article>
 
         @if (_derivationChain.Count > 1)
         {
             <article class="panel">
-                <h2>Provenance chain</h2>
+                <h2>@Strings["ProvenanceChain"]</h2>
                 <ol>
                     @foreach (var entry in _derivationChain)
                     {
-                        <li><span>@entry.File.DisplayName</span> <small class="muted">@entry.File.Id · @entry.File.State @(entry.DerivedBy is null ? string.Empty : $"· {entry.DerivedBy}")</small></li>
+                        <li><span>@entry.File.DisplayName</span> <small class="muted">@Strings["ProvenanceChainEntry", entry.File.Id, FormatRecordState(entry.File.State), entry.DerivedBy is null ? string.Empty : Strings["DerivedBySuffix", entry.DerivedBy]]</small></li>
                     }
                 </ol>
-                <p class="muted">This read-only chain follows only immediate copy sources and stops when no source can be restored.</p>
+                <p class="muted">@Strings["ProvenanceChainDescription"]</p>
             </article>
         }
 
         <article class="panel">
-            <h2>User metadata</h2>
+            <h2>@Strings["UserMetadata"]</h2>
             @if (_metadata.Count == 0)
             {
-                <p class="empty">No user metadata.</p>
+                <p class="empty">@Strings["NoUserMetadata"]</p>
             }
             else
             {
@@ -350,29 +373,29 @@ else
                     @foreach (var item in _metadata)
                     {
                         <li>
-                            <div><strong>@item.Key</strong><small>@item.Kind @(item.IsSensitive ? "· Sensitive" : string.Empty)</small></div>
-                            @if (item.IsSensitive && !_revealed.Contains(item.Id))
+                            <div><strong>@item.Key</strong><small>@Strings["MetadataItemSummary", FormatMetadataKind(item.Kind), item.IsSensitive ? Strings["SensitiveMetadataSuffix"] : string.Empty]</small></div>
+                            @if (item.IsSensitive && !SensitiveReveals.IsRevealed(item.Id))
                             {
-                                <code aria-label="@($"{item.Key}, {item.Kind}, concealed sensitive metadata")" aria-hidden="false">••••••</code>
+                                <span class="concealed-value" aria-hidden="true">@Strings["Concealed"]</span><span class="sr-only">@Strings["ConcealedSensitiveMetadataSummary", item.Key, FormatMetadataKind(item.Kind)]</span>
                             }
                             else
                             {
-                                <div><code>@item.SerializedValue</code>@if (item.Kind == MetadataValueKind.DateTime) { <small>Local time: @FormatMetadataLocalTime(item.SerializedValue)</small> }</div>
+                                <div><code>@item.SerializedValue</code>@if (item.Kind == MetadataValueKind.DateTime) { <small>@Strings["MetadataLocalTime", FormatMetadataLocalTime(item.SerializedValue)]</small> }</div>
                             }
                             @if (item.IsSensitive)
                             {
-                                <button class="ghost" aria-label="@(_revealed.Contains(item.Id) ? $"Conceal {item.Key}" : $"Reveal {item.Key} for this session")" @onclick="() => ToggleReveal(item.Id)">@(_revealed.Contains(item.Id) ? "Conceal" : "Reveal for session")</button>
-                                @if (_revealed.Contains(item.Id)) { <button class="ghost" @onclick="() => CopySensitiveMetadataAsync(item.SerializedValue)">Copy value</button> }
+                                <button class="ghost" aria-label="@(SensitiveReveals.IsRevealed(item.Id) ? Strings["ConcealMetadataAria", item.Key] : Strings["RevealMetadataAria", item.Key])" @onclick="() => ToggleReveal(item.Id)">@(SensitiveReveals.IsRevealed(item.Id) ? Strings["Conceal"] : Strings["RevealForSession"])</button>
+                                @if (SensitiveReveals.IsRevealed(item.Id)) { <button class="ghost" @onclick="() => CopySensitiveMetadataAsync(item.SerializedValue)">@Strings["CopyValue"]</button> }
                             }
-                            <button class="ghost" @onclick="() => BeginRename(item)">Rename key</button>
-                            <button class="danger ghost" @onclick="() => RemoveMetadataAsync(item.Key)">Remove</button>
+                            <button class="ghost" @onclick="() => BeginRename(item)">@Strings["RenameKey"]</button>
+                            <button class="danger ghost" @onclick="() => RemoveMetadataAsync(item.Key)">@Strings["Remove"]</button>
                             @if (_renamingMetadataId == item.Id)
                             {
                                 <div class="inline-form">
-                                    <label for="rename-key-@item.Id">New key</label>
+                                    <label for="rename-key-@item.Id">@Strings["NewKey"]</label>
                                     <input id="rename-key-@item.Id" @bind="_renameKey" maxlength="100" />
-                                    <button @onclick="() => RenameMetadataAsync(item.Key)">Save key</button>
-                                    <button class="secondary" @onclick="CancelRename">Cancel</button>
+                                    <button @onclick="() => RenameMetadataAsync(item.Key)">@Strings["SaveKey"]</button>
+                                    <button class="secondary" @onclick="CancelRename">@Strings["Cancel"]</button>
                                 </div>
                             }
                         </li>
@@ -381,46 +404,53 @@ else
             }
 
             <EditForm Model="_metadataForm" OnValidSubmit="ReviewMetadataAsync" class="stack-form">
-                <label for="metadata-key">Key</label>
+                <label for="metadata-key">@Strings["Key"]</label>
                 <InputText id="metadata-key" @bind-Value="_metadataForm.Key" maxlength="100" />
-                <label for="metadata-kind">Type</label>
+                <label for="metadata-kind">@Strings["Type"]</label>
                 <InputSelect id="metadata-kind" @bind-Value="_metadataForm.Kind">
-                    @foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@kind</option> }
+                    @foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@FormatMetadataKind(kind)</option> }
                 </InputSelect>
-                <label for="metadata-value">Value</label>
-                <InputTextArea id="metadata-value" @bind-Value="_metadataForm.Value" />
-                <label class="check"><InputCheckbox @bind-Value="_metadataForm.IsSensitive" /> Sensitive</label>
-                <button type="submit">Add or update metadata</button>
+                <label for="metadata-value">@Strings["Value"]</label>
+                @if (_metadataForm.IsSensitive)
+                {
+                    <input id="metadata-value" type="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="@Strings["SensitiveMetadataValue"]" @bind="_metadataForm.Value" />
+                }
+                else
+                {
+                    <InputTextArea id="metadata-value" @bind-Value="_metadataForm.Value" />
+                }
+                <label class="check"><InputCheckbox @bind-Value="_metadataForm.IsSensitive" /> @Strings["Sensitive"]</label>
+                <button type="submit">@Strings["AddOrUpdateMetadata"]</button>
             </EditForm>
             @if (_confirmSensitiveMetadata)
             {
-                <div class="notice" role="status"><p><strong>Sensitive metadata</strong> is concealed by SlopFactory's display, search-state, and future export safeguards, but it is not encrypted.</p><button @onclick="ConfirmSensitiveMetadataAsync">I understand — save sensitive metadata</button><button class="secondary" @onclick="() => _confirmSensitiveMetadata = false">Cancel</button></div>
+                <div class="notice" role="status"><p>@Strings["SensitiveMetadataSaveDisclosure"]</p><button @onclick="ConfirmSensitiveMetadataAsync">@Strings["UnderstandSaveSensitiveMetadata"]</button><button class="secondary" @onclick="() => _confirmSensitiveMetadata = false">@Strings["Cancel"]</button></div>
             }
         </article>
 
         <article class="panel">
-            <h2>Links</h2>
-            @if (_links.Count == 0) { <p class="empty">No file links.</p> }
+            <h2>@Strings["Links"]</h2>
+            @if (_links.Count == 0) { <p class="empty">@Strings["NoFileLinks"]</p> }
             else
             {
                 <ul class="metadata-list">
                     @foreach (var link in _links)
                     {
                         <li>
-                            <div><strong>@link.Label</strong><small>@FileName(link.SourceFileId) → @FileName(link.TargetFileId) · @link.State</small></div>
+                            <div><strong>@link.Label</strong><small>@Strings["LinkSummary", FileName(link.SourceFileId), FileName(link.TargetFileId), FormatRecordState(link.State)]</small></div>
                             @if (link.State == LibraryRecordState.Active)
                             {
-                                <button class="ghost" @onclick="() => BeginLinkRename(link)">Relabel</button>
-                                <button class="ghost" @onclick="() => ReverseLinkAsync(link.Id)">Reverse direction</button>
-                                <button class="danger ghost" @onclick="() => RecycleLinkAsync(link.Id)">Recycle link</button>
+                                <button class="ghost" @onclick="() => BeginLinkRename(link)">@Strings["Relabel"]</button>
+                                <button class="ghost" @onclick="() => ReverseLinkAsync(link.Id)">@Strings["ReverseDirection"]</button>
+                                <button class="danger ghost" @onclick="() => RecycleLinkAsync(link.Id)">@Strings["RecycleLink"]</button>
                             }
                             @if (_renamingLinkId == link.Id)
                             {
                                 <div class="inline-form">
-                                    <label for="link-rename-@link.Id">New label</label>
+                                    <label for="link-rename-@link.Id">@Strings["NewLabel"]</label>
                                     <input id="link-rename-@link.Id" @bind="_renamedLinkLabel" maxlength="200" />
-                                    <button @onclick="() => RelabelLinkAsync(link.Id)">Save label</button>
-                                    <button class="secondary" @onclick="CancelLinkRename">Cancel</button>
+                                    <button @onclick="() => RelabelLinkAsync(link.Id)">@Strings["SaveLabel"]</button>
+                                    <button class="secondary" @onclick="CancelLinkRename">@Strings["Cancel"]</button>
                                 </div>
                             }
                         </li>
@@ -429,19 +459,19 @@ else
             }
             @if (_availableFiles.Count == 0)
             {
-                <p class="empty">Import another file before creating a link.</p>
+                <p class="empty">@Strings["ImportAnotherFileForLink"]</p>
             }
             else
             {
                 <EditForm Model="_linkForm" OnValidSubmit="CreateLinkAsync" class="stack-form">
-                    <label for="link-target">Target file</label>
+                    <label for="link-target">@Strings["TargetFile"]</label>
                     <InputSelect id="link-target" @bind-Value="_linkForm.TargetFileId">
-                        <option value="">Select a file</option>
+                        <option value="">@Strings["SelectAFile"]</option>
                         @foreach (var target in _availableFiles) { <option value="@target.Id">@target.DisplayName</option> }
                     </InputSelect>
-                    <label for="link-label">Label</label>
+                    <label for="link-label">@Strings["Label"]</label>
                     <InputText id="link-label" @bind-Value="_linkForm.Label" maxlength="200" />
-                    <button type="submit">Create directed link</button>
+                    <button type="submit">@Strings["CreateDirectedLink"]</button>
                 </EditForm>
             }
         </article>
@@ -468,6 +498,9 @@ else
     private string? _imageDataUri;
     private string? _imageError;
     private ImageTechnicalProperties? _imageTechnicalProperties;
+    private FileSystemMetadata? _systemMetadata;
+    private CancellationTokenSource? _technicalMetadataCancellation;
+    private bool _technicalMetadataLoading;
     private ManagedMediaSource? _mediaSource;
     private string? _mediaError;
     private bool _mediaPreparing;
@@ -479,7 +512,6 @@ else
     private bool _fitImage = true;
     private string? _animatedImagePosterUri;
     private bool _animatedImagePlaying;
-    private readonly HashSet<string> _revealed = new(StringComparer.Ordinal);
     private MetadataForm _metadataForm = new();
     private bool _confirmSensitiveMetadata;
     private LinkForm _linkForm = new();
@@ -496,6 +528,8 @@ else
     private string? _replacementSourcePath;
     private bool _clearMetadataAfterReplacement;
     private bool _replacingContent;
+    private bool _fileActionBusy;
+    private bool _confirmExternalOpen;
     private string? _renamingMetadataId;
     private string _renameKey = string.Empty;
     private string? _renamingLinkId;
@@ -543,6 +577,12 @@ else
             _contentProvenance = await LibraryState.Workspace.GetFileContentProvenanceAsync(Id);
             _derivationProvenance = await LibraryState.Workspace.GetFileDerivationProvenanceAsync(Id);
             _derivationChain = await LibraryState.Workspace.GetFileDerivationChainAsync(Id);
+            _technicalMetadataCancellation?.Cancel();
+            _technicalMetadataCancellation?.Dispose();
+            _technicalMetadataCancellation = new CancellationTokenSource();
+            _technicalMetadataLoading = true;
+            _systemMetadata = null;
+            _ = LoadTechnicalMetadataAsync(LibraryState.Workspace, _technicalMetadataCancellation.Token);
             await StopMediaAsync();
             _mediaError = null;
             _mediaPreparing = false;
@@ -607,7 +647,7 @@ else
     private async Task VerifyContentAsync()
     {
         _verifyingContent = true;
-        try { await ReloadAsync(); _message = $"Content verification complete: {ContentStateLabel(_file?.ContentState ?? FileContentState.Missing)}."; }
+        try { await ReloadAsync(); _message = Strings["ContentVerificationComplete", ContentStateLabel(_file?.ContentState ?? FileContentState.Missing)]; }
         finally { _verifyingContent = false; }
     }
 
@@ -655,20 +695,49 @@ else
         };
         return expectedExtensions.Length > 0 && !expectedExtensions.Contains(displayExtension, StringComparer.OrdinalIgnoreCase);
     }
-    private static string FormatMetadataLocalTime(string serializedValue) => DateTimeOffset.TryParse(serializedValue, out var value)
+    private string FormatMetadataLocalTime(string serializedValue) => DateTimeOffset.TryParse(serializedValue, out var value)
         ? value.ToLocalTime().ToString("g")
-        : "Unavailable";
-    private static string ContentStateLabel(FileContentState state) => state switch
+        : Strings["Unavailable"];
+
+    private string FormatMetadataKind(MetadataValueKind kind) => kind switch
     {
-        FileContentState.Missing => "Missing",
-        FileContentState.Changed => "Content changed",
-        FileContentState.Replaced => "Content replaced",
-        _ => "Healthy"
+        MetadataValueKind.Text => Strings["MetadataKindText"],
+        MetadataValueKind.Number => Strings["MetadataKindNumber"],
+        MetadataValueKind.Boolean => Strings["MetadataKindBoolean"],
+        MetadataValueKind.Date => Strings["MetadataKindDate"],
+        MetadataValueKind.DateTime => Strings["MetadataKindDateTime"],
+        _ => Strings["MetadataKindJson"]
+    };
+
+    private string FormatOrigin(FileOrigin origin) => origin switch
+    {
+        FileOrigin.Imported => Strings["OriginImported"],
+        FileOrigin.Generated => Strings["OriginGenerated"],
+        FileOrigin.UserCopy => Strings["OriginUserCopy"],
+        FileOrigin.EditedCopy => Strings["OriginEditedCopy"],
+        _ => Strings["OriginRecoveredProviderOutput"]
+    };
+
+    private string FormatRecordState(LibraryRecordState state) => state switch
+    {
+        LibraryRecordState.Active => Strings["RecordStateActive"],
+        LibraryRecordState.Recycled => Strings["RecordStateRecycled"],
+        LibraryRecordState.PendingPermanentDeletion => Strings["RecordStatePendingPermanentDeletion"],
+        LibraryRecordState.Missing => Strings["RecordStateMissing"],
+        LibraryRecordState.ContentChanged => Strings["RecordStateContentChanged"],
+        _ => Strings["RecordStateContentReplaced"]
+    };
+    private string ContentStateLabel(FileContentState state) => state switch
+    {
+        FileContentState.Missing => Strings["ContentStateMissing"],
+        FileContentState.Changed => Strings["ContentStateContentChanged"],
+        FileContentState.Replaced => Strings["ContentStateContentReplaced"],
+        _ => Strings["ContentStateHealthy"]
     };
 
     private async Task ChooseReplacementAsync()
     {
-        var selected = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Choose replacement content" });
+        var selected = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = Strings["ChooseReplacementContentPickerTitle"] });
         if (selected is null) return;
         await ReviewReplacementAsync(selected.FullPath);
     }
@@ -700,7 +769,7 @@ else
             await LibraryState.Workspace.CommitManagedContentReplacementAsync(_replacementReview, _replacementSourcePath, !restoresOriginal, !restoresOriginal && _clearMetadataAfterReplacement);
             CancelReplacementReview();
             await ReloadAsync();
-            _message = restoresOriginal ? "The recorded original content was restored." : "The replacement content was accepted permanently.";
+            _message = restoresOriginal ? Strings["RecordedOriginalRestored"] : Strings["ReplacementContentAccepted"];
         }
         catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
         finally { _replacingContent = false; }
@@ -737,7 +806,7 @@ else
         {
             await LibraryState.Workspace.SetMetadataAsync(Id, _metadataForm.Key, _metadataForm.Kind, _metadataForm.Value, _metadataForm.IsSensitive);
             _metadataForm = new();
-            _message = "Metadata saved.";
+            _message = Strings["MetadataSaved"];
             await ReloadAsync();
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
@@ -769,7 +838,7 @@ else
         {
             await LibraryState.Workspace.RenameMetadataAsync(Id, currentKey, _renameKey);
             CancelRename();
-            _message = "Metadata key renamed.";
+            _message = Strings["MetadataKeyRenamed"];
             await ReloadAsync();
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
@@ -782,7 +851,7 @@ else
         {
             await LibraryState.Workspace.CreateLinkAsync(Id, _linkForm.TargetFileId, _linkForm.Label);
             _linkForm = new();
-            _message = "Link created.";
+            _message = Strings["LinkCreated"];
             await ReloadAsync();
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
@@ -807,7 +876,7 @@ else
         {
             await LibraryState.Workspace.RelabelLinkAsync(linkId, _renamedLinkLabel);
             CancelLinkRename();
-            _message = "Link relabelled.";
+            _message = Strings["LinkRelabelled"];
             await ReloadAsync();
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
@@ -819,7 +888,7 @@ else
         try
         {
             await LibraryState.Workspace.ReverseLinkAsync(linkId);
-            _message = "Link direction reversed.";
+            _message = Strings["LinkDirectionReversed"];
             await ReloadAsync();
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
@@ -831,7 +900,7 @@ else
         try
         {
             await LibraryState.Workspace.RecycleLinkAsync(linkId);
-            _message = "Link moved to the recycle bin.";
+            _message = Strings["LinkRecycled"];
             await ReloadAsync();
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
@@ -845,7 +914,7 @@ else
         _textCopyForm = new TextCopyForm
         {
             Content = _textContent.Content,
-            DisplayName = $"{stem} edited{extension}",
+            DisplayName = Strings["DefaultEditedCopyName", stem, extension],
             DestinationFolderId = _file.FolderId,
             Format = TextCopyFormat.PreserveSourceFormat
         };
@@ -875,8 +944,61 @@ else
         {
             _markdownError = exception.Message;
             _showRenderedMarkdown = false;
-            _message = $"{exception.Message} Plain text is shown instead.";
+            _message = Strings["PlainTextShownInstead", exception.Message];
         }
+    }
+
+    private async Task ExportAsync()
+    {
+        if (_file is null || LibraryState.Workspace is null) return;
+        _fileActionBusy = true;
+        try
+        {
+            var result = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: false);
+            _message = result.Outcome switch { FileExportOutcome.Exported => Strings["ExportCompleted"], FileExportOutcome.Cancelled => Strings["ExportCancelled"], _ => result.Error ?? Strings["ExportFailed"] };
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or SlopFactoryException) { _message = exception.Message; }
+        finally { _fileActionBusy = false; }
+    }
+
+    private async Task LoadTechnicalMetadataAsync(ILibraryWorkspace workspace, CancellationToken cancellationToken)
+    {
+        try { _systemMetadata = await workspace.GetSystemMetadataAsync(Id, cancellationToken); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = Strings["TechnicalMetadataUnavailable", exception.Message]; }
+        finally { _technicalMetadataLoading = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    private void CancelTechnicalMetadata() => _technicalMetadataCancellation?.Cancel();
+
+    private async Task ExportChangedBytesAsync()
+    {
+        if (_file is null || LibraryState.Workspace is null) return;
+        _fileActionBusy = true;
+        try
+        {
+            var result = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: true);
+            _message = result.Outcome switch { FileExportOutcome.Exported => Strings["ChangedBytesExported"], FileExportOutcome.Cancelled => Strings["ChangedBytesExportCancelled"], _ => result.Error ?? Strings["ChangedBytesExportFailed"] };
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or SlopFactoryException) { _message = exception.Message; }
+        finally { _fileActionBusy = false; }
+    }
+
+    private Task ReviewExternalOpenAsync()
+    {
+        if (_file is null) return Task.CompletedTask;
+        if (ContentActionPolicy.GetExternalOpenSafety(_file) == ExternalOpenSafety.Allowed) return OpenExternallyAsync();
+        _confirmExternalOpen = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task OpenExternallyAsync()
+    {
+        if (_file is null || LibraryState.Workspace is null) return;
+        _fileActionBusy = true;
+        try { await PlatformFiles.OpenExternallyAsync(LibraryState.Workspace, _file); _confirmExternalOpen = false; _message = Strings["ExternalOpenComplete"]; }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or SlopFactoryException) { _message = exception.Message; }
+        finally { _fileActionBusy = false; }
     }
 
     private async Task SearchTextAsync()
@@ -921,7 +1043,7 @@ else
         }
         catch (Exception exception) when (exception is UriFormatException or InvalidOperationException or NotSupportedException or ArgumentException)
         {
-            _message = $"The external destination could not be opened: {exception.Message}";
+            _message = Strings["ExternalDestinationCouldNotOpen", exception.Message];
         }
     }
 
@@ -943,17 +1065,17 @@ else
         catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
     }
 
-    private void ToggleReveal(string id) { if (!_revealed.Add(id)) _revealed.Remove(id); }
+    private void ToggleReveal(string id) => SensitiveReveals.Toggle(id);
 
     private async Task CopySensitiveMetadataAsync(string value)
     {
         await Clipboard.Default.SetTextAsync(value);
-        _message = "Sensitive value copied. Your operating system's clipboard history may retain it.";
+        _message = Strings["SensitiveValueCopied"];
     }
 
     private void OnLibraryStateChanged(object? sender, EventArgs args) => _ = InvokeAsync(() =>
     {
-        _revealed.Clear();
+        SensitiveReveals.Clear();
         StateHasChanged();
     });
     private void FitImage() { _fitImage = true; _imageZoom = 100; }
@@ -978,10 +1100,12 @@ else
     public async ValueTask DisposeAsync()
     {
         LibraryState.Changed -= OnLibraryStateChanged;
+        _technicalMetadataCancellation?.Cancel();
+        _technicalMetadataCancellation?.Dispose();
         await StopMediaAsync();
     }
     private void Back() => Navigation.NavigateTo("/");
-    private string FileName(string fileId) => fileId == _file?.Id ? _file.DisplayName : _availableFiles.FirstOrDefault(file => file.Id == fileId)?.DisplayName ?? $"Unavailable file {fileId[..Math.Min(8, fileId.Length)]}";
+    private string FileName(string fileId) => fileId == _file?.Id ? _file.DisplayName : _availableFiles.FirstOrDefault(file => file.Id == fileId)?.DisplayName ?? Strings["UnavailableFileIdentifier", fileId[..Math.Min(8, fileId.Length)]];
 
     private sealed class MetadataForm
     {

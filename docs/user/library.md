@@ -46,6 +46,8 @@ Bulk metadata review lists keys common to every selected file, identifies mixed 
 
 Use **Review mark sensitive** or **Review make ordinary** with a metadata key to change that flag across a selection without re-entering values. The review counts entries and missing keys without displaying concealed values. Making metadata ordinary explicitly warns that its values become visible in file details and are eligible for ordinary metadata export when that feature is available.
 
+**Review type normalization** previews conversion of a common text metadata key to the selected structured type. Compatible entries commit independently, incompatible entries remain unchanged, and every sensitivity flag is preserved.
+
 ## File details and metadata
 
 Open a file to view its immutable system information, including its SHA-256 content hash, media type, origin, import time, and current state.
@@ -70,6 +72,12 @@ PNG, JPEG, WebP, and GIF files up to 32 MiB open in the built-in raster image vi
 
 For a detected format without a built-in viewer, SlopFactory shows **Preview unavailable** and retains its safe system information. It does not try to open the file as text, image, audio, or video based on its filename. Export and external-open controls will appear in this state when those actions are available.
 
+**Export** uses a system-selected destination, writes a temporary sibling, verifies the copied byte count and SHA-256 hash, and only then commits it. Existing destinations are never silently renamed or partly replaced. Bulk export maps safe names in a preflight and requires an explicit collision choice for every existing destination. Cancelling cleans the active temporary copy and reports remaining items separately.
+
+For a regular file marked **Content changed**, **Export changed bytes** is a separate recovery action. It exports the currently present safe bytes without accepting them, updating the record, or attaching normal provenance. Normal export and external opening remain blocked for missing or changed content.
+
+**Open in another app** sends a verified temporary read-only copy rather than the managed library path. Detected executable content is blocked even when its display extension looks harmless. Potentially active documents require a warning before the operating system is invoked.
+
 Files made with **Duplicate** or **Edit as Copy** show a read-only source file ID in System information. This direct provenance does not create an editable file link or cause a chain of indirect source relationships.
 
 When a file has more than one copy ancestor, **Provenance chain** lists the file and each immediate source in order. The chain uses stable internal IDs, so moves and renames do not break it, and it stops safely when a source is unavailable.
@@ -77,6 +85,8 @@ When a file has more than one copy ancestor, **Provenance chain** lists the file
 Copy provenance is active only while both files are active. It returns automatically after both are restored. Permanently deleting a source leaves a non-restorable display-name, media-type, and hash snapshot on the surviving copy; it is not a link and cannot reopen or restore the deleted file.
 
 For supported raster images, file details also show dimensions read from a bounded technical-metadata probe after verifying the managed bytes. JPEG viewing also respects a bounded EXIF orientation value, including mirrored orientations, only in the temporary viewer. It never rewrites the imported file. SVG dimensions remain unavailable rather than being inferred from potentially complex markup. SlopFactory does not extract location, device, author, face, or other descriptive embedded metadata.
+
+Supported audio and video receive a separate bounded technical probe for available duration, container/codecs, channels, sample rate, frame rate, and dimensions. Malformed metadata is shown as unavailable and never causes otherwise storable bytes to be rejected. These read-only system properties are separate from searchable and editable user metadata.
 
 SVG files use the same viewing controls only after SlopFactory parses and sanitizes them. The sanitizer removes scripts, event handlers, foreign elements and namespaces, embedded styles, and non-local references before the image enters the WebView. Sanitization changes only the temporary viewing representation, not the original managed SVG.
 
@@ -160,6 +170,8 @@ Restore actions also open a review before making changes. The review lists each 
 ## Integrity scan
 
 Open **Library settings** and choose **Start full integrity scan** to explicitly inspect the current library. The scan validates the manifest and SQLite database, checks required storage directories, and reads and hashes every active and recycled managed file. It reports missing files, size or content-hash mismatches, unsafe filesystem entries, inaccessible content, and regular files in managed storage which have no database record.
+
+A cancelled scan leaves a content-free checkpoint containing only library/record identities and sanitized findings. The next scan resumes after completed records instead of hashing them again, and a complete scan removes the checkpoint. Watcher overflow, unsafe volume removal, or a storage inconsistency recommends this scan with explicit **Start** and **Defer** choices; it never starts automatically.
 
 The scan is read-only: it never deletes an orphan, adopts changed bytes, creates a record, changes a file's state, or repairs the database. Findings display issue categories, opaque record IDs, and relevant byte counts without displaying filenames, managed paths, content hashes, metadata, or file contents. Progress remains visible while hashing. **Cancel scan** stops at a safe boundary and keeps the findings collected so far, clearly labelled as an incomplete partial result.
 

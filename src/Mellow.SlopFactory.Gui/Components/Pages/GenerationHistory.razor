@@ -1,0 +1,134 @@
+@page "/generation-history"
+@inject AppLibraryState LibraryState
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@Strings["GenerationHistoryPageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div><p class="eyebrow">@Strings["GenerateEyebrow"]</p><h1>@Strings["GenerationHistoryHeading"]</h1><p class="muted">@Strings["GenerationHistoryDescription"]</p></div>
+</header>
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else if (_records.Count == 0)
+{
+    <p class="empty">@Strings["NoGenerationHistory"]</p>
+}
+else
+{
+    <section class="panel">
+        <div class="inline-form">
+            <label for="history-status-filter">@Strings["FilterByStatus"]
+                <select id="history-status-filter" @bind="_statusFilter">
+                    <option value="">@Strings["All"]</option>
+                    <option value="@GenerationStatus.Completed">@Strings["GenerationCompleted"]</option>
+                    <option value="@GenerationStatus.Failed">@Strings["GenerationFailed"]</option>
+                </select>
+            </label>
+            <label for="history-mode-filter">@Strings["FilterByMode"]
+                <select id="history-mode-filter" @bind="_modeFilter">
+                    <option value="">@Strings["All"]</option>
+                    <option value="@GenerationMode.Text">@Strings["ModeText"]</option>
+                    <option value="@GenerationMode.Image">@Strings["ModeImage"]</option>
+                </select>
+            </label>
+            <label for="history-model-filter">@Strings["FilterByModel"]
+                <select id="history-model-filter" @bind="_modelFilter">
+                    <option value="">@Strings["All"]</option>
+                    @foreach (var modelLabel in _knownModelLabels)
+                    {
+                        <option value="@modelLabel">@modelLabel</option>
+                    }
+                </select>
+            </label>
+            <button type="button" class="secondary" @onclick="ClearFilters">@Strings["ClearSearchAndFilters"]</button>
+        </div>
+    </section>
+
+    @if (FilteredRecords.Count == 0)
+    {
+        <p class="empty">@Strings["NoFilteredGenerationHistory"]</p>
+    }
+    else
+    {
+        <ul class="metadata-list">
+            @foreach (var record in FilteredRecords)
+            {
+                <li>
+                    <div>
+                        <strong>@record.ModelLabel</strong>
+                        <small>@Strings["GenerationRecordSummary", StatusLabel(record.Status), record.CreatedAt.ToLocalTime().ToString("g"), record.ResultFileIds.Count]</small>
+                    </div>
+                    <p>@record.Prompt</p>
+                    @if (!string.IsNullOrEmpty(record.SystemInstructions))
+                    {
+                        <details>
+                            <summary>@Strings["ShowSystemInstructions"]</summary>
+                            <p>@record.SystemInstructions</p>
+                        </details>
+                    }
+                    @if (record.ErrorMessage is not null)
+                    {
+                        <p class="error">@record.ErrorMessage</p>
+                    }
+                    @if (record.PromptTokens is not null || record.CompletionTokens is not null)
+                    {
+                        <p class="muted">@Strings["TokenUsage", record.PromptTokens?.ToString() ?? Strings["Unknown"], record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
+                    }
+                    <div class="actions">
+                        <a class="ghost" href="@($"/generate/history/{record.Id}")">@Strings["UseAgain"]</a>
+                        @if (record.SourceFileId is not null)
+                        {
+                            <a class="ghost" href="@($"/file/{record.SourceFileId}")">@Strings["SourceImageUsed"]</a>
+                        }
+                        @foreach (var fileId in record.ResultFileIds)
+                        {
+                            <a class="ghost" href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    private IReadOnlyList<GenerationRecord> _records = [];
+    private string _statusFilter = string.Empty;
+    private string _modeFilter = string.Empty;
+    private string _modelFilter = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _records = await workspace.GetGenerationHistoryAsync();
+    }
+
+    private IReadOnlyList<string> _knownModelLabels => _records.Select(record => record.ModelLabel).Distinct(StringComparer.Ordinal).OrderBy(label => label, StringComparer.Ordinal).ToArray();
+
+    private IReadOnlyList<GenerationRecord> FilteredRecords => _records
+        .Where(record => string.IsNullOrEmpty(_statusFilter) || record.Status.ToString() == _statusFilter)
+        .Where(record => string.IsNullOrEmpty(_modeFilter) || record.Mode.ToString() == _modeFilter)
+        .Where(record => string.IsNullOrEmpty(_modelFilter) || string.Equals(record.ModelLabel, _modelFilter, StringComparison.Ordinal))
+        .ToArray();
+
+    private void ClearFilters()
+    {
+        _statusFilter = string.Empty;
+        _modeFilter = string.Empty;
+        _modelFilter = string.Empty;
+    }
+
+    private string StatusLabel(GenerationStatus status) => status switch
+    {
+        GenerationStatus.Completed => Strings["GenerationCompleted"],
+        GenerationStatus.Failed => Strings["GenerationFailed"],
+        _ => status.ToString()
+    };
+}

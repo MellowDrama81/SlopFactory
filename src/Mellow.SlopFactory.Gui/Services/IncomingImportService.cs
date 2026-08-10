@@ -104,7 +104,7 @@ public sealed class IncomingImportService
         PendingChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public async Task StageAndQueueAsync(Stream source, string displayName, CancellationToken cancellationToken = default)
+    public async Task<IncomingImportItem> StageAndQueueAsync(Stream source, string displayName, string? relativeFolder = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
         var safeName = SafeFileName(displayName);
@@ -118,9 +118,10 @@ public sealed class IncomingImportService
                 await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
                 await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
-            var item = new IncomingImportItem(path, safeName, new FileInfo(path).Length, true);
+            var item = new IncomingImportItem(path, safeName, new FileInfo(path).Length, true, relativeFolder);
             lock (_gate) _pending.Add(item);
             PendingChanged?.Invoke(this, EventArgs.Empty);
+            return item;
         }
         catch
         {

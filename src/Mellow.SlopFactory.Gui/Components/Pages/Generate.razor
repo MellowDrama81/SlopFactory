@@ -1,0 +1,479 @@
+@page "/generate"
+@page "/generate/{SettingsId}"
+@page "/generate/history/{HistoryId}"
+@inject AppLibraryState LibraryState
+@inject ISecureCredentialStore Credentials
+@inject IProviderAdapterResolver AdapterResolver
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+@using Mellow.SlopFactory.Infrastructure.Providers
+
+<PageTitle>@Strings["GeneratePageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div><p class="eyebrow">@Strings["GenerateEyebrow"]</p><h1>@Strings["GenerateHeading"]</h1><p class="muted">@Strings["GenerateDescription"]</p></div>
+    <a class="button" href="/saved-settings">@Strings["SavedSettingsHeading"]</a>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice @(_isError ? "error" : "")" role="@(_isError ? "alert" : "status")">@_message</div>
+}
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else if (_models.Count == 0)
+{
+    <p class="empty">@Strings["AddModelFirst"] <a href="/models/new">@Strings["AddModel"]</a></p>
+}
+else
+{
+    <EditForm Model="_form" OnValidSubmit="GenerateAsync" class="stack-form">
+        <label for="generate-model">@Strings["Model"]</label>
+        <InputSelect id="generate-model" @bind-Value="_form.ModelId" disabled="@_busy">
+            @foreach (var model in _models)
+            {
+                <option value="@model.Id">@model.Label (@ModeLabel(model.Mode))</option>
+            }
+        </InputSelect>
+
+        @if (SelectedConnection is not null && !SelectedConnection.HasCredential)
+        {
+            <div class="notice error" role="alert">@Strings["GenerationBlockedCredentialsRequired"] <a href="@($"/connections/{SelectedConnection.Id}")">@Strings["AddApiKey"]</a></div>
+        }
+        else if (SelectedConnection is not null && SelectedConnection.IsUnverified)
+        {
+            <div class="notice" role="status">@Strings["ConnectionUnverifiedWarning"]</div>
+        }
+
+        @if (SelectedModelMode == GenerationMode.Text)
+        {
+            @if (SelectedModel?.SupportsSystemInstructions == true)
+            {
+                <label for="generate-system-instructions">@Strings["SystemInstructions"]</label>
+                <textarea id="generate-system-instructions" rows="3" maxlength="1048576" @bind="_form.SystemInstructions" disabled="@_busy"></textarea>
+            }
+            else
+            {
+                <p class="muted">@Strings["ModelDoesNotSupportSystemInstructions"]</p>
+            }
+
+            <label for="generate-source-image">@Strings["SourceImage"]</label>
+            <InputSelect id="generate-source-image" @bind-Value="_form.SourceFileId" disabled="@_busy">
+                <option value="">@Strings["NoSourceImage"]</option>
+                @foreach (var file in _activeImageFiles)
+                {
+                    <option value="@file.Id">@file.DisplayName</option>
+                }
+            </InputSelect>
+        }
+
+        <label for="generate-prompt">@Strings["Prompt"]</label>
+        <textarea id="generate-prompt" rows="8" maxlength="1048576" @bind="_form.Prompt" disabled="@_busy"></textarea>
+
+        <label for="generate-count">@Strings["ResultCount"]</label>
+        <InputNumber id="generate-count" @bind-Value="_form.ResultCount" min="1" max="4" disabled="@_busy" />
+
+        <label for="generate-folder">@Strings["DestinationFolder"]</label>
+        <InputSelect id="generate-folder" @bind-Value="_form.DestinationFolderId" disabled="@_busy">
+            @foreach (var folder in _activeFolders)
+            {
+                <option value="@folder.Id">@FolderPath(folder.Id)</option>
+            }
+        </InputSelect>
+
+        <div class="actions">
+            <button type="submit" disabled="@(_busy || (SelectedConnection is not null && !SelectedConnection.HasCredential))">@(_busy ? Strings["Generating"] : Strings["Generate"])</button>
+            @if (_busy)
+            {
+                <button type="button" class="secondary" @onclick="CancelGeneration">@Strings["CancelGeneration"]</button>
+            }
+        </div>
+    </EditForm>
+
+    @if (_models.Any(candidate => candidate.Mode == GenerationMode.Text))
+    {
+        <section class="panel">
+            <h2>@Strings["PromptImprovementHeading"]</h2>
+            <p class="muted">@Strings["PromptImprovementDescription"]</p>
+            <label for="improvement-model">@Strings["ImprovementModel"]</label>
+            <select id="improvement-model" @bind="_improvementModelId" disabled="@(_busy || _improving)">
+                <option value="">@Strings["NoImprovementModel"]</option>
+                @foreach (var textModel in _models.Where(candidate => candidate.Mode == GenerationMode.Text))
+                {
+                    <option value="@textModel.Id">@textModel.Label</option>
+                }
+            </select>
+
+            <label for="improvement-guidance">@Strings["ImprovementGuidance"]</label>
+            <textarea id="improvement-guidance" rows="2" maxlength="1048576" @bind="_improvementGuidance" disabled="@(_busy || _improving)"></textarea>
+
+            <div class="actions">
+                <button type="button" class="secondary" disabled="@(_busy || _improving || string.IsNullOrEmpty(_improvementModelId) || string.IsNullOrWhiteSpace(_form.Prompt))" @onclick="ImprovePromptAsync">@(_improving ? Strings["ImprovingPrompt"] : Strings["ImprovePromptAction"])</button>
+            </div>
+
+            @if (_improvementCandidates is not null)
+            {
+                @if (_improvementCandidates.Count == 0)
+                {
+                    <p class="empty">@Strings["NoImprovementCandidates"]</p>
+                }
+                else
+                {
+                    <ul class="metadata-list">
+                        @foreach (var candidate in _improvementCandidates)
+                        {
+                            <li>
+                                <p>@candidate</p>
+                                <button type="button" class="secondary" @onclick="() => UseImprovedPrompt(candidate)">@Strings["UseThisCandidate"]</button>
+                            </li>
+                        }
+                    </ul>
+                }
+            }
+        </section>
+    }
+
+    <section class="panel">
+        <h2>@Strings["SaveSettingsHeading"]</h2>
+        <p class="muted">@Strings["SaveSettingsDescription"]</p>
+        <div class="inline-form">
+            <label for="settings-title">@Strings["SettingsTitle"]</label>
+            <input id="settings-title" maxlength="100" @bind="_form.Title" disabled="@_busy" />
+            <button type="button" class="secondary" disabled="@(_busy || string.IsNullOrWhiteSpace(_form.Title))" @onclick="SaveSettingsAsync">@Strings["SaveSettingsAction"]</button>
+        </div>
+    </section>
+
+    @if (_lastResult is not null)
+    {
+        <section class="panel">
+            <h2>@(_lastResult.Status == GenerationStatus.Completed ? Strings["GenerationCompleted"] : Strings["GenerationFailed"])</h2>
+            @if (_lastResult.ErrorMessage is not null)
+            {
+                <p class="error">@_lastResult.ErrorMessage</p>
+            }
+            @if (_lastResult.PromptTokens is not null || _lastResult.CompletionTokens is not null)
+            {
+                <p class="muted">@Strings["TokenUsage", _lastResult.PromptTokens?.ToString() ?? Strings["Unknown"], _lastResult.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
+            }
+            @if (_lastResult.SourceFileId is not null)
+            {
+                <p class="muted">@Strings["SourceImageUsed"] <a href="@($"/file/{_lastResult.SourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
+            }
+            @if (_lastResult.ResultFileIds.Count > 0)
+            {
+                <ul class="metadata-list">
+                    @foreach (var fileId in _lastResult.ResultFileIds)
+                    {
+                        <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public string SettingsId { get; set; } = string.Empty;
+    [Parameter] public string HistoryId { get; set; } = string.Empty;
+
+    private GenerateForm _form = new();
+    private IReadOnlyList<Model> _models = [];
+    private IReadOnlyList<Connection> _activeConnections = [];
+    private IReadOnlyList<FolderRecord> _activeFolders = [];
+    private IReadOnlyList<FileRecord> _activeImageFiles = [];
+    private bool _busy;
+    private string? _message;
+    private bool _isError;
+    private GenerationRecord? _lastResult;
+    private string? _loadedSettingsId;
+    private string? _loadedTitle;
+    private CancellationTokenSource? _cancellation;
+    private string _improvementModelId = string.Empty;
+    private string _improvementGuidance = string.Empty;
+    private IReadOnlyList<string>? _improvementCandidates;
+    private bool _improving;
+
+    private const string PromptImprovementTemplate =
+        "You are helping a user write a better prompt for an AI {0} generation request. Rewrite the user's prompt to be clearer and more effective for that purpose. Return only the improved prompt text, with no commentary, labels, quotation marks, or formatting wrappers.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _models = await workspace.GetActiveModelsAsync();
+        _activeConnections = await workspace.GetActiveConnectionsAsync();
+        _activeFolders = await workspace.GetActiveFoldersAsync();
+        var activeFiles = await workspace.GetActiveFilesAsync();
+        _activeImageFiles = activeFiles.Where(file => file.MediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif").ToArray();
+        _form.DestinationFolderId = workspace.Descriptor.GeneratedFolderId;
+
+        if (!string.IsNullOrEmpty(SettingsId))
+        {
+            try
+            {
+                var saved = await workspace.GetSavedSettingAsync(SettingsId);
+                _form.Title = saved.Title;
+                _form.Prompt = saved.Prompt;
+                _form.SystemInstructions = saved.SystemInstructions ?? string.Empty;
+                _form.ResultCount = saved.ResultCount;
+                _form.DestinationFolderId = saved.DestinationFolderId;
+                _form.SourceFileId = saved.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == saved.SourceFileId) ? saved.SourceFileId : string.Empty;
+                _loadedSettingsId = saved.Id;
+                _loadedTitle = saved.Title;
+                var model = saved.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == saved.ModelId) : null;
+                if (model is not null)
+                {
+                    _form.ModelId = model.Id;
+                }
+                else if (_models.Count > 0)
+                {
+                    _form.ModelId = _models[0].Id;
+                    _message = Strings["SavedSettingsModelUnavailable", saved.ModelLabel];
+                }
+            }
+            catch (SlopFactoryException exception)
+            {
+                _message = exception.Message;
+                _isError = true;
+            }
+        }
+        else if (!string.IsNullOrEmpty(HistoryId))
+        {
+            try
+            {
+                var history = await workspace.GetGenerationRecordAsync(HistoryId);
+                _form.Prompt = history.Prompt;
+                _form.SystemInstructions = history.SystemInstructions ?? string.Empty;
+                _form.ResultCount = history.ResultCount;
+                _form.DestinationFolderId = history.DestinationFolderId;
+                _form.SourceFileId = history.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == history.SourceFileId) ? history.SourceFileId : string.Empty;
+                var model = history.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == history.ModelId) : null;
+                if (model is not null)
+                {
+                    _form.ModelId = model.Id;
+                }
+                else if (_models.Count > 0)
+                {
+                    _form.ModelId = _models[0].Id;
+                    _message = Strings["SavedSettingsModelUnavailable", history.ModelLabel];
+                }
+            }
+            catch (SlopFactoryException exception)
+            {
+                _message = exception.Message;
+                _isError = true;
+            }
+        }
+
+        if (string.IsNullOrEmpty(_form.ModelId) && _models.Count > 0) _form.ModelId = _models[0].Id;
+    }
+
+    private Model? SelectedModel => _models.FirstOrDefault(candidate => candidate.Id == _form.ModelId);
+    private GenerationMode? SelectedModelMode => SelectedModel?.Mode;
+
+    private Connection? SelectedConnection => SelectedModel is { } selectedModel
+        ? _activeConnections.FirstOrDefault(candidate => candidate.Id == selectedModel.ConnectionId)
+        : null;
+
+    private string ModeLabel(GenerationMode mode) => mode switch
+    {
+        GenerationMode.Text => Strings["ModeText"],
+        GenerationMode.Image => Strings["ModeImage"],
+        _ => mode.ToString()
+    };
+
+    private string FolderPath(string folderId)
+    {
+        var names = new Stack<string>();
+        var current = _activeFolders.FirstOrDefault(folder => folder.Id == folderId);
+        while (current is not null)
+        {
+            names.Push(current.Name);
+            current = current.ParentId is { } parentId ? _activeFolders.FirstOrDefault(folder => folder.Id == parentId) : null;
+        }
+        return names.Count == 0 ? Strings["UnknownFolder"] : string.Join(" / ", names);
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || string.IsNullOrWhiteSpace(_form.Title)) return;
+        _busy = true;
+        try
+        {
+            var systemInstructions = SelectedModel?.SupportsSystemInstructions == true && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
+            var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
+            var saved = _loadedSettingsId is not null && string.Equals(_loadedTitle, _form.Title, StringComparison.Ordinal)
+                ? await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _form.Title, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId)
+                : await workspace.CreateSavedSettingAsync(_form.Title, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            _loadedSettingsId = saved.Id;
+            _loadedTitle = saved.Title;
+            _message = Strings["SavedSettingsSaved"];
+            _isError = false;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task GenerateAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        var model = _models.FirstOrDefault(candidate => candidate.Id == _form.ModelId);
+        if (model is null) return;
+        var connection = _activeConnections.FirstOrDefault(candidate => candidate.Id == model.ConnectionId);
+        if (connection is null)
+        {
+            _message = Strings["ConnectionUnavailableForModel"];
+            _isError = true;
+            return;
+        }
+        if (!connection.HasCredential)
+        {
+            _message = Strings["GenerationBlockedCredentialsRequired"];
+            _isError = true;
+            return;
+        }
+
+        _busy = true;
+        _lastResult = null;
+        using var cancellation = new CancellationTokenSource();
+        _cancellation = cancellation;
+        try
+        {
+            var adapter = AdapterResolver.Resolve(connection.ProviderType);
+            var apiKey = connection.HasCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, connection.Id) : null;
+
+            if (model.Mode == GenerationMode.Image)
+            {
+                IReadOnlyList<byte[]>? images = null;
+                string? errorMessage = null;
+                try
+                {
+                    images = await adapter.GenerateImageAsync(connection, model, apiKey, _form.Prompt, _form.ResultCount, cancellationToken: cancellation.Token);
+                }
+                catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+                {
+                    errorMessage = exception.Message;
+                }
+
+                _lastResult = await workspace.RecordImageGenerationResultAsync(model.Id, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, images, errorMessage, cancellation.Token);
+            }
+            else
+            {
+                var systemInstructions = model.SupportsSystemInstructions && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
+                var sourceFileId = string.IsNullOrEmpty(_form.SourceFileId) ? null : _form.SourceFileId;
+                TextGenerationSourceImage? sourceImage = null;
+                if (sourceFileId is not null)
+                {
+                    var sourceContent = await workspace.ReadImageFileAsync(sourceFileId, cancellation.Token);
+                    sourceImage = new TextGenerationSourceImage(sourceContent.MediaType, sourceContent.Bytes);
+                }
+
+                TextGenerationResult? result = null;
+                string? errorMessage = null;
+                try
+                {
+                    result = await adapter.GenerateTextAsync(connection, model, apiKey, _form.Prompt, _form.ResultCount, systemInstructions, sourceImage, cancellation.Token);
+                }
+                catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+                {
+                    errorMessage = exception.Message;
+                }
+
+                _lastResult = await workspace.RecordTextGenerationResultAsync(model.Id, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, result?.Texts, errorMessage, systemInstructions, result?.PromptTokens, result?.CompletionTokens, sourceFileId, cancellation.Token);
+            }
+
+            _isError = _lastResult.Status == GenerationStatus.Failed;
+            _message = _isError ? Strings["GenerationFailed"] : Strings["GenerationCompleted"];
+        }
+        catch (OperationCanceledException)
+        {
+            _message = Strings["GenerationCancelledByUser"];
+            _isError = false;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally
+        {
+            _busy = false;
+            _cancellation = null;
+        }
+    }
+
+    private void CancelGeneration() => _cancellation?.Cancel();
+
+    private async Task ImprovePromptAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || string.IsNullOrEmpty(_improvementModelId) || string.IsNullOrWhiteSpace(_form.Prompt)) return;
+        var improvementModel = _models.FirstOrDefault(candidate => candidate.Id == _improvementModelId);
+        if (improvementModel is null) return;
+        var connection = _activeConnections.FirstOrDefault(candidate => candidate.Id == improvementModel.ConnectionId);
+        if (connection is null)
+        {
+            _message = Strings["ConnectionUnavailableForModel"];
+            _isError = true;
+            return;
+        }
+        if (!connection.HasCredential)
+        {
+            _message = Strings["GenerationBlockedCredentialsRequired"];
+            _isError = true;
+            return;
+        }
+
+        _improving = true;
+        _improvementCandidates = null;
+        try
+        {
+            var adapter = AdapterResolver.Resolve(connection.ProviderType);
+            var apiKey = connection.HasCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, connection.Id) : null;
+            var outputModeLabel = SelectedModelMode == GenerationMode.Image ? "image" : "text";
+            var template = string.Format(PromptImprovementTemplate, outputModeLabel);
+            if (!string.IsNullOrWhiteSpace(_improvementGuidance))
+            {
+                template = $"{template} Additional guidance from the user: {_improvementGuidance}";
+            }
+
+            var result = await adapter.GenerateTextAsync(connection, improvementModel, apiKey, _form.Prompt, 1, template);
+            _improvementCandidates = result.Texts;
+            _message = null;
+        }
+        catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _improving = false; }
+    }
+
+    private void UseImprovedPrompt(string candidate)
+    {
+        _form.Prompt = candidate;
+        _improvementCandidates = null;
+    }
+
+    private sealed class GenerateForm
+    {
+        public string Title { get; set; } = string.Empty;
+        public string ModelId { get; set; } = string.Empty;
+        public string Prompt { get; set; } = string.Empty;
+        public string SystemInstructions { get; set; } = string.Empty;
+        public string SourceFileId { get; set; } = string.Empty;
+        public int ResultCount { get; set; } = 1;
+        public string DestinationFolderId { get; set; } = string.Empty;
+    }
+}

@@ -1,3 +1,6 @@
+using System.IO.Compression;
+using System.Text;
+
 namespace Mellow.SlopFactory.Infrastructure.Storage;
 
 internal static class MediaTypeDetector
@@ -8,6 +11,11 @@ internal static class MediaTypeDetector
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, buffer.Length, FileOptions.Asynchronous | FileOptions.SequentialScan);
         var read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
         var bytes = buffer.AsSpan(0, read);
+
+        if (bytes.StartsWith("MZ"u8)) return ("application/x-msdownload", ".bin");
+        if (read >= 4 && bytes[..4].SequenceEqual(new byte[] { 0x7F, (byte)'E', (byte)'L', (byte)'F' })) return ("application/x-executable", ".bin");
+        if (bytes.StartsWith("#!"u8)) return ("text/x-script", ".txt");
+        if (read >= 8 && bytes[..8].SequenceEqual(new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 })) return ("application/x-ole-storage", ".bin");
 
         if (read >= 8 && bytes[..8].SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A })) return ("image/png", ".png");
         if (read >= 3 && bytes[..3].SequenceEqual(new byte[] { 0xFF, 0xD8, 0xFF })) return ("image/jpeg", ".jpg");
@@ -27,6 +35,17 @@ internal static class MediaTypeDetector
             }
             return ("video/mp4", ".mp4");
         }
+
+        if (read >= 4 && bytes[..4].SequenceEqual(new byte[] { 0x50, 0x4B, 0x03, 0x04 }))
+        {
+            var officeType = TryDetectOfficePackage(path);
+            if (officeType is not null) return officeType.Value;
+            return ("application/zip", ".zip");
+        }
+
+        var decoded = Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+        if (decoded.StartsWith("<!doctype html", StringComparison.OrdinalIgnoreCase) || decoded.StartsWith("<html", StringComparison.OrdinalIgnoreCase)) return ("text/html", ".html");
+        if (decoded.StartsWith("<svg", StringComparison.OrdinalIgnoreCase) || decoded.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase) && decoded.Contains("<svg", StringComparison.OrdinalIgnoreCase)) return ("image/svg+xml", ".svg");
 
         var extension = Path.GetExtension(path).ToLowerInvariant();
         return extension switch
@@ -55,6 +74,22 @@ internal static class MediaTypeDetector
             ".opus" or ".ogg" => ("audio/ogg", ".opus"),
             _ => ("application/octet-stream", ".bin")
         };
+    }
+
+    private static (string MediaType, string Extension)? TryDetectOfficePackage(string path)
+    {
+        try
+        {
+            using var archive = ZipFile.OpenRead(path);
+            if (archive.Entries.Count > 4_096) return null;
+            var names = archive.Entries.Select(entry => entry.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!names.Contains("[Content_Types].xml")) return null;
+            if (names.Any(name => name.StartsWith("word/", StringComparison.OrdinalIgnoreCase))) return ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx");
+            if (names.Any(name => name.StartsWith("xl/", StringComparison.OrdinalIgnoreCase))) return ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx");
+            if (names.Any(name => name.StartsWith("ppt/", StringComparison.OrdinalIgnoreCase))) return ("application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) { }
+        return null;
     }
 
     private static bool IsMpegAudioFrame(ReadOnlySpan<byte> bytes) =>

@@ -1,0 +1,175 @@
+@page "/saved-settings"
+@inject AppLibraryState LibraryState
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@Strings["SavedSettingsPageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div><p class="eyebrow">@Strings["GenerateEyebrow"]</p><h1>@Strings["SavedSettingsHeading"]</h1><p class="muted">@Strings["SavedSettingsDescription"]</p></div>
+    <a class="button" href="/generate">@Strings["NewGeneration"]</a>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice" role="status">@_message</div>
+}
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else
+{
+    <section class="panel">
+        @if (_activeSettings.Count == 0)
+        {
+            <p class="empty">@Strings["NoSavedSettings"]</p>
+        }
+        else
+        {
+            <ul class="metadata-list">
+                @foreach (var setting in _activeSettings)
+                {
+                    <li>
+                        <div>
+                            <strong>@setting.Title</strong>
+                            <small>@Strings["SavedSettingSummary", setting.ModelLabel, ModeLabel(setting.Mode)]</small>
+                        </div>
+                        <p>@setting.Prompt</p>
+                        <a class="ghost" href="@($"/generate/{setting.Id}")">@Strings["UseSettings"]</a>
+                        @if (_recycleCandidate == setting.Id)
+                        {
+                            <span role="group" aria-label="@Strings["ConfirmRecycleSavedSettings"]">
+                                <span>@Strings["RecycleSavedSettingsWarning"]</span>
+                                <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(setting.Id)">@Strings["Recycle"]</button>
+                                <button class="secondary" disabled="@_busy" @onclick="() => _recycleCandidate = null">@Strings["Cancel"]</button>
+                            </span>
+                        }
+                        else
+                        {
+                            <button class="ghost danger" disabled="@_busy" @onclick="() => _recycleCandidate = setting.Id">@Strings["Recycle"]</button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="panel">
+        <button class="secondary" @onclick="() => _showRecycled = !_showRecycled">@(_showRecycled ? Strings["HideRecycledSavedSettings"] : Strings["ShowRecycledSavedSettings"])</button>
+        @if (_showRecycled)
+        {
+            @if (_recycledSettings.Count == 0)
+            {
+                <p class="empty">@Strings["NoRecycledSavedSettings"]</p>
+            }
+            else
+            {
+                <ul class="metadata-list">
+                    @foreach (var setting in _recycledSettings)
+                    {
+                        <li>
+                            <div><strong>@setting.Title</strong><small>@ModeLabel(setting.Mode)</small></div>
+                            <button class="ghost" disabled="@_busy" @onclick="() => RestoreAsync(setting.Id)">@Strings["Restore"]</button>
+                            @if (_deleteCandidate == setting.Id)
+                            {
+                                <span role="group" aria-label="@Strings["ConfirmPermanentlyDeleteSavedSettings"]">
+                                    <span>@Strings["PermanentlyDeleteSavedSettingsWarning"]</span>
+                                    <button class="danger" disabled="@_busy" @onclick="() => PermanentlyDeleteAsync(setting.Id)">@Strings["DeletePermanently"]</button>
+                                    <button class="secondary" disabled="@_busy" @onclick="() => _deleteCandidate = null">@Strings["Cancel"]</button>
+                                </span>
+                            }
+                            else
+                            {
+                                <button class="ghost danger" disabled="@_busy" @onclick="() => _deleteCandidate = setting.Id">@Strings["DeletePermanently"]</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        }
+    </section>
+}
+
+@code {
+    private IReadOnlyList<SavedGenerationSetting> _activeSettings = [];
+    private IReadOnlyList<SavedGenerationSetting> _recycledSettings = [];
+    private bool _busy;
+    private bool _showRecycled;
+    private string? _message;
+    private string? _recycleCandidate;
+    private string? _deleteCandidate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _activeSettings = await workspace.GetActiveSavedSettingsAsync();
+        _recycledSettings = await workspace.GetRecycledSavedSettingsAsync();
+    }
+
+    private string ModeLabel(GenerationMode mode) => mode switch
+    {
+        GenerationMode.Text => Strings["ModeText"],
+        GenerationMode.Image => Strings["ModeImage"],
+        _ => mode.ToString()
+    };
+
+    private async Task RecycleAsync(string settingId)
+    {
+        _busy = true;
+        try
+        {
+            await LibraryState.Workspace!.RecycleSavedSettingAsync(settingId);
+            _recycleCandidate = null;
+            _message = Strings["SavedSettingsRecycled"];
+            await ReloadAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RestoreAsync(string settingId)
+    {
+        _busy = true;
+        try
+        {
+            await LibraryState.Workspace!.RestoreSavedSettingAsync(settingId);
+            _message = Strings["SavedSettingsRestored"];
+            await ReloadAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task PermanentlyDeleteAsync(string settingId)
+    {
+        _busy = true;
+        try
+        {
+            await LibraryState.Workspace!.PermanentlyDeleteSavedSettingAsync(settingId);
+            _deleteCandidate = null;
+            _message = Strings["SavedSettingsPermanentlyDeleted"];
+            await ReloadAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+}

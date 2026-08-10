@@ -23,12 +23,14 @@ Library settings keeps a device-local **Recent libraries** list showing each lib
 
 1. Open **Library**.
 2. Open the folder that should receive the files.
-3. Select **Import files**.
-4. Choose one or more files in the operating-system picker.
+3. Select **Import files** or **Import folder**.
+4. Choose files or a folder in the operating-system document picker. Hidden files are excluded unless **Include hidden files in import review** was enabled; protected, system, redirected, and non-regular entries are always excluded.
 
 SlopFactory then opens **Review import** without copying anything into the library. Choose any available recent library as the target, choose an active destination folder within it, and remove unwanted selections. **Import all byte-identical files** applies a default choice to the current review, while each item also has its own **Import this item if it is a duplicate** control. Changing the target opens that library normally without moving data. **Import files** begins only after this review.
 
 SlopFactory copies every successful import into managed storage and calculates a SHA-256 content hash. It never treats the selected external file as its managed copy.
+
+Folder import first builds a cancellable inventory without creating library folders, records, or managed files. Review shows eligible files, known bytes, virtual folders, duplicate groups, name conflicts, and skipped-reason counts. Confirmation freezes that candidate list; newly appearing entries are excluded, and every selected source is revalidated immediately before copying. Successful nested items recreate their hierarchy as virtual folders.
 
 When the same bytes already exist in the library, the default import skips the duplicate and reports it in the completion summary. An active match can be opened directly. A recycled match offers **Restore existing**, which uses the normal restore checks for names, managed content, and link dependencies; a record pending permanent deletion is identified as unavailable for restore. A failed file does not undo files that already imported successfully.
 

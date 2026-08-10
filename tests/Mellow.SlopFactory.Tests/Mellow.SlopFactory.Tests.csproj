@@ -17,5 +17,12 @@
     <ProjectReference Include="..\..\src\Mellow.SlopFactory.Core\Mellow.SlopFactory.Core.csproj" />
     <ProjectReference Include="..\..\src\Mellow.SlopFactory.Infrastructure\Mellow.SlopFactory.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\LibraryAvailabilityProbe.cs" Link="Services\LibraryAvailabilityProbe.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\LibraryVolumeIdentity.cs" Link="Services\LibraryVolumeIdentity.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IAppPreferenceStore.cs" Link="Services\IAppPreferenceStore.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\AppLibraryState.cs" Link="Services\AppLibraryState.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IntegrityScanRecommendationService.cs" Link="Services\IntegrityScanRecommendationService.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\SensitiveRevealSessionService.cs" Link="Services\SensitiveRevealSessionService.cs" />
+  </ItemGroup>
 </Project>
-

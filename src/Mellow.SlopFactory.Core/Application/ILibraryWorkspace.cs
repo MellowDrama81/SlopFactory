@@ -22,6 +22,8 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<RenderedMarkdownContent> RenderMarkdownFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<ImageFileContent> ReadImageFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<ImageTechnicalProperties> GetImageTechnicalPropertiesAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<MediaTechnicalProperties> GetMediaTechnicalPropertiesAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<FileSystemMetadata> GetSystemMetadataAsync(string fileId, CancellationToken cancellationToken = default);
     Task<MediaPlaybackDescriptor> PrepareMediaPlaybackAsync(string fileId, CancellationToken cancellationToken = default);
     Task<Stream> OpenMediaRangeAsync(string fileId, string expectedContentHash, long offset, long length, CancellationToken cancellationToken = default);
     Task<LibraryFileBrowseResult> BrowseFilesAsync(LibraryFileBrowseQuery query, CancellationToken cancellationToken = default);
@@ -43,12 +45,21 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<FileRecord> CreateEditedTextCopyAsync(string fileId, string destinationFolderId, string displayName, string content, TextCopyFormat format, bool copyUserMetadata, bool includeSensitiveMetadata, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ImportResult>> ImportAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates = false, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ImportResult>> ImportWithProgressAsync(IEnumerable<string> sourcePaths, string destinationFolderId, bool importDuplicates, IProgress<ImportProgress>? progress, CancellationToken cancellationToken = default);
+    Task<RecursiveImportInventory> BuildRecursiveImportInventoryAsync(IEnumerable<string> sourcePaths, bool includeHiddenFiles = false, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ImportResult>> ImportConfirmedInventoryAsync(RecursiveImportInventory inventory, IReadOnlyList<ConfirmedImportCandidate> candidates, string destinationFolderId, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default);
+    Task<FileExportResult> ExportFileAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
+    Task<FileExportResult> ExportChangedBytesAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
+    Task<BulkExportPreflight> BuildBulkExportPreflightAsync(IReadOnlyCollection<string> fileIds, string destinationDirectory, CancellationToken cancellationToken = default);
+    Task<BulkExportResult> ExportFilesAsync(BulkExportPreflight preflight, IReadOnlyDictionary<string, ExportCollisionChoice> collisionChoices, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default);
+    Task<ExternalOpenCopy> CreateExternalOpenCopyAsync(string fileId, string temporaryDirectory, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default);
     Task<MetadataEntry> SetMetadataAsync(string fileId, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default);
     Task<BulkFileOperationResult> SetMetadataForFilesAsync(IReadOnlyCollection<string> fileIds, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default);
     Task<BulkFileOperationResult> SetMetadataSensitivityForFilesAsync(IReadOnlyCollection<string> fileIds, string key, bool isSensitive, CancellationToken cancellationToken = default);
     Task<MetadataEntry> RenameMetadataAsync(string fileId, string currentKey, string newKey, CancellationToken cancellationToken = default);
     Task RemoveMetadataAsync(string fileId, string key, CancellationToken cancellationToken = default);
+    Task<MetadataNormalizationPreview> PreviewMetadataNormalizationAsync(IReadOnlyCollection<string> fileIds, string key, MetadataValueKind targetKind, CancellationToken cancellationToken = default);
+    Task<BulkFileOperationResult> CommitMetadataNormalizationAsync(MetadataNormalizationPreview preview, CancellationToken cancellationToken = default);
     Task<BulkFileOperationResult> RemoveMetadataFromFilesAsync(IReadOnlyCollection<string> fileIds, string key, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileLink>> GetLinksAsync(string fileId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileLink>> GetRecycledLinksAsync(CancellationToken cancellationToken = default);
@@ -74,6 +85,44 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task AdoptAsIndependentLibraryAsync(CancellationToken cancellationToken = default);
     Task RenameLibraryAsync(string displayName, CancellationToken cancellationToken = default);
     string GetManagedFilePath(FileRecord file);
+
+    Task<IReadOnlyList<Connection>> GetActiveConnectionsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Connection>> GetRecycledConnectionsAsync(CancellationToken cancellationToken = default);
+    Task<Connection> GetConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task<Connection> CreateConnectionAsync(string label, ProviderType providerType, string baseUrl, string credentialHeaderName, string authPrefix, int? timeoutSeconds = null, IReadOnlyList<ConnectionHeader>? additionalHeaders = null, GenericConnectionModalitySettings? genericModalitySettings = null, CancellationToken cancellationToken = default);
+    Task<Connection> UpdateConnectionAsync(string connectionId, string label, string baseUrl, string credentialHeaderName, string authPrefix, int? timeoutSeconds = null, IReadOnlyList<ConnectionHeader>? additionalHeaders = null, GenericConnectionModalitySettings? genericModalitySettings = null, CancellationToken cancellationToken = default);
+    Task<Connection> SetConnectionCredentialStateAsync(string connectionId, bool hasCredential, CancellationToken cancellationToken = default);
+    Task<Connection> SetConnectionTestResultAsync(string connectionId, bool success, string message, CancellationToken cancellationToken = default);
+    Task<Connection> ChangeConnectionProviderTypeAsync(string connectionId, ProviderType providerType, CancellationToken cancellationToken = default);
+    Task<ModelCatalogue> GetModelCatalogueAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task<ModelCatalogue> RefreshModelCatalogueAsync(string connectionId, IReadOnlyList<ProviderModelInfo> discoveredModels, CancellationToken cancellationToken = default);
+    Task<ModelCatalogue> MarkModelCatalogueRefreshFailedAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task RecycleConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task RestoreConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task PermanentlyDeleteConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Model>> GetActiveModelsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Model>> GetRecycledModelsAsync(CancellationToken cancellationToken = default);
+    Task<Model> GetModelAsync(string modelId, CancellationToken cancellationToken = default);
+    Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, CancellationToken cancellationToken = default);
+    Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, CancellationToken cancellationToken = default);
+    Task RecycleModelAsync(string modelId, CancellationToken cancellationToken = default);
+    Task RestoreModelAsync(string modelId, CancellationToken cancellationToken = default);
+    Task PermanentlyDeleteModelAsync(string modelId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken = default);
+    Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
+    Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, CancellationToken cancellationToken = default);
+    Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SavedGenerationSetting>> GetActiveSavedSettingsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SavedGenerationSetting>> GetRecycledSavedSettingsAsync(CancellationToken cancellationToken = default);
+    Task<SavedGenerationSetting> GetSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
+    Task<SavedGenerationSetting> CreateSavedSettingAsync(string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default);
+    Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default);
+    Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
+    Task RestoreSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
+    Task PermanentlyDeleteSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
 }
 
 public interface ILibraryWorkspaceFactory

@@ -1,0 +1,225 @@
+@page "/models/new"
+@page "/models/{Id}"
+@inject AppLibraryState LibraryState
+@inject ISecureCredentialStore Credentials
+@inject IProviderAdapterResolver AdapterResolver
+@inject NavigationManager Navigation
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@(IsNew ? Strings["AddModel"] : Strings["EditModel"])</PageTitle>
+
+<header class="page-header">
+    <h1>@(IsNew ? Strings["AddModel"] : Strings["EditModel"])</h1>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice @(_isError ? "error" : "")" role="@(_isError ? "alert" : "status")">@_message</div>
+}
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else if (_activeConnections.Count == 0)
+{
+    <p class="empty">@Strings["AddConnectionFirst"] <a href="/connections/new">@Strings["AddConnection"]</a></p>
+}
+else
+{
+    <EditForm Model="_form" OnValidSubmit="SaveAsync" class="stack-form">
+        <label for="model-label">@Strings["Label"]</label>
+        <InputText id="model-label" @bind-Value="_form.Label" maxlength="100" />
+
+        <label for="model-connection">@Strings["Connection"]</label>
+        <InputSelect id="model-connection" @bind-Value="_form.ConnectionId" disabled="@(!IsNew)">
+            @foreach (var connection in _activeConnections)
+            {
+                <option value="@connection.Id">@connection.Label</option>
+            }
+        </InputSelect>
+
+        <label for="model-mode">@Strings["GenerationMode"]</label>
+        <InputSelect id="model-mode" @bind-Value="_form.Mode">
+            <option value="@GenerationMode.Text">@Strings["ModeText"]</option>
+            <option value="@GenerationMode.Image">@Strings["ModeImage"]</option>
+        </InputSelect>
+
+        <label for="model-provider-id">@Strings["ProviderModelId"]</label>
+        <InputText id="model-provider-id" @bind-Value="_form.ProviderModelId" maxlength="100" />
+        @if (_catalogue is not null)
+        {
+            <p class="muted">
+                @(_catalogue.RetrievedAt is { } retrievedAt ? Strings["ModelCatalogueLastRefreshed", retrievedAt.ToLocalTime().ToString("g")] : Strings["ModelCatalogueNeverRefreshed"])
+                @if (_catalogue.PossiblyStale)
+                {
+                    <span class="notice error">@Strings["ModelCataloguePossiblyStale"]</span>
+                }
+                else if (_catalogue.RetrievedAt is { } lastRefreshed && DateTimeOffset.UtcNow - lastRefreshed > LibraryRules.ModelCatalogueStalenessPeriod)
+                {
+                    <span class="notice">@Strings["ModelCatalogueStale"]</span>
+                }
+            </p>
+        }
+        <button type="button" class="secondary" disabled="@_busy" @onclick="LoadModelsAsync">@(_loadingModels ? Strings["LoadingModels"] : Strings["LoadModels"])</button>
+        @if (_discoveredModels is not null)
+        {
+            @if (_discoveredModels.Count == 0)
+            {
+                <p class="muted">@Strings["NoModelsDiscovered"]</p>
+            }
+            else
+            {
+                <select aria-label="@Strings["DiscoveredModels"]" @onchange="ChooseDiscoveredModel">
+                    <option value="">@Strings["SelectDiscoveredModel"]</option>
+                    @foreach (var discovered in _discoveredModels)
+                    {
+                        <option value="@discovered.ProviderModelId">@(discovered.DisplayLabel ?? discovered.ProviderModelId)</option>
+                    }
+                </select>
+            }
+        }
+
+        <label class="check"><InputCheckbox @bind-Value="_form.SupportsSystemInstructions" /> @Strings["SupportsSystemInstructions"]</label>
+
+        <div class="actions">
+            <button type="submit" disabled="@_busy">@Strings["Save"]</button>
+            <a class="ghost" href="/models">@Strings["Cancel"]</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    private bool IsNew => string.IsNullOrEmpty(Id);
+
+    private ModelForm _form = new();
+    private IReadOnlyList<Connection> _activeConnections = [];
+    private IReadOnlyList<ProviderModelInfo>? _discoveredModels;
+    private ModelCatalogue? _catalogue;
+    private bool _busy;
+    private bool _loadingModels;
+    private string? _message;
+    private bool _isError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _activeConnections = await workspace.GetActiveConnectionsAsync();
+        if (!IsNew)
+        {
+            try
+            {
+                var existing = await workspace.GetModelAsync(Id);
+                _form.Label = existing.Label;
+                _form.ConnectionId = existing.ConnectionId;
+                _form.Mode = existing.Mode;
+                _form.ProviderModelId = existing.ProviderModelId;
+                _form.SupportsSystemInstructions = existing.SupportsSystemInstructions;
+            }
+            catch (SlopFactoryException exception)
+            {
+                _message = exception.Message;
+                _isError = true;
+            }
+        }
+        else if (_activeConnections.Count > 0)
+        {
+            _form.ConnectionId = _activeConnections[0].Id;
+        }
+
+        if (!string.IsNullOrEmpty(_form.ConnectionId))
+        {
+            try
+            {
+                _catalogue = await workspace.GetModelCatalogueAsync(_form.ConnectionId);
+            }
+            catch (SlopFactoryException)
+            {
+                _catalogue = null;
+            }
+        }
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        var connection = _activeConnections.FirstOrDefault(candidate => candidate.Id == _form.ConnectionId);
+        if (connection is null) return;
+        _busy = true;
+        _loadingModels = true;
+        try
+        {
+            var adapter = AdapterResolver.Resolve(connection.ProviderType);
+            var apiKey = connection.HasCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, connection.Id) : null;
+            _discoveredModels = await adapter.ListModelsAsync(connection, apiKey);
+            _catalogue = await workspace.RefreshModelCatalogueAsync(connection.Id, _discoveredModels);
+            if (_discoveredModels.Count == 0) _message = Strings["NoModelsDiscovered"];
+        }
+        catch (Exception exception) when (exception is HttpRequestException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+            _discoveredModels = null;
+            try
+            {
+                _catalogue = await workspace.MarkModelCatalogueRefreshFailedAsync(connection.Id);
+            }
+            catch (SlopFactoryException)
+            {
+                // Connection may have been recycled between the failed refresh and this cleanup step; nothing further to record.
+            }
+        }
+        finally
+        {
+            _busy = false;
+            _loadingModels = false;
+        }
+    }
+
+    private void ChooseDiscoveredModel(ChangeEventArgs args)
+    {
+        var selected = args.Value?.ToString();
+        if (!string.IsNullOrEmpty(selected)) _form.ProviderModelId = selected;
+    }
+
+    private async Task SaveAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _busy = true;
+        try
+        {
+            if (IsNew)
+            {
+                await workspace.CreateModelAsync(_form.Label, _form.ConnectionId, _form.ProviderModelId, _form.Mode, _form.SupportsSystemInstructions);
+            }
+            else
+            {
+                await workspace.UpdateModelAsync(Id, _form.Label, _form.ProviderModelId, _form.Mode, _form.SupportsSystemInstructions);
+            }
+
+            Navigation.NavigateTo("/models");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private sealed class ModelForm
+    {
+        public string Label { get; set; } = string.Empty;
+        public string ConnectionId { get; set; } = string.Empty;
+        public GenerationMode Mode { get; set; } = GenerationMode.Text;
+        public string ProviderModelId { get; set; } = string.Empty;
+        public bool SupportsSystemInstructions { get; set; }
+    }
+}

@@ -1,0 +1,727 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="ApplicationName" xml:space="preserve"><value>SlopFactory</value></data>
+  <data name="NavLibrary" xml:space="preserve"><value>Library</value></data>
+  <data name="NavRecycleBin" xml:space="preserve"><value>Recycle bin</value></data>
+  <data name="NavLibrarySettings" xml:space="preserve"><value>Library settings</value></data>
+  <data name="NavAbout" xml:space="preserve"><value>About</value></data>
+  <data name="PrimaryNavigation" xml:space="preserve"><value>Primary navigation</value></data>
+  <data name="IntegrityScanRecommended" xml:space="preserve"><value>A full integrity scan is recommended.</value></data>
+  <data name="IntegrityScanNotAutomatic" xml:space="preserve"><value>SlopFactory will not start it automatically.</value></data>
+  <data name="StartFromLibrarySettings" xml:space="preserve"><value>Start from Library settings</value></data>
+  <data name="Defer" xml:space="preserve"><value>Defer</value></data>
+  <data name="LocalStorage" xml:space="preserve"><value>Local storage</value></data>
+  <data name="LibrarySettingsHeading" xml:space="preserve"><value>Library settings</value></data>
+  <data name="LibrarySettingsDescription" xml:space="preserve"><value>Open or create an independent local library.</value></data>
+  <data name="Appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="Theme" xml:space="preserve"><value>Theme</value></data>
+  <data name="FollowSystem" xml:space="preserve"><value>Follow system</value></data>
+  <data name="Light" xml:space="preserve"><value>Light</value></data>
+  <data name="Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="ActiveLibrary" xml:space="preserve"><value>Active library</value></data>
+  <data name="Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Location" xml:space="preserve"><value>Location</value></data>
+  <data name="Unavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="NoLocationOpen" xml:space="preserve"><value>No location is open</value></data>
+  <data name="RecycleBin" xml:space="preserve"><value>Recycle bin</value></data>
+  <data name="Recovery" xml:space="preserve"><value>Recovery</value></data>
+  <data name="RecycleBinDescription" xml:space="preserve"><value>Search, restore, or permanently delete top-level library aggregates.</value></data>
+  <data name="EmptyRecycleBin" xml:space="preserve"><value>Empty recycle bin</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Search" xml:space="preserve"><value>Search</value></data>
+  <data name="NameOrOriginalLocation" xml:space="preserve"><value>Name or original location</value></data>
+  <data name="Category" xml:space="preserve"><value>Category</value></data>
+  <data name="All" xml:space="preserve"><value>All</value></data>
+  <data name="Folders" xml:space="preserve"><value>Folders</value></data>
+  <data name="Files" xml:space="preserve"><value>Files</value></data>
+  <data name="FileLinks" xml:space="preserve"><value>File links</value></data>
+  <data name="Sort" xml:space="preserve"><value>Sort</value></data>
+  <data name="RecycleBinControls" xml:space="preserve"><value>Recycle bin controls</value></data>
+  <data name="SelectAllShown" xml:space="preserve"><value>Select all shown</value></data>
+  <data name="ClearSelection" xml:space="preserve"><value>Clear selection</value></data>
+  <data name="Restore" xml:space="preserve"><value>Restore</value></data>
+  <data name="RecycleBinEmpty" xml:space="preserve"><value>The recycle bin is empty.</value></data>
+  <data name="NoRecycleBinMatches" xml:space="preserve"><value>No recycled items match the current search and category.</value></data>
+  <data name="OpeningLibrary" xml:space="preserve"><value>Opening your library</value></data>
+  <data name="LibraryUnavailable" xml:space="preserve"><value>Library unavailable</value></data>
+  <data name="LibraryUnavailableAction" xml:space="preserve"><value>Retry, choose another library, relink, or forget this location</value></data>
+  <data name="LoadingLibrary" xml:space="preserve"><value>Loading library</value></data>
+  <data name="LocalLibrary" xml:space="preserve"><value>Local library</value></data>
+  <data name="NewFolder" xml:space="preserve"><value>New folder</value></data>
+  <data name="ImportFiles" xml:space="preserve"><value>Import files</value></data>
+  <data name="ImportFolder" xml:space="preserve"><value>Import folder</value></data>
+  <data name="IncludeHiddenFiles" xml:space="preserve"><value>Include hidden files in import review</value></data>
+  <data name="FolderName" xml:space="preserve"><value>Folder name</value></data>
+  <data name="Create" xml:space="preserve"><value>Create</value></data>
+  <data name="ReviewImport" xml:space="preserve"><value>Review import</value></data>
+  <data name="TargetLibrary" xml:space="preserve"><value>Target library</value></data>
+  <data name="DestinationFolder" xml:space="preserve"><value>Destination folder</value></data>
+  <data name="ImportDuplicates" xml:space="preserve"><value>Import all byte-identical files as separate records instead of skipping them</value></data>
+  <data name="ItemsCouldNotBeProcessed" xml:space="preserve"><value>{0} item(s) could not be processed.</value></data>
+  <data name="AffectedContent" xml:space="preserve"><value>Affected content:</value></data>
+  <data name="AndMoreItems" xml:space="preserve"><value>And {0} more item(s).</value></data>
+  <data name="Blocked" xml:space="preserve"><value>Blocked: {0}</value></data>
+  <data name="RestoreBlockedItems" xml:space="preserve"><value>{0} item(s) will remain unchanged.</value></data>
+  <data name="RestoreBlockedGuidance" xml:space="preserve"><value>Resolve the listed conflicts or dependencies, then retry them.</value></data>
+  <data name="RestoreSelected" xml:space="preserve"><value>Restore selected ({0})</value></data>
+  <data name="DeleteSelectedPermanently" xml:space="preserve"><value>Delete selected permanently ({0})</value></data>
+  <data name="ItemsProcessedSuccessfully" xml:space="preserve"><value>{0} item(s) processed successfully.</value></data>
+  <data name="ItemsProcessedWithFailures" xml:space="preserve"><value>{0} item(s) succeeded and {1} failed. Failed items remain in the recycle bin.</value></data>
+  <data name="Folder" xml:space="preserve"><value>Folder</value></data>
+  <data name="File" xml:space="preserve"><value>File</value></data>
+  <data name="FileLink" xml:space="preserve"><value>File link</value></data>
+  <data name="PendingPermanentDeletion" xml:space="preserve"><value>Pending permanent deletion</value></data>
+  <data name="Recycled" xml:space="preserve"><value>Recycled</value></data>
+  <data name="CascadeSummary" xml:space="preserve"><value>{0} folder(s), {1} file(s), and {2} link(s)</value></data>
+  <data name="RestoreSelectedItemsQuestion" xml:space="preserve"><value>Restore selected items?</value></data>
+  <data name="EmptyRecycleBinQuestion" xml:space="preserve"><value>Empty the recycle bin?</value></data>
+  <data name="PermanentlyDeleteSelectedItemsQuestion" xml:space="preserve"><value>Permanently delete selected items?</value></data>
+  <data name="RestoreReviewMessage" xml:space="preserve"><value>Review every affected aggregate, name conflict, managed file, and link dependency before restoration. Only unblocked items will be changed.</value></data>
+  <data name="PermanentDeletionWarning" xml:space="preserve"><value>Permanent deletion cannot be undone. Managed files, metadata, and affected file links will be removed.</value></data>
+  <data name="RestoreItemCount" xml:space="preserve"><value>Restore {0} item(s)</value></data>
+  <data name="Skipped" xml:space="preserve"><value>Skipped: {0}</value></data>
+  <data name="ImportThisItemIfDuplicate" xml:space="preserve"><value>Import this item if it is a duplicate</value></data>
+  <data name="DuplicateAction" xml:space="preserve"><value>Duplicate action</value></data>
+  <data name="Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="ImportAnyway" xml:space="preserve"><value>Import anyway</value></data>
+  <data name="Remove" xml:space="preserve"><value>Remove</value></data>
+  <data name="Importing" xml:space="preserve"><value>Importing…</value></data>
+  <data name="ImportItemCount" xml:space="preserve"><value>Import {0} file(s)</value></data>
+  <data name="CancelRemainingImport" xml:space="preserve"><value>Cancel remaining import</value></data>
+  <data name="IncomingItemsNotAdded" xml:space="preserve"><value>Incoming items not added to review</value></data>
+  <data name="ImportResults" xml:space="preserve"><value>Import results</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>Dismiss</value></data>
+  <data name="FolderPath" xml:space="preserve"><value>Folder path</value></data>
+  <data name="NoFoldersHere" xml:space="preserve"><value>No folders here.</value></data>
+  <data name="Manage" xml:space="preserve"><value>Manage</value></data>
+  <data name="Recycle" xml:space="preserve"><value>Recycle</value></data>
+  <data name="FileView" xml:space="preserve"><value>File view</value></data>
+  <data name="List" xml:space="preserve"><value>List</value></data>
+  <data name="Grid" xml:space="preserve"><value>Grid</value></data>
+  <data name="SearchNamesAndMetadata" xml:space="preserve"><value>Search names and user metadata</value></data>
+  <data name="SearchLibraryFiles" xml:space="preserve"><value>Search library files</value></data>
+  <data name="Scope" xml:space="preserve"><value>Scope</value></data>
+  <data name="CurrentFolder" xml:space="preserve"><value>Current folder</value></data>
+  <data name="EntireLibrary" xml:space="preserve"><value>Entire library</value></data>
+  <data name="Media" xml:space="preserve"><value>Media</value></data>
+  <data name="Origin" xml:space="preserve"><value>Origin</value></data>
+  <data name="Any" xml:space="preserve"><value>Any</value></data>
+  <data name="ImportedFrom" xml:space="preserve"><value>Imported from</value></data>
+  <data name="ImportedThrough" xml:space="preserve"><value>Imported through</value></data>
+  <data name="Apply" xml:space="preserve"><value>Apply</value></data>
+  <data name="ClearSearchAndFilters" xml:space="preserve"><value>Clear search and filters</value></data>
+  <data name="NoFilesMatch" xml:space="preserve"><value>No files match the current search and filters.</value></data>
+  <data name="NoFilesInFolder" xml:space="preserve"><value>There are no files in this folder.</value></data>
+  <data name="FileSelectionActions" xml:space="preserve"><value>File selection actions</value></data>
+  <data name="SelectThisPage" xml:space="preserve"><value>Select this page</value></data>
+  <data name="Move" xml:space="preserve"><value>Move</value></data>
+  <data name="Duplicate" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="Metadata" xml:space="preserve"><value>Metadata</value></data>
+  <data name="BulkActionApplies" xml:space="preserve"><value>This action applies to {0} selected active file(s). Each file commits independently; any failure is reported without rolling back unrelated successes.</value></data>
+  <data name="ConfirmMove" xml:space="preserve"><value>Confirm move</value></data>
+  <data name="ConfirmDuplicate" xml:space="preserve"><value>Confirm duplicate</value></data>
+  <data name="CancelRemainingCopies" xml:space="preserve"><value>Cancel remaining copies</value></data>
+  <data name="ConfirmRecycle" xml:space="preserve"><value>Confirm recycle</value></data>
+  <data name="Key" xml:space="preserve"><value>Key</value></data>
+  <data name="Type" xml:space="preserve"><value>Type</value></data>
+  <data name="NewValue" xml:space="preserve"><value>New value</value></data>
+  <data name="Sensitive" xml:space="preserve"><value>Sensitive</value></data>
+  <data name="BulkActionResult" xml:space="preserve"><value>Bulk action result</value></data>
+  <data name="SucceededFailed" xml:space="preserve"><value>{0} succeeded; {1} failed.</value></data>
+  <data name="DuplicateSelectedDescription" xml:space="preserve"><value>Each selected file is copied independently with its user metadata. Links are not copied. Name conflicts receive the normal numeric suffix.</value></data>
+  <data name="Eligible" xml:space="preserve"><value>Eligible</value></data>
+  <data name="RecycleSelectedDescription" xml:space="preserve"><value>Files, their user metadata, and endpoint-owned links will move to the recycle bin together. They can be restored until permanently deleted.</value></data>
+  <data name="CommonMetadataKeys" xml:space="preserve"><value>Metadata keys common to every selected file</value></data>
+  <data name="NoCommonMetadataKeys" xml:space="preserve"><value>The selected files have no user-metadata key in common.</value></data>
+  <data name="ReviewAddOrReplace" xml:space="preserve"><value>Review add or replace</value></data>
+  <data name="ReviewRemoval" xml:space="preserve"><value>Review removal</value></data>
+  <data name="ReviewMarkSensitive" xml:space="preserve"><value>Review mark sensitive</value></data>
+  <data name="ReviewMakeOrdinary" xml:space="preserve"><value>Review make ordinary</value></data>
+  <data name="ReviewTypeNormalization" xml:space="preserve"><value>Review type normalization</value></data>
+  <data name="ConfirmCompatibleConversions" xml:space="preserve"><value>Confirm compatible conversions</value></data>
+  <data name="FileDetails" xml:space="preserve"><value>File details</value></data>
+  <data name="LoadingFile" xml:space="preserve"><value>Loading file</value></data>
+  <data name="Export" xml:space="preserve"><value>Export</value></data>
+  <data name="OpenInAnotherApp" xml:space="preserve"><value>Open in another app</value></data>
+  <data name="ExportChangedBytes" xml:space="preserve"><value>Export changed bytes</value></data>
+  <data name="BackToLibrary" xml:space="preserve"><value>Back to library</value></data>
+  <data name="OpenTemporaryCopy" xml:space="preserve"><value>Open a temporary read-only copy?</value></data>
+  <data name="Continue" xml:space="preserve"><value>Continue</value></data>
+  <data name="ManagedContent" xml:space="preserve"><value>Managed content</value></data>
+  <data name="VerifyNow" xml:space="preserve"><value>Verify now</value></data>
+  <data name="Verifying" xml:space="preserve"><value>Verifying…</value></data>
+  <data name="PreviewUnavailable" xml:space="preserve"><value>Preview unavailable</value></data>
+  <data name="VideoViewer" xml:space="preserve"><value>Video viewer</value></data>
+  <data name="AudioPlayer" xml:space="preserve"><value>Audio player</value></data>
+  <data name="PlaybackSpeed" xml:space="preserve"><value>Playback speed</value></data>
+  <data name="Normal" xml:space="preserve"><value>Normal</value></data>
+  <data name="ImageViewer" xml:space="preserve"><value>Image viewer</value></data>
+  <data name="ImageViewControls" xml:space="preserve"><value>Image view controls</value></data>
+  <data name="PauseAnimation" xml:space="preserve"><value>Pause animation</value></data>
+  <data name="PlayAnimation" xml:space="preserve"><value>Play animation</value></data>
+  <data name="Fit" xml:space="preserve"><value>Fit</value></data>
+  <data name="ActualSize" xml:space="preserve"><value>Actual size</value></data>
+  <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
+  <data name="TextViewer" xml:space="preserve"><value>Text viewer</value></data>
+  <data name="MarkdownView" xml:space="preserve"><value>Markdown view</value></data>
+  <data name="PlainText" xml:space="preserve"><value>Plain text</value></data>
+  <data name="RenderedMarkdown" xml:space="preserve"><value>Rendered Markdown</value></data>
+  <data name="FindInFile" xml:space="preserve"><value>Find in file</value></data>
+  <data name="MatchCase" xml:space="preserve"><value>Match case</value></data>
+  <data name="Find" xml:space="preserve"><value>Find</value></data>
+  <data name="Clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="ExternalLinks" xml:space="preserve"><value>External links</value></data>
+  <data name="ReviewLink" xml:space="preserve"><value>Review link</value></data>
+  <data name="SearchResults" xml:space="preserve"><value>Search results</value></data>
+  <data name="NoMatchesFound" xml:space="preserve"><value>No matches found in the complete file.</value></data>
+  <data name="OpenExternalLink" xml:space="preserve"><value>Open external link?</value></data>
+  <data name="OpenExternally" xml:space="preserve"><value>Open externally</value></data>
+  <data name="EditAsCopy" xml:space="preserve"><value>Edit as Copy</value></data>
+  <data name="EditedContent" xml:space="preserve"><value>Edited content</value></data>
+  <data name="NewFileName" xml:space="preserve"><value>New file name</value></data>
+  <data name="Format" xml:space="preserve"><value>Format</value></data>
+  <data name="PlainTextFormat" xml:space="preserve"><value>Plain text</value></data>
+  <data name="Markdown" xml:space="preserve"><value>Markdown</value></data>
+  <data name="CopyUserMetadata" xml:space="preserve"><value>Copy user metadata</value></data>
+  <data name="SaveEditedCopy" xml:space="preserve"><value>Save edited copy</value></data>
+  <data name="SystemInformation" xml:space="preserve"><value>System information</value></data>
+  <data name="UserMetadata" xml:space="preserve"><value>User metadata</value></data>
+  <data name="NoUserMetadata" xml:space="preserve"><value>No user metadata.</value></data>
+  <data name="Value" xml:space="preserve"><value>Value</value></data>
+  <data name="AddOrUpdateMetadata" xml:space="preserve"><value>Add or update metadata</value></data>
+  <data name="Links" xml:space="preserve"><value>Links</value></data>
+  <data name="NoFileLinks" xml:space="preserve"><value>No file links.</value></data>
+  <data name="Relabel" xml:space="preserve"><value>Relabel</value></data>
+  <data name="ReverseDirection" xml:space="preserve"><value>Reverse direction</value></data>
+  <data name="RecycleLink" xml:space="preserve"><value>Recycle link</value></data>
+  <data name="NewLabel" xml:space="preserve"><value>New label</value></data>
+  <data name="SaveLabel" xml:space="preserve"><value>Save label</value></data>
+  <data name="TargetFile" xml:space="preserve"><value>Target file</value></data>
+  <data name="SelectAFile" xml:space="preserve"><value>Select a file</value></data>
+  <data name="Label" xml:space="preserve"><value>Label</value></data>
+  <data name="CreateDirectedLink" xml:space="preserve"><value>Create directed link</value></data>
+  <data name="DuplicateSensitiveMetadataCopied" xml:space="preserve"><value>{0} sensitive metadata entries will be copied across the selection; keys and values remain concealed.</value></data>
+  <data name="DuplicatingProgress" xml:space="preserve"><value>Duplicating {0} of {1}: {2}</value></data>
+  <data name="ExistingSensitiveMetadataConcealed" xml:space="preserve"><value>{0} existing sensitive value(s) remain concealed in this preview.</value></data>
+  <data name="NormalizationPreview" xml:space="preserve"><value>{0} compatible value(s) can be converted to {1}; {2} incompatible value(s) will remain unchanged. Sensitivity flags are preserved.</value></data>
+  <data name="ReviewBulkMove" xml:space="preserve"><value>Review bulk move</value></data>
+  <data name="ReviewBulkDuplicate" xml:space="preserve"><value>Review bulk duplicate</value></data>
+  <data name="ReviewBulkRecycle" xml:space="preserve"><value>Review bulk recycle</value></data>
+  <data name="ReviewBulkMetadata" xml:space="preserve"><value>Review bulk metadata</value></data>
+  <data name="ConfirmRemoval" xml:space="preserve"><value>Confirm removal</value></data>
+  <data name="ConfirmMarkSensitive" xml:space="preserve"><value>Confirm mark sensitive</value></data>
+  <data name="ConfirmMakeOrdinary" xml:space="preserve"><value>Confirm make ordinary</value></data>
+  <data name="ConfirmMetadataChange" xml:space="preserve"><value>Confirm metadata change</value></data>
+  <data name="SensitiveMetadataDisclosure" xml:space="preserve"><value>Sensitive metadata is concealed by SlopFactory display, search-state, and future export safeguards, but it is not encrypted.</value></data>
+  <data name="UnderstandContinue" xml:space="preserve"><value>I understand — continue</value></data>
+  <data name="ExternalOpenWarning" xml:space="preserve"><value>Another application will receive a verified temporary copy, never SlopFactory's managed path. Potentially active documents may still run scripts or external content in that application.</value></data>
+  <data name="ManagedFileMissing" xml:space="preserve"><value>The managed file is missing. The file record, user metadata, and links remain preserved.</value></data>
+  <data name="ContentChanged" xml:space="preserve"><value>The bytes differ from the recorded content and have not been accepted as a replacement. Normal viewing is blocked.</value></data>
+  <data name="ChooseReplacementFile" xml:space="preserve"><value>Choose replacement file</value></data>
+  <data name="AcceptCurrentBytes" xml:space="preserve"><value>Accept current bytes as replacement</value></data>
+  <data name="ReviewManagedReplacement" xml:space="preserve"><value>Review managed-content replacement</value></data>
+  <data name="Candidate" xml:space="preserve"><value>Candidate</value></data>
+  <data name="ClearMetadataAfterReplacement" xml:space="preserve"><value>Clear all user metadata after replacement</value></data>
+  <data name="RestoreOriginalContent" xml:space="preserve"><value>Restore original content</value></data>
+  <data name="ConfirmPermanentReplacement" xml:space="preserve"><value>Confirm permanent replacement</value></data>
+  <data name="FileDetailsMeta" xml:space="preserve"><value>{0} · {1} bytes</value></data>
+  <data name="ExtensionMismatch" xml:space="preserve"><value>The display-name extension {0} does not match the detected {1} content. SlopFactory uses the detected bytes for viewing and safety decisions.</value></data>
+  <data name="UnsupportedViewer" xml:space="preserve"><value>SlopFactory has no built-in viewer for the detected {0} content. It has not opened the file in an inappropriate viewer.</value></data>
+  <data name="SafeSystemInformation" xml:space="preserve"><value>Safe system information remains available below. Use the reviewed export or temporary external-open actions above when appropriate.</value></data>
+  <data name="VerifyingMedia" xml:space="preserve"><value>Verifying managed media before playback…</value></data>
+  <data name="VideoFormatUnsupported" xml:space="preserve"><value>This platform cannot play the video format.</value></data>
+  <data name="AudioFormatUnsupported" xml:space="preserve"><value>This platform cannot play the audio format.</value></data>
+  <data name="MediaControlsGuidance" xml:space="preserve"><value>Use the built-in controls for seeking, volume, mute, captions when available, and video full screen.</value></data>
+  <data name="AnimationPaused" xml:space="preserve"><value>Animation paused. Choose Play animation to decode it.</value></data>
+  <data name="ViewingDoesNotModify" xml:space="preserve"><value>Viewing controls do not modify the managed image.</value></data>
+  <data name="RenderingMarkdown" xml:space="preserve"><value>Rendering Markdown…</value></data>
+  <data name="MarkdownLinksInert" xml:space="preserve"><value>Markdown links are inert in the rendered document. Review the destination before opening one in another application.</value></data>
+  <data name="CancelTechnicalMetadata" xml:space="preserve"><value>Cancel technical metadata</value></data>
+  <data name="ContentHash" xml:space="preserve"><value>Content hash</value></data>
+  <data name="OriginalFilename" xml:space="preserve"><value>Original filename</value></data>
+  <data name="Imported" xml:space="preserve"><value>Imported</value></data>
+  <data name="LibraryModified" xml:space="preserve"><value>Library modified</value></data>
+  <data name="SourceLastModified" xml:space="preserve"><value>Source last modified</value></data>
+  <data name="State" xml:space="preserve"><value>State</value></data>
+  <data name="ContentState" xml:space="preserve"><value>Content state</value></data>
+  <data name="ProvenanceChain" xml:space="preserve"><value>Provenance chain</value></data>
+  <data name="RevealForSession" xml:space="preserve"><value>Reveal for session</value></data>
+  <data name="Conceal" xml:space="preserve"><value>Conceal</value></data>
+  <data name="CopyValue" xml:space="preserve"><value>Copy value</value></data>
+  <data name="RenameKey" xml:space="preserve"><value>Rename key</value></data>
+  <data name="SaveKey" xml:space="preserve"><value>Save key</value></data>
+  <data name="SensitiveMetadataValue" xml:space="preserve"><value>Sensitive metadata value</value></data>
+  <data name="SensitiveMetadataSaveDisclosure" xml:space="preserve"><value>Sensitive metadata is concealed by SlopFactory's display, search-state, and future export safeguards, but it is not encrypted.</value></data>
+  <data name="UnderstandSaveSensitiveMetadata" xml:space="preserve"><value>I understand — save sensitive metadata</value></data>
+  <data name="NewKey" xml:space="preserve"><value>New key</value></data>
+  <data name="ImportAnotherFileForLink" xml:space="preserve"><value>Import another file before creating a link.</value></data>
+  <data name="RecycleBinPageTitle" xml:space="preserve"><value>Recycle bin · SlopFactory</value></data>
+  <data name="RecentlyDeleted" xml:space="preserve"><value>Recently deleted</value></data>
+  <data name="OldestDeleted" xml:space="preserve"><value>Oldest deleted</value></data>
+  <data name="NameAscending" xml:space="preserve"><value>Name A–Z</value></data>
+  <data name="NameDescending" xml:space="preserve"><value>Name Z–A</value></data>
+  <data name="EntityType" xml:space="preserve"><value>Entity type</value></data>
+  <data name="ItemsShownSelected" xml:space="preserve"><value>{0} item(s) shown · {1} selected</value></data>
+  <data name="SelectItem" xml:space="preserve"><value>Select {0} {1}</value></data>
+  <data name="OriginallyIn" xml:space="preserve"><value>{0} · originally in {1}</value></data>
+  <data name="DeletedEntryStatus" xml:space="preserve"><value>Deleted {0} · {1} · {2}</value></data>
+  <data name="LastDeletionAttemptFailed" xml:space="preserve"><value>Last deletion attempt failed {0}: {1}</value></data>
+  <data name="RetryPermanentDeletion" xml:space="preserve"><value>Retry permanent deletion</value></data>
+  <data name="DeletePermanently" xml:space="preserve"><value>Delete permanently</value></data>
+  <data name="LibraryPageTitle" xml:space="preserve"><value>Library · SlopFactory</value></data>
+  <data name="ValidatingLocalStorage" xml:space="preserve"><value>Validating local storage…</value></data>
+  <data name="LibrarySummary" xml:space="preserve"><value>{0} · {1} folder(s) · {2} file(s)</value></data>
+  <data name="PermissionBlocksImport" xml:space="preserve"><value>A document-provider permission is blocking the requested import.</value></data>
+  <data name="OpenSystemSettings" xml:space="preserve"><value>Open system settings</value></data>
+  <data name="ImportInventorySummary" xml:space="preserve"><value>{0} eligible file(s), {1}, {2} virtual folder(s), {3} duplicate group(s), and {4} name conflict(s).</value></data>
+  <data name="SizeUnavailableUntilImport" xml:space="preserve"><value>Size unavailable until import</value></data>
+  <data name="RestoreExisting" xml:space="preserve"><value>Restore existing {0}</value></data>
+  <data name="OpenExisting" xml:space="preserve"><value>Open existing {0}</value></data>
+  <data name="PendingDeletionCannotRestore" xml:space="preserve"><value>Matching record is pending permanent deletion and cannot be restored.</value></data>
+  <data name="OpenImportedFile" xml:space="preserve"><value>Open imported file</value></data>
+  <data name="DisplayName" xml:space="preserve"><value>Display name</value></data>
+  <data name="SaveChanges" xml:space="preserve"><value>Save changes</value></data>
+  <data name="CopyName" xml:space="preserve"><value>Copy name</value></data>
+  <data name="Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="CreateCopy" xml:space="preserve"><value>Create copy</value></data>
+  <data name="DuplicateSensitiveMetadataConcealed" xml:space="preserve"><value>{0} sensitive metadata entries will be copied, but remain concealed.</value></data>
+  <data name="ImportProgress" xml:space="preserve"><value>{0}: {1} · item {2} of {3}</value></data>
+  <data name="ImportFilesPickerTitle" xml:space="preserve"><value>Import files into SlopFactory</value></data>
+  <data name="ImportSummary" xml:space="preserve"><value>Imported {0}; skipped {1} duplicate(s); {2} failed; {3} cancelled.</value></data>
+  <data name="ImportTargetChanged" xml:space="preserve"><value>Import target changed to {0}.</value></data>
+  <data name="UnknownFolder" xml:space="preserve"><value>Unknown folder</value></data>
+  <data name="ImportOutcomeImported" xml:space="preserve"><value>Imported</value></data>
+  <data name="ImportOutcomeDuplicateSkipped" xml:space="preserve"><value>Duplicate skipped</value></data>
+  <data name="ImportOutcomeCancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="ImportOutcomeFailed" xml:space="preserve"><value>Failed</value></data>
+  <data name="ImportStageHashingSource" xml:space="preserve"><value>Hashing source</value></data>
+  <data name="ImportStageDuplicateSkipped" xml:space="preserve"><value>Duplicate skipped</value></data>
+  <data name="ImportStageCopyingManagedStorage" xml:space="preserve"><value>Copying into managed storage</value></data>
+  <data name="ImportStageCompleted" xml:space="preserve"><value>Completed</value></data>
+  <data name="SortBy" xml:space="preserve"><value>Sort</value></data>
+  <data name="SortName" xml:space="preserve"><value>Name</value></data>
+  <data name="SortImportedNewest" xml:space="preserve"><value>Imported (newest)</value></data>
+  <data name="SortModifiedNewest" xml:space="preserve"><value>Modified (newest)</value></data>
+  <data name="SortSizeLargest" xml:space="preserve"><value>Size (largest)</value></data>
+  <data name="SortMediaType" xml:space="preserve"><value>Media type</value></data>
+  <data name="FilterTypedMetadata" xml:space="preserve"><value>Filter by typed metadata</value></data>
+  <data name="MetadataKey" xml:space="preserve"><value>Metadata key</value></data>
+  <data name="MetadataType" xml:space="preserve"><value>Metadata type</value></data>
+  <data name="MetadataOperator" xml:space="preserve"><value>Operator</value></data>
+  <data name="ComparisonValue" xml:space="preserve"><value>Comparison value</value></data>
+  <data name="LoadingFiles" xml:space="preserve"><value>Loading files…</value></data>
+  <data name="BrowseResultSummary" xml:space="preserve"><value>Showing {0}–{1} of {2} active file(s){3}{4}</value></data>
+  <data name="AcrossLibrary" xml:space="preserve"><value> across the library</value></data>
+  <data name="InThisFolder" xml:space="preserve"><value> in this folder</value></data>
+  <data name="MetadataFilterSummary" xml:space="preserve"><value> Among files passing the other filters, {0} lack the selected key and {1} use an incompatible type.</value></data>
+  <data name="SelectedAcrossResultPages" xml:space="preserve"><value>{0} file(s) selected across result pages</value></data>
+  <data name="SelectFile" xml:space="preserve"><value>Select {0}</value></data>
+  <data name="OriginalFilenameSummary" xml:space="preserve"><value>Original: {0}</value></data>
+  <data name="WhyFileMatched" xml:space="preserve"><value>Why this file matched</value></data>
+  <data name="FileResultPages" xml:space="preserve"><value>File result pages</value></data>
+  <data name="Previous" xml:space="preserve"><value>Previous</value></data>
+  <data name="Next" xml:space="preserve"><value>Next</value></data>
+  <data name="PageOf" xml:space="preserve"><value>Page {0} of {1}</value></data>
+  <data name="MediaAny" xml:space="preserve"><value>Any</value></data>
+  <data name="MediaText" xml:space="preserve"><value>Text</value></data>
+  <data name="MediaImage" xml:space="preserve"><value>Image</value></data>
+  <data name="MediaAudio" xml:space="preserve"><value>Audio</value></data>
+  <data name="MediaVideo" xml:space="preserve"><value>Video</value></data>
+  <data name="MediaOther" xml:space="preserve"><value>Other</value></data>
+  <data name="MetadataKindText" xml:space="preserve"><value>Text</value></data>
+  <data name="MetadataKindNumber" xml:space="preserve"><value>Number</value></data>
+  <data name="MetadataKindBoolean" xml:space="preserve"><value>Boolean</value></data>
+  <data name="MetadataKindDate" xml:space="preserve"><value>Date</value></data>
+  <data name="MetadataKindDateTime" xml:space="preserve"><value>Date and time</value></data>
+  <data name="MetadataKindJson" xml:space="preserve"><value>JSON</value></data>
+  <data name="OriginImported" xml:space="preserve"><value>Imported</value></data>
+  <data name="OriginGenerated" xml:space="preserve"><value>Generated</value></data>
+  <data name="OriginUserCopy" xml:space="preserve"><value>User copy</value></data>
+  <data name="OriginEditedCopy" xml:space="preserve"><value>Edited copy</value></data>
+  <data name="OriginRecoveredProviderOutput" xml:space="preserve"><value>Recovered provider output</value></data>
+  <data name="ContentStateMissing" xml:space="preserve"><value>Missing</value></data>
+  <data name="ContentStateChanged" xml:space="preserve"><value>Changed</value></data>
+  <data name="ContentStateReplaced" xml:space="preserve"><value>Replaced</value></data>
+  <data name="MatchOriginalFilename" xml:space="preserve"><value>Matched original filename</value></data>
+  <data name="MatchUserMetadata" xml:space="preserve"><value>Matched user metadata</value></data>
+  <data name="MatchUserMetadataKey" xml:space="preserve"><value>Matched user metadata: {0}</value></data>
+  <data name="MatchUserMetadataFilter" xml:space="preserve"><value>Matched user metadata filter</value></data>
+  <data name="OperatorEqualsCaseInsensitive" xml:space="preserve"><value>Equals (case-insensitive)</value></data>
+  <data name="OperatorDoesNotEqual" xml:space="preserve"><value>Does not equal</value></data>
+  <data name="OperatorContainsCaseInsensitive" xml:space="preserve"><value>Contains (case-insensitive)</value></data>
+  <data name="OperatorEquals" xml:space="preserve"><value>Equals</value></data>
+  <data name="OperatorExists" xml:space="preserve"><value>Exists</value></data>
+  <data name="OperatorDoesNotExist" xml:space="preserve"><value>Does not exist</value></data>
+  <data name="OperatorStructurallyEquals" xml:space="preserve"><value>Structurally equals</value></data>
+  <data name="OperatorLessThan" xml:space="preserve"><value>Less than</value></data>
+  <data name="OperatorLessThanOrEqual" xml:space="preserve"><value>Less than or equal</value></data>
+  <data name="OperatorGreaterThan" xml:space="preserve"><value>Greater than</value></data>
+  <data name="OperatorGreaterThanOrEqual" xml:space="preserve"><value>Greater than or equal</value></data>
+  <data name="BulkDestinationFolder" xml:space="preserve"><value>Destination folder</value></data>
+  <data name="BulkDuplicateInactive" xml:space="preserve"><value>Unavailable because it is not active.</value></data>
+  <data name="BulkDuplicateContentUnavailable" xml:space="preserve"><value>Unavailable because managed content is missing or changed.</value></data>
+  <data name="UnavailableFile" xml:space="preserve"><value>Unavailable file</value></data>
+  <data name="BulkDuplicateRecordMissing" xml:space="preserve"><value>Unavailable because the record no longer exists.</value></data>
+  <data name="MixedTypes" xml:space="preserve"><value>Mixed types</value></data>
+  <data name="MixedSensitivityValuesConcealed" xml:space="preserve"><value>Mixed sensitivity; values concealed</value></data>
+  <data name="SensitiveValuesConcealed" xml:space="preserve"><value>Sensitive values concealed</value></data>
+  <data name="MixedValues" xml:space="preserve"><value>Mixed values</value></data>
+  <data name="SameValue" xml:space="preserve"><value>Same value: {0}</value></data>
+  <data name="BulkMetadataSetPreview" xml:space="preserve"><value>Set '{0}' as {1} on {2} file(s), replacing {3} existing entr{4}.</value></data>
+  <data name="BulkMetadataRemovePreview" xml:space="preserve"><value>Remove '{0}' from {1} of the {2} selected file(s). Files without that key remain unchanged.</value></data>
+  <data name="BulkMetadataSensitivityPreview" xml:space="preserve"><value>Mark {0} existing '{1}' entr{2} as {3}. {4} selected file(s) without that key will remain unchanged.{5}</value></data>
+  <data name="SensitiveAdjective" xml:space="preserve"><value>sensitive</value></data>
+  <data name="Ordinary" xml:space="preserve"><value>ordinary</value></data>
+  <data name="OrdinaryMetadataDisclosure" xml:space="preserve"><value> Making metadata ordinary exposes its values in file details and makes it eligible for ordinary metadata export when export is available.</value></data>
+  <data name="BulkDuplicateComplete" xml:space="preserve"><value>Bulk duplicate complete: {0} succeeded; {1} failed.</value></data>
+  <data name="BulkDuplicateCancelled" xml:space="preserve"><value>Bulk duplicate cancelled. Completed copies remain available.</value></data>
+  <data name="BulkActionComplete" xml:space="preserve"><value>Bulk action complete: {0} succeeded; {1} failed.</value></data>
+  <data name="DefaultCopyName" xml:space="preserve"><value>{0} copy{1}</value></data>
+  <data name="FileDuplicated" xml:space="preserve"><value>File duplicated.</value></data>
+  <data name="FileDetailsPageTitle" xml:space="preserve"><value>File details · SlopFactory</value></data>
+  <data name="BuiltInViewingVerifiesContent" xml:space="preserve"><value>{0} · Built-in viewing rechecks the managed bytes before use.</value></data>
+  <data name="Recorded" xml:space="preserve"><value>Recorded</value></data>
+  <data name="Observed" xml:space="preserve"><value>Observed</value></data>
+  <data name="ContentIdentity" xml:space="preserve"><value>{0} · {1} bytes · {2}</value></data>
+  <data name="InspectingChangedBytes" xml:space="preserve"><value>Inspecting…</value></data>
+  <data name="InspectChangedBytes" xml:space="preserve"><value>Inspect changed bytes</value></data>
+  <data name="ChangedByteInspection" xml:space="preserve"><value>Changed-byte inspection</value></data>
+  <data name="ChangedByteInspectionDescription" xml:space="preserve"><value>{0} does not accept or alter the file.</value></data>
+  <data name="ActualBytes" xml:space="preserve"><value>Actual bytes</value></data>
+  <data name="ChangedTextTruncated" xml:space="preserve"><value>Only the first 1,048,576 characters are shown.</value></data>
+  <data name="ReadOnlyTextInspection" xml:space="preserve"><value>Read-only text inspection.</value></data>
+  <data name="ReplacementAcceptedDescription" xml:space="preserve"><value>The current bytes were accepted as a permanent replacement. The recorded original identity remains available for comparison.</value></data>
+  <data name="RecordedOriginal" xml:space="preserve"><value>Recorded original</value></data>
+  <data name="CurrentReplacement" xml:space="preserve"><value>Current replacement</value></data>
+  <data name="Replaced" xml:space="preserve"><value>Replaced</value></data>
+  <data name="CandidateRestoresOriginal" xml:space="preserve"><value>The candidate exactly restores the recorded original bytes. Original provenance and user metadata will remain unchanged.</value></data>
+  <data name="PermanentReplacementWarning" xml:space="preserve"><value>This permanently accepts different bytes without retaining a hidden previous version. The stable file ID, folder, links, and original provenance remain; current content metadata changes.</value></data>
+  <data name="ReplacementMetadataSummary" xml:space="preserve"><value>{0} ordinary and {1} sensitive user-metadata entries are attached. Sensitive keys and values remain concealed.</value></data>
+  <data name="ContentVerificationComplete" xml:space="preserve"><value>Content verification complete: {0}.</value></data>
+  <data name="ContentStateHealthy" xml:space="preserve"><value>Healthy</value></data>
+  <data name="ContentStateContentChanged" xml:space="preserve"><value>Content changed</value></data>
+  <data name="ContentStateContentReplaced" xml:space="preserve"><value>Content replaced</value></data>
+  <data name="ChooseReplacementContentPickerTitle" xml:space="preserve"><value>Choose replacement content</value></data>
+  <data name="ExportCompleted" xml:space="preserve"><value>Export completed and the destination bytes were verified.</value></data>
+  <data name="ExportCancelled" xml:space="preserve"><value>Export cancelled; no partial destination was kept.</value></data>
+  <data name="ExportFailed" xml:space="preserve"><value>Export failed.</value></data>
+  <data name="ChangedBytesExported" xml:space="preserve"><value>Changed bytes exported for recovery. The library record and provenance were not changed.</value></data>
+  <data name="ChangedBytesExportCancelled" xml:space="preserve"><value>Changed-byte export cancelled.</value></data>
+  <data name="ChangedBytesExportFailed" xml:space="preserve"><value>Changed-byte export failed.</value></data>
+  <data name="ExternalOpenComplete" xml:space="preserve"><value>A verified temporary read-only copy was sent to the selected application.</value></data>
+  <data name="RotateImage" xml:space="preserve"><value>Rotate 90°</value></data>
+  <data name="ImagePreviewAlt" xml:space="preserve"><value>Preview of {0}</value></data>
+  <data name="ReadOnlyTextSummary" xml:space="preserve"><value>Read-only · {0}{1}</value></data>
+  <data name="TextContentTruncatedSuffix" xml:space="preserve"><value> · Showing the first 1,048,576 characters</value></data>
+  <data name="Searching" xml:space="preserve"><value>Searching…</value></data>
+  <data name="TextSearchMatchSummary" xml:space="preserve"><value>Match {0} of {1}{2}</value></data>
+  <data name="FirstNavigationMatches" xml:space="preserve"><value> · First 200 available for navigation</value></data>
+  <data name="CharacterOffset" xml:space="preserve"><value>Character offset {0}{1}</value></data>
+  <data name="BeyondDisplayedTextPrefix" xml:space="preserve"><value> · Beyond the displayed plain-text prefix</value></data>
+  <data name="ExternalLinkDestinationNotice" xml:space="preserve"><value>Another application will receive this destination:</value></data>
+  <data name="TextTooLargeForEditor" xml:space="preserve"><value>This file is too large to open in the built-in editor.</value></data>
+  <data name="PreserveSourceFormat" xml:space="preserve"><value>Preserve source format</value></data>
+  <data name="IncludeSensitiveMetadataCount" xml:space="preserve"><value>Include {0} sensitive metadata entries</value></data>
+  <data name="DefaultEditedCopyName" xml:space="preserve"><value>{0} edited{1}</value></data>
+  <data name="PlainTextShownInstead" xml:space="preserve"><value>{0} Plain text is shown instead.</value></data>
+  <data name="RecordedOriginalRestored" xml:space="preserve"><value>The recorded original content was restored.</value></data>
+  <data name="ReplacementContentAccepted" xml:space="preserve"><value>The replacement content was accepted permanently.</value></data>
+  <data name="ReadingTechnicalMetadata" xml:space="preserve"><value>Reading bounded technical metadata in the background…</value></data>
+  <data name="GeneratingThumbnails" xml:space="preserve"><value>Generating {0} thumbnail(s) in the background.</value></data>
+  <data name="CancelThumbnailLoading" xml:space="preserve"><value>Cancel thumbnail generation</value></data>
+  <data name="ContentHashSummary" xml:space="preserve"><value>SHA-256 {0}</value></data>
+  <data name="ImageDimensions" xml:space="preserve"><value>Image dimensions</value></data>
+  <data name="ImageDimensionsValue" xml:space="preserve"><value>{0} × {1} pixels</value></data>
+  <data name="ContentReplaced" xml:space="preserve"><value>Content replaced</value></data>
+  <data name="DerivedFrom" xml:space="preserve"><value>Derived from</value></data>
+  <data name="DeletedSource" xml:space="preserve"><value>Deleted source</value></data>
+  <data name="DeletedSourceSummary" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
+  <data name="ProvenanceChainEntry" xml:space="preserve"><value>{0} · {1}{2}</value></data>
+  <data name="DerivedBySuffix" xml:space="preserve"><value> · {0}</value></data>
+  <data name="ProvenanceChainDescription" xml:space="preserve"><value>This read-only chain follows only immediate copy sources and stops when no source can be restored.</value></data>
+  <data name="MetadataItemSummary" xml:space="preserve"><value>{0}{1}</value></data>
+  <data name="SensitiveMetadataSuffix" xml:space="preserve"><value> · Sensitive</value></data>
+  <data name="Concealed" xml:space="preserve"><value>Concealed</value></data>
+  <data name="ConcealedSensitiveMetadataSummary" xml:space="preserve"><value>{0}, {1}, concealed sensitive metadata</value></data>
+  <data name="MetadataLocalTime" xml:space="preserve"><value>Local time: {0}</value></data>
+  <data name="ConcealMetadataAria" xml:space="preserve"><value>Conceal {0}</value></data>
+  <data name="RevealMetadataAria" xml:space="preserve"><value>Reveal {0} for this session</value></data>
+  <data name="LinkSummary" xml:space="preserve"><value>{0} → {1} · {2}</value></data>
+  <data name="MetadataSaved" xml:space="preserve"><value>Metadata saved.</value></data>
+  <data name="MetadataKeyRenamed" xml:space="preserve"><value>Metadata key renamed.</value></data>
+  <data name="LinkCreated" xml:space="preserve"><value>Link created.</value></data>
+  <data name="LinkRelabelled" xml:space="preserve"><value>Link relabelled.</value></data>
+  <data name="LinkDirectionReversed" xml:space="preserve"><value>Link direction reversed.</value></data>
+  <data name="LinkRecycled" xml:space="preserve"><value>Link moved to the recycle bin.</value></data>
+  <data name="TechnicalMetadataUnavailable" xml:space="preserve"><value>Technical metadata is unavailable: {0}</value></data>
+  <data name="ExternalDestinationCouldNotOpen" xml:space="preserve"><value>The external destination could not be opened: {0}</value></data>
+  <data name="SensitiveValueCopied" xml:space="preserve"><value>Sensitive value copied. Your operating system's clipboard history may retain it.</value></data>
+  <data name="RecordStateActive" xml:space="preserve"><value>Active</value></data>
+  <data name="RecordStateRecycled" xml:space="preserve"><value>Recycled</value></data>
+  <data name="RecordStatePendingPermanentDeletion" xml:space="preserve"><value>Pending permanent deletion</value></data>
+  <data name="RecordStateMissing" xml:space="preserve"><value>Missing</value></data>
+  <data name="RecordStateContentChanged" xml:space="preserve"><value>Content changed</value></data>
+  <data name="RecordStateContentReplaced" xml:space="preserve"><value>Content replaced</value></data>
+  <data name="UnavailableFileIdentifier" xml:space="preserve"><value>Unavailable file {0}</value></data>
+  <data name="PlaybackRateHalf" xml:space="preserve"><value>0.5×</value></data>
+  <data name="PlaybackRateThreeQuarters" xml:space="preserve"><value>0.75×</value></data>
+  <data name="PlaybackRateOneAndQuarter" xml:space="preserve"><value>1.25×</value></data>
+  <data name="PlaybackRateOneAndHalf" xml:space="preserve"><value>1.5×</value></data>
+  <data name="PlaybackRateDouble" xml:space="preserve"><value>2×</value></data>
+  <data name="IncomingImportsPending" xml:space="preserve"><value>{0} shared or dropped item(s) are waiting for review.</value></data>
+  <data name="ReviewInLibrary" xml:space="preserve"><value>Review in Library</value></data>
+  <data name="ManagedContentNeedsReview" xml:space="preserve"><value>Managed content needs review</value></data>
+  <data name="Review" xml:space="preserve"><value>Review</value></data>
+  <data name="MoreNotices" xml:space="preserve"><value>{0} more notice(s).</value></data>
+  <data name="LibrarySettingsPageTitle" xml:space="preserve"><value>Library settings · SlopFactory</value></data>
+  <data name="RetryRememberedLibrary" xml:space="preserve"><value>Retry remembered library</value></data>
+  <data name="LibraryName" xml:space="preserve"><value>Library name</value></data>
+  <data name="RenameLibrary" xml:space="preserve"><value>Rename library</value></data>
+  <data name="OpenLibraryLocation" xml:space="preserve"><value>Open library location</value></data>
+  <data name="ConfirmOpenLibraryLocation" xml:space="preserve"><value>Confirm opening library location</value></data>
+  <data name="ManagedDirectoryWarning" xml:space="preserve"><value>This is an application-managed directory. Internal filenames may not match display names, and editing or moving entries outside SlopFactory is unsupported.</value></data>
+  <data name="OpenLocation" xml:space="preserve"><value>Open location</value></data>
+  <data name="AppSpecificStorageLocation" xml:space="preserve"><value>App-specific storage location</value></data>
+  <data name="AbsoluteLocalDirectory" xml:space="preserve"><value>Absolute local directory</value></data>
+  <data name="LibraryLocationGuidance" xml:space="preserve"><value>An empty location becomes a new library. A valid existing SlopFactory library is opened. A non-empty unrelated directory is rejected. Existing data is never moved or copied.</value></data>
+  <data name="SwitchingLibrary" xml:space="preserve"><value>Switching…</value></data>
+  <data name="OpenThisLibrary" xml:space="preserve"><value>Open this library</value></data>
+  <data name="ConfirmAdoptCopiedLibrary" xml:space="preserve"><value>Confirm adopting copied library</value></data>
+  <data name="AdoptCopiedLibraryWarning" xml:space="preserve"><value>The selected location could be a copy of another available library. Adopting it assigns a new permanent ID, keeps its files and records, and makes it independent from the original.</value></data>
+  <data name="AdoptCopiedLibrary" xml:space="preserve"><value>Adopt copied library</value></data>
+  <data name="ConfirmCloudLibraryLocation" xml:space="preserve"><value>Confirm cloud-synchronised library location</value></data>
+  <data name="CloudLibraryWarning" xml:space="preserve"><value>This location appears to be cloud-synchronised. Concurrent sync activity can corrupt or duplicate a local library. Continue only if you understand that SlopFactory does not provide synchronisation.</value></data>
+  <data name="UseThisLocation" xml:space="preserve"><value>Use this location</value></data>
+  <data name="AndroidStorage" xml:space="preserve"><value>Android storage</value></data>
+  <data name="AndroidStorageRetention" xml:space="preserve"><value>Libraries in app-specific storage are removed when SlopFactory is uninstalled. SlopFactory data is excluded from Android backup. Export anything you need to retain before uninstalling.</value></data>
+  <data name="AndroidStoragePermissions" xml:space="preserve"><value>Import and export use Android document providers and request only access to the item you choose. SlopFactory declares no broad storage, camera, microphone, contacts, location, or media-library permissions.</value></data>
+  <data name="RecentLibraries" xml:space="preserve"><value>Recent libraries</value></data>
+  <data name="RecentLibrariesGuidance" xml:space="preserve"><value>Libraries are independent. Opening another location never moves or copies data.</value></data>
+  <data name="NoRememberedLibraries" xml:space="preserve"><value>No remembered libraries.</value></data>
+  <data name="ActiveSuffix" xml:space="preserve"><value> (active)</value></data>
+  <data name="Available" xml:space="preserve"><value>Available</value></data>
+  <data name="RecentLibraryStatus" xml:space="preserve"><value>{0} · Last opened {1}</value></data>
+  <data name="CorruptLibraryStatus" xml:space="preserve"><value>Corrupt · stage {0} · diagnostic {1}</value></data>
+  <data name="Open" xml:space="preserve"><value>Open</value></data>
+  <data name="RelinkUsingLocation" xml:space="preserve"><value>Relink using location above</value></data>
+  <data name="Forget" xml:space="preserve"><value>Forget</value></data>
+  <data name="RebuildingPreviews" xml:space="preserve"><value>Rebuilding previews…</value></data>
+  <data name="RebuildLibraryPreviews" xml:space="preserve"><value>Rebuild library previews</value></data>
+  <data name="RebuildPreviewProgress" xml:space="preserve"><value>Rebuilding {0}: {1} of {2}.</value></data>
+  <data name="ConfirmForgetLibrary" xml:space="preserve"><value>Confirm forgetting library</value></data>
+  <data name="ForgetLibraryWarning" xml:space="preserve"><value>Forget {0} on this device? Its library data and future credentials remain untouched; regenerable previews for it will be removed.</value></data>
+  <data name="ForgetLibrary" xml:space="preserve"><value>Forget library</value></data>
+  <data name="PreviewCache" xml:space="preserve"><value>Preview cache</value></data>
+  <data name="PreviewCacheGuidance" xml:space="preserve"><value>Regenerable thumbnails are stored in device-local application cache, separately from every library. Cache limits never restrict or delete original files.</value></data>
+  <data name="CacheUsage" xml:space="preserve"><value>Using {0} of {1}.</value></data>
+  <data name="CacheLimitMib" xml:space="preserve"><value>Cache limit (MiB)</value></data>
+  <data name="SaveCacheLimit" xml:space="preserve"><value>Save cache limit</value></data>
+  <data name="ClearPreviewCache" xml:space="preserve"><value>Clear preview cache</value></data>
+  <data name="ConfirmClearPreviewCache" xml:space="preserve"><value>Confirm clearing preview cache</value></data>
+  <data name="ClearPreviewCacheWarning" xml:space="preserve"><value>Clear all device-local previews? Original library files are unaffected.</value></data>
+  <data name="ClearPreviews" xml:space="preserve"><value>Clear previews</value></data>
+  <data name="LibraryIntegrity" xml:space="preserve"><value>Library integrity</value></data>
+  <data name="IntegrityGuidance" xml:space="preserve"><value>An explicit full scan validates the manifest and database, then reads and hashes every active and recycled managed file. It never repairs, deletes, adopts, or rewrites anything.</value></data>
+  <data name="Scanning" xml:space="preserve"><value>Scanning…</value></data>
+  <data name="StartIntegrityScan" xml:space="preserve"><value>Start full integrity scan</value></data>
+  <data name="CancelScan" xml:space="preserve"><value>Cancel scan</value></data>
+  <data name="IntegrityProgress" xml:space="preserve"><value>{0} · {1} of {2} items</value></data>
+  <data name="ScanTimes" xml:space="preserve"><value>Started {0}; finished {1}.</value></data>
+  <data name="ScanPartialResult" xml:space="preserve"><value>This is an incomplete partial result because the scan was cancelled.</value></data>
+  <data name="PreparingExport" xml:space="preserve"><value>Preparing export…</value></data>
+  <data name="ExportFindingsJson" xml:space="preserve"><value>Export findings as JSON</value></data>
+  <data name="RecordIdentifier" xml:space="preserve"><value>Record {0}</value></data>
+  <data name="IntegrityJsonScope" xml:space="preserve"><value>JSON export includes: library ID, schema version, scan times/status, finding category, opaque record ID, byte counts, and summary. It excludes names, paths, hashes, metadata, prompts, credentials, and file bytes.</value></data>
+  <data name="ExpectedFoundBytes" xml:space="preserve"><value>Expected {0} bytes; found {1} bytes.</value></data>
+  <data name="Unknown" xml:space="preserve"><value>unknown</value></data>
+  <data name="PartialScanHeading" xml:space="preserve"><value>Partial scan: {0} finding(s)</value></data>
+  <data name="ScanCompleteNoFindings" xml:space="preserve"><value>Integrity scan completed with no findings</value></data>
+  <data name="ScanCompleteFindings" xml:space="preserve"><value>Integrity scan completed with {0} finding(s)</value></data>
+  <data name="ScanIncompleteFindings" xml:space="preserve"><value>Integrity scan incomplete with {0} finding(s)</value></data>
+  <data name="OpenedLibrary" xml:space="preserve"><value>Opened {0}.</value></data>
+  <data name="LibraryRenamed" xml:space="preserve"><value>Library renamed.</value></data>
+  <data name="ScanCancelled" xml:space="preserve"><value>Integrity scan cancelled; partial findings are shown below.</value></data>
+  <data name="ScanFinished" xml:space="preserve"><value>Integrity scan finished.</value></data>
+  <data name="CloudWarningReview" xml:space="preserve"><value>This location appears to be cloud-synchronised. Review the warning before continuing.</value></data>
+  <data name="StartingScan" xml:space="preserve"><value>Starting scan</value></data>
+  <data name="ExportIntegrityFindingsTitle" xml:space="preserve"><value>Export integrity findings</value></data>
+  <data name="CopiedLibraryAdopted" xml:space="preserve"><value>The copied library was adopted as an independent library. Existing media and local records were preserved.</value></data>
+  <data name="RelinkedLibrary" xml:space="preserve"><value>Relinked {0} after validating its permanent ID and lock.</value></data>
+  <data name="IntegrityReportReady" xml:space="preserve"><value>The JSON integrity report is ready to save or share. It contains only the default diagnostic fields.</value></data>
+  <data name="ForgotLibrary" xml:space="preserve"><value>Forgot {0} on this device. Its library data was not changed.</value></data>
+  <data name="CacheLimitSaved" xml:space="preserve"><value>Preview cache limit saved. Older previews were removed if needed.</value></data>
+  <data name="CacheCleared" xml:space="preserve"><value>Preview cache cleared. Original files were not changed.</value></data>
+  <data name="PreviewsRebuilt" xml:space="preserve"><value>Rebuilt {0} of {1} eligible previews; {2} could not be generated. Original files were not changed.</value></data>
+  <data name="IssueManifestInvalid" xml:space="preserve"><value>Manifest invalid</value></data>
+  <data name="IssueDatabaseInvalid" xml:space="preserve"><value>Database invalid</value></data>
+  <data name="IssueRequiredDirectoryMissing" xml:space="preserve"><value>Required directory missing</value></data>
+  <data name="IssueManagedFileMissing" xml:space="preserve"><value>Managed file missing</value></data>
+  <data name="IssueFileSizeMismatch" xml:space="preserve"><value>File size mismatch</value></data>
+  <data name="IssueContentHashMismatch" xml:space="preserve"><value>Content hash mismatch</value></data>
+  <data name="IssueUnsafeManagedEntry" xml:space="preserve"><value>Unsafe managed entry</value></data>
+  <data name="IssueOrphanManagedFile" xml:space="preserve"><value>Orphan managed file</value></data>
+  <data name="IssueManagedFileInaccessible" xml:space="preserve"><value>Managed file inaccessible</value></data>
+  <data name="NavConnections" xml:space="preserve"><value>Connections</value></data>
+  <data name="NavModels" xml:space="preserve"><value>Models</value></data>
+  <data name="Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="Save" xml:space="preserve"><value>Save</value></data>
+  <data name="ProviderOpenAi" xml:space="preserve"><value>OpenAI</value></data>
+  <data name="ProviderGenericOpenAiCompatible" xml:space="preserve"><value>Generic OpenAI-compatible</value></data>
+  <data name="ConnectionsPageTitle" xml:space="preserve"><value>Connections · SlopFactory</value></data>
+  <data name="ConnectionsEyebrow" xml:space="preserve"><value>AI providers</value></data>
+  <data name="ConnectionsHeading" xml:space="preserve"><value>Connections</value></data>
+  <data name="ConnectionsDescription" xml:space="preserve"><value>Manage the API connections used for generation.</value></data>
+  <data name="AddConnection" xml:space="preserve"><value>Add connection</value></data>
+  <data name="EditConnection" xml:space="preserve"><value>Edit connection</value></data>
+  <data name="NoConnections" xml:space="preserve"><value>No connections yet.</value></data>
+  <data name="ConnectionSummary" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="ConfirmRecycleConnection" xml:space="preserve"><value>Confirm recycle connection</value></data>
+  <data name="RecycleConnectionWarning" xml:space="preserve"><value>Recycling this connection will also recycle {0} dependent model(s).</value></data>
+  <data name="HideRecycledConnections" xml:space="preserve"><value>Hide recycled connections</value></data>
+  <data name="ShowRecycledConnections" xml:space="preserve"><value>Show recycled connections</value></data>
+  <data name="NoRecycledConnections" xml:space="preserve"><value>No recycled connections.</value></data>
+  <data name="ConfirmPermanentlyDeleteConnection" xml:space="preserve"><value>Confirm permanently delete connection</value></data>
+  <data name="PermanentlyDeleteConnectionWarning" xml:space="preserve"><value>This permanently deletes the connection, its dependent models, and its stored API key.</value></data>
+  <data name="ConnectionVerified" xml:space="preserve"><value>Verified</value></data>
+  <data name="ConnectionTestFailedStatus" xml:space="preserve"><value>Last test failed</value></data>
+  <data name="ConnectionUnverified" xml:space="preserve"><value>Unverified</value></data>
+  <data name="ConnectionRecycled" xml:space="preserve"><value>Connection recycled.</value></data>
+  <data name="ConnectionRestored" xml:space="preserve"><value>Connection restored.</value></data>
+  <data name="ConnectionPermanentlyDeleted" xml:space="preserve"><value>Connection permanently deleted.</value></data>
+  <data name="ProviderType" xml:space="preserve"><value>Provider type</value></data>
+  <data name="BaseUrl" xml:space="preserve"><value>Base URL</value></data>
+  <data name="AdvancedConnectionSettings" xml:space="preserve"><value>Advanced connection settings</value></data>
+  <data name="CredentialHeaderName" xml:space="preserve"><value>Credential header name</value></data>
+  <data name="AuthPrefix" xml:space="preserve"><value>Authorization prefix</value></data>
+  <data name="ApiKey" xml:space="preserve"><value>API key</value></data>
+  <data name="CredentialStored" xml:space="preserve"><value>Credential stored</value></data>
+  <data name="ReplaceApiKey" xml:space="preserve"><value>Replace API key</value></data>
+  <data name="TestConnection" xml:space="preserve"><value>Test connection</value></data>
+  <data name="TestingConnection" xml:space="preserve"><value>Testing…</value></data>
+  <data name="ConnectionTestSucceeded" xml:space="preserve"><value>Connection succeeded ({0}).</value></data>
+  <data name="ConnectionTestFailed" xml:space="preserve"><value>Connection test failed: {0}</value></data>
+  <data name="ModelsPageTitle" xml:space="preserve"><value>Models · SlopFactory</value></data>
+  <data name="ModelsEyebrow" xml:space="preserve"><value>AI providers</value></data>
+  <data name="ModelsHeading" xml:space="preserve"><value>Models</value></data>
+  <data name="ModelsDescription" xml:space="preserve"><value>Manage the configured models used for generation.</value></data>
+  <data name="AddModel" xml:space="preserve"><value>Add model</value></data>
+  <data name="EditModel" xml:space="preserve"><value>Edit model</value></data>
+  <data name="AddConnectionFirst" xml:space="preserve"><value>Add a connection before configuring a model.</value></data>
+  <data name="NoModels" xml:space="preserve"><value>No models yet.</value></data>
+  <data name="ModelSummary" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
+  <data name="ConfirmRecycleModel" xml:space="preserve"><value>Confirm recycle model</value></data>
+  <data name="RecycleModelWarning" xml:space="preserve"><value>Recycling this model also recycles its dependent saved generation settings.</value></data>
+  <data name="HideRecycledModels" xml:space="preserve"><value>Hide recycled models</value></data>
+  <data name="ShowRecycledModels" xml:space="preserve"><value>Show recycled models</value></data>
+  <data name="NoRecycledModels" xml:space="preserve"><value>No recycled models.</value></data>
+  <data name="ConfirmPermanentlyDeleteModel" xml:space="preserve"><value>Confirm permanently delete model</value></data>
+  <data name="PermanentlyDeleteModelWarning" xml:space="preserve"><value>This permanently deletes the model. Files already generated with it keep their provider and model provenance.</value></data>
+  <data name="ModeText" xml:space="preserve"><value>Text</value></data>
+  <data name="ModeImage" xml:space="preserve"><value>Image</value></data>
+  <data name="ModelRecycled" xml:space="preserve"><value>Model recycled.</value></data>
+  <data name="ModelRestored" xml:space="preserve"><value>Model restored.</value></data>
+  <data name="ModelPermanentlyDeleted" xml:space="preserve"><value>Model permanently deleted.</value></data>
+  <data name="Connection" xml:space="preserve"><value>Connection</value></data>
+  <data name="GenerationMode" xml:space="preserve"><value>Generation mode</value></data>
+  <data name="ProviderModelId" xml:space="preserve"><value>Provider model ID</value></data>
+  <data name="LoadModels" xml:space="preserve"><value>Load models</value></data>
+  <data name="LoadingModels" xml:space="preserve"><value>Loading models…</value></data>
+  <data name="NoModelsDiscovered" xml:space="preserve"><value>No models were returned by this connection. Enter a provider model ID manually.</value></data>
+  <data name="DiscoveredModels" xml:space="preserve"><value>Discovered models</value></data>
+  <data name="SelectDiscoveredModel" xml:space="preserve"><value>Select a discovered model…</value></data>
+  <data name="SupportsSystemInstructions" xml:space="preserve"><value>Supports system instructions</value></data>
+  <data name="NavGenerate" xml:space="preserve"><value>Generate</value></data>
+  <data name="NavGenerationHistory" xml:space="preserve"><value>Generation history</value></data>
+  <data name="Model" xml:space="preserve"><value>Model</value></data>
+  <data name="Prompt" xml:space="preserve"><value>Prompt</value></data>
+  <data name="ResultCount" xml:space="preserve"><value>Result count</value></data>
+  <data name="Generate" xml:space="preserve"><value>Generate</value></data>
+  <data name="Generating" xml:space="preserve"><value>Generating…</value></data>
+  <data name="GeneratePageTitle" xml:space="preserve"><value>Generate · SlopFactory</value></data>
+  <data name="GenerateEyebrow" xml:space="preserve"><value>AI generation</value></data>
+  <data name="GenerateHeading" xml:space="preserve"><value>Generate</value></data>
+  <data name="GenerateDescription" xml:space="preserve"><value>Send a prompt to a configured text model and add the result to your library.</value></data>
+  <data name="AddModelFirst" xml:space="preserve"><value>Add a model before generating.</value></data>
+  <data name="ConnectionUnavailableForModel" xml:space="preserve"><value>The connection for this model is unavailable.</value></data>
+  <data name="GenerationCompleted" xml:space="preserve"><value>Generation completed</value></data>
+  <data name="GenerationFailed" xml:space="preserve"><value>Generation failed</value></data>
+  <data name="OpenGeneratedFile" xml:space="preserve"><value>Open generated file</value></data>
+  <data name="GenerationHistoryPageTitle" xml:space="preserve"><value>Generation history · SlopFactory</value></data>
+  <data name="GenerationHistoryHeading" xml:space="preserve"><value>Generation history</value></data>
+  <data name="GenerationHistoryDescription" xml:space="preserve"><value>Review past generation attempts and their results.</value></data>
+  <data name="NoGenerationHistory" xml:space="preserve"><value>No generations yet.</value></data>
+  <data name="GenerationRecordSummary" xml:space="preserve"><value>{0} · {1} · {2} result(s)</value></data>
+  <data name="NavSavedSettings" xml:space="preserve"><value>Saved settings</value></data>
+  <data name="NewGeneration" xml:space="preserve"><value>New generation</value></data>
+  <data name="SaveSettingsHeading" xml:space="preserve"><value>Save these settings</value></data>
+  <data name="SaveSettingsDescription" xml:space="preserve"><value>Save the current model, prompt, result count and destination for reuse.</value></data>
+  <data name="SettingsTitle" xml:space="preserve"><value>Title</value></data>
+  <data name="SaveSettingsAction" xml:space="preserve"><value>Save settings</value></data>
+  <data name="SavedSettingsSaved" xml:space="preserve"><value>Saved generation settings saved.</value></data>
+  <data name="SavedSettingsModelUnavailable" xml:space="preserve"><value>The model saved with these settings ({0}) is unavailable. Choose another model.</value></data>
+  <data name="SavedSettingsPageTitle" xml:space="preserve"><value>Saved settings · SlopFactory</value></data>
+  <data name="SavedSettingsHeading" xml:space="preserve"><value>Saved settings</value></data>
+  <data name="SavedSettingsDescription" xml:space="preserve"><value>Reuse a saved model, prompt, result count and destination.</value></data>
+  <data name="NoSavedSettings" xml:space="preserve"><value>No saved settings yet.</value></data>
+  <data name="SavedSettingSummary" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="UseSettings" xml:space="preserve"><value>Use</value></data>
+  <data name="ConfirmRecycleSavedSettings" xml:space="preserve"><value>Confirm recycle saved settings</value></data>
+  <data name="RecycleSavedSettingsWarning" xml:space="preserve"><value>Recycling these saved settings does not affect the model or any previously generated files.</value></data>
+  <data name="HideRecycledSavedSettings" xml:space="preserve"><value>Hide recycled saved settings</value></data>
+  <data name="ShowRecycledSavedSettings" xml:space="preserve"><value>Show recycled saved settings</value></data>
+  <data name="NoRecycledSavedSettings" xml:space="preserve"><value>No recycled saved settings.</value></data>
+  <data name="ConfirmPermanentlyDeleteSavedSettings" xml:space="preserve"><value>Confirm permanently delete saved settings</value></data>
+  <data name="PermanentlyDeleteSavedSettingsWarning" xml:space="preserve"><value>This permanently deletes the saved settings. It does not affect the model or any previously generated files.</value></data>
+  <data name="SavedSettingsRecycled" xml:space="preserve"><value>Saved settings recycled.</value></data>
+  <data name="SavedSettingsRestored" xml:space="preserve"><value>Saved settings restored.</value></data>
+  <data name="SavedSettingsPermanentlyDeleted" xml:space="preserve"><value>Saved settings permanently deleted.</value></data>
+  <data name="UseAgain" xml:space="preserve"><value>Use again</value></data>
+  <data name="SystemInstructions" xml:space="preserve"><value>System instructions (optional)</value></data>
+  <data name="ShowSystemInstructions" xml:space="preserve"><value>Show system instructions</value></data>
+  <data name="TokenUsage" xml:space="preserve"><value>{0} prompt tokens · {1} completion tokens</value></data>
+  <data name="SourceImage" xml:space="preserve"><value>Source image (optional)</value></data>
+  <data name="NoSourceImage" xml:space="preserve"><value>None</value></data>
+  <data name="SourceImageUsed" xml:space="preserve"><value>Source image</value></data>
+  <data name="FilterByStatus" xml:space="preserve"><value>Status</value></data>
+  <data name="FilterByMode" xml:space="preserve"><value>Type</value></data>
+  <data name="FilterByModel" xml:space="preserve"><value>Model</value></data>
+  <data name="NoFilteredGenerationHistory" xml:space="preserve"><value>No generations match the current filters.</value></data>
+  <data name="CancelGeneration" xml:space="preserve"><value>Cancel</value></data>
+  <data name="GenerationCancelledByUser" xml:space="preserve"><value>Generation cancelled. The provider may still process or charge for a request that was already sent.</value></data>
+  <data name="PromptImprovementHeading" xml:space="preserve"><value>Improve this prompt</value></data>
+  <data name="PromptImprovementDescription" xml:space="preserve"><value>Send the prompt above to a text model for a rewritten suggestion. Nothing changes until you choose a suggestion to use.</value></data>
+  <data name="ImprovementModel" xml:space="preserve"><value>Improvement model</value></data>
+  <data name="NoImprovementModel" xml:space="preserve"><value>None</value></data>
+  <data name="ImprovementGuidance" xml:space="preserve"><value>Guidance for the improvement (optional)</value></data>
+  <data name="ImprovePromptAction" xml:space="preserve"><value>Improve prompt</value></data>
+  <data name="ImprovingPrompt" xml:space="preserve"><value>Improving...</value></data>
+  <data name="NoImprovementCandidates" xml:space="preserve"><value>The model did not return a suggestion.</value></data>
+  <data name="UseThisCandidate" xml:space="preserve"><value>Use this suggestion</value></data>
+  <data name="ConnectionCredentialsRequired" xml:space="preserve"><value>Credentials required</value></data>
+  <data name="GenerationBlockedCredentialsRequired" xml:space="preserve"><value>This model's connection has no stored API key.</value></data>
+  <data name="AddApiKey" xml:space="preserve"><value>Add API key</value></data>
+  <data name="ConnectionUnverifiedWarning" xml:space="preserve"><value>This model's connection has not passed a connection test. The request may fail.</value></data>
+  <data name="ModelDoesNotSupportSystemInstructions" xml:space="preserve"><value>This model is not configured to support system instructions.</value></data>
+  <data name="ModelCatalogueLastRefreshed" xml:space="preserve"><value>Model list last refreshed {0}.</value></data>
+  <data name="ModelCatalogueNeverRefreshed" xml:space="preserve"><value>The model list has not been refreshed yet.</value></data>
+  <data name="ModelCataloguePossiblyStale" xml:space="preserve"><value>Possibly stale (last refresh failed)</value></data>
+  <data name="ModelCatalogueStale" xml:space="preserve"><value>Stale</value></data>
+  <data name="ModelNotCurrentlyListed" xml:space="preserve"><value>Not currently listed</value></data>
+  <data name="ConnectionTimeoutSeconds" xml:space="preserve"><value>Request timeout (seconds)</value></data>
+  <data name="ConnectionTimeoutHelp" xml:space="preserve"><value>Leave blank to use the default of {0} seconds. Must be between {1} and {2} seconds.</value></data>
+  <data name="AdditionalHeaders" xml:space="preserve"><value>Additional headers</value></data>
+  <data name="AdditionalHeadersHelp" xml:space="preserve"><value>One per line, in the form "Name: Value". For gateway or routing headers only — never for credentials; Authorization, Proxy-Authorization, Cookie and the credential header above cannot be set here.</value></data>
+  <data name="ModalitySettingsHeading" xml:space="preserve"><value>Per-modality settings</value></data>
+  <data name="ModalitySettingsDescription" xml:space="preserve"><value>Override the relative path used for each modality, or disable a modality this gateway does not support. Requests still use OpenAI-compatible bodies.</value></data>
+  <data name="ModelsModality" xml:space="preserve"><value>Model listing</value></data>
+  <data name="TextGenerationModality" xml:space="preserve"><value>Text generation</value></data>
+  <data name="ImageGenerationModality" xml:space="preserve"><value>Image generation</value></data>
+  <data name="ResolvedEndpoint" xml:space="preserve"><value>Resolved endpoint: {0}</value></data>
+  <data name="ProviderTypeLockedWhileModelsExist" xml:space="preserve"><value>The provider type cannot be changed while this connection has dependent models.</value></data>
+  <data name="InsecureHttpBaseUrlWarning" xml:space="preserve"><value>This base URL uses unencrypted HTTP. Only loopback or private-network addresses are accepted; credentials and data would otherwise travel in cleartext.</value></data>
+  <data name="InsecureConnectionBadge" xml:space="preserve"><value>Unencrypted (HTTP)</value></data>
+</root>

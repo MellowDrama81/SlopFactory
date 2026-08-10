@@ -8,6 +8,9 @@ public sealed record ManagedContentWatchNotice(string? FileId, string DisplayNam
 public sealed class ManagedContentWatchService : IDisposable
 {
     private readonly AppLibraryState _libraries;
+    private readonly ILibraryAvailabilityProbe _availability;
+    private readonly IntegrityScanRecommendationService _scanRecommendation;
+    private readonly IRecentLibraryService _recentLibraries;
     private readonly object _gate = new();
     private readonly Dictionary<string, CancellationTokenSource> _pending = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly Dictionary<string, ManagedContentWatchNotice> _notices = new(StringComparer.Ordinal);
@@ -16,8 +19,17 @@ public sealed class ManagedContentWatchService : IDisposable
     private CancellationTokenSource? _libraryValidation;
     private string? _libraryId;
     private bool _started;
+    private Timer? _availabilityTimer;
+    private string? _volumeIdentity;
+    private int _reopening;
 
-    public ManagedContentWatchService(AppLibraryState libraries) => _libraries = libraries;
+    public ManagedContentWatchService(AppLibraryState libraries, ILibraryAvailabilityProbe availability, IntegrityScanRecommendationService scanRecommendation, IRecentLibraryService recentLibraries)
+    {
+        _libraries = libraries;
+        _availability = availability;
+        _scanRecommendation = scanRecommendation;
+        _recentLibraries = recentLibraries;
+    }
 
     public event EventHandler? Changed;
     public IReadOnlyList<ManagedContentWatchNotice> Notices { get { lock (_gate) return _notices.Values.OrderBy(item => item.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToArray(); } }
@@ -48,11 +60,14 @@ public sealed class ManagedContentWatchService : IDisposable
             _libraryWatcher = null;
             _libraryValidation?.Cancel();
             _libraryValidation = null;
+            _availabilityTimer?.Dispose();
+            _availabilityTimer = null;
             foreach (var cancellation in _pending.Values) { cancellation.Cancel(); cancellation.Dispose(); }
             _pending.Clear();
             _notices.Clear();
             var workspace = _libraries.Workspace;
             _libraryId = workspace?.Descriptor.LibraryId;
+            _volumeIdentity = workspace is null ? null : LibraryVolumeIdentity.ForPath(workspace.Descriptor.RootPath);
             if (workspace is not null)
             {
                 var mediaPath = Path.Combine(workspace.Descriptor.RootPath, "media");
@@ -82,6 +97,7 @@ public sealed class ManagedContentWatchService : IDisposable
                 _libraryWatcher.Renamed += OnLibraryPathChanged;
                 _libraryWatcher.Error += OnLibraryWatcherError;
             }
+            if (workspace is not null || _libraries.ActivePath is not null) _availabilityTimer = new Timer(CheckAvailability, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
         }
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -166,6 +182,7 @@ public sealed class ManagedContentWatchService : IDisposable
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
             lock (_gate) _notices[$"watch:{managedName}"] = new ManagedContentWatchNotice(null, "Managed storage", null, "A managed-file change could not be revalidated. Run a full integrity scan.");
+            _scanRecommendation.Recommend(IntegrityScanRecommendationReason.StorageInconsistency);
             Changed?.Invoke(this, EventArgs.Empty);
         }
         finally
@@ -181,7 +198,36 @@ public sealed class ManagedContentWatchService : IDisposable
     private void OnWatcherError(object sender, ErrorEventArgs args)
     {
         lock (_gate) _notices["watcher"] = new ManagedContentWatchNotice(null, "Managed storage", null, "Some filesystem changes may have been missed. Run a full integrity scan.");
+        _scanRecommendation.Recommend(IntegrityScanRecommendationReason.WatcherOverflow);
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void CheckAvailability(object? state)
+    {
+        ILibraryWorkspace? workspace;
+        string? expectedId;
+        string? volumeIdentity;
+        lock (_gate) { workspace = _libraries.Workspace; expectedId = _libraryId; volumeIdentity = _volumeIdentity; }
+        if (workspace is null)
+        {
+            var path = _libraries.ActivePath;
+            if (path is null || Interlocked.CompareExchange(ref _reopening, 1, 0) != 0) return;
+            var remembered = _recentLibraries.GetAll().FirstOrDefault(item => string.Equals(Path.GetFullPath(item.Path), Path.GetFullPath(path), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            if (remembered?.State != RememberedLibraryState.Unavailable || !_availability.IsAvailable(path, remembered.VolumeIdentity, out _)) { Interlocked.Exchange(ref _reopening, 0); return; }
+            _ = ReopenAvailableLibraryAsync();
+            return;
+        }
+        if (expectedId != workspace.Descriptor.LibraryId) return;
+        if (_availability.IsAvailable(workspace.Descriptor.RootPath, volumeIdentity, out var stage)) return;
+        _scanRecommendation.Recommend(IntegrityScanRecommendationReason.UnsafeVolumeRemoval);
+        _ = _libraries.CloseUnavailableLibraryAsync(workspace, stage);
+    }
+
+    private async Task ReopenAvailableLibraryAsync()
+    {
+        try { await _libraries.RetryAsync().ConfigureAwait(false); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException) { }
+        finally { Interlocked.Exchange(ref _reopening, 0); }
     }
 
     private void OnLibraryWatcherError(object sender, ErrorEventArgs args)
@@ -203,6 +249,7 @@ public sealed class ManagedContentWatchService : IDisposable
             _watcher?.Dispose();
             _libraryWatcher?.Dispose();
             _libraryValidation?.Cancel();
+            _availabilityTimer?.Dispose();
             foreach (var cancellation in _pending.Values) { cancellation.Cancel(); cancellation.Dispose(); }
             _pending.Clear();
         }

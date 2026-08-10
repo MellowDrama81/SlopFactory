@@ -7,7 +7,7 @@
   <Properties>
     <DisplayName>SlopFactory</DisplayName>
     <PublisherDisplayName>Mellow</PublisherDisplayName>
-    <Logo>appicon.png</Logo>
+    <Logo>appiconStoreLogo.png</Logo>
   </Properties>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.19045.0" MaxVersionTested="10.0.26100.0" />
@@ -16,9 +16,9 @@
   <Resources><Resource Language="x-generate" /></Resources>
   <Applications>
     <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
-      <uap:VisualElements DisplayName="SlopFactory" Description="Local-first AI media library" BackgroundColor="#171A21" Square150x150Logo="appicon.png" Square44x44Logo="appicon.png">
-        <uap:DefaultTile Wide310x150Logo="appicon.png" />
-        <uap:SplashScreen Image="appicon.png" BackgroundColor="#171A21" />
+      <uap:VisualElements DisplayName="SlopFactory" Description="Local-first AI media library" BackgroundColor="#171A21" Square150x150Logo="appiconMediumTile.png" Square44x44Logo="appiconLogo.png">
+        <uap:DefaultTile Wide310x150Logo="appiconWideTile.png" />
+        <uap:SplashScreen Image="splashSplashScreen.png" BackgroundColor="#171A21" />
       </uap:VisualElements>
       <Extensions>
         <uap:Extension Category="windows.fileTypeAssociation">

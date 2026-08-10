@@ -3,17 +3,24 @@ using System.Text.Json;
 
 namespace Mellow.SlopFactory.Gui.Services;
 
+public enum RememberedLibraryState { Available, Unavailable, Corrupt }
+
 public sealed record RecentLibrary(
     string LibraryId,
     string DisplayName,
     string Path,
-    DateTimeOffset LastOpenedAt);
+    DateTimeOffset LastOpenedAt,
+    string? VolumeIdentity = null,
+    RememberedLibraryState State = RememberedLibraryState.Available,
+    string? FailureStage = null,
+    string? DiagnosticId = null);
 
 public interface IRecentLibraryService
 {
     IReadOnlyList<RecentLibrary> GetAll();
     void RecordOpened(LibraryDescriptor descriptor);
     void Forget(string libraryId, string path);
+    void RecordFailure(string path, string displayName, string? libraryId, RememberedLibraryState state, string failureStage, string diagnosticId);
     void ValidateNoOverlap(string candidatePath);
 }
 
@@ -35,7 +42,7 @@ public sealed class RecentLibraryService : IRecentLibraryService
             var path = Path.GetFullPath(descriptor.RootPath);
             var items = Read();
             items.RemoveAll(item => SamePath(item.Path, path) || string.Equals(item.LibraryId, descriptor.LibraryId, StringComparison.Ordinal));
-            items.Add(new RecentLibrary(descriptor.LibraryId, descriptor.DisplayName, path, DateTimeOffset.UtcNow));
+            items.Add(new RecentLibrary(descriptor.LibraryId, descriptor.DisplayName, path, DateTimeOffset.UtcNow, LibraryVolumeIdentity.ForPath(path)));
             Write(items);
         }
     }
@@ -46,6 +53,28 @@ public sealed class RecentLibraryService : IRecentLibraryService
         {
             var items = Read();
             items.RemoveAll(item => string.Equals(item.LibraryId, libraryId, StringComparison.Ordinal) && SamePath(item.Path, path));
+            Write(items);
+        }
+    }
+
+    public void RecordFailure(string path, string displayName, string? libraryId, RememberedLibraryState state, string failureStage, string diagnosticId)
+    {
+        if (state == RememberedLibraryState.Available) throw new ArgumentOutOfRangeException(nameof(state));
+        lock (_gate)
+        {
+            var fullPath = Path.GetFullPath(path);
+            var items = Read();
+            var existing = items.FirstOrDefault(item => SamePath(item.Path, fullPath));
+            items.RemoveAll(item => SamePath(item.Path, fullPath));
+            items.Add(new RecentLibrary(
+                libraryId ?? existing?.LibraryId ?? Guid.NewGuid().ToString("N"),
+                string.IsNullOrWhiteSpace(displayName) ? existing?.DisplayName ?? "Unavailable library" : displayName,
+                fullPath,
+                existing?.LastOpenedAt ?? DateTimeOffset.UtcNow,
+                existing?.VolumeIdentity ?? LibraryVolumeIdentity.ForPath(fullPath),
+                state,
+                failureStage,
+                diagnosticId));
             Write(items);
         }
     }

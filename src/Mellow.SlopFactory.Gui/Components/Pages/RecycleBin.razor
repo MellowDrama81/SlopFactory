@@ -1,22 +1,25 @@
 @page "/recycle-bin"
 @inject AppLibraryState LibraryState
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
 
-<PageTitle>Recycle bin · SlopFactory</PageTitle>
+<PageTitle>@Strings["RecycleBinPageTitle"]</PageTitle>
 
 <header class="page-header">
     <div>
-        <p class="eyebrow">Recovery</p>
-        <h1>Recycle bin</h1>
-        <p class="muted">Search, restore, or permanently delete top-level library aggregates.</p>
+        <p class="eyebrow">@Strings["Recovery"]</p>
+        <h1>@Strings["RecycleBin"]</h1>
+        <p class="muted">@Strings["RecycleBinDescription"]</p>
     </div>
-    <button class="danger" disabled="@(_entries.Count == 0 || _isBusy)" @onclick="BeginEmpty">Empty recycle bin</button>
+    <button class="danger" disabled="@(_entries.Count == 0 || _isBusy)" @onclick="BeginEmpty">@Strings["EmptyRecycleBin"]</button>
 </header>
 
 @if (!string.IsNullOrWhiteSpace(_message)) { <div class="notice" role="status">@_message</div> }
 @if (_failures.Count > 0)
 {
     <div class="notice error" role="alert">
-        <strong>@_failures.Count item(s) could not be processed.</strong>
+        <strong>@Strings["ItemsCouldNotBeProcessed", _failures.Count]</strong>
         <ul>
             @foreach (var failure in _failures) { <li><strong>@failure.Name:</strong> @failure.Error</li> }
         </ul>
@@ -28,13 +31,13 @@
     <section class="panel confirmation-panel" aria-labelledby="confirmation-title">
         <h2 id="confirmation-title">@ConfirmationTitle</h2>
         <p>@ConfirmationMessage</p>
-        <p><strong>Affected content:</strong> @CascadeSummary(_pendingEntries)</p>
+        <p><strong>@Strings["AffectedContent"]</strong> @CascadeSummary(_pendingEntries)</p>
         <ul>
             @foreach (var entry in _pendingEntries.Take(6))
             {
                 <li>@KindName(entry.Reference.Kind): <strong>@entry.Name</strong> — @EntryCascadeSummary(entry)</li>
             }
-            @if (_pendingEntries.Count > 6) { <li>And @(_pendingEntries.Count - 6) more item(s).</li> }
+            @if (_pendingEntries.Count > 6) { <li>@Strings["AndMoreItems", _pendingEntries.Count - 6]</li> }
         </ul>
         @if (_pendingAction == RecycleBinAction.Restore)
         {
@@ -45,63 +48,63 @@
                         <strong>@preview.Entry.Name</strong>
                         <ul>
                             @foreach (var effect in preview.Effects) { <li>@effect</li> }
-                            @foreach (var blocker in preview.BlockingReasons) { <li class="error">Blocked: @blocker</li> }
+                            @foreach (var blocker in preview.BlockingReasons) { <li class="error">@Strings["Blocked", blocker]</li> }
                         </ul>
                     </div>
                 }
                 @if (_restorePreview.BlockedCount > 0)
                 {
-                    <p class="error"><strong>@_restorePreview.BlockedCount item(s) will remain unchanged.</strong> Resolve the listed conflicts or dependencies, then retry them.</p>
+                    <p class="error"><strong>@Strings["RestoreBlockedItems", _restorePreview.BlockedCount]</strong> @Strings["RestoreBlockedGuidance"]</p>
                 }
             </div>
         }
         <div class="actions">
             <button class="@(_pendingAction == RecycleBinAction.Restore ? string.Empty : "danger")" disabled="@(_isBusy || (_pendingAction == RecycleBinAction.Restore && _restorePreview.RestorableCount == 0))" @onclick="ConfirmPendingActionAsync">@ConfirmationButtonLabel</button>
-            <button class="secondary" disabled="@_isBusy" @onclick="CancelPendingAction">Cancel</button>
+            <button class="secondary" disabled="@_isBusy" @onclick="CancelPendingAction">@Strings["Cancel"]</button>
         </div>
     </section>
 }
 
-<section class="panel recycle-controls" aria-label="Recycle bin controls">
-    <label>Search
-        <input type="search" placeholder="Name or original location" @bind="_search" @bind:event="oninput" />
+<section class="panel recycle-controls" aria-label="@Strings["RecycleBinControls"]">
+    <label>@Strings["Search"]
+        <input type="search" placeholder="@Strings["NameOrOriginalLocation"]" @bind="_search" @bind:event="oninput" />
     </label>
-    <label>Category
+    <label>@Strings["Category"]
         <select @bind="_category">
-            <option value="all">All</option>
-            <option value="folder">Folders</option>
-            <option value="file">Files</option>
-            <option value="link">File links</option>
+            <option value="all">@Strings["All"]</option>
+            <option value="folder">@Strings["Folders"]</option>
+            <option value="file">@Strings["Files"]</option>
+            <option value="link">@Strings["FileLinks"]</option>
         </select>
     </label>
-    <label>Sort
+    <label>@Strings["Sort"]
         <select @bind="_sort">
-            <option value="deleted-desc">Recently deleted</option>
-            <option value="deleted-asc">Oldest deleted</option>
-            <option value="name-asc">Name A–Z</option>
-            <option value="name-desc">Name Z–A</option>
-            <option value="type">Entity type</option>
+            <option value="deleted-desc">@Strings["RecentlyDeleted"]</option>
+            <option value="deleted-asc">@Strings["OldestDeleted"]</option>
+            <option value="name-asc">@Strings["NameAscending"]</option>
+            <option value="name-desc">@Strings["NameDescending"]</option>
+            <option value="type">@Strings["EntityType"]</option>
         </select>
     </label>
 </section>
 
 <div class="selection-bar">
-    <span>@VisibleEntries.Count item(s) shown · @_selected.Count selected</span>
+    <span>@Strings["ItemsShownSelected", VisibleEntries.Count, _selected.Count]</span>
     <div class="actions">
-        <button class="secondary" disabled="@(VisibleEntries.Count == 0 || _isBusy)" @onclick="SelectVisible">Select all shown</button>
-        <button class="secondary" disabled="@(_selected.Count == 0 || _isBusy)" @onclick="ClearSelection">Clear selection</button>
-        <button disabled="@(SelectedRestorableCount == 0 || _isBusy)" @onclick="BeginRestoreSelected">Restore selected (@SelectedRestorableCount)</button>
-        <button class="danger" disabled="@(_selected.Count == 0 || _isBusy)" @onclick="BeginDeleteSelected">Delete selected permanently (@_selected.Count)</button>
+        <button class="secondary" disabled="@(VisibleEntries.Count == 0 || _isBusy)" @onclick="SelectVisible">@Strings["SelectAllShown"]</button>
+        <button class="secondary" disabled="@(_selected.Count == 0 || _isBusy)" @onclick="ClearSelection">@Strings["ClearSelection"]</button>
+        <button disabled="@(SelectedRestorableCount == 0 || _isBusy)" @onclick="BeginRestoreSelected">@Strings["RestoreSelected", SelectedRestorableCount]</button>
+        <button class="danger" disabled="@(_selected.Count == 0 || _isBusy)" @onclick="BeginDeleteSelected">@Strings["DeleteSelectedPermanently", _selected.Count]</button>
     </div>
 </div>
 
 @if (_entries.Count == 0)
 {
-    <div class="empty-panel"><p>The recycle bin is empty.</p></div>
+    <div class="empty-panel"><p>@Strings["RecycleBinEmpty"]</p></div>
 }
 else if (VisibleEntries.Count == 0)
 {
-    <div class="empty-panel"><p>No recycled items match the current search and category.</p></div>
+    <div class="empty-panel"><p>@Strings["NoRecycleBinMatches"]</p></div>
 }
 else
 {
@@ -111,23 +114,23 @@ else
             <article class="file-row recycle-entry">
                 <label class="recycle-check">
                     <input type="checkbox" checked="@_selected.Contains(entry.Reference)" @onchange="eventArgs => ToggleSelection(entry.Reference, eventArgs)" />
-                    <span class="visually-hidden">Select @KindName(entry.Reference.Kind) @entry.Name</span>
+                    <span class="visually-hidden">@Strings["SelectItem", KindName(entry.Reference.Kind), entry.Name]</span>
                 </label>
                 <div class="file-main">
                     <strong>@entry.Name</strong>
-                    <span>@KindName(entry.Reference.Kind) · originally in @entry.OriginalLocation</span>
-                    <span>Deleted @entry.RecycledAt.ToLocalTime().ToString("g") · @EntryCascadeSummary(entry) · @StateName(entry.State)</span>
+                    <span>@Strings["OriginallyIn", KindName(entry.Reference.Kind), entry.OriginalLocation]</span>
+                    <span>@Strings["DeletedEntryStatus", entry.RecycledAt.ToLocalTime().ToString("g"), EntryCascadeSummary(entry), StateName(entry.State)]</span>
                     @if (entry.DeletionFailure is not null)
                     {
-                        <span class="error">Last deletion attempt failed @entry.DeletionFailure.FailedAt.ToLocalTime().ToString("g"): @entry.DeletionFailure.SanitizedError</span>
+                        <span class="error">@Strings["LastDeletionAttemptFailed", entry.DeletionFailure.FailedAt.ToLocalTime().ToString("g"), entry.DeletionFailure.SanitizedError]</span>
                     }
                 </div>
                 <div class="actions">
                     @if (entry.State == LibraryRecordState.Recycled)
                     {
-                        <button disabled="@_isBusy" @onclick="() => BeginRestore([entry.Reference])">Restore</button>
+                        <button disabled="@_isBusy" @onclick="() => BeginRestore([entry.Reference])">@Strings["Restore"]</button>
                     }
-                    <button class="danger" disabled="@_isBusy" @onclick="() => BeginDelete([entry.Reference])">@(entry.State == LibraryRecordState.PendingPermanentDeletion ? "Retry permanent deletion" : "Delete permanently")</button>
+                    <button class="danger" disabled="@_isBusy" @onclick="() => BeginDelete([entry.Reference])">@(entry.State == LibraryRecordState.PendingPermanentDeletion ? Strings["RetryPermanentDeletion"] : Strings["DeletePermanently"])</button>
                 </div>
             </article>
         }
@@ -178,11 +181,11 @@ else
     }
 
     private int SelectedRestorableCount => _entries.Count(entry => _selected.Contains(entry.Reference) && entry.State == LibraryRecordState.Recycled);
-    private string ConfirmationTitle => _pendingAction switch { RecycleBinAction.Restore => "Restore selected items?", RecycleBinAction.Empty => "Empty the recycle bin?", _ => "Permanently delete selected items?" };
+    private string ConfirmationTitle => _pendingAction switch { RecycleBinAction.Restore => Strings["RestoreSelectedItemsQuestion"], RecycleBinAction.Empty => Strings["EmptyRecycleBinQuestion"], _ => Strings["PermanentlyDeleteSelectedItemsQuestion"] };
     private string ConfirmationMessage => _pendingAction == RecycleBinAction.Restore
-        ? "Review every affected aggregate, name conflict, managed file, and link dependency before restoration. Only unblocked items will be changed."
-        : "Permanent deletion cannot be undone. Managed files, metadata, and affected file links will be removed.";
-    private string ConfirmationButtonLabel => _pendingAction switch { RecycleBinAction.Restore => $"Restore {_restorePreview.RestorableCount} item(s)", RecycleBinAction.Empty => "Empty recycle bin", _ => "Delete permanently" };
+        ? Strings["RestoreReviewMessage"]
+        : Strings["PermanentDeletionWarning"];
+    private string ConfirmationButtonLabel => _pendingAction switch { RecycleBinAction.Restore => Strings["RestoreItemCount", _restorePreview.RestorableCount], RecycleBinAction.Empty => Strings["EmptyRecycleBin"], _ => Strings["DeletePermanently"] };
 
     protected override async Task OnInitializedAsync()
     {
@@ -267,8 +270,8 @@ else
             foreach (var success in result.Items.Where(item => item.Succeeded)) _selected.Remove(success.Reference);
             _failures = result.Items.Where(item => !item.Succeeded).ToArray();
             _message = result.FailedCount == 0
-                ? $"{result.SucceededCount} item(s) processed successfully."
-                : $"{result.SucceededCount} item(s) succeeded and {result.FailedCount} failed. Failed items remain in the recycle bin.";
+                ? Strings["ItemsProcessedSuccessfully", result.SucceededCount]
+                : Strings["ItemsProcessedWithFailures", result.SucceededCount, result.FailedCount];
         }
         finally
         {
@@ -280,12 +283,12 @@ else
         }
     }
 
-    private static string KindName(RecycleBinItemKind kind) => kind switch { RecycleBinItemKind.Folder => "Folder", RecycleBinItemKind.File => "File", _ => "File link" };
-    private static string StateName(LibraryRecordState state) => state == LibraryRecordState.PendingPermanentDeletion ? "Pending permanent deletion" : "Recycled";
-    private static string EntryCascadeSummary(RecycleBinEntry entry) => CascadeSummary([entry]);
-    private static string CascadeSummary(IEnumerable<RecycleBinEntry> entries)
+    private string KindName(RecycleBinItemKind kind) => kind switch { RecycleBinItemKind.Folder => Strings["Folder"], RecycleBinItemKind.File => Strings["File"], _ => Strings["FileLink"] };
+    private string StateName(LibraryRecordState state) => state == LibraryRecordState.PendingPermanentDeletion ? Strings["PendingPermanentDeletion"] : Strings["Recycled"];
+    private string EntryCascadeSummary(RecycleBinEntry entry) => CascadeSummary([entry]);
+    private string CascadeSummary(IEnumerable<RecycleBinEntry> entries)
     {
         var snapshot = entries.ToArray();
-        return $"{snapshot.Sum(entry => entry.OwnedFolderCount)} folder(s), {snapshot.Sum(entry => entry.OwnedFileCount)} file(s), and {snapshot.Sum(entry => entry.OwnedLinkCount)} link(s)";
+        return Strings["CascadeSummary", snapshot.Sum(entry => entry.OwnedFolderCount), snapshot.Sum(entry => entry.OwnedFileCount), snapshot.Sum(entry => entry.OwnedLinkCount)];
     }
 }

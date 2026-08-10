@@ -30,6 +30,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         {
             layout.ValidateExistingRoot();
             libraryLock = AcquireLock(layout);
+            ValidateStorageCapabilitiesAtRoot(layout.RootPath);
             Directory.CreateDirectory(layout.ManagedPath);
             Directory.CreateDirectory(layout.StagingPath);
             ValidateStorageCapabilities(layout);
@@ -52,6 +53,10 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             {
                 TryDeleteTree(fullPath);
             }
+            else
+            {
+                CleanupFailedCreation(layout);
+            }
             throw;
         }
     }
@@ -72,6 +77,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         var libraryLock = AcquireLock(layout);
         try
         {
+            ValidateStorageCapabilitiesAtRoot(layout.RootPath);
             var lockedManifest = await LibraryManifestStore.ReadAsync(layout, cancellationToken).ConfigureAwait(false);
             if (lockedManifest != initialManifest)
             {
@@ -142,6 +148,39 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             TryDelete(temporary);
             TryDelete(committed);
         }
+    }
+
+    private static void ValidateStorageCapabilitiesAtRoot(string rootPath)
+    {
+        var temporary = Path.Combine(rootPath, $".slopfactory-capability-{Guid.NewGuid():N}.tmp");
+        var committed = Path.Combine(rootPath, $".slopfactory-capability-{Guid.NewGuid():N}.probe");
+        try
+        {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.WriteThrough))
+            {
+                stream.WriteByte(0x53);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, committed, overwrite: false);
+            File.Delete(committed);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            throw new LibraryValidationException("The library root does not support required writable atomic file operations.");
+        }
+        finally { TryDelete(temporary); TryDelete(committed); }
+    }
+
+    private static void CleanupFailedCreation(LibraryLayout layout)
+    {
+        TryDelete(layout.DatabasePath);
+        TryDelete(layout.DatabasePath + "-wal");
+        TryDelete(layout.DatabasePath + "-shm");
+        TryDelete(Path.Combine(layout.RootPath, "slopfactory-library.json"));
+        TryDelete(Path.Combine(layout.RootPath, "slopfactory-library.json.tmp"));
+        TryDeleteTree(layout.ManagedPath);
+        TryDeleteTree(layout.StagingPath);
+        TryDelete(layout.LockPath);
     }
 
     private static void ValidateLocalStoragePath(string fullPath)

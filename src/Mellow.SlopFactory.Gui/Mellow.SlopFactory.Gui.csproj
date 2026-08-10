@@ -22,6 +22,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.20" />
+    <PackageReference Include="Microsoft.Extensions.Localization" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mellow.SlopFactory.Core\Mellow.SlopFactory.Core.csproj" />

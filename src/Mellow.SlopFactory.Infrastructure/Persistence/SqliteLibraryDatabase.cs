@@ -137,6 +137,113 @@ internal sealed class SqliteLibraryDatabase
                 failed_at TEXT NOT NULL,
                 PRIMARY KEY(record_kind, record_id)
             );
+
+            CREATE TABLE connections (
+                id TEXT PRIMARY KEY,
+                label TEXT NOT NULL,
+                label_key TEXT NOT NULL,
+                provider_type INTEGER NOT NULL,
+                base_url TEXT NOT NULL,
+                credential_header_name TEXT NOT NULL,
+                auth_prefix TEXT NOT NULL,
+                has_credential INTEGER NOT NULL DEFAULT 0,
+                last_test_status INTEGER NOT NULL DEFAULT 0,
+                last_tested_at TEXT NULL,
+                last_test_message TEXT NULL,
+                state INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                modified_at TEXT NOT NULL,
+                recycled_at TEXT NULL,
+                catalogue_retrieved_at TEXT NULL,
+                catalogue_possibly_stale INTEGER NOT NULL DEFAULT 0,
+                timeout_seconds INTEGER NULL,
+                generic_models_enabled INTEGER NOT NULL DEFAULT 1,
+                generic_models_path TEXT NULL,
+                generic_text_enabled INTEGER NOT NULL DEFAULT 1,
+                generic_text_path TEXT NULL,
+                generic_image_enabled INTEGER NOT NULL DEFAULT 1,
+                generic_image_path TEXT NULL
+            );
+            CREATE UNIQUE INDEX ux_connections_active_label ON connections(label_key) WHERE state = 0;
+
+            CREATE TABLE connection_headers (
+                connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY(connection_id, name)
+            );
+
+            CREATE TABLE connection_model_catalogue (
+                connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+                provider_model_id TEXT NOT NULL,
+                display_label TEXT NULL,
+                PRIMARY KEY(connection_id, provider_model_id)
+            );
+
+            CREATE TABLE models (
+                id TEXT PRIMARY KEY,
+                connection_id TEXT NOT NULL REFERENCES connections(id),
+                label TEXT NOT NULL,
+                label_key TEXT NOT NULL,
+                provider_model_id TEXT NOT NULL,
+                mode INTEGER NOT NULL,
+                supports_system_instructions INTEGER NOT NULL DEFAULT 0,
+                state INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                modified_at TEXT NOT NULL,
+                recycled_at TEXT NULL
+            );
+            CREATE UNIQUE INDEX ux_models_active_label ON models(label_key) WHERE state = 0;
+            CREATE INDEX ix_models_connection_state ON models(connection_id, state);
+
+            CREATE TABLE generation_records (
+                id TEXT PRIMARY KEY,
+                model_id TEXT NULL REFERENCES models(id) ON DELETE SET NULL,
+                model_label TEXT NOT NULL,
+                provider_model_id TEXT NOT NULL,
+                provider_type INTEGER NOT NULL,
+                mode INTEGER NOT NULL,
+                prompt TEXT NOT NULL,
+                system_instructions TEXT NULL,
+                result_count INTEGER NOT NULL,
+                status INTEGER NOT NULL,
+                error_message TEXT NULL,
+                destination_folder_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                completed_at TEXT NULL,
+                prompt_tokens INTEGER NULL,
+                completion_tokens INTEGER NULL,
+                source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL
+            );
+            CREATE INDEX ix_generation_records_created ON generation_records(created_at);
+
+            CREATE TABLE generation_results (
+                id TEXT PRIMARY KEY,
+                generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,
+                file_id TEXT NOT NULL REFERENCES files(id),
+                position INTEGER NOT NULL
+            );
+            CREATE INDEX ix_generation_results_generation ON generation_results(generation_id);
+
+            CREATE TABLE saved_generation_settings (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                title_key TEXT NOT NULL,
+                model_id TEXT NULL REFERENCES models(id) ON DELETE SET NULL,
+                model_label TEXT NOT NULL,
+                mode INTEGER NOT NULL,
+                prompt TEXT NOT NULL,
+                system_instructions TEXT NULL,
+                result_count INTEGER NOT NULL,
+                destination_folder_id TEXT NOT NULL,
+                state INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                modified_at TEXT NOT NULL,
+                recycled_at TEXT NULL,
+                source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL
+            );
+            CREATE UNIQUE INDEX ux_saved_settings_active_title ON saved_generation_settings(title_key) WHERE state = 0;
+            CREATE INDEX ix_saved_settings_model ON saved_generation_settings(model_id, state);
             """;
         await ExecuteNonQueryAsync(connection, schema, cancellationToken, transaction).ConfigureAwait(false);
 
@@ -216,6 +323,62 @@ internal sealed class SqliteLibraryDatabase
         if (fromVersion < 8)
         {
             await ExecuteNonQueryAsync(connection, "ALTER TABLE file_derivation_provenance ADD COLUMN deleted_source_name TEXT NULL; ALTER TABLE file_derivation_provenance ADD COLUMN deleted_source_media_type TEXT NULL; ALTER TABLE file_derivation_provenance ADD COLUMN deleted_source_content_hash TEXT NULL;", cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 9)
+        {
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE IF NOT EXISTS connections (id TEXT PRIMARY KEY,label TEXT NOT NULL,label_key TEXT NOT NULL,provider_type INTEGER NOT NULL,base_url TEXT NOT NULL,credential_header_name TEXT NOT NULL,auth_prefix TEXT NOT NULL,has_credential INTEGER NOT NULL DEFAULT 0,last_test_status INTEGER NOT NULL DEFAULT 0,last_tested_at TEXT NULL,last_test_message TEXT NULL,state INTEGER NOT NULL,created_at TEXT NOT NULL,modified_at TEXT NOT NULL,recycled_at TEXT NULL); CREATE UNIQUE INDEX IF NOT EXISTS ux_connections_active_label ON connections(label_key) WHERE state = 0;", cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE IF NOT EXISTS models (id TEXT PRIMARY KEY,connection_id TEXT NOT NULL REFERENCES connections(id),label TEXT NOT NULL,label_key TEXT NOT NULL,provider_model_id TEXT NOT NULL,mode INTEGER NOT NULL,supports_system_instructions INTEGER NOT NULL DEFAULT 0,state INTEGER NOT NULL,created_at TEXT NOT NULL,modified_at TEXT NOT NULL,recycled_at TEXT NULL); CREATE UNIQUE INDEX IF NOT EXISTS ux_models_active_label ON models(label_key) WHERE state = 0; CREATE INDEX IF NOT EXISTS ix_models_connection_state ON models(connection_id, state);", cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 10)
+        {
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE IF NOT EXISTS generation_records (id TEXT PRIMARY KEY,model_id TEXT NULL REFERENCES models(id) ON DELETE SET NULL,model_label TEXT NOT NULL,provider_model_id TEXT NOT NULL,provider_type INTEGER NOT NULL,mode INTEGER NOT NULL,prompt TEXT NOT NULL,result_count INTEGER NOT NULL,status INTEGER NOT NULL,error_message TEXT NULL,destination_folder_id TEXT NOT NULL,created_at TEXT NOT NULL,completed_at TEXT NULL); CREATE INDEX IF NOT EXISTS ix_generation_records_created ON generation_records(created_at);", cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE IF NOT EXISTS generation_results (id TEXT PRIMARY KEY,generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,file_id TEXT NOT NULL REFERENCES files(id),position INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS ix_generation_results_generation ON generation_results(generation_id);", cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 11)
+        {
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE IF NOT EXISTS saved_generation_settings (id TEXT PRIMARY KEY,title TEXT NOT NULL,title_key TEXT NOT NULL,model_id TEXT NULL REFERENCES models(id) ON DELETE SET NULL,model_label TEXT NOT NULL,mode INTEGER NOT NULL,prompt TEXT NOT NULL,result_count INTEGER NOT NULL,destination_folder_id TEXT NOT NULL,state INTEGER NOT NULL,created_at TEXT NOT NULL,modified_at TEXT NOT NULL,recycled_at TEXT NULL); CREATE UNIQUE INDEX IF NOT EXISTS ux_saved_settings_active_title ON saved_generation_settings(title_key) WHERE state = 0; CREATE INDEX IF NOT EXISTS ix_saved_settings_model ON saved_generation_settings(model_id, state);", cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 12)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "system_instructions", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "saved_generation_settings", "system_instructions", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 13)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "prompt_tokens", "INTEGER NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "completion_tokens", "INTEGER NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 14)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "source_file_id", "TEXT NULL REFERENCES files(id) ON DELETE SET NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "saved_generation_settings", "source_file_id", "TEXT NULL REFERENCES files(id) ON DELETE SET NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 15)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "catalogue_retrieved_at", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "catalogue_possibly_stale", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection,
+                "CREATE TABLE IF NOT EXISTS connection_model_catalogue (connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,provider_model_id TEXT NOT NULL,display_label TEXT NULL,PRIMARY KEY(connection_id, provider_model_id));",
+                cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 16)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "timeout_seconds", "INTEGER NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 17)
+        {
+            await ExecuteNonQueryAsync(connection,
+                "CREATE TABLE IF NOT EXISTS connection_headers (connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,name TEXT NOT NULL,value TEXT NOT NULL,PRIMARY KEY(connection_id, name));",
+                cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 18)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "generic_models_enabled", "INTEGER NOT NULL DEFAULT 1", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "generic_models_path", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "generic_text_enabled", "INTEGER NOT NULL DEFAULT 1", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "generic_text_path", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "generic_image_enabled", "INTEGER NOT NULL DEFAULT 1", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "generic_image_path", "TEXT NULL", cancellationToken).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -853,6 +1016,14 @@ internal sealed class SqliteLibraryDatabase
         throw new NameConflictException("No available numeric-suffix name could be found.");
     }
 
+    public async Task DeleteEmptyActiveFolderAsync(string folderId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "DELETE FROM folders WHERE id=$id AND state=0 AND parent_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM folders child WHERE child.parent_id=$id) AND NOT EXISTS(SELECT 1 FROM files WHERE folder_id=$id);",
+            cancellationToken, null, ("$id", folderId)).ConfigureAwait(false);
+    }
+
     public async Task<FileRecord> InsertImportedFileAsync(FileRecord file, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -1336,6 +1507,582 @@ internal sealed class SqliteLibraryDatabase
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET display_name=$name WHERE singleton=1;", cancellationToken, null, ("$name", displayName)).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<Connection>> GetActiveConnectionsAsync(CancellationToken cancellationToken) =>
+        await ListConnectionsAsync(LibraryRecordState.Active, cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<Connection>> GetRecycledConnectionsAsync(CancellationToken cancellationToken) =>
+        await ListConnectionsAsync(LibraryRecordState.Recycled, cancellationToken).ConfigureAwait(false);
+
+    private async Task<IReadOnlyList<Connection>> ListConnectionsAsync(LibraryRecordState state, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var results = new List<Connection>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = ConnectionSelect + " WHERE state=$state ORDER BY label_key;";
+            command.Parameters.AddWithValue("$state", (int)state);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadConnection(reader));
+        }
+        for (var i = 0; i < results.Count; i++)
+        {
+            var headers = await LoadConnectionHeadersAsync(connection, results[i].Id, null, cancellationToken).ConfigureAwait(false);
+            results[i] = results[i] with { AdditionalHeaders = headers };
+        }
+        return results;
+    }
+
+    public async Task<Connection> GetConnectionAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<Connection> CreateConnectionAsync(string label, ProviderType providerType, string baseUrl, string credentialHeaderName, string authPrefix, int? timeoutSeconds, IReadOnlyList<ConnectionHeader>? additionalHeaders, GenericConnectionModalitySettings? genericModalitySettings, CancellationToken cancellationToken)
+    {
+        var normalizedLabel = LibraryRules.NormalizeShortLabel(label, "Connection label");
+        var normalizedBaseUrl = LibraryRules.NormalizeConnectionBaseUrl(baseUrl);
+        var normalizedHeaderName = LibraryRules.NormalizeShortLabel(credentialHeaderName, "Credential header name");
+        var normalizedAuthPrefix = authPrefix?.Trim() ?? string.Empty;
+        var normalizedTimeoutSeconds = LibraryRules.NormalizeConnectionTimeoutSeconds(timeoutSeconds);
+        var normalizedHeaders = LibraryRules.NormalizeConnectionHeaders(additionalHeaders, normalizedHeaderName);
+        var normalizedModalitySettings = LibraryRules.NormalizeGenericModalitySettings(genericModalitySettings);
+        var id = LibraryRules.NewId();
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await ExecuteNonQueryAsync(connection,
+                "INSERT INTO connections(id,label,label_key,provider_type,base_url,credential_header_name,auth_prefix,has_credential,last_test_status,state,created_at,modified_at,timeout_seconds,generic_models_enabled,generic_models_path,generic_text_enabled,generic_text_path,generic_image_enabled,generic_image_path) VALUES($id,$label,$key,$provider,$url,$header,$prefix,0,0,0,$now,$now,$timeout,$modelsEnabled,$modelsPath,$textEnabled,$textPath,$imageEnabled,$imagePath);",
+                cancellationToken, transaction,
+                ("$id", id), ("$label", normalizedLabel), ("$key", LibraryRules.ComparisonKey(normalizedLabel)), ("$provider", (int)providerType),
+                ("$url", normalizedBaseUrl), ("$header", normalizedHeaderName), ("$prefix", normalizedAuthPrefix), ("$now", Format(now)),
+                ("$timeout", (object?)normalizedTimeoutSeconds ?? DBNull.Value),
+                ("$modelsEnabled", normalizedModalitySettings.ModelsEnabled), ("$modelsPath", (object?)normalizedModalitySettings.ModelsPathOverride ?? DBNull.Value),
+                ("$textEnabled", normalizedModalitySettings.TextGenerationEnabled), ("$textPath", (object?)normalizedModalitySettings.TextGenerationPathOverride ?? DBNull.Value),
+                ("$imageEnabled", normalizedModalitySettings.ImageGenerationEnabled), ("$imagePath", (object?)normalizedModalitySettings.ImageGenerationPathOverride ?? DBNull.Value)).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"An active connection labelled '{normalizedLabel}' already exists.");
+        }
+
+        await ReplaceConnectionHeadersAsync(connection, transaction, id, normalizedHeaders, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return new Connection(id, normalizedLabel, providerType, normalizedBaseUrl, normalizedHeaderName, normalizedAuthPrefix, false, ConnectionTestStatus.Untested, null, null, LibraryRecordState.Active, now, now, null, normalizedTimeoutSeconds, normalizedHeaders, normalizedModalitySettings);
+    }
+
+    public async Task<Connection> UpdateConnectionAsync(string connectionId, string label, string baseUrl, string credentialHeaderName, string authPrefix, int? timeoutSeconds, IReadOnlyList<ConnectionHeader>? additionalHeaders, GenericConnectionModalitySettings? genericModalitySettings, CancellationToken cancellationToken)
+    {
+        var normalizedLabel = LibraryRules.NormalizeShortLabel(label, "Connection label");
+        var normalizedBaseUrl = LibraryRules.NormalizeConnectionBaseUrl(baseUrl);
+        var normalizedHeaderName = LibraryRules.NormalizeShortLabel(credentialHeaderName, "Credential header name");
+        var normalizedAuthPrefix = authPrefix?.Trim() ?? string.Empty;
+        var normalizedTimeoutSeconds = LibraryRules.NormalizeConnectionTimeoutSeconds(timeoutSeconds);
+        var normalizedHeaders = LibraryRules.NormalizeConnectionHeaders(additionalHeaders, normalizedHeaderName);
+        var normalizedModalitySettings = LibraryRules.NormalizeGenericModalitySettings(genericModalitySettings);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken, transaction).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active connection can be edited.");
+        var modified = DateTimeOffset.UtcNow;
+        try
+        {
+            await ExecuteNonQueryAsync(connection,
+                "UPDATE connections SET label=$label,label_key=$key,base_url=$url,credential_header_name=$header,auth_prefix=$prefix,timeout_seconds=$timeout,generic_models_enabled=$modelsEnabled,generic_models_path=$modelsPath,generic_text_enabled=$textEnabled,generic_text_path=$textPath,generic_image_enabled=$imageEnabled,generic_image_path=$imagePath,last_test_status=0,last_tested_at=NULL,last_test_message=NULL,modified_at=$modified WHERE id=$id AND state=0;",
+                cancellationToken, transaction,
+                ("$label", normalizedLabel), ("$key", LibraryRules.ComparisonKey(normalizedLabel)), ("$url", normalizedBaseUrl), ("$header", normalizedHeaderName),
+                ("$prefix", normalizedAuthPrefix), ("$timeout", (object?)normalizedTimeoutSeconds ?? DBNull.Value),
+                ("$modelsEnabled", normalizedModalitySettings.ModelsEnabled), ("$modelsPath", (object?)normalizedModalitySettings.ModelsPathOverride ?? DBNull.Value),
+                ("$textEnabled", normalizedModalitySettings.TextGenerationEnabled), ("$textPath", (object?)normalizedModalitySettings.TextGenerationPathOverride ?? DBNull.Value),
+                ("$imageEnabled", normalizedModalitySettings.ImageGenerationEnabled), ("$imagePath", (object?)normalizedModalitySettings.ImageGenerationPathOverride ?? DBNull.Value),
+                ("$modified", Format(modified)), ("$id", connectionId)).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"An active connection labelled '{normalizedLabel}' already exists.");
+        }
+
+        await ReplaceConnectionHeadersAsync(connection, transaction, connectionId, normalizedHeaders, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return existing with
+        {
+            Label = normalizedLabel, BaseUrl = normalizedBaseUrl, CredentialHeaderName = normalizedHeaderName, AuthPrefix = normalizedAuthPrefix,
+            TimeoutSeconds = normalizedTimeoutSeconds, AdditionalHeaders = normalizedHeaders, GenericModalitySettings = normalizedModalitySettings,
+            LastTestStatus = ConnectionTestStatus.Untested, LastTestedAt = null, LastTestMessage = null, ModifiedAt = modified
+        };
+    }
+
+    public async Task<Connection> SetConnectionCredentialStateAsync(string connectionId, bool hasCredential, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        var modified = DateTimeOffset.UtcNow;
+        await ExecuteNonQueryAsync(connection, "UPDATE connections SET has_credential=$has,modified_at=$modified WHERE id=$id;",
+            cancellationToken, null, ("$has", hasCredential), ("$modified", Format(modified)), ("$id", connectionId)).ConfigureAwait(false);
+        return existing with { HasCredential = hasCredential, ModifiedAt = modified };
+    }
+
+    public async Task<Connection> SetConnectionTestResultAsync(string connectionId, bool success, string message, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        var now = DateTimeOffset.UtcNow;
+        var status = success ? ConnectionTestStatus.Success : ConnectionTestStatus.Failed;
+        await ExecuteNonQueryAsync(connection, "UPDATE connections SET last_test_status=$status,last_tested_at=$now,last_test_message=$message,modified_at=$now WHERE id=$id;",
+            cancellationToken, null, ("$status", (int)status), ("$now", Format(now)), ("$message", message), ("$id", connectionId)).ConfigureAwait(false);
+        return existing with { LastTestStatus = status, LastTestedAt = now, LastTestMessage = message, ModifiedAt = now };
+    }
+
+    public async Task<Connection> ChangeConnectionProviderTypeAsync(string connectionId, ProviderType providerType, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active connection can be edited.");
+        if (existing.ProviderType == providerType) return existing;
+
+        await using (var countCommand = connection.CreateCommand())
+        {
+            countCommand.CommandText = "SELECT COUNT(*) FROM models WHERE connection_id=$id AND state=0;";
+            countCommand.Parameters.AddWithValue("$id", connectionId);
+            if (Convert.ToInt32(await countCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) != 0)
+            {
+                throw new LibraryValidationException("The provider type cannot be changed while dependent models exist.");
+            }
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        await ExecuteNonQueryAsync(connection,
+            "UPDATE connections SET provider_type=$provider,generic_models_enabled=1,generic_models_path=NULL,generic_text_enabled=1,generic_text_path=NULL,generic_image_enabled=1,generic_image_path=NULL,last_test_status=0,last_tested_at=NULL,last_test_message=NULL,modified_at=$now WHERE id=$id;",
+            cancellationToken, null, ("$provider", (int)providerType), ("$now", Format(now)), ("$id", connectionId)).ConfigureAwait(false);
+
+        return existing with
+        {
+            ProviderType = providerType, GenericModalitySettings = GenericConnectionModalitySettings.Default,
+            LastTestStatus = ConnectionTestStatus.Untested, LastTestedAt = null, LastTestMessage = null, ModifiedAt = now
+        };
+    }
+
+    public async Task<ModelCatalogue> GetModelCatalogueAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        return await ReadModelCatalogueAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ModelCatalogue> RefreshModelCatalogueAsync(string connectionId, IReadOnlyList<ProviderModelInfo> discoveredModels, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "DELETE FROM connection_model_catalogue WHERE connection_id=$id;", cancellationToken, transaction, ("$id", connectionId)).ConfigureAwait(false);
+        foreach (var entry in discoveredModels)
+        {
+            await ExecuteNonQueryAsync(connection,
+                "INSERT INTO connection_model_catalogue(connection_id,provider_model_id,display_label) VALUES($cid,$pid,$label);",
+                cancellationToken, transaction, ("$cid", connectionId), ("$pid", entry.ProviderModelId), ("$label", (object?)entry.DisplayLabel ?? DBNull.Value)).ConfigureAwait(false);
+        }
+        var now = DateTimeOffset.UtcNow;
+        await ExecuteNonQueryAsync(connection, "UPDATE connections SET catalogue_retrieved_at=$now,catalogue_possibly_stale=0 WHERE id=$id;",
+            cancellationToken, transaction, ("$now", Format(now)), ("$id", connectionId)).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new ModelCatalogue(now, false, discoveredModels);
+    }
+
+    public async Task<ModelCatalogue> MarkModelCatalogueRefreshFailedAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "UPDATE connections SET catalogue_possibly_stale=1 WHERE id=$id;", cancellationToken, null, ("$id", connectionId)).ConfigureAwait(false);
+        return await ReadModelCatalogueAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RecycleConnectionAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken, transaction).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active connection can be recycled.");
+        var now = Format(DateTimeOffset.UtcNow);
+        await ExecuteNonQueryAsync(connection, "UPDATE connections SET state=1,recycled_at=$now,modified_at=$now WHERE id=$id;", cancellationToken, transaction, ("$now", now), ("$id", connectionId)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "UPDATE models SET state=1,recycled_at=$now,modified_at=$now WHERE connection_id=$id AND state=0;", cancellationToken, transaction, ("$now", now), ("$id", connectionId)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "UPDATE saved_generation_settings SET state=1,recycled_at=$now,modified_at=$now WHERE state=0 AND model_id IN (SELECT id FROM models WHERE connection_id=$id);",
+            cancellationToken, transaction, ("$now", now), ("$id", connectionId)).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RestoreConnectionAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken, transaction).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled connection can be restored.");
+        var now = Format(DateTimeOffset.UtcNow);
+        try
+        {
+            await ExecuteNonQueryAsync(connection, "UPDATE connections SET state=0,recycled_at=NULL,modified_at=$now WHERE id=$id;", cancellationToken, transaction, ("$now", now), ("$id", connectionId)).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"An active connection labelled '{existing.Label}' already exists.");
+        }
+        await ExecuteNonQueryAsync(connection, "UPDATE models SET state=0,recycled_at=NULL,modified_at=$now WHERE connection_id=$id AND state=1;", cancellationToken, transaction, ("$now", now), ("$id", connectionId)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "UPDATE saved_generation_settings SET state=0,recycled_at=NULL,modified_at=$now WHERE state=1 AND model_id IN (SELECT id FROM models WHERE connection_id=$id);",
+            cancellationToken, transaction, ("$now", now), ("$id", connectionId)).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task PermanentlyDeleteConnectionAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken, transaction).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled connection can be permanently deleted.");
+        await ExecuteNonQueryAsync(connection, "DELETE FROM saved_generation_settings WHERE model_id IN (SELECT id FROM models WHERE connection_id=$id);", cancellationToken, transaction, ("$id", connectionId)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "DELETE FROM models WHERE connection_id=$id;", cancellationToken, transaction, ("$id", connectionId)).ConfigureAwait(false);
+        var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM connections WHERE id=$id;", cancellationToken, transaction, ("$id", connectionId)).ConfigureAwait(false);
+        if (deleted == 0) throw new RecordNotFoundException("Connection not found.");
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<Model>> GetActiveModelsAsync(CancellationToken cancellationToken) =>
+        await ListModelsAsync(LibraryRecordState.Active, cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<Model>> GetRecycledModelsAsync(CancellationToken cancellationToken) =>
+        await ListModelsAsync(LibraryRecordState.Recycled, cancellationToken).ConfigureAwait(false);
+
+    private async Task<IReadOnlyList<Model>> ListModelsAsync(LibraryRecordState state, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = ModelSelect + " WHERE state=$state ORDER BY label_key;";
+        command.Parameters.AddWithValue("$state", (int)state);
+        var results = new List<Model>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadModel(reader));
+        return results;
+    }
+
+    public async Task<Model> GetModelAsync(string modelId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await GetModelAsync(connection, modelId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, CancellationToken cancellationToken)
+    {
+        var normalizedLabel = LibraryRules.NormalizeShortLabel(label, "Model label");
+        var normalizedProviderModelId = LibraryRules.NormalizeShortLabel(providerModelId, "Provider model ID");
+        var id = LibraryRules.NewId();
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var owningConnection = await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        if (owningConnection.State != LibraryRecordState.Active) throw new LibraryValidationException("Models can only be added to an active connection.");
+        try
+        {
+            await ExecuteNonQueryAsync(connection,
+                "INSERT INTO models(id,connection_id,label,label_key,provider_model_id,mode,supports_system_instructions,state,created_at,modified_at) VALUES($id,$connection,$label,$key,$providerModel,$mode,$sysInstr,0,$now,$now);",
+                cancellationToken, null,
+                ("$id", id), ("$connection", connectionId), ("$label", normalizedLabel), ("$key", LibraryRules.ComparisonKey(normalizedLabel)),
+                ("$providerModel", normalizedProviderModelId), ("$mode", (int)mode), ("$sysInstr", supportsSystemInstructions), ("$now", Format(now))).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"An active model labelled '{normalizedLabel}' already exists.");
+        }
+
+        return new Model(id, connectionId, normalizedLabel, normalizedProviderModelId, mode, supportsSystemInstructions, LibraryRecordState.Active, now, now, null);
+    }
+
+    public async Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, CancellationToken cancellationToken)
+    {
+        var normalizedLabel = LibraryRules.NormalizeShortLabel(label, "Model label");
+        var normalizedProviderModelId = LibraryRules.NormalizeShortLabel(providerModelId, "Provider model ID");
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetModelAsync(connection, modelId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active model can be edited.");
+        var modified = DateTimeOffset.UtcNow;
+        try
+        {
+            await ExecuteNonQueryAsync(connection,
+                "UPDATE models SET label=$label,label_key=$key,provider_model_id=$providerModel,mode=$mode,supports_system_instructions=$sysInstr,modified_at=$modified WHERE id=$id AND state=0;",
+                cancellationToken, null,
+                ("$label", normalizedLabel), ("$key", LibraryRules.ComparisonKey(normalizedLabel)), ("$providerModel", normalizedProviderModelId),
+                ("$mode", (int)mode), ("$sysInstr", supportsSystemInstructions), ("$modified", Format(modified)), ("$id", modelId)).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"An active model labelled '{normalizedLabel}' already exists.");
+        }
+
+        return existing with { Label = normalizedLabel, ProviderModelId = normalizedProviderModelId, Mode = mode, SupportsSystemInstructions = supportsSystemInstructions, ModifiedAt = modified };
+    }
+
+    public async Task RecycleModelAsync(string modelId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetModelAsync(connection, modelId, cancellationToken, transaction).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active model can be recycled.");
+        var now = Format(DateTimeOffset.UtcNow);
+        await ExecuteNonQueryAsync(connection, "UPDATE models SET state=1,recycled_at=$now,modified_at=$now WHERE id=$id;", cancellationToken, transaction, ("$now", now), ("$id", modelId)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "UPDATE saved_generation_settings SET state=1,recycled_at=$now,modified_at=$now WHERE state=0 AND model_id=$id;", cancellationToken, transaction, ("$now", now), ("$id", modelId)).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RestoreModelAsync(string modelId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetModelAsync(connection, modelId, cancellationToken, transaction).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled model can be restored.");
+        var owningConnection = await GetConnectionAsync(connection, existing.ConnectionId, cancellationToken, transaction).ConfigureAwait(false);
+        if (owningConnection.State != LibraryRecordState.Active) throw new LibraryValidationException("Restore the owning connection before restoring this model.");
+        var now = Format(DateTimeOffset.UtcNow);
+        try
+        {
+            await ExecuteNonQueryAsync(connection, "UPDATE models SET state=0,recycled_at=NULL,modified_at=$now WHERE id=$id;", cancellationToken, transaction, ("$now", now), ("$id", modelId)).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"An active model labelled '{existing.Label}' already exists.");
+        }
+        await ExecuteNonQueryAsync(connection, "UPDATE saved_generation_settings SET state=0,recycled_at=NULL,modified_at=$now WHERE state=1 AND model_id=$id;", cancellationToken, transaction, ("$now", now), ("$id", modelId)).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task PermanentlyDeleteModelAsync(string modelId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetModelAsync(connection, modelId, cancellationToken, transaction).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled model can be permanently deleted.");
+        await ExecuteNonQueryAsync(connection, "DELETE FROM saved_generation_settings WHERE model_id=$id;", cancellationToken, transaction, ("$id", modelId)).ConfigureAwait(false);
+        var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM models WHERE id=$id;", cancellationToken, transaction, ("$id", modelId)).ConfigureAwait(false);
+        if (deleted == 0) throw new RecordNotFoundException("Model not found.");
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private const string SavedSettingSelect = "SELECT id,title,model_id,model_label,mode,prompt,system_instructions,result_count,destination_folder_id,state,created_at,modified_at,recycled_at,source_file_id FROM saved_generation_settings";
+
+    public async Task<IReadOnlyList<SavedGenerationSetting>> GetActiveSavedSettingsAsync(CancellationToken cancellationToken) =>
+        await ListSavedSettingsAsync(LibraryRecordState.Active, cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<SavedGenerationSetting>> GetRecycledSavedSettingsAsync(CancellationToken cancellationToken) =>
+        await ListSavedSettingsAsync(LibraryRecordState.Recycled, cancellationToken).ConfigureAwait(false);
+
+    private async Task<IReadOnlyList<SavedGenerationSetting>> ListSavedSettingsAsync(LibraryRecordState state, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = SavedSettingSelect + " WHERE state=$state ORDER BY title_key;";
+        command.Parameters.AddWithValue("$state", (int)state);
+        var results = new List<SavedGenerationSetting>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadSavedSetting(reader));
+        return results;
+    }
+
+    public async Task<SavedGenerationSetting> GetSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await GetSavedSettingAsync(connection, savedSettingId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<SavedGenerationSetting> CreateSavedSettingAsync(string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions, string? sourceFileId, CancellationToken cancellationToken)
+    {
+        var normalizedTitle = LibraryRules.NormalizeShortLabel(title, "Settings title");
+        var id = LibraryRules.NewId();
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var (modelLabel, mode) = modelId is null
+            ? (string.Empty, GenerationMode.Text)
+            : await ResolveModelSnapshotAsync(connection, modelId, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await ExecuteNonQueryAsync(connection,
+                "INSERT INTO saved_generation_settings(id,title,title_key,model_id,model_label,mode,prompt,system_instructions,result_count,destination_folder_id,state,created_at,modified_at,source_file_id) VALUES($id,$title,$key,$model,$modelLabel,$mode,$prompt,$sysInstr,$count,$folder,0,$now,$now,$source);",
+                cancellationToken, null,
+                ("$id", id), ("$title", normalizedTitle), ("$key", LibraryRules.ComparisonKey(normalizedTitle)), ("$model", modelId is null ? DBNull.Value : modelId),
+                ("$modelLabel", modelLabel), ("$mode", (int)mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions),
+                ("$count", resultCount), ("$folder", destinationFolderId), ("$now", Format(now)), ("$source", sourceFileId is null ? DBNull.Value : sourceFileId)).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"Saved settings titled '{normalizedTitle}' already exist.");
+        }
+
+        return new SavedGenerationSetting(id, normalizedTitle, modelId, modelLabel, mode, prompt, systemInstructions, resultCount, destinationFolderId, LibraryRecordState.Active, now, now, null, sourceFileId);
+    }
+
+    public async Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions, string? sourceFileId, CancellationToken cancellationToken)
+    {
+        var normalizedTitle = LibraryRules.NormalizeShortLabel(title, "Settings title");
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetSavedSettingAsync(connection, savedSettingId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only active saved settings can be edited.");
+        var (modelLabel, mode) = modelId is null
+            ? (existing.ModelLabel, existing.Mode)
+            : await ResolveModelSnapshotAsync(connection, modelId, cancellationToken).ConfigureAwait(false);
+        var modified = DateTimeOffset.UtcNow;
+        try
+        {
+            await ExecuteNonQueryAsync(connection,
+                "UPDATE saved_generation_settings SET title=$title,title_key=$key,model_id=$model,model_label=$modelLabel,mode=$mode,prompt=$prompt,system_instructions=$sysInstr,result_count=$count,destination_folder_id=$folder,modified_at=$modified,source_file_id=$source WHERE id=$id AND state=0;",
+                cancellationToken, null,
+                ("$title", normalizedTitle), ("$key", LibraryRules.ComparisonKey(normalizedTitle)), ("$model", modelId is null ? DBNull.Value : modelId),
+                ("$modelLabel", modelLabel), ("$mode", (int)mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions),
+                ("$count", resultCount), ("$folder", destinationFolderId), ("$modified", Format(modified)), ("$source", sourceFileId is null ? DBNull.Value : sourceFileId), ("$id", savedSettingId)).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"Saved settings titled '{normalizedTitle}' already exist.");
+        }
+
+        return existing with { Title = normalizedTitle, ModelId = modelId, ModelLabel = modelLabel, Mode = mode, Prompt = prompt, SystemInstructions = systemInstructions, ResultCount = resultCount, DestinationFolderId = destinationFolderId, ModifiedAt = modified, SourceFileId = sourceFileId };
+    }
+
+    public async Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetSavedSettingAsync(connection, savedSettingId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only active saved settings can be recycled.");
+        var now = Format(DateTimeOffset.UtcNow);
+        await ExecuteNonQueryAsync(connection, "UPDATE saved_generation_settings SET state=1,recycled_at=$now,modified_at=$now WHERE id=$id;", cancellationToken, null, ("$now", now), ("$id", savedSettingId)).ConfigureAwait(false);
+    }
+
+    public async Task RestoreSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetSavedSettingAsync(connection, savedSettingId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only recycled saved settings can be restored.");
+        var now = Format(DateTimeOffset.UtcNow);
+        try
+        {
+            await ExecuteNonQueryAsync(connection, "UPDATE saved_generation_settings SET state=0,recycled_at=NULL,modified_at=$now WHERE id=$id;", cancellationToken, null, ("$now", now), ("$id", savedSettingId)).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new NameConflictException($"Saved settings titled '{existing.Title}' already exist.");
+        }
+    }
+
+    public async Task PermanentlyDeleteSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetSavedSettingAsync(connection, savedSettingId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only recycled saved settings can be permanently deleted.");
+        var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM saved_generation_settings WHERE id=$id;", cancellationToken, null, ("$id", savedSettingId)).ConfigureAwait(false);
+        if (deleted == 0) throw new RecordNotFoundException("Saved generation settings not found.");
+    }
+
+    private static async Task<(string ModelLabel, GenerationMode Mode)> ResolveModelSnapshotAsync(SqliteConnection connection, string modelId, CancellationToken cancellationToken)
+    {
+        var model = await GetModelAsync(connection, modelId, cancellationToken).ConfigureAwait(false);
+        return (model.Label, model.Mode);
+    }
+
+    private static async Task<SavedGenerationSetting> GetSavedSettingAsync(SqliteConnection connection, string savedSettingId, CancellationToken cancellationToken, SqliteTransaction? transaction = null)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = SavedSettingSelect + " WHERE id=$id;";
+        command.Parameters.AddWithValue("$id", savedSettingId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Saved generation settings not found.");
+        return ReadSavedSetting(reader);
+    }
+
+    private static SavedGenerationSetting ReadSavedSetting(SqliteDataReader reader) => new(
+        reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetString(3), (GenerationMode)reader.GetInt32(4),
+        reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetString(6), reader.GetInt32(7), reader.GetString(8), (LibraryRecordState)reader.GetInt32(9),
+        Parse(reader.GetString(10)), Parse(reader.GetString(11)), reader.IsDBNull(12) ? null : Parse(reader.GetString(12)), reader.IsDBNull(13) ? null : reader.GetString(13));
+
+    private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id FROM generation_records";
+
+    public async Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var records = new List<GenerationRecord>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = GenerationRecordSelect + " ORDER BY created_at DESC;";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadGenerationRecord(reader));
+        }
+        var results = new List<GenerationRecord>(records.Count);
+        foreach (var record in records)
+        {
+            results.Add(record with { ResultFileIds = await GetGenerationResultFileIdsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false) });
+        }
+        return results;
+    }
+
+    public async Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        GenerationRecord record;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = GenerationRecordSelect + " WHERE id=$id;";
+            command.Parameters.AddWithValue("$id", generationId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Generation record not found.");
+            record = ReadGenerationRecord(reader);
+        }
+        var fileIds = await GetGenerationResultFileIdsAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
+        return record with { ResultFileIds = fileIds };
+    }
+
+    public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, string? sourceFileId, CancellationToken cancellationToken)
+    {
+        var id = LibraryRules.NewId();
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO generation_records(id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id) VALUES($id,$model,$label,$providerModel,$provider,$mode,$prompt,$sysInstr,$count,$status,$error,$folder,$created,$completed,$promptTokens,$completionTokens,$source);",
+            cancellationToken, transaction,
+            ("$id", id), ("$model", model.Id), ("$label", model.Label), ("$providerModel", model.ProviderModelId), ("$provider", (int)providerType),
+            ("$mode", (int)model.Mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions), ("$count", resultCount), ("$status", (int)status),
+            ("$error", errorMessage is null ? DBNull.Value : errorMessage), ("$folder", destinationFolderId), ("$created", Format(now)), ("$completed", Format(now)),
+            ("$promptTokens", promptTokens is null ? DBNull.Value : promptTokens.Value), ("$completionTokens", completionTokens is null ? DBNull.Value : completionTokens.Value),
+            ("$source", sourceFileId is null ? DBNull.Value : sourceFileId)).ConfigureAwait(false);
+
+        var position = 0;
+        foreach (var fileId in resultFileIds)
+        {
+            await ExecuteNonQueryAsync(connection, "INSERT INTO generation_results(id,generation_id,file_id,position) VALUES($resultId,$generation,$file,$position);",
+                cancellationToken, transaction, ("$resultId", LibraryRules.NewId()), ("$generation", id), ("$file", fileId), ("$position", position)).ConfigureAwait(false);
+            position++;
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new GenerationRecord(id, model.Id, model.Label, model.ProviderModelId, providerType, model.Mode, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, now, now, resultFileIds, promptTokens, completionTokens, sourceFileId);
+    }
+
+    private static async Task<IReadOnlyList<string>> GetGenerationResultFileIdsAsync(SqliteConnection connection, string generationId, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT file_id FROM generation_results WHERE generation_id=$id ORDER BY position;";
+        command.Parameters.AddWithValue("$id", generationId);
+        var ids = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) ids.Add(reader.GetString(0));
+        return ids;
+    }
+
+    private static GenerationRecord ReadGenerationRecord(SqliteDataReader reader) => new(
+        reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), reader.GetString(3), (ProviderType)reader.GetInt32(4),
+        (GenerationMode)reader.GetInt32(5), reader.GetString(6), reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetInt32(8), (GenerationStatus)reader.GetInt32(9),
+        reader.IsDBNull(10) ? null : reader.GetString(10), reader.GetString(11), Parse(reader.GetString(12)), reader.IsDBNull(13) ? null : Parse(reader.GetString(13)),
+        Array.Empty<string>(), reader.IsDBNull(14) ? null : reader.GetInt32(14), reader.IsDBNull(15) ? null : reader.GetInt32(15), reader.IsDBNull(16) ? null : reader.GetString(16));
+
     private async Task SetFileStateAndLinksAsync(string fileId, LibraryRecordState state, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -1439,6 +2186,104 @@ internal sealed class SqliteLibraryDatabase
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("File link not found.");
         return ReadLink(reader);
     }
+
+    private const string ConnectionSelect = "SELECT id,label,provider_type,base_url,credential_header_name,auth_prefix,has_credential,last_test_status,last_tested_at,last_test_message,state,created_at,modified_at,recycled_at,timeout_seconds,generic_models_enabled,generic_models_path,generic_text_enabled,generic_text_path,generic_image_enabled,generic_image_path FROM connections";
+    private const string ModelSelect = "SELECT id,connection_id,label,provider_model_id,mode,supports_system_instructions,state,created_at,modified_at,recycled_at FROM models";
+
+    private static async Task<Connection> GetConnectionAsync(SqliteConnection connection, string connectionId, CancellationToken cancellationToken, SqliteTransaction? transaction = null)
+    {
+        Connection result;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = ConnectionSelect + " WHERE id=$id;";
+            command.Parameters.AddWithValue("$id", connectionId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Connection not found.");
+            result = ReadConnection(reader);
+        }
+
+        var headers = await LoadConnectionHeadersAsync(connection, connectionId, transaction, cancellationToken).ConfigureAwait(false);
+        return result with { AdditionalHeaders = headers };
+    }
+
+    private static async Task<IReadOnlyList<ConnectionHeader>> LoadConnectionHeadersAsync(SqliteConnection connection, string connectionId, SqliteTransaction? transaction, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT name,value FROM connection_headers WHERE connection_id=$id ORDER BY name;";
+        command.Parameters.AddWithValue("$id", connectionId);
+        var results = new List<ConnectionHeader>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            results.Add(new ConnectionHeader(reader.GetString(0), reader.GetString(1)));
+        }
+        return results;
+    }
+
+    private static async Task ReplaceConnectionHeadersAsync(SqliteConnection connection, SqliteTransaction transaction, string connectionId, IReadOnlyList<ConnectionHeader> headers, CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(connection, "DELETE FROM connection_headers WHERE connection_id=$id;", cancellationToken, transaction, ("$id", connectionId)).ConfigureAwait(false);
+        foreach (var header in headers)
+        {
+            await ExecuteNonQueryAsync(connection, "INSERT INTO connection_headers(connection_id,name,value) VALUES($id,$name,$value);",
+                cancellationToken, transaction, ("$id", connectionId), ("$name", header.Name), ("$value", header.Value)).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<Model> GetModelAsync(SqliteConnection connection, string modelId, CancellationToken cancellationToken, SqliteTransaction? transaction = null)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = ModelSelect + " WHERE id=$id;";
+        command.Parameters.AddWithValue("$id", modelId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Model not found.");
+        return ReadModel(reader);
+    }
+
+    private static Connection ReadConnection(SqliteDataReader reader) => new(
+        reader.GetString(0), reader.GetString(1), (ProviderType)reader.GetInt32(2), reader.GetString(3), reader.GetString(4), reader.GetString(5),
+        reader.GetBoolean(6), (ConnectionTestStatus)reader.GetInt32(7), reader.IsDBNull(8) ? null : Parse(reader.GetString(8)), reader.IsDBNull(9) ? null : reader.GetString(9),
+        (LibraryRecordState)reader.GetInt32(10), Parse(reader.GetString(11)), Parse(reader.GetString(12)), reader.IsDBNull(13) ? null : Parse(reader.GetString(13)),
+        reader.IsDBNull(14) ? null : reader.GetInt32(14), null,
+        new GenericConnectionModalitySettings(reader.GetBoolean(15), reader.IsDBNull(16) ? null : reader.GetString(16),
+            reader.GetBoolean(17), reader.IsDBNull(18) ? null : reader.GetString(18),
+            reader.GetBoolean(19), reader.IsDBNull(20) ? null : reader.GetString(20)));
+
+    private static async Task<ModelCatalogue> ReadModelCatalogueAsync(SqliteConnection connection, string connectionId, CancellationToken cancellationToken)
+    {
+        DateTimeOffset? retrievedAt;
+        bool possiblyStale;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT catalogue_retrieved_at,catalogue_possibly_stale FROM connections WHERE id=$id;";
+            command.Parameters.AddWithValue("$id", connectionId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Connection not found.");
+            retrievedAt = reader.IsDBNull(0) ? null : Parse(reader.GetString(0));
+            possiblyStale = reader.GetBoolean(1);
+        }
+
+        var entries = new List<ProviderModelInfo>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT provider_model_id,display_label FROM connection_model_catalogue WHERE connection_id=$id ORDER BY provider_model_id;";
+            command.Parameters.AddWithValue("$id", connectionId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                entries.Add(new ProviderModelInfo(reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+            }
+        }
+
+        return new ModelCatalogue(retrievedAt, possiblyStale, entries);
+    }
+
+    private static Model ReadModel(SqliteDataReader reader) => new(
+        reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), (GenerationMode)reader.GetInt32(4), reader.GetBoolean(5),
+        (LibraryRecordState)reader.GetInt32(6), Parse(reader.GetString(7)), Parse(reader.GetString(8)), reader.IsDBNull(9) ? null : Parse(reader.GetString(9)));
 
     private static FolderRecord ReadFolder(SqliteDataReader reader) => new(
         reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3),
@@ -1552,6 +2397,25 @@ internal sealed class SqliteLibraryDatabase
         var significand = BigInteger.Parse(digits, CultureInfo.InvariantCulture);
         if (negative) significand = -significand;
         return (significand, exponent - fractionDigits + trailingZeros);
+    }
+
+    private static async Task AddColumnIfMissingAsync(SqliteConnection connection, SqliteTransaction transaction, string table, string column, string definition, CancellationToken cancellationToken)
+    {
+        var hasColumn = false;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = $"PRAGMA table_info({table});";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (string.Equals(reader.GetString(1), column, StringComparison.Ordinal)) hasColumn = true;
+            }
+        }
+        if (!hasColumn)
+        {
+            await ExecuteNonQueryAsync(connection, $"ALTER TABLE {table} ADD COLUMN {column} {definition};", cancellationToken, transaction).ConfigureAwait(false);
+        }
     }
 
     private static async Task ExecuteNonQueryAsync(SqliteConnection connection, string sql, CancellationToken cancellationToken, SqliteTransaction? transaction = null, params (string Name, object Value)[] parameters)

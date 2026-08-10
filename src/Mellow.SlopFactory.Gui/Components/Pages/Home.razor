@@ -6,42 +6,48 @@
 @inject IncomingImportService IncomingImports
 @inject IRecentLibraryService RecentLibraries
 @inject ISensitiveMetadataDisclosureService SensitiveDisclosure
+@inject IPlatformFileActionService PlatformFiles
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
 
-<PageTitle>Library · SlopFactory</PageTitle>
+<PageTitle>@Strings["LibraryPageTitle"]</PageTitle>
 
 @if (!LibraryState.IsInitialized)
 {
-    <section class="center-state" aria-live="polite"><h1>Opening your library</h1><p>Validating local storage…</p></section>
+    <section class="center-state" aria-live="polite"><h1>@Strings["OpeningLibrary"]</h1><p>@Strings["ValidatingLocalStorage"]</p></section>
 }
 else if (LibraryState.Workspace is null)
 {
-    <section class="center-state error" role="alert"><h1>Library unavailable</h1><p>@LibraryState.Error</p></section>
+    <section class="center-state error" role="alert"><h1>@Strings["LibraryUnavailable"]</h1><p>@LibraryState.Error</p><a href="/library-settings">@Strings["LibraryUnavailableAction"]</a></section>
 }
 else if (_contents is null)
 {
-    <section class="center-state" aria-live="polite"><h1>Loading library</h1></section>
+    <section class="center-state" aria-live="polite"><h1>@Strings["LoadingLibrary"]</h1></section>
 }
 else
 {
     <header class="page-header">
         <div>
-            <p class="eyebrow">Local library</p>
+            <p class="eyebrow">@Strings["LocalLibrary"]</p>
             <h1>@LibraryState.Workspace.Descriptor.DisplayName</h1>
-            <p class="muted">@_contents.Folder.Name · @_contents.Folders.Count folder(s) · @_contents.Files.Count file(s)</p>
+            <p class="muted">@Strings["LibrarySummary", _contents.Folder.Name, _contents.Folders.Count, _contents.Files.Count]</p>
         </div>
         <div class="actions">
-            <button class="secondary" @onclick="ToggleFolderForm">New folder</button>
-            <button @onclick="ChooseImportFilesAsync" disabled="@_busy">Import files</button>
+            <button class="secondary" @onclick="ToggleFolderForm">@Strings["NewFolder"]</button>
+            <button @onclick="ChooseImportFilesAsync" disabled="@_busy">@Strings["ImportFiles"]</button>
+            <button class="secondary" @onclick="ChooseImportFolderAsync" disabled="@_busy">@Strings["ImportFolder"]</button>
         </div>
+        <label class="check"><input type="checkbox" @bind="_includeHiddenFiles" @bind:after="RefreshImportInventoryForCurrentSelectionAsync" /> @Strings["IncludeHiddenFiles"]</label>
     </header>
 
     @if (_showFolderForm)
     {
         <EditForm Model="_newFolder" OnValidSubmit="CreateFolderAsync" class="inline-form">
-            <label for="folder-name">Folder name</label>
+            <label for="folder-name">@Strings["FolderName"]</label>
             <InputText id="folder-name" @bind-Value="_newFolder.Name" maxlength="255" />
-            <button type="submit">Create</button>
-            <button type="button" class="secondary" @onclick="ToggleFolderForm">Cancel</button>
+            <button type="submit">@Strings["Create"]</button>
+            <button type="button" class="secondary" @onclick="ToggleFolderForm">@Strings["Cancel"]</button>
         </EditForm>
     }
 
@@ -49,27 +55,46 @@ else
     {
         <div class="notice" role="status">@_message</div>
     }
+    @if (PlatformFiles.HasPermissionBlock)
+    {
+        <div class="notice" role="status"><span>@Strings["PermissionBlocksImport"]</span><button class="secondary" @onclick="PlatformFiles.OpenApplicationSettings">@Strings["OpenSystemSettings"]</button></div>
+    }
 
     @if (_pendingImports.Count > 0)
     {
         <section class="panel import-review" aria-labelledby="import-review-title">
-            <h2 id="import-review-title">Review import</h2>
-            <label for="import-library">Target library</label>
+            <h2 id="import-review-title">@Strings["ReviewImport"]</h2>
+            @if (_importInventory is not null)
+            {
+                <p role="status">@Strings["ImportInventorySummary", _importInventory.EligibleCount, FormatBytes(_importInventory.KnownBytes), _importInventory.VirtualFolders.Count, _importInventory.DuplicateGroups.Count, _importInventory.NameConflicts.Count]</p>
+                @if (_importInventory.SkippedCounts.Count > 0) { <p class="muted">@Strings["Skipped", string.Join(", ", _importInventory.SkippedCounts.OrderBy(item => item.Key).Select(item => $"{item.Value} {item.Key}"))]</p> }
+            }
+            <label for="import-library">@Strings["TargetLibrary"]</label>
             <select id="import-library" value="@_importForm.TargetLibraryPath" @onchange="ChangeImportTargetAsync" disabled="@_busy">
                 @foreach (var library in AvailableImportLibraries()) { <option value="@library.Path">@library.DisplayName Â· @library.Path</option> }
             </select>
-            <label for="import-folder">Destination folder</label>
+            <label for="import-folder">@Strings["DestinationFolder"]</label>
             <InputSelect id="import-folder" @bind-Value="_importForm.DestinationFolderId" disabled="@_busy">
                 @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
             </InputSelect>
-            <label class="check"><InputCheckbox @bind-Value="_importForm.ImportDuplicates" @bind-Value:after="ApplyDuplicateChoiceToPending" disabled="@_busy" /> Import all byte-identical files as separate records instead of skipping them</label>
+            <label class="check"><InputCheckbox @bind-Value="_importForm.ImportDuplicates" @bind-Value:after="ApplyDuplicateChoiceToPending" disabled="@_busy" /> @Strings["ImportDuplicates"]</label>
             <ul class="metadata-list">
                 @foreach (var candidate in _pendingImports)
                 {
                     <li>
-                        <div><strong>@candidate.DisplayName</strong><small>@(candidate.ByteSize is null ? "Size unavailable until import" : FormatBytes(candidate.ByteSize.Value))@(!string.IsNullOrWhiteSpace(candidate.RelativeFolder) ? $" · {candidate.RelativeFolder}" : string.Empty)</small></div>
-                        <label class="check"><input type="checkbox" checked="@candidate.ImportDuplicates" @onchange="args => SetImportDuplicate(candidate.Path, args)" disabled="@_busy" /> Import this item if it is a duplicate</label>
-                        <button class="ghost danger" disabled="@_busy" @onclick="() => RemovePendingImport(candidate.Path)">Remove</button>
+                        <div><strong>@candidate.DisplayName</strong><small>@(candidate.ByteSize is null ? Strings["SizeUnavailableUntilImport"] : FormatBytes(candidate.ByteSize.Value))@(!string.IsNullOrWhiteSpace(candidate.RelativeFolder) ? $" · {candidate.RelativeFolder}" : string.Empty)</small></div>
+                        <label class="check"><input type="checkbox" checked="@candidate.ImportDuplicates" @onchange="args => SetImportDuplicate(candidate.Path, args)" disabled="@_busy" /> @Strings["ImportThisItemIfDuplicate"]</label>
+                        @if (DuplicateMatches(candidate.Path).Count > 0)
+                        {
+                            <label>@Strings["DuplicateAction"]
+                                <select value="@DuplicateChoiceValue(candidate)" @onchange="args => SetDuplicateChoice(candidate.Path, args)" disabled="@_busy">
+                                    <option value="skip">@Strings["Skip"]</option>
+                                    <option value="import">@Strings["ImportAnyway"]</option>
+                                    @foreach (var match in DuplicateMatches(candidate.Path).Where(match => match.State == LibraryRecordState.Recycled)) { <option value="restore:@match.Id">@Strings["RestoreExisting", match.DisplayName]</option> }
+                                </select>
+                            </label>
+                        }
+                        <button class="ghost danger" disabled="@_busy" @onclick="() => RemovePendingImport(candidate.Path)">@Strings["Remove"]</button>
                     </li>
                 }
             </ul>
@@ -77,13 +102,13 @@ else
             {
                 <div class="scan-progress" role="status" aria-live="polite">
                     <progress max="@Math.Max(_importProgress.TotalBytes, 1)" value="@_importProgress.BytesProcessed"></progress>
-                    <span>@_importProgress.Stage: @_importProgress.DisplayName Â· item @_importProgress.ItemIndex of @_importProgress.TotalItems</span>
+                    <span>@Strings["ImportProgress", ImportProgressStage(_importProgress.Stage), _importProgress.DisplayName, _importProgress.ItemIndex, _importProgress.TotalItems]</span>
                 </div>
             }
             <div class="actions">
-                <button disabled="@_busy" @onclick="ConfirmImportAsync">@(_busy ? "Importing..." : $"Import {_pendingImports.Count} file(s)")</button>
-                @if (_busy) { <button class="secondary" @onclick="CancelImport">Cancel remaining import</button> }
-                else { <button class="secondary" @onclick="CancelImportReview">Cancel</button> }
+                <button disabled="@_busy" @onclick="ConfirmImportAsync">@(_busy ? Strings["Importing"] : Strings["ImportItemCount", _pendingImports.Count])</button>
+                @if (_busy) { <button class="secondary" @onclick="CancelImport">@Strings["CancelRemainingImport"]</button> }
+                else { <button class="secondary" @onclick="CancelImportReview">@Strings["Cancel"]</button> }
             </div>
         </section>
     }
@@ -91,7 +116,7 @@ else
     @if (_incomingFailures.Count > 0)
     {
         <section class="panel" aria-labelledby="incoming-failures-title">
-            <div class="section-heading"><h2 id="incoming-failures-title">Incoming items not added to review</h2><button class="ghost" @onclick="() => _incomingFailures = []">Dismiss</button></div>
+            <div class="section-heading"><h2 id="incoming-failures-title">@Strings["IncomingItemsNotAdded"]</h2><button class="ghost" @onclick="() => _incomingFailures = []">@Strings["Dismiss"]</button></div>
             <ul class="metadata-list">
                 @foreach (var failure in _incomingFailures) { <li><div><strong>@failure.DisplayName</strong><small>@failure.Message</small></div></li> }
             </ul>
@@ -101,7 +126,7 @@ else
     @if (_lastImportResults.Count > 0)
     {
         <section class="panel import-results" aria-labelledby="import-results-title">
-            <div class="section-heading"><h2 id="import-results-title">Import results</h2><button class="ghost" @onclick="() => _lastImportResults = []">Dismiss</button></div>
+            <div class="section-heading"><h2 id="import-results-title">@Strings["ImportResults"]</h2><button class="ghost" @onclick="() => _lastImportResults = []">@Strings["Dismiss"]</button></div>
             <ul class="metadata-list">
                 @foreach (var result in _lastImportResults)
                 {
@@ -113,21 +138,21 @@ else
                             {
                                 if (match.State == LibraryRecordState.Recycled)
                                 {
-                                    <button class="ghost" @onclick="() => RestoreDuplicateAsync(match.Id)">Restore existing @match.DisplayName</button>
+                                    <button class="ghost" @onclick="() => RestoreDuplicateAsync(match.Id)">@Strings["RestoreExisting", match.DisplayName]</button>
                                 }
                                 else if (match.State == LibraryRecordState.Active)
                                 {
-                                    <button class="ghost" @onclick="() => OpenFile(match.Id)">Open existing @match.DisplayName</button>
+                                    <button class="ghost" @onclick="() => OpenFile(match.Id)">@Strings["OpenExisting", match.DisplayName]</button>
                                 }
                                 else
                                 {
-                                    <span class="muted">Matching record is pending permanent deletion and cannot be restored.</span>
+                                    <span class="muted">@Strings["PendingDeletionCannotRestore"]</span>
                                 }
                             }
                         }
                         else if (result.File is not null)
                         {
-                            <button class="ghost" @onclick="() => OpenFile(result.File.Id)">Open imported file</button>
+                            <button class="ghost" @onclick="() => OpenFile(result.File.Id)">@Strings["OpenImportedFile"]</button>
                         }
                     </li>
                 }
@@ -138,39 +163,39 @@ else
     @if (_editingFileId is not null || _editingFolderId is not null)
     {
         <EditForm Model="_itemForm" OnValidSubmit="SaveItemAsync" class="inline-form">
-            <label for="item-name">Display name</label>
+            <label for="item-name">@Strings["DisplayName"]</label>
             <InputText id="item-name" @bind-Value="_itemForm.Name" maxlength="255" />
-            <label for="item-folder">Location</label>
+            <label for="item-folder">@Strings["Location"]</label>
             <InputSelect id="item-folder" @bind-Value="_itemForm.DestinationFolderId">
                 @foreach (var destination in AvailableDestinations())
                 {
                     <option value="@destination.Id">@destination.Name</option>
                 }
             </InputSelect>
-            <button type="submit">Save changes</button>
-            <button type="button" class="secondary" @onclick="CancelItemEdit">Cancel</button>
+            <button type="submit">@Strings["SaveChanges"]</button>
+            <button type="button" class="secondary" @onclick="CancelItemEdit">@Strings["Cancel"]</button>
         </EditForm>
     }
 
     @if (_duplicatingFileId is not null)
     {
         <EditForm Model="_duplicateForm" OnValidSubmit="DuplicateFileAsync" class="inline-form">
-            @if (_duplicateSensitiveMetadataCount > 0) { <p>@_duplicateSensitiveMetadataCount sensitive metadata entr@(_duplicateSensitiveMetadataCount == 1 ? "y" : "ies") will be copied, but remain concealed.</p> }
-            <label for="duplicate-name">Copy name</label>
+            @if (_duplicateSensitiveMetadataCount > 0) { <p>@Strings["DuplicateSensitiveMetadataConcealed", _duplicateSensitiveMetadataCount]</p> }
+            <label for="duplicate-name">@Strings["CopyName"]</label>
             <InputText id="duplicate-name" @bind-Value="_duplicateForm.Name" maxlength="255" />
-            <label for="duplicate-folder">Destination</label>
+            <label for="duplicate-folder">@Strings["Destination"]</label>
             <InputSelect id="duplicate-folder" @bind-Value="_duplicateForm.DestinationFolderId">
                 @foreach (var destination in _activeFolders)
                 {
                     <option value="@destination.Id">@destination.Name</option>
                 }
             </InputSelect>
-            <button type="submit">Create copy</button>
-            <button type="button" class="secondary" @onclick="CancelDuplicate">Cancel</button>
+            <button type="submit">@Strings["CreateCopy"]</button>
+            <button type="button" class="secondary" @onclick="CancelDuplicate">@Strings["Cancel"]</button>
         </EditForm>
     }
 
-    <nav class="breadcrumbs" aria-label="Folder path">
+    <nav class="breadcrumbs" aria-label="@Strings["FolderPath"]">
         @foreach (var folder in Breadcrumbs())
         {
             <button class="text-button" @onclick="() => OpenFolderAsync(folder.Id)" disabled="@(folder.Id == _contents.Folder.Id)">@folder.Name</button>
@@ -179,10 +204,10 @@ else
     </nav>
 
     <section aria-labelledby="folders-title">
-        <h2 id="folders-title">Folders</h2>
+        <h2 id="folders-title">@Strings["Folders"]</h2>
         @if (_contents.Folders.Count == 0)
         {
-            <p class="empty">No folders here.</p>
+            <p class="empty">@Strings["NoFoldersHere"]</p>
         }
         else
         {
@@ -193,8 +218,8 @@ else
                         <button class="card-link" @onclick="() => OpenFolderAsync(folder.Id)"><span aria-hidden="true">▰</span><strong>@folder.Name</strong></button>
                         @if (folder.Id != LibraryState.Workspace.Descriptor.GeneratedFolderId)
                         {
-                            <button class="ghost" @onclick="() => BeginFolderEdit(folder)">Manage</button>
-                            <button class="danger ghost" @onclick="() => RecycleFolderAsync(folder.Id)">Recycle</button>
+                            <button class="ghost" @onclick="() => BeginFolderEdit(folder)">@Strings["Manage"]</button>
+                            <button class="danger ghost" @onclick="() => RecycleFolderAsync(folder.Id)">@Strings["Recycle"]</button>
                         }
                     </article>
                 }
@@ -204,106 +229,106 @@ else
 
     <section aria-labelledby="files-title">
         <div class="section-heading">
-            <h2 id="files-title">Files</h2>
-            <div class="view-toggle" aria-label="File view">
-                <button class="@(_browser.ViewMode == LibraryBrowserViewMode.List ? string.Empty : "secondary")" aria-pressed="@(_browser.ViewMode == LibraryBrowserViewMode.List)" @onclick="() => SetViewMode(LibraryBrowserViewMode.List)">List</button>
-                <button class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? string.Empty : "secondary")" aria-pressed="@(_browser.ViewMode == LibraryBrowserViewMode.Grid)" @onclick="() => SetViewMode(LibraryBrowserViewMode.Grid)">Grid</button>
+            <h2 id="files-title">@Strings["Files"]</h2>
+            <div class="view-toggle" aria-label="@Strings["FileView"]">
+                <button class="@(_browser.ViewMode == LibraryBrowserViewMode.List ? string.Empty : "secondary")" aria-pressed="@(_browser.ViewMode == LibraryBrowserViewMode.List)" @onclick="() => SetViewMode(LibraryBrowserViewMode.List)">@Strings["List"]</button>
+                <button class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? string.Empty : "secondary")" aria-pressed="@(_browser.ViewMode == LibraryBrowserViewMode.Grid)" @onclick="() => SetViewMode(LibraryBrowserViewMode.Grid)">@Strings["Grid"]</button>
             </div>
         </div>
 
         <EditForm Model="_browser" OnValidSubmit="ApplyBrowserAsync" class="browser-controls">
-            <label class="browser-search" for="library-search">Search names and user metadata
-                <input id="library-search" type="search" maxlength="256" @bind="_browser.SearchText" placeholder="Search library files" />
+            <label class="browser-search" for="library-search">@Strings["SearchNamesAndMetadata"]
+                <input id="library-search" type="search" maxlength="256" @bind="_browser.SearchText" placeholder="@Strings["SearchLibraryFiles"]" />
             </label>
-            <label for="browse-scope">Scope
+            <label for="browse-scope">@Strings["Scope"]
                 <InputSelect id="browse-scope" @bind-Value="_browser.Scope">
-                    <option value="@LibraryBrowseScope.CurrentFolder">Current folder</option>
-                    <option value="@LibraryBrowseScope.EntireLibrary">Entire library</option>
+                    <option value="@LibraryBrowseScope.CurrentFolder">@Strings["CurrentFolder"]</option>
+                    <option value="@LibraryBrowseScope.EntireLibrary">@Strings["EntireLibrary"]</option>
                 </InputSelect>
             </label>
-            <label for="media-filter">Media
+            <label for="media-filter">@Strings["Media"]
                 <InputSelect id="media-filter" @bind-Value="_browser.MediaKind">
-                    @foreach (var kind in Enum.GetValues<LibraryMediaKind>()) { <option value="@kind">@kind</option> }
+                    @foreach (var kind in Enum.GetValues<LibraryMediaKind>()) { <option value="@kind">@FormatMediaKind(kind)</option> }
                 </InputSelect>
             </label>
-            <label for="origin-filter">Origin
+            <label for="origin-filter">@Strings["Origin"]
                 <InputSelect id="origin-filter" @bind-Value="_browser.Origin">
-                    <option value="">Any</option>
+                    <option value="">@Strings["Any"]</option>
                     @foreach (var origin in Enum.GetValues<FileOrigin>()) { <option value="@origin">@FormatOrigin(origin)</option> }
                 </InputSelect>
             </label>
-            <label for="imported-from">Imported from
+            <label for="imported-from">@Strings["ImportedFrom"]
                 <InputDate id="imported-from" @bind-Value="_browser.ImportedFrom" />
             </label>
-            <label for="imported-through">Imported through
+            <label for="imported-through">@Strings["ImportedThrough"]
                 <InputDate id="imported-through" @bind-Value="_browser.ImportedThrough" />
             </label>
-            <label for="file-sort">Sort
+            <label for="file-sort">@Strings["SortBy"]
                 <InputSelect id="file-sort" @bind-Value="_browser.Sort">
-                    <option value="@LibraryFileSort.Name">Name</option>
-                    <option value="@LibraryFileSort.ImportedNewest">Imported (newest)</option>
-                    <option value="@LibraryFileSort.ModifiedNewest">Modified (newest)</option>
-                    <option value="@LibraryFileSort.SizeLargest">Size (largest)</option>
-                    <option value="@LibraryFileSort.MediaType">Media type</option>
+                    <option value="@LibraryFileSort.Name">@Strings["SortName"]</option>
+                    <option value="@LibraryFileSort.ImportedNewest">@Strings["SortImportedNewest"]</option>
+                    <option value="@LibraryFileSort.ModifiedNewest">@Strings["SortModifiedNewest"]</option>
+                    <option value="@LibraryFileSort.SizeLargest">@Strings["SortSizeLargest"]</option>
+                    <option value="@LibraryFileSort.MediaType">@Strings["SortMediaType"]</option>
                 </InputSelect>
             </label>
-            <label class="check metadata-filter-toggle"><InputCheckbox id="metadata-filter-enabled" @bind-Value="_browser.MetadataFilterEnabled" /> Filter by typed metadata</label>
+            <label class="check metadata-filter-toggle"><InputCheckbox id="metadata-filter-enabled" @bind-Value="_browser.MetadataFilterEnabled" /> @Strings["FilterTypedMetadata"]</label>
             @if (_browser.MetadataFilterEnabled)
             {
-                <label for="metadata-filter-key">Metadata key
+                <label for="metadata-filter-key">@Strings["MetadataKey"]
                     <InputText id="metadata-filter-key" maxlength="100" @bind-Value="_browser.MetadataKey" />
                 </label>
-                <label for="metadata-filter-kind">Metadata type
+                <label for="metadata-filter-kind">@Strings["MetadataType"]
                     <select id="metadata-filter-kind" value="@_browser.MetadataKind" @onchange="ChangeMetadataFilterKind">
-                        @foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@kind</option> }
+                        @foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@FormatMetadataKind(kind)</option> }
                     </select>
                 </label>
-                <label for="metadata-filter-operator">Operator
+                <label for="metadata-filter-operator">@Strings["MetadataOperator"]
                     <InputSelect id="metadata-filter-operator" @bind-Value="_browser.MetadataOperator">
                         @foreach (var item in MetadataOperators(_browser.MetadataKind)) { <option value="@item.Operator">@item.Label</option> }
                     </InputSelect>
                 </label>
                 @if (MetadataFilterNeedsValue)
                 {
-                    <label for="metadata-filter-value">Comparison value
+                    <label for="metadata-filter-value">@Strings["ComparisonValue"]
                         <input id="metadata-filter-value" type="password" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" @bind="_browser.MetadataComparisonValue" />
                     </label>
                 }
             }
             <div class="actions browser-actions">
-                <button type="submit" disabled="@_loadingBrowse">Apply</button>
-                <button type="button" class="secondary" @onclick="ClearBrowserAsync" disabled="@_loadingBrowse">Clear search and filters</button>
+                <button type="submit" disabled="@_loadingBrowse">@Strings["Apply"]</button>
+                <button type="button" class="secondary" @onclick="ClearBrowserAsync" disabled="@_loadingBrowse">@Strings["ClearSearchAndFilters"]</button>
             </div>
         </EditForm>
 
         @if (_browseResult is null)
         {
-            <p class="muted" aria-live="polite">Loading files…</p>
+            <p class="muted" aria-live="polite">@Strings["LoadingFiles"]</p>
         }
         else if (_browseResult.TotalCount == 0)
         {
             <div class="empty-panel">
-                <p>@(HasBrowserCriteria ? "No files match the current search and filters." : "There are no files in this folder.")</p>
-                @if (HasBrowserCriteria) { <button class="secondary" @onclick="ClearBrowserAsync">Clear search and filters</button> }
-                else { <button @onclick="ChooseImportFilesAsync">Import files</button> }
+                <p>@(HasBrowserCriteria ? Strings["NoFilesMatch"] : Strings["NoFilesInFolder"])</p>
+                @if (HasBrowserCriteria) { <button class="secondary" @onclick="ClearBrowserAsync">@Strings["ClearSearchAndFilters"]</button> }
+                else { <button @onclick="ChooseImportFilesAsync">@Strings["ImportFiles"]</button> }
             </div>
         }
         else
         {
-            <p class="muted browser-summary" role="status">Showing @(_browseResult.Offset + 1)–@(_browseResult.Offset + _browseResult.Items.Count) of @_browseResult.TotalCount active file(s)@(_browser.Scope == LibraryBrowseScope.EntireLibrary ? " across the library" : " in this folder").@(_browser.MetadataFilterEnabled ? $" Among files passing the other filters, {_browseResult.MetadataMissingCount} lack the selected key and {_browseResult.MetadataIncompatibleTypeCount} use an incompatible type." : string.Empty)</p>
-            <div class="selection-bar" aria-label="File selection actions">
+            <p class="muted browser-summary" role="status">@Strings["BrowseResultSummary", _browseResult.Offset + 1, _browseResult.Offset + _browseResult.Items.Count, _browseResult.TotalCount, _browser.Scope == LibraryBrowseScope.EntireLibrary ? Strings["AcrossLibrary"] : Strings["InThisFolder"], _browser.MetadataFilterEnabled ? Strings["MetadataFilterSummary", _browseResult.MetadataMissingCount, _browseResult.MetadataIncompatibleTypeCount] : string.Empty]</p>
+            <div class="selection-bar" aria-label="@Strings["FileSelectionActions"]">
                 <div class="actions">
-                    <button class="secondary" @onclick="SelectCurrentPage">Select this page</button>
-                    @if (_selectedFileIds.Count > 0) { <button class="secondary" @onclick="ClearBulkSelection">Clear selection</button> }
+                    <button class="secondary" @onclick="SelectCurrentPage">@Strings["SelectThisPage"]</button>
+                    @if (_selectedFileIds.Count > 0) { <button class="secondary" @onclick="ClearBulkSelection">@Strings["ClearSelection"]</button> }
                 </div>
-                <span>@_selectedFileIds.Count file(s) selected across result pages</span>
+                <span>@Strings["SelectedAcrossResultPages", _selectedFileIds.Count]</span>
                 @if (_selectedFileIds.Count > 0)
                 {
                     <div class="actions">
-                        <button class="secondary" @onclick="BeginBulkMove">Move</button>
-                        <button class="secondary" @onclick="BeginBulkDuplicate">Duplicate</button>
-                        <button class="secondary" @onclick="BeginBulkMetadataAsync">Metadata</button>
-                        <button class="danger" @onclick="BeginBulkRecycle">Recycle</button>
+                        <button class="secondary" @onclick="BeginBulkMove">@Strings["Move"]</button>
+                        <button class="secondary" @onclick="BeginBulkDuplicate">@Strings["Duplicate"]</button>
+                        <button class="secondary" @onclick="BeginBulkMetadataAsync">@Strings["Metadata"]</button>
+                        <button class="danger" @onclick="BeginBulkRecycle">@Strings["Recycle"]</button>
                     </div>
                 }
             </div>
@@ -311,48 +336,48 @@ else
             @if (_bulkAction != BulkAction.None)
             {
                 <section class="panel confirmation-panel" aria-labelledby="bulk-action-title">
-                    <div class="section-heading"><h2 id="bulk-action-title">@BulkActionTitle()</h2><button class="ghost" @onclick="CancelBulkAction">Cancel</button></div>
-                    <p>This action applies to @_selectedFileIds.Count selected active file(s). Each file commits independently; any failure is reported without rolling back unrelated successes.</p>
+                    <div class="section-heading"><h2 id="bulk-action-title">@BulkActionTitle()</h2><button class="ghost" @onclick="CancelBulkAction">@Strings["Cancel"]</button></div>
+                    <p>@Strings["BulkActionApplies", _selectedFileIds.Count]</p>
                     @if (_bulkAction == BulkAction.Move)
                     {
-                        <label for="bulk-destination">Destination folder
+                        <label for="bulk-destination">@Strings["BulkDestinationFolder"]
                             <select id="bulk-destination" @bind="_bulkDestinationFolderId">
                                 @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
                             </select>
                         </label>
-                        <div class="actions"><button disabled="@_busy" @onclick="ConfirmBulkMoveAsync">Confirm move</button></div>
+                        <div class="actions"><button disabled="@_busy" @onclick="ConfirmBulkMoveAsync">@Strings["ConfirmMove"]</button></div>
                     }
                     else if (_bulkAction == BulkAction.Duplicate)
                     {
-                        <p>Each selected file is copied independently with its user metadata. Links are not copied. Name conflicts receive the normal numeric suffix.</p>
+                        <p>@Strings["DuplicateSelectedDescription"]</p>
                         @if (_bulkDuplicateEligibility.Count > 0)
                         {
                             <ul class="metadata-list">
                                 @foreach (var item in _bulkDuplicateEligibility)
                                 {
-                                    <li><strong>@item.DisplayName</strong><small>@(item.Reason ?? "Eligible")</small></li>
+                                    <li><strong>@item.DisplayName</strong><small>@(item.Reason ?? Strings["Eligible"])</small></li>
                                 }
                             </ul>
                         }
-                        @if (_bulkDuplicateSensitiveMetadataCount > 0) { <p>@_bulkDuplicateSensitiveMetadataCount sensitive metadata entr@(_bulkDuplicateSensitiveMetadataCount == 1 ? "y" : "ies") will be copied across the selection; keys and values remain concealed.</p> }
-                        <label for="bulk-duplicate-destination">Destination folder
+                        @if (_bulkDuplicateSensitiveMetadataCount > 0) { <p>@Strings["DuplicateSensitiveMetadataCopied", _bulkDuplicateSensitiveMetadataCount]</p> }
+                        <label for="bulk-duplicate-destination">@Strings["BulkDestinationFolder"]
                             <select id="bulk-duplicate-destination" @bind="_bulkDestinationFolderId">
                                 @foreach (var folder in _activeFolders) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
                             </select>
                         </label>
-                        @if (_bulkDuplicateProgress is not null) { <p role="status">Duplicating @_bulkDuplicateProgress.CurrentItem of @_bulkDuplicateProgress.TotalItems: @_bulkDuplicateProgress.DisplayName</p> }
-                        <div class="actions"><button disabled="@(_busy || !_bulkDuplicateEligibility.Any(item => item.Reason is null))" @onclick="ConfirmBulkDuplicateAsync">Confirm duplicate</button>@if (_busy) { <button class="secondary" @onclick="CancelBulkDuplicate">Cancel remaining copies</button> }</div>
+                        @if (_bulkDuplicateProgress is not null) { <p role="status">@Strings["DuplicatingProgress", _bulkDuplicateProgress.CurrentItem, _bulkDuplicateProgress.TotalItems, _bulkDuplicateProgress.DisplayName]</p> }
+                        <div class="actions"><button disabled="@(_busy || !_bulkDuplicateEligibility.Any(item => item.Reason is null))" @onclick="ConfirmBulkDuplicateAsync">@Strings["ConfirmDuplicate"]</button>@if (_busy) { <button class="secondary" @onclick="CancelBulkDuplicate">@Strings["CancelRemainingCopies"]</button> }</div>
                     }
                     else if (_bulkAction == BulkAction.Recycle)
                     {
-                        <p>Files, their user metadata, and endpoint-owned links will move to the recycle bin together. They can be restored until permanently deleted.</p>
-                        <div class="actions"><button class="danger" disabled="@_busy" @onclick="ConfirmBulkRecycleAsync">Confirm recycle</button></div>
+                        <p>@Strings["RecycleSelectedDescription"]</p>
+                        <div class="actions"><button class="danger" disabled="@_busy" @onclick="ConfirmBulkRecycleAsync">@Strings["ConfirmRecycle"]</button></div>
                     }
                     else
                     {
                         @if (_commonMetadata.Count > 0)
                         {
-                            <h3>Metadata keys common to every selected file</h3>
+                            <h3>@Strings["CommonMetadataKeys"]</h3>
                             <ul class="metadata-list">
                                 @foreach (var item in _commonMetadata)
                                 {
@@ -360,32 +385,43 @@ else
                                 }
                             </ul>
                         }
-                        else { <p class="muted">The selected files have no user-metadata key in common.</p> }
+                        else { <p class="muted">@Strings["NoCommonMetadataKeys"]</p> }
                         <div class="bulk-metadata-form">
-                            <label for="bulk-metadata-key">Key<input id="bulk-metadata-key" maxlength="200" @bind="_bulkMetadata.Key" /></label>
-                            <label for="bulk-metadata-kind">Type
-                                <select id="bulk-metadata-kind" @bind="_bulkMetadata.Kind">@foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@kind</option> }</select>
+                            <label for="bulk-metadata-key">@Strings["Key"]<input id="bulk-metadata-key" maxlength="200" @bind="_bulkMetadata.Key" /></label>
+                            <label for="bulk-metadata-kind">@Strings["Type"]
+                                <select id="bulk-metadata-kind" @bind="_bulkMetadata.Kind">@foreach (var kind in Enum.GetValues<MetadataValueKind>()) { <option value="@kind">@FormatMetadataKind(kind)</option> }</select>
                             </label>
-                            <label class="bulk-metadata-value" for="bulk-metadata-value">New value<textarea id="bulk-metadata-value" @bind="_bulkMetadata.Value"></textarea></label>
-                            <label class="check"><input type="checkbox" @bind="_bulkMetadata.IsSensitive" /> Sensitive</label>
+                            <label class="bulk-metadata-value" for="bulk-metadata-value">@Strings["NewValue"]
+                                @if (_bulkMetadata.IsSensitive) { <input id="bulk-metadata-value" type="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" @bind="_bulkMetadata.Value" /> }
+                                else { <textarea id="bulk-metadata-value" @bind="_bulkMetadata.Value"></textarea> }
+                            </label>
+                            <label class="check"><input type="checkbox" @bind="_bulkMetadata.IsSensitive" /> @Strings["Sensitive"]</label>
                         </div>
                         <div class="actions">
-                            <button disabled="@_busy" @onclick="ReviewBulkMetadataSetAsync">Review add or replace</button>
-                            <button class="danger ghost" disabled="@_busy" @onclick="ReviewBulkMetadataRemovalAsync">Review removal</button>
-                            <button class="secondary" disabled="@_busy" @onclick="() => ReviewBulkMetadataSensitivityAsync(true)">Review mark sensitive</button>
-                            <button class="secondary" disabled="@_busy" @onclick="() => ReviewBulkMetadataSensitivityAsync(false)">Review make ordinary</button>
+                            <button disabled="@_busy" @onclick="ReviewBulkMetadataSetAsync">@Strings["ReviewAddOrReplace"]</button>
+                            <button class="danger ghost" disabled="@_busy" @onclick="ReviewBulkMetadataRemovalAsync">@Strings["ReviewRemoval"]</button>
+                            <button class="secondary" disabled="@_busy" @onclick="() => ReviewBulkMetadataSensitivityAsync(true)">@Strings["ReviewMarkSensitive"]</button>
+                            <button class="secondary" disabled="@_busy" @onclick="() => ReviewBulkMetadataSensitivityAsync(false)">@Strings["ReviewMakeOrdinary"]</button>
+                            <button class="secondary" disabled="@_busy" @onclick="ReviewMetadataNormalizationAsync">@Strings["ReviewTypeNormalization"]</button>
                         </div>
                         @if (_bulkMetadataPreview is not null)
                         {
                             <div class="notice" role="status">
                                 <p>@_bulkMetadataPreview.Summary</p>
-                                @if (_bulkMetadataPreview.ExistingSensitiveCount > 0) { <p>@_bulkMetadataPreview.ExistingSensitiveCount existing sensitive value(s) remain concealed in this preview.</p> }
+                                @if (_bulkMetadataPreview.ExistingSensitiveCount > 0) { <p>@Strings["ExistingSensitiveMetadataConcealed", _bulkMetadataPreview.ExistingSensitiveCount]</p> }
                                 <button class="@(_bulkMetadataPreview.Action == BulkMetadataAction.Remove ? "danger" : string.Empty)" disabled="@_busy" @onclick="ConfirmBulkMetadataAsync">@BulkMetadataConfirmationLabel()</button>
+                            </div>
+                        }
+                        @if (_metadataNormalizationPreview is not null)
+                        {
+                            <div class="notice" role="status">
+                                <p>@Strings["NormalizationPreview", _metadataNormalizationPreview.Items.Count(item => item.IsConvertible), _bulkMetadata.Kind, _metadataNormalizationPreview.Items.Count(item => !item.IsConvertible)]</p>
+                                <button disabled="@_busy" @onclick="CommitMetadataNormalizationAsync">@Strings["ConfirmCompatibleConversions"]</button>
                             </div>
                         }
                         @if (_confirmBulkSensitiveMetadata)
                         {
-                            <div class="notice" role="status"><p><strong>Sensitive metadata</strong> is concealed by SlopFactory display, search-state, and future export safeguards, but it is not encrypted.</p><button @onclick="ConfirmBulkSensitiveDisclosureAsync">I understand — continue</button><button class="secondary" @onclick="() => _confirmBulkSensitiveMetadata = false">Cancel</button></div>
+                            <div class="notice" role="status"><p>@Strings["SensitiveMetadataDisclosure"]</p><button @onclick="ConfirmBulkSensitiveDisclosureAsync">@Strings["UnderstandContinue"]</button><button class="secondary" @onclick="() => _confirmBulkSensitiveMetadata = false">@Strings["Cancel"]</button></div>
                         }
                     }
                 </section>
@@ -394,19 +430,23 @@ else
             @if (_bulkResult is not null)
             {
                 <section class="panel" aria-labelledby="bulk-result-title">
-                    <div class="section-heading"><h2 id="bulk-result-title">Bulk action result</h2><button class="ghost" @onclick="() => _bulkResult = null">Dismiss</button></div>
-                    <p>@_bulkResult.SucceededCount succeeded; @_bulkResult.FailedCount failed.</p>
+                    <div class="section-heading"><h2 id="bulk-result-title">@Strings["BulkActionResult"]</h2><button class="ghost" @onclick="() => _bulkResult = null">@Strings["Dismiss"]</button></div>
+                    <p>@Strings["SucceededFailed", _bulkResult.SucceededCount, _bulkResult.FailedCount]</p>
                     @if (_bulkResult.FailedCount > 0)
                     {
                         <ul class="metadata-list">@foreach (var item in _bulkResult.Items.Where(item => !item.Succeeded)) { <li><strong>@item.DisplayName</strong><small>@item.Error</small></li> }</ul>
                     }
                 </section>
             }
+            @if (_thumbnailLoading.Count > 0)
+            {
+                <div class="notice" role="status"><span>@Strings["GeneratingThumbnails", _thumbnailLoading.Count]</span><button class="secondary" @onclick="CancelThumbnailLoading">@Strings["CancelThumbnailLoading"]</button></div>
+            }
             <div class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? "file-grid" : "file-list")">
                 @foreach (var item in _browseResult.Items)
                 {
                     <article class="@(_browser.ViewMode == LibraryBrowserViewMode.Grid ? "file-card" : "file-row")">
-                        <label class="file-select"><input type="checkbox" checked="@_selectedFileIds.Contains(item.File.Id)" @onchange="args => SetFileSelected(item.File.Id, args)" /><span class="visually-hidden">Select @item.File.DisplayName</span></label>
+                        <label class="file-select"><input type="checkbox" checked="@_selectedFileIds.Contains(item.File.Id)" @onchange="args => SetFileSelected(item.File.Id, args)" /><span class="visually-hidden">@Strings["SelectFile", item.File.DisplayName]</span></label>
                         <button class="file-main" @onclick="() => OpenFile(item.File.Id)">
                             @if (CanShowThumbnail(item.File))
                             {
@@ -427,33 +467,33 @@ else
                             }
                             <span class="file-identity"><strong>@item.File.DisplayName</strong><span>@item.File.MediaType · @FormatBytes(item.File.ByteSize)</span></span>
                         </button>
-                        @if (item.File.ContentState != FileContentState.Healthy) { <span class="content-state-badge">@item.File.ContentState</span> }
+                        @if (item.File.ContentState != FileContentState.Healthy) { <span class="content-state-badge">@FormatContentState(item.File.ContentState)</span> }
                         @if (_browser.Scope == LibraryBrowseScope.EntireLibrary)
                         {
                             <span class="file-location">@FolderPath(item.File.FolderId)</span>
                         }
                         @if (!string.Equals(item.File.DisplayName, item.File.OriginalFileName, StringComparison.Ordinal))
                         {
-                            <span class="original-name">Original: @item.File.OriginalFileName</span>
+                            <span class="original-name">@Strings["OriginalFilenameSummary", item.File.OriginalFileName]</span>
                         }
                         @if (item.MatchReasons.Count > 0)
                         {
-                            <ul class="match-reasons" aria-label="Why this file matched">
-                                @foreach (var reason in item.MatchReasons) { <li>@reason</li> }
+                            <ul class="match-reasons" aria-label="@Strings["WhyFileMatched"]">
+                                @foreach (var reason in item.MatchReasons) { <li>@FormatMatchReason(reason)</li> }
                             </ul>
                         }
                         <div class="file-actions">
-                            <button class="ghost" @onclick="() => BeginFileEdit(item.File)">Manage</button>
-                            <button class="ghost" @onclick="() => BeginDuplicateAsync(item.File)">Duplicate</button>
-                            <button class="danger ghost" @onclick="() => RecycleFileAsync(item.File.Id)">Recycle</button>
+                            <button class="ghost" @onclick="() => BeginFileEdit(item.File)">@Strings["Manage"]</button>
+                            <button class="ghost" @onclick="() => BeginDuplicateAsync(item.File)">@Strings["Duplicate"]</button>
+                            <button class="danger ghost" @onclick="() => RecycleFileAsync(item.File.Id)">@Strings["Recycle"]</button>
                         </div>
                     </article>
                 }
             </div>
-            <nav class="pagination" aria-label="File result pages">
-                <button class="secondary" @onclick="PreviousPageAsync" disabled="@(!_browseResult.HasPreviousPage || _loadingBrowse)">Previous</button>
-                <span>Page @CurrentPage of @PageCount</span>
-                <button class="secondary" @onclick="NextPageAsync" disabled="@(!_browseResult.HasNextPage || _loadingBrowse)">Next</button>
+            <nav class="pagination" aria-label="@Strings["FileResultPages"]">
+                <button class="secondary" @onclick="PreviousPageAsync" disabled="@(!_browseResult.HasPreviousPage || _loadingBrowse)">@Strings["Previous"]</button>
+                <span>@Strings["PageOf", CurrentPage, PageCount]</span>
+                <button class="secondary" @onclick="NextPageAsync" disabled="@(!_browseResult.HasNextPage || _loadingBrowse)">@Strings["Next"]</button>
             </nav>
         }
     </section>
@@ -478,11 +518,14 @@ else
     private IReadOnlyList<BulkDuplicateEligibility> _bulkDuplicateEligibility = [];
     private IReadOnlyList<FolderRecord> _activeFolders = [];
     private readonly Dictionary<string, PreviewThumbnail> _thumbnails = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _thumbnailLoading = new(StringComparer.Ordinal);
     private CancellationTokenSource? _thumbnailCancellation;
     private List<PendingImport> _pendingImports = [];
     private IReadOnlyList<ImportResult> _lastImportResults = [];
     private ImportForm _importForm = new();
     private ImportProgress? _importProgress;
+    private RecursiveImportInventory? _importInventory;
+    private bool _includeHiddenFiles;
     private CancellationTokenSource? _importCancellation;
     private readonly HashSet<string> _activeImportPaths = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private IReadOnlyList<IncomingImportFailure> _incomingFailures = [];
@@ -492,6 +535,7 @@ else
     private BulkMetadataForm _bulkMetadata = new();
     private IReadOnlyList<CommonMetadataSummary> _commonMetadata = [];
     private BulkMetadataPreview? _bulkMetadataPreview;
+    private MetadataNormalizationPreview? _metadataNormalizationPreview;
     private bool _confirmBulkSensitiveMetadata;
     private BulkFileOperationResult? _bulkResult;
     private BulkDuplicateProgress? _bulkDuplicateProgress;
@@ -592,34 +636,34 @@ else
         _browser.MetadataComparisonValue = string.Empty;
     }
 
-    private static IReadOnlyList<MetadataOperatorChoice> MetadataOperators(MetadataValueKind kind) => kind switch
+    private IReadOnlyList<MetadataOperatorChoice> MetadataOperators(MetadataValueKind kind) => kind switch
     {
         MetadataValueKind.Text =>
         [
-            new(MetadataFilterOperator.Equals, "Equals (case-insensitive)"),
-            new(MetadataFilterOperator.DoesNotEqual, "Does not equal"),
-            new(MetadataFilterOperator.Contains, "Contains (case-insensitive)")
+            new(MetadataFilterOperator.Equals, Strings["OperatorEqualsCaseInsensitive"]),
+            new(MetadataFilterOperator.DoesNotEqual, Strings["OperatorDoesNotEqual"]),
+            new(MetadataFilterOperator.Contains, Strings["OperatorContainsCaseInsensitive"])
         ],
         MetadataValueKind.Boolean =>
         [
-            new(MetadataFilterOperator.Equals, "Equals"),
-            new(MetadataFilterOperator.DoesNotEqual, "Does not equal")
+            new(MetadataFilterOperator.Equals, Strings["OperatorEquals"]),
+            new(MetadataFilterOperator.DoesNotEqual, Strings["OperatorDoesNotEqual"])
         ],
         MetadataValueKind.Json =>
         [
-            new(MetadataFilterOperator.Exists, "Exists"),
-            new(MetadataFilterOperator.DoesNotExist, "Does not exist"),
-            new(MetadataFilterOperator.StructurallyEquals, "Structurally equals"),
-            new(MetadataFilterOperator.DoesNotEqual, "Does not equal")
+            new(MetadataFilterOperator.Exists, Strings["OperatorExists"]),
+            new(MetadataFilterOperator.DoesNotExist, Strings["OperatorDoesNotExist"]),
+            new(MetadataFilterOperator.StructurallyEquals, Strings["OperatorStructurallyEquals"]),
+            new(MetadataFilterOperator.DoesNotEqual, Strings["OperatorDoesNotEqual"])
         ],
         _ =>
         [
-            new(MetadataFilterOperator.Equals, "Equals"),
-            new(MetadataFilterOperator.DoesNotEqual, "Does not equal"),
-            new(MetadataFilterOperator.LessThan, "Less than"),
-            new(MetadataFilterOperator.LessThanOrEqual, "Less than or equal"),
-            new(MetadataFilterOperator.GreaterThan, "Greater than"),
-            new(MetadataFilterOperator.GreaterThanOrEqual, "Greater than or equal")
+            new(MetadataFilterOperator.Equals, Strings["OperatorEquals"]),
+            new(MetadataFilterOperator.DoesNotEqual, Strings["OperatorDoesNotEqual"]),
+            new(MetadataFilterOperator.LessThan, Strings["OperatorLessThan"]),
+            new(MetadataFilterOperator.LessThanOrEqual, Strings["OperatorLessThanOrEqual"]),
+            new(MetadataFilterOperator.GreaterThan, Strings["OperatorGreaterThan"]),
+            new(MetadataFilterOperator.GreaterThanOrEqual, Strings["OperatorGreaterThanOrEqual"])
         ]
     };
 
@@ -680,11 +724,11 @@ else
             try
             {
                 var file = await LibraryState.Workspace.GetFileAsync(fileId);
-                var reason = file.State != LibraryRecordState.Active ? "Unavailable because it is not active." : file.ContentState is FileContentState.Missing or FileContentState.Changed ? "Unavailable because managed content is missing or changed." : null;
+                string? reason = file.State != LibraryRecordState.Active ? Strings["BulkDuplicateInactive"].Value : file.ContentState is FileContentState.Missing or FileContentState.Changed ? Strings["BulkDuplicateContentUnavailable"].Value : null;
                 eligibility.Add(new BulkDuplicateEligibility(file.Id, file.DisplayName, reason));
                 if (reason is null) _bulkDuplicateSensitiveMetadataCount += (await LibraryState.Workspace.GetMetadataAsync(fileId)).Count(item => item.IsSensitive);
             }
-            catch (SlopFactoryException) { eligibility.Add(new BulkDuplicateEligibility(fileId, "Unavailable file", "Unavailable because the record no longer exists.")); }
+            catch (SlopFactoryException) { eligibility.Add(new BulkDuplicateEligibility(fileId, Strings["UnavailableFile"].Value, Strings["BulkDuplicateRecordMissing"].Value)); }
         }
         _bulkDuplicateEligibility = eligibility;
     }
@@ -704,17 +748,17 @@ else
             .ToArray();
     }
 
-    private static CommonMetadataSummary SummarizeCommonMetadata(string key, IReadOnlyList<IReadOnlyList<MetadataEntry>> selectedMetadata)
+    private CommonMetadataSummary SummarizeCommonMetadata(string key, IReadOnlyList<IReadOnlyList<MetadataEntry>> selectedMetadata)
     {
         var entries = selectedMetadata.Select(items => items.Single(item => LibraryRules.ComparisonKey(item.Key) == LibraryRules.ComparisonKey(key))).ToArray();
         var kinds = entries.Select(item => item.Kind).Distinct().ToArray();
         var mixedSensitivity = entries.Select(item => item.IsSensitive).Distinct().Count() > 1;
-        var typeLabel = kinds.Length == 1 ? kinds[0].ToString() : "Mixed Types";
+        string typeLabel = kinds.Length == 1 ? FormatMetadataKind(kinds[0]) : Strings["MixedTypes"];
         string valueLabel;
-        if (entries.Any(item => item.IsSensitive)) valueLabel = mixedSensitivity ? "Mixed sensitivity; values concealed" : "Sensitive values concealed";
-        else if (kinds.Length > 1) valueLabel = "Mixed values";
-        else if (entries.Select(item => item.SerializedValue).Distinct(StringComparer.Ordinal).Count() > 1) valueLabel = "Mixed values";
-        else valueLabel = $"Same value: {TruncateMetadataValue(entries[0].SerializedValue)}";
+        if (entries.Any(item => item.IsSensitive)) valueLabel = mixedSensitivity ? Strings["MixedSensitivityValuesConcealed"] : Strings["SensitiveValuesConcealed"];
+        else if (kinds.Length > 1) valueLabel = Strings["MixedValues"];
+        else if (entries.Select(item => item.SerializedValue).Distinct(StringComparer.Ordinal).Count() > 1) valueLabel = Strings["MixedValues"];
+        else valueLabel = Strings["SameValue", TruncateMetadataValue(entries[0].SerializedValue)];
         return new CommonMetadataSummary(entries[0].Key, typeLabel, valueLabel);
     }
 
@@ -727,10 +771,24 @@ else
             _ = LibraryRules.ValidateMetadataValue(_bulkMetadata.Kind, _bulkMetadata.Value);
             var entries = await GetSelectedMetadataKeyAsync(key);
             _bulkMetadataPreview = new BulkMetadataPreview(BulkMetadataAction.Set, entries.Count, entries.Count(item => item.IsSensitive),
-                $"Set '{key}' as {_bulkMetadata.Kind} on {_selectedFileIds.Count} file(s), replacing {entries.Count} existing entr{(entries.Count == 1 ? "y" : "ies")}.");
+                Strings["BulkMetadataSetPreview", key, FormatMetadataKind(_bulkMetadata.Kind), _selectedFileIds.Count, entries.Count, entries.Count == 1 ? "y" : "ies"]);
             _message = null;
         }
         catch (SlopFactoryException exception) { _message = exception.Message; _bulkMetadataPreview = null; }
+    }
+
+    private async Task ReviewMetadataNormalizationAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        try { _metadataNormalizationPreview = await LibraryState.Workspace.PreviewMetadataNormalizationAsync(_selectedFileIds, _bulkMetadata.Key, _bulkMetadata.Kind); }
+        catch (SlopFactoryException exception) { _message = exception.Message; _metadataNormalizationPreview = null; }
+    }
+
+    private async Task CommitMetadataNormalizationAsync()
+    {
+        if (LibraryState.Workspace is null || _metadataNormalizationPreview is null) return;
+        await RunBulkActionAsync(() => LibraryState.Workspace.CommitMetadataNormalizationAsync(_metadataNormalizationPreview));
+        _metadataNormalizationPreview = null;
     }
 
     private async Task ReviewBulkMetadataRemovalAsync()
@@ -741,7 +799,7 @@ else
             var key = LibraryRules.NormalizeMetadataKey(_bulkMetadata.Key);
             var entries = await GetSelectedMetadataKeyAsync(key);
             _bulkMetadataPreview = new BulkMetadataPreview(BulkMetadataAction.Remove, entries.Count, entries.Count(item => item.IsSensitive),
-                $"Remove '{key}' from {entries.Count} of the {_selectedFileIds.Count} selected file(s). Files without that key remain unchanged.");
+                Strings["BulkMetadataRemovePreview", key, entries.Count, _selectedFileIds.Count]);
             _message = null;
         }
         catch (SlopFactoryException exception) { _message = exception.Message; _bulkMetadataPreview = null; }
@@ -755,7 +813,7 @@ else
             var key = LibraryRules.NormalizeMetadataKey(_bulkMetadata.Key);
             var entries = await GetSelectedMetadataKeyAsync(key);
             _bulkMetadataPreview = new BulkMetadataPreview(isSensitive ? BulkMetadataAction.MarkSensitive : BulkMetadataAction.MarkOrdinary, entries.Count, entries.Count(item => item.IsSensitive),
-                $"Mark {entries.Count} existing '{key}' entr{(entries.Count == 1 ? "y" : "ies")} as {(isSensitive ? "sensitive" : "ordinary")}. {_selectedFileIds.Count - entries.Count} selected file(s) without that key will remain unchanged." + (isSensitive ? string.Empty : " Making metadata ordinary exposes its values in file details and makes it eligible for ordinary metadata export when export is available."));
+                Strings["BulkMetadataSensitivityPreview", entries.Count, key, entries.Count == 1 ? "y" : "ies", isSensitive ? Strings["SensitiveAdjective"] : Strings["Ordinary"], _selectedFileIds.Count - entries.Count, isSensitive ? string.Empty : Strings["OrdinaryMetadataDisclosure"]]);
             _message = null;
         }
         catch (SlopFactoryException exception) { _message = exception.Message; _bulkMetadataPreview = null; }
@@ -797,12 +855,12 @@ else
         {
             var eligibleIds = _bulkDuplicateEligibility.Where(item => item.Reason is null).Select(item => item.FileId).ToArray();
             _bulkResult = await LibraryState.Workspace.DuplicateFilesWithProgressAsync(eligibleIds, _bulkDestinationFolderId, progress, _bulkDuplicateCancellation.Token);
-            _message = $"Bulk duplicate complete: {_bulkResult.SucceededCount} succeeded; {_bulkResult.FailedCount} failed.";
+            _message = Strings["BulkDuplicateComplete", _bulkResult.SucceededCount, _bulkResult.FailedCount];
             _selectedFileIds.Clear();
             CancelBulkAction();
             await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
-        catch (OperationCanceledException) { _message = "Bulk duplicate cancelled. Completed copies remain available."; await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true); }
+        catch (OperationCanceledException) { _message = Strings["BulkDuplicateCancelled"]; await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true); }
         catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
         finally { _bulkDuplicateCancellation?.Dispose(); _bulkDuplicateCancellation = null; _bulkDuplicateProgress = null; _busy = false; }
     }
@@ -841,7 +899,7 @@ else
         try
         {
             _bulkResult = await action();
-            _message = $"Bulk action complete: {_bulkResult.SucceededCount} succeeded; {_bulkResult.FailedCount} failed.";
+            _message = Strings["BulkActionComplete", _bulkResult.SucceededCount, _bulkResult.FailedCount];
             _selectedFileIds.Clear();
             CancelBulkAction();
             await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
@@ -861,18 +919,18 @@ else
 
     private string BulkActionTitle() => _bulkAction switch
     {
-        BulkAction.Move => "Review bulk move",
-        BulkAction.Duplicate => "Review bulk duplicate",
-        BulkAction.Recycle => "Review bulk recycle",
-        _ => "Review bulk metadata"
+        BulkAction.Move => Strings["ReviewBulkMove"],
+        BulkAction.Duplicate => Strings["ReviewBulkDuplicate"],
+        BulkAction.Recycle => Strings["ReviewBulkRecycle"],
+        _ => Strings["ReviewBulkMetadata"]
     };
 
     private string BulkMetadataConfirmationLabel() => _bulkMetadataPreview?.Action switch
     {
-        BulkMetadataAction.Remove => "Confirm removal",
-        BulkMetadataAction.MarkSensitive => "Confirm mark sensitive",
-        BulkMetadataAction.MarkOrdinary => "Confirm make ordinary",
-        _ => "Confirm metadata change"
+        BulkMetadataAction.Remove => Strings["ConfirmRemoval"],
+        BulkMetadataAction.MarkSensitive => Strings["ConfirmMarkSensitive"],
+        BulkMetadataAction.MarkOrdinary => Strings["ConfirmMakeOrdinary"],
+        _ => Strings["ConfirmMetadataChange"]
     };
 
     private static string TruncateMetadataValue(string value) => value.Length <= 80 ? value : $"{value[..80]}…";
@@ -883,9 +941,11 @@ else
         _thumbnailCancellation?.Dispose();
         _thumbnailCancellation = new CancellationTokenSource();
         _thumbnails.Clear();
+        _thumbnailLoading.Clear();
         if (_browseResult is null || LibraryState.Workspace is null) return;
         foreach (var file in _browseResult.Items.Select(item => item.File).Where(CanShowThumbnail))
         {
+            _thumbnailLoading.Add(file.Id);
             _ = LoadThumbnailAsync(LibraryState.Workspace, file, _thumbnailCancellation.Token);
         }
     }
@@ -901,6 +961,17 @@ else
         }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
+        finally
+        {
+            _thumbnailLoading.Remove(file.Id);
+            if (!cancellationToken.IsCancellationRequested) await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void CancelThumbnailLoading()
+    {
+        _thumbnailCancellation?.Cancel();
+        _thumbnailLoading.Clear();
     }
 
     private static DateTimeOffset? ParseLocalDate(DateTime? value, bool inclusiveThrough)
@@ -936,13 +1007,13 @@ else
             names.Push(current.Name);
             current = current.ParentId is { } parentId ? _activeFolders.FirstOrDefault(folder => folder.Id == parentId) : null;
         }
-        return names.Count == 0 ? "Unknown folder" : string.Join(" / ", names);
+        return names.Count == 0 ? Strings["UnknownFolder"] : string.Join(" / ", names);
     }
 
     private async Task ChooseImportFilesAsync()
     {
         if (_contents is null || LibraryState.Workspace is null) return;
-        var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = "Import files into SlopFactory" });
+        var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = Strings["ImportFilesPickerTitle"] });
         var files = picked?.OfType<FileResult>().Where(item => !string.IsNullOrWhiteSpace(item.FullPath)).ToArray() ?? [];
         if (files.Length == 0) return;
         var selected = files.Select(item =>
@@ -953,6 +1024,18 @@ else
             return new PendingImport(item.FullPath, string.IsNullOrWhiteSpace(item.FileName) ? Path.GetFileName(item.FullPath) : item.FileName, size, false, null);
         }).GroupBy(item => item.Path, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).Select(group => group.First()).ToList();
         AddPendingImports(selected);
+        await RefreshImportInventoryAsync(_pendingImports);
+        _importForm = new ImportForm { TargetLibraryPath = LibraryState.ActivePath ?? string.Empty, DestinationFolderId = _contents.Folder.Id };
+        _lastImportResults = [];
+        _importProgress = null;
+    }
+
+    private async Task ChooseImportFolderAsync()
+    {
+        if (_contents is null || LibraryState.Workspace is null) return;
+        await PlatformFiles.PickRecursiveImportFolderAsync(_includeHiddenFiles);
+        DrainIncomingImports();
+        await RefreshImportInventoryAsync(_pendingImports);
         _importForm = new ImportForm { TargetLibraryPath = LibraryState.ActivePath ?? string.Empty, DestinationFolderId = _contents.Folder.Id };
         _lastImportResults = [];
         _importProgress = null;
@@ -975,8 +1058,15 @@ else
         });
         try
         {
-            _lastImportResults = await ImportReviewedItemsAsync(LibraryState.Workspace, runItems, progress, _importCancellation.Token);
-            _message = $"Imported {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Imported)}; skipped {_lastImportResults.Count(item => item.Outcome == ImportOutcome.DuplicateSkipped)} duplicate(s); {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Failed)} failed; {_lastImportResults.Count(item => item.Outcome == ImportOutcome.Cancelled)} cancelled.";
+            await RefreshImportInventoryAsync(runItems, _importCancellation.Token);
+            var inventory = _importInventory ?? throw new LibraryValidationException("The import inventory is unavailable.");
+            var choices = inventory.Candidates.Select(snapshot =>
+            {
+                var pending = runItems.Single(item => SameSourcePath(item.Path, snapshot.SourcePath));
+                return new ConfirmedImportCandidate(snapshot, pending.ExistingFileId is not null ? ImportDuplicateChoice.RestoreExisting : pending.ImportDuplicates ? ImportDuplicateChoice.ImportAnyway : ImportDuplicateChoice.Skip, pending.ExistingFileId);
+            }).ToArray();
+            _lastImportResults = await LibraryState.Workspace.ImportConfirmedInventoryAsync(inventory, choices, _importForm.DestinationFolderId, progress, _importCancellation.Token);
+            _message = Strings["ImportSummary", _lastImportResults.Count(item => item.Outcome == ImportOutcome.Imported), _lastImportResults.Count(item => item.Outcome == ImportOutcome.DuplicateSkipped), _lastImportResults.Count(item => item.Outcome == ImportOutcome.Failed), _lastImportResults.Count(item => item.Outcome == ImportOutcome.Cancelled)];
             foreach (var item in runItems)
             {
                 _pendingImports.RemoveAll(candidate => SameSourcePath(candidate.Path, item.Path));
@@ -1038,8 +1128,36 @@ else
     private void SetImportDuplicate(string path, ChangeEventArgs args)
     {
         var index = _pendingImports.FindIndex(item => SameSourcePath(item.Path, path));
-        if (index >= 0) _pendingImports[index] = _pendingImports[index] with { ImportDuplicates = args.Value is bool selected && selected };
+        if (index >= 0) _pendingImports[index] = _pendingImports[index] with { ImportDuplicates = args.Value is bool selected && selected, ExistingFileId = null };
     }
+
+    private IReadOnlyList<FileRecord> DuplicateMatches(string path) => _importInventory?.DuplicateGroups.FirstOrDefault(group => group.SourcePaths.Any(source => SameSourcePath(source, path)))?.LibraryMatches ?? [];
+    private static string DuplicateChoiceValue(PendingImport candidate) => candidate.ExistingFileId is not null ? $"restore:{candidate.ExistingFileId}" : candidate.ImportDuplicates ? "import" : "skip";
+    private void SetDuplicateChoice(string path, ChangeEventArgs args)
+    {
+        var index = _pendingImports.FindIndex(item => SameSourcePath(item.Path, path));
+        if (index < 0) return;
+        var value = args.Value?.ToString() ?? "skip";
+        _pendingImports[index] = _pendingImports[index] with { ImportDuplicates = value == "import", ExistingFileId = value.StartsWith("restore:", StringComparison.Ordinal) ? value[8..] : null };
+    }
+
+    private async Task RefreshImportInventoryAsync(IEnumerable<PendingImport> pendingItems, CancellationToken cancellationToken = default)
+    {
+        if (LibraryState.Workspace is null) return;
+        var pending = pendingItems.ToArray();
+        if (pending.Length == 0) { _importInventory = null; return; }
+        var inventory = await LibraryState.Workspace.BuildRecursiveImportInventoryAsync(pending.Select(item => item.Path), includeHiddenFiles: _includeHiddenFiles, cancellationToken);
+        var acceptedPaths = inventory.Candidates.Select(candidate => candidate.SourcePath).ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        _pendingImports.RemoveAll(candidate => pending.Any(item => SameSourcePath(item.Path, candidate.Path)) && !acceptedPaths.Contains(candidate.Path));
+        var mapped = inventory.Candidates.Select(snapshot =>
+        {
+            var item = pending.Single(candidate => SameSourcePath(candidate.Path, snapshot.SourcePath));
+            return snapshot with { DisplayName = item.DisplayName, RelativeFolder = item.RelativeFolder ?? string.Empty };
+        }).ToArray();
+        _importInventory = inventory with { Candidates = mapped, VirtualFolders = mapped.Select(item => item.RelativeFolder).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal).ToArray() };
+    }
+
+    private Task RefreshImportInventoryForCurrentSelectionAsync() => RefreshImportInventoryAsync(_pendingImports);
 
     private void OnIncomingImportsChanged(object? sender, EventArgs args) => _ = InvokeAsync(() =>
     {
@@ -1140,7 +1258,7 @@ else
             _importForm.TargetLibraryPath = LibraryState.ActivePath ?? path;
             _importForm.DestinationFolderId = LibraryState.Workspace.Descriptor.RootFolderId;
             await LoadFolderAsync(LibraryState.Workspace.Descriptor.RootFolderId);
-            _message = $"Import target changed to {LibraryState.Workspace.Descriptor.DisplayName}.";
+            _message = Strings["ImportTargetChanged", LibraryState.Workspace.Descriptor.DisplayName];
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
@@ -1218,7 +1336,7 @@ else
         _duplicatingFileId = file.Id;
         var extension = Path.GetExtension(file.DisplayName);
         var stem = Path.GetFileNameWithoutExtension(file.DisplayName);
-        _duplicateForm = new DuplicateForm { Name = $"{stem} copy{extension}", DestinationFolderId = file.FolderId };
+        _duplicateForm = new DuplicateForm { Name = Strings["DefaultCopyName", stem, extension], DestinationFolderId = file.FolderId };
         _duplicateSensitiveMetadataCount = LibraryState.Workspace is null ? 0 : (await LibraryState.Workspace.GetMetadataAsync(file.Id)).Count(item => item.IsSensitive);
     }
 
@@ -1229,7 +1347,7 @@ else
         {
             await LibraryState.Workspace.DuplicateFileAsync(_duplicatingFileId, _duplicateForm.DestinationFolderId, _duplicateForm.Name);
             CancelDuplicate();
-            _message = "File duplicated.";
+            _message = Strings["FileDuplicated"];
             await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
         catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException) { _message = exception.Message; }
@@ -1307,12 +1425,49 @@ else
     private static bool CanShowThumbnail(FileRecord file) =>
         (file.MediaType.StartsWith("image/", StringComparison.Ordinal) && file.MediaType != "image/svg+xml") || file.MediaType == "video/mp4";
 
-    private static string FormatOrigin(FileOrigin origin) => origin switch
+    private string FormatOrigin(FileOrigin origin) => origin switch
     {
-        FileOrigin.UserCopy => "User copy",
-        FileOrigin.EditedCopy => "Edited copy",
-        FileOrigin.RecoveredProviderOutput => "Recovered provider output",
-        _ => origin.ToString()
+        FileOrigin.Imported => Strings["OriginImported"],
+        FileOrigin.Generated => Strings["OriginGenerated"],
+        FileOrigin.UserCopy => Strings["OriginUserCopy"],
+        FileOrigin.EditedCopy => Strings["OriginEditedCopy"],
+        _ => Strings["OriginRecoveredProviderOutput"]
+    };
+
+    private string FormatMediaKind(LibraryMediaKind kind) => kind switch
+    {
+        LibraryMediaKind.Any => Strings["MediaAny"],
+        LibraryMediaKind.Text => Strings["MediaText"],
+        LibraryMediaKind.Image => Strings["MediaImage"],
+        LibraryMediaKind.Audio => Strings["MediaAudio"],
+        LibraryMediaKind.Video => Strings["MediaVideo"],
+        _ => Strings["MediaOther"]
+    };
+
+    private string FormatMetadataKind(MetadataValueKind kind) => kind switch
+    {
+        MetadataValueKind.Text => Strings["MetadataKindText"],
+        MetadataValueKind.Number => Strings["MetadataKindNumber"],
+        MetadataValueKind.Boolean => Strings["MetadataKindBoolean"],
+        MetadataValueKind.Date => Strings["MetadataKindDate"],
+        MetadataValueKind.DateTime => Strings["MetadataKindDateTime"],
+        _ => Strings["MetadataKindJson"]
+    };
+
+    private string FormatContentState(FileContentState state) => state switch
+    {
+        FileContentState.Missing => Strings["ContentStateMissing"],
+        FileContentState.Changed => Strings["ContentStateChanged"],
+        _ => Strings["ContentStateReplaced"]
+    };
+
+    private string FormatMatchReason(string reason) => reason switch
+    {
+        "Matched original filename" => Strings["MatchOriginalFilename"],
+        "Matched user metadata" => Strings["MatchUserMetadata"],
+        "Matched user metadata filter" => Strings["MatchUserMetadataFilter"],
+        _ when reason.StartsWith("Matched user metadata: ", StringComparison.Ordinal) => Strings["MatchUserMetadataKey", reason[23..]],
+        _ => reason
     };
 
     private static string FormatBytes(long bytes) => bytes switch
@@ -1323,12 +1478,21 @@ else
         _ => $"{bytes} B"
     };
 
-    private static string ImportOutcomeLabel(ImportOutcome outcome) => outcome switch
+    private string ImportOutcomeLabel(ImportOutcome outcome) => outcome switch
     {
-        ImportOutcome.Imported => "Imported",
-        ImportOutcome.DuplicateSkipped => "Duplicate skipped",
-        ImportOutcome.Cancelled => "Cancelled",
-        _ => "Failed"
+        ImportOutcome.Imported => Strings["ImportOutcomeImported"],
+        ImportOutcome.DuplicateSkipped => Strings["ImportOutcomeDuplicateSkipped"],
+        ImportOutcome.Cancelled => Strings["ImportOutcomeCancelled"],
+        _ => Strings["ImportOutcomeFailed"]
+    };
+
+    private string ImportProgressStage(string stage) => stage switch
+    {
+        "Hashing source" => Strings["ImportStageHashingSource"],
+        "Duplicate skipped" => Strings["ImportStageDuplicateSkipped"],
+        "Copying into managed storage" => Strings["ImportStageCopyingManagedStorage"],
+        "Completed" => Strings["ImportStageCompleted"],
+        _ => stage
     };
 
     private sealed class FolderForm { public string Name { get; set; } = string.Empty; }
@@ -1342,7 +1506,7 @@ else
         public string Name { get; set; } = string.Empty;
         public string DestinationFolderId { get; set; } = string.Empty;
     }
-    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize, bool IsTemporary, string? RelativeFolder, bool ImportDuplicates = false);
+    private sealed record PendingImport(string Path, string DisplayName, long? ByteSize, bool IsTemporary, string? RelativeFolder, bool ImportDuplicates = false, string? ExistingFileId = null);
     private sealed class DelegatingProgress<T>(Action<T> report) : IProgress<T>
     {
         public void Report(T value) => report(value);

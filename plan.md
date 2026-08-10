@@ -498,7 +498,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Corrupt-library actions are **Retry**, **Choose Another Library**, **Forget Library** and, on Windows, **Open Location**.
 - The application does not attempt automatic destructive database repair and preserves the original database and managed files unchanged.
 - A crash, unsafe volume removal or detected storage inconsistency marks a full scan as recommended and prompts the user to start or defer it rather than silently beginning an expensive scan.
-- Full scans can resume from a device-local checkpoint which contains no file content or user metadata.
 - First-release scan actions are limited to retrying validation, clearing or rebuilding derived previews, exporting the findings and opening the library location on Windows.
 - The integrity workflow never deletes orphan files, invents database records, adopts externally changed bytes or performs automatic SQLite repair.
 - Explicit managed-content replacement, recycle-bin actions and manual copying of intact media remain separate user-initiated workflows and are not presented as scan repair.
@@ -552,9 +551,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - If the active library becomes read-only or unavailable, the application closes it safely rather than continuing with partial functionality.
 - Managed-file existence must also be verified before export and provider submission when those workflows are implemented.
 - Future provider and export operations retain explicit existence, containment and hash checks regardless of watcher state.
-- **Export Changed Bytes** lets the user copy the currently present bytes to an external destination for recovery without updating the library record or attaching a normal provenance sidecar.
-- Ordinary export, **Open Externally**, and provider-source selection remain unavailable while the record is **Content Changed** when those workflows are implemented.
-- A **Missing** record has no bytes to inspect or export when those workflows are implemented.
 - A provider safety classification received while a record is **Missing** or **Content Changed** attaches only to the immutable provenance of the record's original bytes.
 - Restoring bytes whose algorithm, digest and size match the original activates the classification and concealment on the current file; differing replacement or externally changed bytes do not inherit that classification or become concealed as if the provider had classified them.
 - A content-replaced file retains its original origin and generation relationship for historical context but clearly states that its current bytes are not the original imported or generated content.
@@ -571,11 +567,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The application does not impose a storage quota; capacity is limited only by available device storage.
 - Long file operations display progress and support cancellation.
 - Thumbnail generation and media metadata extraction run in background tasks.
-- Preview decoding enforces bounded image dimensions, total pixel count, animation frame count, decoded-memory use, media probe time and thumbnail-processing work.
-- These are safety limits on derived viewing work, not limits on what the library can store or export.
-- Files which exceed a preview safety limit remain intact and are shown with metadata plus **Preview Too Complex or Large** rather than being marked corrupt.
 - Preview safety limits cannot be bypassed by a misleading filename, MIME declaration or embedded dimension metadata.
-- Text preview uses a configurable safety threshold. Files above the threshold use a partial or range-based viewer and can be opened externally.
 - The application warns before rendering an extremely large image at full resolution.
 - Provider input limits are separate from library storage and preview limits.
 - Preview limitations never prevent storing or exporting original file content.
@@ -584,9 +576,7 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 - The library can store any file type, including files which the application cannot preview.
 - File types are detected using available provider content types, file signatures and filename extensions rather than trusting the extension alone.
-- Detected media type and active-content classification are read-only system metadata and cannot be overridden by the user.
 - Renaming a file's display name or extension never changes its viewer, provider compatibility, preview behavior or safety classification.
-- For an unsupported format, the application displays its metadata and allows the user to export it or open it using another installed application.
 - Imported and generated files retain their original bytes and are not automatically transcoded.
 - The first release also does not offer hidden or temporary resizing, recompression or transcoding merely to satisfy provider input limits; validation explains the violated constraint and requires a separately converted file to be imported.
 - A future conversion workflow would create a visible derived library file with its own identity, content hash and provenance rather than substituting transformed upload bytes invisibly.
@@ -654,15 +644,12 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Cancelling retains completed exports and replacements, prevents not-yet-started items, requests cancellation of active writes and removes incomplete temporary outputs where possible; its summary distinguishes completed, cancelled and leftover partial items.
 - The library action for saving a managed file outside the library is named **Export**.
 - Export copies files out of managed storage without changing their library records.
-- A single-file export lets the user choose the destination and filename.
 - A multi-file or folder export lets the user choose a destination directory. Folder export recreates the selected virtual folder hierarchy.
 - When a file's display extension conflicts with its detected content, export proposes the display basename with the safe detected extension and shows the mismatch.
 - The user can change the export basename freely.
 - Executable or otherwise active content cannot be exported with a harmless-looking or conflicting extension.
 - Non-active content can use a conflicting user-entered export extension only after an explicit warning; its bytes and detected-type metadata remain unchanged.
 - Bulk export automatically uses safe detected extensions for mismatched items and lists renamed outputs in its completion summary.
-- Files are exported using their original bytes without conversion.
-- During export, SlopFactory streams a new SHA-256 digest and byte count and compares both with the managed file's verified identity before final commit.
 - Export review offers **Verify After Export** off by default only when the destination API supports trustworthy read-back; enabling it performs a full post-write size and SHA-256 comparison and may substantially increase time and I/O.
 - An outgoing-stream mismatch before commit aborts and cleans the temporary output, writes no sidecar, marks the library record for integrity review and reports that export did not complete.
 - A post-commit read-back mismatch marks **Export Verification Failed**, writes no sidecar and attempts to delete a newly created output; cleanup failure is tracked normally.
@@ -798,19 +785,12 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 - Every library file is treated as untrusted content.
 - Viewer operations do not modify original file bytes.
-- **Open Externally** never exposes a writable managed library file directly.
-- On Android, the application shares the managed file through a narrowly scoped, read-only content URI grant.
-- On Windows, the application creates and opens a temporary read-only copy in application cache storage.
-- External applications cannot write changes back into the library automatically.
 - To retain an externally edited version, the user must import it as a new file or explicitly use the managed-content replacement workflow.
 - Android content grants are revoked when they are no longer needed, subject to platform lifecycle behavior.
 - Windows external-opening copies are treated as regenerable temporary data and are removed on later startup or cache cleanup when they are no longer in use.
 - The application explains that a receiving application may retain its own copy after SlopFactory revokes access or removes its temporary copy.
 - SlopFactory never executes library content.
-- Known executables, installers, application packages, shortcuts and scripts can be stored and exported, but **Open Externally** is unavailable for them.
 - Users who intentionally want to run such content must export it and act through the operating system.
-- Potentially active document formats require a warning before **Open Externally** hands a temporary or read-only copy to another application.
-- Active-file classification uses file signatures, declared media type and extension where available rather than relying on the filename alone.
 - The application can request operating-system malware or reputation scanning where the platform exposes a suitable API, but it does not provide its own malware scanner or describe unflagged content as safe.
 
 ## File Import
@@ -819,27 +799,12 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Custom URL schemes, remote-URL imports and automatic downloading of shared links are not supported in the first release.
 - Users obtain remote files through the operating system or browser and explicitly import the resulting local bytes, giving SlopFactory a stable content hash and clear provenance boundary.
 - Any later URL-ingestion feature requires dedicated SSRF, redirect, authentication, expiry, content-size and provenance controls rather than reusing provider result-download behavior.
-- Recursive folder import is supported when the platform's picker grants folder access.
 - Recursive import excludes hidden files and directories by default, using platform attributes and leading-dot conventions where applicable.
 - Before import, the user can explicitly enable **Include Hidden Files**; the choice applies only to that reviewed import operation.
 - The completion summary reports hidden items skipped by policy.
 - Protected system files, filesystem metadata, symbolic links, junctions, reparse-point redirections and other non-regular entries are always excluded even when hidden files are included.
 - Windows recursive import does not follow symbolic links or junctions.
-- Before recursive copying starts, SlopFactory performs a cancellable, non-mutating preflight inventory.
-- The preflight shows eligible file count, total known byte size, proposed virtual-folder hierarchy, detected duplicate content, name conflicts and counts grouped by skipped-item reason.
 - When a picker, document provider or permission prevents complete enumeration or reliable sizing, the preflight labels its totals incomplete and explains that additional per-file failures may occur.
-- Copying begins only after the user confirms the reviewed inventory and destination.
-- Cancelling preflight creates no library folders, file records or managed copies.
-- The confirmed preflight freezes the candidate set; files or directories which appear afterward are not added to the running import.
-- Each candidate is revalidated immediately before copying against its preflight identity and content fingerprint when available.
-- A metadata-only timestamp change does not cause a skip when the content hash still matches.
-- A missing, inaccessible or content-changed candidate is skipped and reported for re-review rather than silently importing bytes different from those reviewed.
-- Revalidation failure for one candidate does not stop unrelated validated files from importing.
-- An imported directory hierarchy is recreated as virtual library folders.
-- Import copies only the selected regular file's primary byte stream and assigns SlopFactory-controlled permissions in managed storage.
-- Source ACLs, ownership, hidden or read-only attributes, executable flags, alternate data streams and extended attributes are not applied to the managed copy or exposed as editable library metadata.
-- On Windows, SlopFactory reads a source Mark-of-the-Web zone when available and retains only a normalized read-only security-zone classification as system metadata.
-- Source and referrer URLs from zone metadata are not retained.
 - Files downloaded from an AI provider are classified as internet-origin content for Windows export protection even when no raw zone stream exists in managed storage.
 - Failure to read the primary stream fails that file's import; SlopFactory does not fall back to copying a different stream or filesystem object.
 - After its SHA-256 digest and byte size are verified, a newly imported file inherits any existing shared provider safety classification for the same bytes in the active library.
@@ -847,8 +812,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Bulk-import preflight groups candidates whose content hashes match existing library files.
 - The running copy phase does not interrupt the user with a separate modal for each duplicate already resolved during preflight.
 - Duplicate detection includes matching files in the recycle bin and labels them **Recycled Match** rather than treating them as active existing content.
-- A recycled match offers **Restore Existing**, **Import Anyway**, and **Skip** and is never restored automatically.
-- **Restore Existing** runs the normal restoration preview for folder, name and dependency effects before the import operation is confirmed.
 - A matching record in **Pending Permanent Deletion** or failed permanent-deletion cleanup is not restorable; preflight identifies that state and permits only **Import Anyway** or **Skip**.
 
 ## Library Organization
@@ -904,11 +867,8 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 ## File Metadata
 
-- Read-only system metadata is stored separately from editable user metadata.
 - System metadata includes identifiers, content hashes, media type, byte size, timestamps, origin and generation provenance.
-- Media inspection extracts only technical properties needed for safe viewing and model validation, including dimensions, orientation, duration, codecs, channel count, sample rate and frame rate where applicable.
 - Embedded GPS coordinates, device serial numbers, author or owner identity, face or person tags and similar sensitive descriptive fields are not copied into library metadata, indexed for search or written to diagnostics.
-- Metadata extraction uses bounded parsers and treats malformed embedded metadata as unavailable rather than modifying or rejecting otherwise valid original bytes.
 - Original managed bytes retain their embedded metadata unchanged, and ordinary export preserves it because export is byte-for-byte.
 - Imported files record **Imported At** as the UTC instant at which the managed file and record commit successfully.
 - **Library Modified** records later SlopFactory-managed metadata, naming, content-repair or organization changes without rewriting **Imported At**.
@@ -926,10 +886,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Numeric metadata accepts only finite values within the persisted numeric representation; NaN and positive or negative infinity are rejected.
 - These per-value parsing and interface safety bounds are not a quota on total library storage or managed file sizes.
 - Metadata keys do not have a library-wide schema in the first release, so the same case-insensitive key may use different value types on different files.
-- Multi-selection displays **Mixed Types** for such a key and requires an explicit target type plus a conversion preview before any bulk normalization.
-- The conversion preview groups selected files into convertible and incompatible outcomes before confirmation.
-- For sensitive entries, that preview shows only the file identity, source type, target type and a sanitized incompatibility reason; it never displays the original value.
-- Confirmed normalization preserves each entry's **Sensitive** flag, converts valid entries transactionally per file, leaves incompatible entries unchanged and reports every per-file result rather than failing or rolling back unrelated conversions.
 - File-level recycle and restore preserve the metadata attached at the time the file aggregate was recycled, but do not provide version history for earlier metadata edits.
 - Each user-metadata entry can be marked **Sensitive** independently of its value type.
 - The first use of **Sensitive** explains that it controls SlopFactory display, search-state and export behavior but does not encrypt the stored value.

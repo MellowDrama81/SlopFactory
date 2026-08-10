@@ -1,0 +1,287 @@
+@page "/connections/new"
+@page "/connections/{Id}"
+@inject AppLibraryState LibraryState
+@inject ISecureCredentialStore Credentials
+@inject IProviderAdapterResolver AdapterResolver
+@inject NavigationManager Navigation
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@(IsNew ? Strings["AddConnection"] : Strings["EditConnection"])</PageTitle>
+
+<header class="page-header">
+    <h1>@(IsNew ? Strings["AddConnection"] : Strings["EditConnection"])</h1>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice @(_isError ? "error" : "")" role="@(_isError ? "alert" : "status")">@_message</div>
+}
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else
+{
+    <EditForm Model="_form" OnValidSubmit="SaveAsync" class="stack-form">
+        <label for="connection-label">@Strings["Label"]</label>
+        <InputText id="connection-label" @bind-Value="_form.Label" maxlength="100" />
+
+        <label for="connection-provider">@Strings["ProviderType"]</label>
+        <InputSelect id="connection-provider" @bind-Value="_form.ProviderType" disabled="@(!IsNew && _hasDependentModels)">
+            <option value="@ProviderType.OpenAi">@Strings["ProviderOpenAi"]</option>
+            <option value="@ProviderType.GenericOpenAiCompatible">@Strings["ProviderGenericOpenAiCompatible"]</option>
+        </InputSelect>
+        @if (!IsNew && _hasDependentModels)
+        {
+            <p class="muted">@Strings["ProviderTypeLockedWhileModelsExist"]</p>
+        }
+
+        <label for="connection-base-url">@Strings["BaseUrl"]</label>
+        <InputText id="connection-base-url" @bind-Value="_form.BaseUrl" />
+        @if (IsInsecureHttpBaseUrl)
+        {
+            <div class="notice error" role="alert">@Strings["InsecureHttpBaseUrlWarning"]</div>
+        }
+
+        <details>
+            <summary>@Strings["AdvancedConnectionSettings"]</summary>
+            <label for="connection-header-name">@Strings["CredentialHeaderName"]</label>
+            <InputText id="connection-header-name" @bind-Value="_form.CredentialHeaderName" />
+            <label for="connection-auth-prefix">@Strings["AuthPrefix"]</label>
+            <InputText id="connection-auth-prefix" @bind-Value="_form.AuthPrefix" />
+            <label for="connection-timeout">@Strings["ConnectionTimeoutSeconds"]</label>
+            <InputNumber id="connection-timeout" @bind-Value="_form.TimeoutSeconds" />
+            <p class="muted">@Strings["ConnectionTimeoutHelp", LibraryRules.DefaultConnectionTimeoutSeconds, LibraryRules.MinimumConnectionTimeoutSeconds, LibraryRules.MaximumConnectionTimeoutSeconds]</p>
+            <label for="connection-additional-headers">@Strings["AdditionalHeaders"]</label>
+            <textarea id="connection-additional-headers" rows="4" maxlength="4096" @bind="_form.AdditionalHeadersText" placeholder="X-Organization: org_123"></textarea>
+            <p class="muted">@Strings["AdditionalHeadersHelp"]</p>
+
+            @if (_form.ProviderType == ProviderType.GenericOpenAiCompatible)
+            {
+                <h3>@Strings["ModalitySettingsHeading"]</h3>
+                <p class="muted">@Strings["ModalitySettingsDescription"]</p>
+
+                <label class="check"><InputCheckbox @bind-Value="_form.ModelsEnabled" /> @Strings["ModelsModality"]</label>
+                <InputText @bind-Value="_form.ModelsPathOverride" placeholder="models" disabled="@(!_form.ModelsEnabled)" />
+                <p class="muted">@Strings["ResolvedEndpoint", ResolvedEndpoint(_form.ModelsPathOverride, "models")]</p>
+
+                <label class="check"><InputCheckbox @bind-Value="_form.TextGenerationEnabled" /> @Strings["TextGenerationModality"]</label>
+                <InputText @bind-Value="_form.TextGenerationPathOverride" placeholder="chat/completions" disabled="@(!_form.TextGenerationEnabled)" />
+                <p class="muted">@Strings["ResolvedEndpoint", ResolvedEndpoint(_form.TextGenerationPathOverride, "chat/completions")]</p>
+
+                <label class="check"><InputCheckbox @bind-Value="_form.ImageGenerationEnabled" /> @Strings["ImageGenerationModality"]</label>
+                <InputText @bind-Value="_form.ImageGenerationPathOverride" placeholder="images/generations" disabled="@(!_form.ImageGenerationEnabled)" />
+                <p class="muted">@Strings["ResolvedEndpoint", ResolvedEndpoint(_form.ImageGenerationPathOverride, "images/generations")]</p>
+            }
+        </details>
+
+        <label for="connection-api-key">@Strings["ApiKey"]</label>
+        @if (_hasStoredCredential && !_editingCredential)
+        {
+            <div class="inline-form">
+                <span>@Strings["CredentialStored"]</span>
+                <button type="button" class="secondary" @onclick="() => _editingCredential = true">@Strings["ReplaceApiKey"]</button>
+            </div>
+        }
+        else
+        {
+            <input id="connection-api-key" type="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" @bind="_form.ApiKey" />
+        }
+
+        <div class="actions">
+            <button type="button" class="secondary" disabled="@_busy" @onclick="TestConnectionAsync">@(_testing ? Strings["TestingConnection"] : Strings["TestConnection"])</button>
+            <button type="submit" disabled="@_busy">@Strings["Save"]</button>
+            <a class="ghost" href="/connections">@Strings["Cancel"]</a>
+        </div>
+    </EditForm>
+
+    @if (_testResult is not null)
+    {
+        <div class="notice @(_testResult.Success ? "" : "error")" role="status">
+            @(_testResult.Success ? Strings["ConnectionTestSucceeded", _testResult.FinalHost ?? string.Empty] : Strings["ConnectionTestFailed", _testResult.Message])
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    private bool IsNew => string.IsNullOrEmpty(Id);
+    private bool IsInsecureHttpBaseUrl => Uri.TryCreate(_form.BaseUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttp;
+
+    private ConnectionForm _form = new();
+    private bool _busy;
+    private bool _testing;
+    private bool _hasStoredCredential;
+    private bool _hasDependentModels;
+    private ProviderType _originalProviderType;
+    private bool _editingCredential;
+    private string? _message;
+    private bool _isError;
+    private ConnectionTestResult? _testResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        if (!IsNew)
+        {
+            try
+            {
+                var existing = await workspace.GetConnectionAsync(Id);
+                _form.Label = existing.Label;
+                _form.ProviderType = existing.ProviderType;
+                _originalProviderType = existing.ProviderType;
+                _hasDependentModels = (await workspace.GetActiveModelsAsync()).Any(model => model.ConnectionId == Id);
+                _form.BaseUrl = existing.BaseUrl;
+                _form.CredentialHeaderName = existing.CredentialHeaderName;
+                _form.AuthPrefix = existing.AuthPrefix;
+                _form.TimeoutSeconds = existing.TimeoutSeconds;
+                _form.AdditionalHeadersText = FormatHeaderLines(existing.AdditionalHeaders);
+                var modalitySettings = existing.GenericModalitySettings ?? GenericConnectionModalitySettings.Default;
+                _form.ModelsEnabled = modalitySettings.ModelsEnabled;
+                _form.ModelsPathOverride = modalitySettings.ModelsPathOverride ?? string.Empty;
+                _form.TextGenerationEnabled = modalitySettings.TextGenerationEnabled;
+                _form.TextGenerationPathOverride = modalitySettings.TextGenerationPathOverride ?? string.Empty;
+                _form.ImageGenerationEnabled = modalitySettings.ImageGenerationEnabled;
+                _form.ImageGenerationPathOverride = modalitySettings.ImageGenerationPathOverride ?? string.Empty;
+                _hasStoredCredential = existing.HasCredential;
+            }
+            catch (SlopFactoryException exception)
+            {
+                _message = exception.Message;
+                _isError = true;
+            }
+        }
+        else
+        {
+            _form.CredentialHeaderName = "Authorization";
+            _form.AuthPrefix = "Bearer";
+            _form.BaseUrl = "https://api.openai.com/v1";
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _busy = true;
+        _testing = true;
+        try
+        {
+            var adapter = AdapterResolver.Resolve(_form.ProviderType);
+            var candidateHeaders = LibraryRules.NormalizeConnectionHeaders(ParseHeaderLines(_form.AdditionalHeadersText), _form.CredentialHeaderName);
+            var candidateModalitySettings = LibraryRules.NormalizeGenericModalitySettings(BuildModalitySettings());
+            var probeConnection = new Connection(Id, _form.Label, _form.ProviderType, _form.BaseUrl.TrimEnd('/'), _form.CredentialHeaderName, _form.AuthPrefix,
+                _hasStoredCredential, ConnectionTestStatus.Untested, null, null, LibraryRecordState.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, _form.TimeoutSeconds, candidateHeaders, candidateModalitySettings);
+            var apiKey = string.IsNullOrEmpty(_form.ApiKey)
+                ? _hasStoredCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, Id) : null
+                : _form.ApiKey;
+            _testResult = await adapter.TestConnectionAsync(probeConnection, apiKey);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or SlopFactoryException)
+        {
+            _testResult = new ConnectionTestResult(false, exception.Message, null, false);
+        }
+        finally
+        {
+            _busy = false;
+            _testing = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _busy = true;
+        try
+        {
+            var headers = ParseHeaderLines(_form.AdditionalHeadersText);
+            var modalitySettings = BuildModalitySettings();
+            var connection = IsNew
+                ? await workspace.CreateConnectionAsync(_form.Label, _form.ProviderType, _form.BaseUrl, _form.CredentialHeaderName, _form.AuthPrefix, _form.TimeoutSeconds, headers, modalitySettings)
+                : await workspace.UpdateConnectionAsync(Id, _form.Label, _form.BaseUrl, _form.CredentialHeaderName, _form.AuthPrefix, _form.TimeoutSeconds, headers, modalitySettings);
+
+            if (!IsNew && _form.ProviderType != _originalProviderType)
+            {
+                connection = await workspace.ChangeConnectionProviderTypeAsync(connection.Id, _form.ProviderType);
+            }
+
+            if (_testResult is not null)
+            {
+                connection = await workspace.SetConnectionTestResultAsync(connection.Id, _testResult.Success, _testResult.Message);
+            }
+
+            if (!string.IsNullOrEmpty(_form.ApiKey))
+            {
+                await Credentials.SetAsync(workspace.Descriptor.LibraryId, connection.Id, _form.ApiKey);
+                await workspace.SetConnectionCredentialStateAsync(connection.Id, true);
+            }
+
+            Navigation.NavigateTo("/connections");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private sealed class ConnectionForm
+    {
+        public string Label { get; set; } = string.Empty;
+        public ProviderType ProviderType { get; set; } = ProviderType.OpenAi;
+        public string BaseUrl { get; set; } = string.Empty;
+        public string CredentialHeaderName { get; set; } = "Authorization";
+        public string AuthPrefix { get; set; } = "Bearer";
+        public int? TimeoutSeconds { get; set; }
+        public string AdditionalHeadersText { get; set; } = string.Empty;
+        public bool ModelsEnabled { get; set; } = true;
+        public string ModelsPathOverride { get; set; } = string.Empty;
+        public bool TextGenerationEnabled { get; set; } = true;
+        public string TextGenerationPathOverride { get; set; } = string.Empty;
+        public bool ImageGenerationEnabled { get; set; } = true;
+        public string ImageGenerationPathOverride { get; set; } = string.Empty;
+        public string ApiKey { get; set; } = string.Empty;
+    }
+
+    private GenericConnectionModalitySettings BuildModalitySettings() => new(
+        _form.ModelsEnabled, string.IsNullOrWhiteSpace(_form.ModelsPathOverride) ? null : _form.ModelsPathOverride,
+        _form.TextGenerationEnabled, string.IsNullOrWhiteSpace(_form.TextGenerationPathOverride) ? null : _form.TextGenerationPathOverride,
+        _form.ImageGenerationEnabled, string.IsNullOrWhiteSpace(_form.ImageGenerationPathOverride) ? null : _form.ImageGenerationPathOverride);
+
+    private string ResolvedEndpoint(string pathOverride, string defaultPath)
+    {
+        var path = string.IsNullOrWhiteSpace(pathOverride) ? defaultPath : pathOverride;
+        return $"{_form.BaseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
+    }
+
+    private static string FormatHeaderLines(IReadOnlyList<ConnectionHeader>? headers) =>
+        headers is null ? string.Empty : string.Join('\n', headers.Select(header => $"{header.Name}: {header.Value}"));
+
+    private static IReadOnlyList<ConnectionHeader> ParseHeaderLines(string text)
+    {
+        var headers = new List<ConnectionHeader>();
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0) continue;
+            var separatorIndex = line.IndexOf(':');
+            if (separatorIndex < 0)
+            {
+                throw new LibraryValidationException($"Additional header line '{line}' must be in the form 'Name: Value'.");
+            }
+
+            var name = line[..separatorIndex].Trim();
+            var value = line[(separatorIndex + 1)..].Trim();
+            headers.Add(new ConnectionHeader(name, value));
+        }
+
+        return headers;
+    }
+}

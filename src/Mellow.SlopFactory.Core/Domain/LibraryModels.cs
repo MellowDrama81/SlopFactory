@@ -353,7 +353,18 @@ public sealed record ImportCandidate(
     string SourcePath,
     string DisplayName,
     long ByteSize,
-    DateTimeOffset? SourceLastModified);
+    DateTimeOffset? SourceLastModified,
+    SourceZoneClassification SourceZone = SourceZoneClassification.Unknown);
+
+public enum SourceZoneClassification
+{
+    Unknown = 0,
+    LocalMachine = 1,
+    Intranet = 2,
+    Trusted = 3,
+    Internet = 4,
+    Restricted = 5
+}
 
 public sealed record ImportResult(
     ImportCandidate Candidate,
@@ -405,6 +416,149 @@ public sealed record ImageTechnicalProperties(
     int? Height,
     int? Orientation = null);
 
+public sealed record MediaTechnicalProperties(
+    TimeSpan? Duration,
+    string? Container,
+    string? AudioCodec,
+    string? VideoCodec,
+    int? ChannelCount,
+    int? SampleRate,
+    double? FrameRate,
+    int? Width,
+    int? Height,
+    bool IsAvailable,
+    string? UnavailableReason = null);
+
+public sealed record SystemMetadataProperty(string Key, string DisplayName, string? Value);
+
+public sealed record FileSystemMetadata(
+    string FileId,
+    IReadOnlyList<SystemMetadataProperty> Properties);
+
+public enum ImportInventorySkipReason
+{
+    Hidden = 0,
+    ProtectedOrSystem = 1,
+    RedirectedOrReparse = 2,
+    NotARegularFile = 3,
+    Inaccessible = 4,
+    LimitExceeded = 5
+}
+
+public sealed record ImportSourceSnapshot(
+    string SourcePath,
+    string DisplayName,
+    string RelativeFolder,
+    long ByteSize,
+    DateTimeOffset LastWriteTime,
+    string? ContentHash = null,
+    SourceZoneClassification SourceZone = SourceZoneClassification.Unknown);
+
+public sealed record ImportDuplicateGroup(
+    long ByteSize,
+    string ContentHash,
+    IReadOnlyList<string> SourcePaths,
+    IReadOnlyList<FileRecord> LibraryMatches);
+
+public sealed record RecursiveImportInventory(
+    string InventoryId,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<ImportSourceSnapshot> Candidates,
+    IReadOnlyList<string> VirtualFolders,
+    IReadOnlyList<ImportDuplicateGroup> DuplicateGroups,
+    IReadOnlyDictionary<ImportInventorySkipReason, int> SkippedCounts,
+    IReadOnlyList<string> NameConflicts,
+    string? LibraryId = null)
+{
+    public int EligibleCount => Candidates.Count;
+    public long KnownBytes => Candidates.Sum(candidate => candidate.ByteSize);
+}
+
+public enum ImportDuplicateChoice
+{
+    Skip = 0,
+    ImportAnyway = 1,
+    RestoreExisting = 2
+}
+
+public sealed record ConfirmedImportCandidate(
+    ImportSourceSnapshot Snapshot,
+    ImportDuplicateChoice DuplicateChoice = ImportDuplicateChoice.Skip,
+    string? ExistingFileId = null);
+
+public enum ExportCollisionChoice
+{
+    Fail = 0,
+    Replace = 1
+}
+
+public enum FileExportOutcome
+{
+    Exported = 0,
+    Failed = 1,
+    Cancelled = 2
+}
+
+public sealed record FileExportResult(
+    string FileId,
+    string DestinationPath,
+    FileExportOutcome Outcome,
+    long BytesWritten,
+    string? ContentHash,
+    string? Error);
+
+public sealed record BulkExportPreflightItem(
+    string FileId,
+    string DisplayName,
+    string SafeFileName,
+    string DestinationPath,
+    bool DestinationExists,
+    bool HasSelectionCollision,
+    string? BlockingReason);
+
+public sealed record BulkExportPreflight(
+    string PreviewId,
+    string DestinationDirectory,
+    IReadOnlyList<BulkExportPreflightItem> Items,
+    string? LibraryId = null);
+
+public sealed record BulkExportResult(IReadOnlyList<FileExportResult> Items)
+{
+    public int ExportedCount => Items.Count(item => item.Outcome == FileExportOutcome.Exported);
+    public int FailedCount => Items.Count(item => item.Outcome == FileExportOutcome.Failed);
+    public int CancelledCount => Items.Count(item => item.Outcome == FileExportOutcome.Cancelled);
+}
+
+public sealed record ExternalOpenCopy(
+    string FileId,
+    string Path,
+    string MediaType,
+    bool IsReadOnly);
+
+public enum ExternalOpenSafety
+{
+    Allowed = 0,
+    RequiresWarning = 1,
+    BlockedActiveContent = 2,
+    BlockedUnavailableContent = 3
+}
+
+public sealed record MetadataNormalizationItem(
+    string FileId,
+    string MetadataId,
+    string Key,
+    MetadataValueKind SourceKind,
+    MetadataValueKind TargetKind,
+    bool IsSensitive,
+    bool IsConvertible,
+    string? NormalizedValue,
+    string? Error);
+
+public sealed record MetadataNormalizationPreview(
+    string PreviewId,
+    IReadOnlyList<MetadataNormalizationItem> Items,
+    string? LibraryId = null);
+
 public sealed record MediaPlaybackDescriptor(
     string FileId,
     string MediaType,
@@ -418,3 +572,136 @@ public enum ImportOutcome
     Failed = 2,
     Cancelled = 3
 }
+
+public enum ProviderType
+{
+    OpenAi = 0,
+    GenericOpenAiCompatible = 1
+}
+
+public enum GenerationMode
+{
+    Text = 0,
+    Image = 1
+}
+
+public enum ConnectionTestStatus
+{
+    Untested = 0,
+    Success = 1,
+    Failed = 2
+}
+
+public sealed record Connection(
+    string Id,
+    string Label,
+    ProviderType ProviderType,
+    string BaseUrl,
+    string CredentialHeaderName,
+    string AuthPrefix,
+    bool HasCredential,
+    ConnectionTestStatus LastTestStatus,
+    DateTimeOffset? LastTestedAt,
+    string? LastTestMessage,
+    LibraryRecordState State,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ModifiedAt,
+    DateTimeOffset? RecycledAt,
+    int? TimeoutSeconds = null,
+    IReadOnlyList<ConnectionHeader>? AdditionalHeaders = null,
+    GenericConnectionModalitySettings? GenericModalitySettings = null)
+{
+    public bool IsUnverified => LastTestStatus != ConnectionTestStatus.Success;
+}
+
+public sealed record ConnectionHeader(string Name, string Value);
+
+public sealed record GenericConnectionModalitySettings(
+    bool ModelsEnabled,
+    string? ModelsPathOverride,
+    bool TextGenerationEnabled,
+    string? TextGenerationPathOverride,
+    bool ImageGenerationEnabled,
+    string? ImageGenerationPathOverride)
+{
+    public static readonly GenericConnectionModalitySettings Default = new(true, null, true, null, true, null);
+}
+
+public sealed record Model(
+    string Id,
+    string ConnectionId,
+    string Label,
+    string ProviderModelId,
+    GenerationMode Mode,
+    bool SupportsSystemInstructions,
+    LibraryRecordState State,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ModifiedAt,
+    DateTimeOffset? RecycledAt);
+
+public sealed record ProviderModelInfo(
+    string ProviderModelId,
+    string? DisplayLabel);
+
+public sealed record ModelCatalogue(
+    DateTimeOffset? RetrievedAt,
+    bool PossiblyStale,
+    IReadOnlyList<ProviderModelInfo> Entries);
+
+public sealed record ConnectionTestResult(
+    bool Success,
+    string Message,
+    string? FinalHost,
+    bool SupportsModelDiscovery,
+    IReadOnlyList<ProviderModelInfo>? DiscoveredModels = null);
+
+public sealed record TextGenerationResult(
+    IReadOnlyList<string> Texts,
+    int? PromptTokens,
+    int? CompletionTokens);
+
+public sealed record TextGenerationSourceImage(
+    string MediaType,
+    byte[] Bytes);
+
+public enum GenerationStatus
+{
+    Completed = 0,
+    Failed = 1
+}
+
+public sealed record GenerationRecord(
+    string Id,
+    string? ModelId,
+    string ModelLabel,
+    string ProviderModelId,
+    ProviderType ProviderType,
+    GenerationMode Mode,
+    string Prompt,
+    string? SystemInstructions,
+    int ResultCount,
+    GenerationStatus Status,
+    string? ErrorMessage,
+    string DestinationFolderId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CompletedAt,
+    IReadOnlyList<string> ResultFileIds,
+    int? PromptTokens = null,
+    int? CompletionTokens = null,
+    string? SourceFileId = null);
+
+public sealed record SavedGenerationSetting(
+    string Id,
+    string Title,
+    string? ModelId,
+    string ModelLabel,
+    GenerationMode Mode,
+    string Prompt,
+    string? SystemInstructions,
+    int ResultCount,
+    string DestinationFolderId,
+    LibraryRecordState State,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ModifiedAt,
+    DateTimeOffset? RecycledAt,
+    string? SourceFileId = null);
