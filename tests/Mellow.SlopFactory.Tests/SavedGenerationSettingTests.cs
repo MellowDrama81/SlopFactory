@@ -162,4 +162,21 @@ public sealed class SavedGenerationSettingTests
         await workspace.PermanentlyDeleteConnectionAsync(connection.Id);
         await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetSavedSettingAsync(saved.Id));
     }
+
+    [Fact]
+    public async Task SavedSettingPromptAndSystemInstructionsAreBoundedTo1MiBOfUtf8Text()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var oversized = new string('a', LibraryRules.MaximumGenerationTextUtf8Bytes + 1);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateSavedSettingAsync("Too Long", model.Id, oversized, 1, workspace.Descriptor.GeneratedFolderId));
+
+        var saved = await workspace.CreateSavedSettingAsync("Preset", model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.UpdateSavedSettingAsync(saved.Id, saved.Title, model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, systemInstructions: oversized));
+    }
 }

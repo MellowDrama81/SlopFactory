@@ -114,8 +114,26 @@ in parallel. Both milestones must be complete before the first public release.
       or disabling it. The catalogue is not yet refreshed automatically during initial connection
       setup or connection retesting (only via the explicit **Load Models** action), and manual model
       entry remains unaffected by catalogue state either way.
-- [ ] Add **Needs Review** propagation when a configured model's provider model ID, mode, input
-      capabilities or settings schema changes, including confirmation before applying the change.
+- [x] Add **Needs Review** propagation when a configured model's provider model ID or mode changes,
+      including confirmation before applying the change (schema v20: `needs_review` on `models` and
+      `saved_generation_settings`). `UpdateModelAsync` compares the incoming provider model ID/mode
+      against the stored values and, when either differs, marks the model **and** every one of its
+      *active* saved generation settings **Needs Review** in the same transaction.
+      `ModelEdit.razor` detects the same change client-side, looks up the affected active saved
+      settings, and requires an explicit **Confirm change** click (listing them by title) before
+      calling `UpdateModelAsync` — mirroring the recycle-confirmation pattern used elsewhere rather
+      than a bespoke dialog. A model marked **Needs Review** is excluded from `/generate`'s
+      selectable model list (a distinct empty-state message appears when every active model needs
+      review), which is how "cannot be used for generation until validated" is enforced; a saved
+      setting referencing such a model falls through to the existing missing-model fallback warning
+      it already had for a recycled/deleted model. Since there is no real settings-schema/capability
+      re-validation to perform (typed provider settings schemas do not exist yet), "validates" is
+      substituted with a manual **Mark as Reviewed** action (`MarkModelReviewedAsync`) that clears
+      the flag on the model and its active saved settings — an explicit, documented simplification,
+      not real automated validation. Input-capability and settings-schema triggers, and a connection
+      base-URL change cascading **Needs Review** to its dependent models, remain open (both require
+      infrastructure — capability declarations and a base-URL-change-triggered dependent scan —
+      that does not exist yet).
 - [ ] Add typed provider settings schemas per model/modality and the generated settings-control UI
       described under Connections and Models, including **Use Provider Default** and **Reset to
       Provider Default** semantics.
@@ -160,15 +178,45 @@ in parallel. Both milestones must be complete before the first public release.
 
 ## Generation workspace (tabs and drafts)
 
-- [ ] Add a per-library generation-tab draft model (automatic/custom title, models, prompts,
-      settings, source roles/order, destination folder, result count) persisted in the library
-      database per the Session Recovery requirements.
-- [ ] Add tab lifecycle: create, duplicate (without run/history association), rename, reset to
-      automatic title, reorder, and close with the discard/save-as-named-settings/cancel dialog.
-- [ ] Add debounced atomic draft autosave with **Saving**/**Saved**/**Not Saved** status and
-      **Retry Save**, plus the library-switch and application-exit unsaved-edit gates.
-- [ ] Add the Android compact tab-switcher and Windows/tablet tab-strip UI, including
-      virtualization for a large number of drafts.
+- [x] Add a per-library generation-tab draft model (`GenerationDraft`: automatic/custom title,
+      model, prompt, system instructions, source image, result count, destination folder, and
+      prompt-improvement model/guidance) persisted in the library database (schema v22,
+      `generation_drafts` table, `ILibraryWorkspace.GetDraftsAsync`/`CreateDraftAsync`/
+      `ReplaceDraftStateAsync`/`DuplicateDraftAsync`/`DeleteDraftAsync`). There are no source
+      roles/order (a draft still has a single optional source image, matching the current
+      single-source generation form) and no Session Recovery emergency-snapshot staging; those
+      remain separate unchecked items below.
+- [x] Add tab lifecycle on `/generate`: a plain-HTML tab strip with create (**+**), duplicate
+      (`DuplicateDraftAsync`, without any run/history association), rename (an editable **Tab
+      title** field) and **Reset to automatic title**, and close via an inline confirm/cancel
+      panel. **Closing a tab is an instant, permanent discard with no recycle-bin entry and no
+      undo** (a deliberate departure from this app's usual recycle/restore safety net, since a
+      draft is working form state and **Save settings** already exists as a standing way to keep
+      one before closing) — there is no three-way discard/save-as-named-settings/cancel dialog and
+      no tab reordering yet; those remain separate unchecked items below.
+- [x] Add debounced draft autosave (800 ms, cancel-and-restart on each edit) with
+      **Saving**/**Saved**/**Not Saved** status and a **Retry Save** action
+      (`GenerationDraftTests`, `LibraryWorkspaceTests.OpeningVersionTwentyOneLibraryAddsGenerationDrafts`).
+      There are no library-switch or application-exit unsaved-edit gates yet (an unflushed autosave
+      in flight at exit could still be lost); that remains open.
+- [x] Add tab reordering: `ILibraryWorkspace.ReorderDraftsAsync` takes the full ordered list of
+      draft IDs (a whole-order-replace, matching `ReplaceDraftStateAsync`'s philosophy rather than a
+      granular move-by-index method), validates it contains exactly the current set of drafts, and
+      rewrites `tab_order` transactionally. `/generate`'s tab strip exposes this as **‹**/**›**
+      move-left/move-right buttons per tab (disabled at the respective end) rather than
+      drag-and-drop, which needs no pointer-drag JS interop and works identically with mouse, touch,
+      and keyboard activation.
+- [x] Add the three-way close dialog: the tab close panel now offers **Discard without saving**
+      (the original instant, permanent delete), **Save settings first** (reveals a title field,
+      then `CreateSavedSettingAsync` followed by the same permanent `DeleteDraftAsync` — a
+      `NameConflictException`/other `SlopFactoryException` from a duplicate title is shown inline
+      without closing the tab, so the user can retry with a different title), and **Keep tab open**
+      (cancel). There is no settings-title-uniqueness pre-check before showing the confirm panel and
+      no undo after **Discard without saving** — both match the already-established instant-discard
+      behavior for that path.
+- [ ] Add the Android compact tab-switcher and virtualization for a large number of drafts (the
+      current tab strip is the same plain, unvirtualized markup on both platforms).
+- [ ] Add the library-switch and application-exit unsaved-edit gates.
 - [ ] Add emergency draft snapshot staging and reconciliation for an unavailable/read-only library,
       per Session Recovery.
 
@@ -180,11 +228,18 @@ in parallel. Both milestones must be complete before the first public release.
 - [x] Add an optional **System Instructions** field, shown only for Text-mode models, sent through
       the documented `system` chat-completion role (OpenAI and generic adapters), persisted on
       `GenerationRecord` and `SavedGenerationSetting` (schema v12), and carried through **Save
-      settings** and **Use Again**. There is no 1 MiB well-formed-UTF-8 bound, CRLF/CR
-      normalization, atomic oversized-edit rejection, or adapter-declared-capability gating yet —
-      any text-mode model is currently allowed to receive it regardless of documented support.
-- [ ] Add the raw-prompt, system-instructions and result-count generation form with the 1 MiB
-      well-formed-UTF-8 bounds, CRLF/CR normalization and atomic oversized-edit rejection.
+      settings** and **Use Again**. There is no CRLF/CR normalization, atomic oversized-edit
+      rejection, or adapter-declared-capability gating yet — any text-mode model is currently
+      allowed to receive it regardless of documented support.
+- [x] Add the 1 MiB well-formed-UTF-8 bound on the prompt, system instructions and
+      prompt-improvement raw prompt/guidance (`LibraryRules.ValidateGenerationTextLength`, applied
+      in `CreateGenerationRecordAsync`, `CreateSavedSettingAsync`/`UpdateSavedSettingAsync` and
+      `CreatePromptImprovementRecordAsync`) — closing a real gap where none of these fields had any
+      length validation at all despite the GUI's textareas already declaring `maxlength="1048576"`
+      as a client-side backstop. There is no CRLF/CR normalization and no atomic oversized-edit
+      rejection UI (an edit that would exceed the bound is rejected server-side with a validation
+      error at save time rather than being prevented/reverted interactively as the user types); the
+      raw-prompt/system-instructions/result-count generation form redesign itself remains open too.
 - [x] Add a minimal single-image vision source input for Text-mode generation: `/generate` offers
       one optional source image (from active image-media library files), read through the existing
       verified `ReadImageFileAsync` pipeline and sent as an OpenAI-shaped `image_url` data-URI
@@ -205,16 +260,55 @@ in parallel. Both milestones must be complete before the first public release.
 
 - [x] Add a minimal synchronous generation submission path: `IProviderAdapter.GenerateTextAsync` and
       `GenerateImageAsync` (OpenAI and generic adapters, chat-completions and images/generations
-      request/response) called directly from the `/generate` page, with a lightweight
-      `GenerationRecord` (schema v10: `generation_records`/`generation_results`) capturing the
-      model/provider snapshot, prompt, result count, status and sanitized error. There is no queue,
-      cancellation, retry, multi-request tracking or async job polling yet — every item below this
-      one remains open.
+      request/response), now scheduled through `GenerationQueueService` rather than called directly
+      from the `/generate` page, with a lightweight `GenerationRecord` (schema v10:
+      `generation_records`/`generation_results`) capturing the model/provider snapshot, prompt,
+      result count, status and sanitized error. There is no per-child-request tracking, retry beyond
+      the bounded model-listing case below, or async job polling yet — the relevant items below
+      remain open.
 - [ ] Add the generation-history record model (immutable request snapshot, normalized status
       timeline, per-child-request tracking for multi-result generations without a native count
       parameter).
-- [ ] Add per-connection FIFO queues, the device-wide submission cap with fair round-robin slot
-      allocation, and configurable per-connection concurrency within adapter-declared bounds.
+- [x] Add per-connection FIFO queues, a device-wide submission cap with fair round-robin slot
+      allocation, scoped to what's real and buildable without fabricating provider behavior: neither
+      the OpenAI nor the generic OpenAI-compatible adapter exposes an actual asynchronous
+      submit-then-poll job API, so this slice adds queueing/concurrency control on top of today's
+      existing synchronous `GenerateTextAsync`/`GenerateImageAsync` calls rather than any async-job
+      state machine. `GenerationQueueService` (`src/Mellow.SlopFactory.Gui/Services/`) holds a
+      per-connection FIFO (concurrency hardcoded to 1 per connection — true for both real adapters
+      today, since neither declares a safe higher bound) and enforces a device-wide cap (a hardcoded
+      constant: 3 on Windows, 2 on Android, matching the plan's stated defaults; not yet
+      user-adjustable), assigning freed slots by fair round-robin across connections with pending
+      work. `/generate`'s **Generate** button now enqueues an immutable snapshot of the draft's
+      current form values instead of awaiting the provider call inline; the tab shows **Queued**
+      (with position) then **Generating…**, and its **Cancel** action either removes a still-queued
+      job before its delegate ever runs (no `GenerationRecord` created, matching the existing
+      pre-submission-cancellation contract) or cancels a running one exactly as before. A small
+      `MainLayout.razor` indicator shows aggregate queued/running counts with a link back to
+      `/generate`. Because the service — not the page — owns execution and the durable commit, a
+      submission now survives the user navigating away from `/generate` and back. Switching the
+      active library drops every still-queued job and cancels every running one tied to the outgoing
+      workspace, since `AppLibraryState` only ever holds one live, disposable workspace at a time — a
+      real multi-library background-work model remains a separate, larger milestone. Adjustable
+      per-connection concurrency, an adjustable device-cap settings UI, a dedicated **Queue** page
+      with reordering, multiple concurrent run cards from the same tab, and OS
+      thermal/battery-driven cap reduction all remain open, tracked below.
+- [ ] Add adjustable per-connection submission concurrency once an adapter declares a safe range
+      above one.
+- [ ] Add an adjustable device-wide submission cap settings UI (1–8 on Windows, 1–4 on Android).
+- [x] Add a dedicated **Queue** page (`/queue`) with visible cross-tab job ordering and reordering
+      of waiting jobs: `GenerationQueueService.GetSnapshot()` exposes every non-terminal job across
+      every connection (queued with position, or running), and `ReorderQueuedJobs(connectionId,
+      orderedJobIds)` — a whole-order-replace validated against the connection's current queued set,
+      matching `ReorderDraftsAsync`'s philosophy — rewrites a connection's FIFO order. The page groups
+      entries by connection with **‹**/**›** move buttons for queued jobs (disabled at each end,
+      mirroring the tab-strip reorder controls) and a **Cancel** action for either phase. The
+      `MainLayout.razor` queued/running activity notice now links to `/queue` instead of `/generate`.
+      Only waiting jobs on the *same* connection can be reordered relative to each other (matching
+      the per-connection FIFO model); there is no cross-connection priority and no reordering of a
+      job that has already started.
+- [ ] Add multiple concurrent run cards from the same generation tab.
+- [ ] Add OS thermal/battery-driven temporary cap reduction.
 - [x] Add a minimal **Cancel** action on `/generate` backed by a `CancellationTokenSource` passed
       through to the adapter call, the result-file commit and the history-record insert. On
       cancellation, the page shows a message warning that the provider may still process or charge
@@ -230,8 +324,19 @@ in parallel. Both milestones must be complete before the first public release.
       metered-network transfer warnings and the device-wide transfer-option setting.
 - [ ] Add idempotency-key generation and scoped reuse for adapters with documented idempotency
       support.
-- [ ] Add bounded automatic retry with `Retry-After`/rate-limit honoring and exponential backoff
-      with jitter for idempotent operations.
+- [x] Add bounded automatic retry with `Retry-After`/rate-limit honoring and exponential backoff
+      with jitter, scoped to the one operation the plan explicitly documents as idempotent and
+      safe to retry without provider-confirmed idempotency support: model listing.
+      `OpenAiCompatibleProtocol.SendAsync` takes an `allowRetry` flag (both adapters' `ListModelsAsync`
+      pass `true`; `GenerateTextAsync`/`GenerateImageAsync` do not, matching the documented rule
+      that a generation-submission request must not auto-retry without an idempotency key — which
+      does not exist in this application). On a `429` response with retrying enabled, it retries up
+      to 3 times, honoring a `Retry-After` header when present (capped at 30 seconds — an
+      application safety bound, not a documented provider guarantee) or otherwise bounded
+      exponential backoff with jitter, entirely inside the connection's existing single timeout
+      budget rather than resetting the clock per attempt. Idempotency-key generation itself remains
+      open — this slice is the piece that is safe to add without it, per the plan's own carve-out
+      for model listing.
 
 ## Generation results and result ingestion
 
@@ -247,10 +352,29 @@ in parallel. Both milestones must be complete before the first public release.
       unverified-binary retention path, and audio/video results all remain open.
 - [ ] Add result download, validation (status/content-type/media-category/checksum), atomic
       managed-file commit, and the unverified-binary/unrecognized-content-type retention paths.
-- [ ] Add text-result formatting (`.md` default, `.json` for validated structured output, `.txt`
-      fallback/override) and streaming incremental display.
-- [ ] Add multi-result generation handling: per-child status, **Partially Completed**, and the
-      documented transport-archive extraction rules for providers that document it.
+- [x] Add text-result formatting: `.md` remains the default, and a per-model **Text result
+      format** setting (schema v21: `models.text_format`, `TextResultFormat.Markdown`/`PlainText`)
+      lets a Text-mode model commit its results as `.txt`/`text/plain` instead. `GenerationRecord`
+      also snapshots the format actually used (`generation_records.text_format`), so history
+      reflects "the requested and actual text format" even though there is only ever one format per
+      generation in this slice (no separate "requested vs. actual" divergence path exists, since
+      there is no structured-output validation to fail). There is no `.json` structured-output
+      format — that requires the adapters to support requesting/validating structured JSON output,
+      which does not exist — and no streaming incremental display (text is still committed only
+      once the full response is received). Selecting a format does not rewrite already-generated
+      content, matching the documented rule, since format only ever applies at commit time for a
+      new result.
+- [x] Add whole-generation **Partially Completed** status: `GenerationStatus.PartiallyCompleted`
+      (a third value alongside `Completed`/`Failed`, no schema change needed since the column was
+      already a plain `INTEGER`) is computed by `LibraryWorkspace.DetermineGenerationStatus` by
+      comparing the number of results actually committed against the originally requested count —
+      a provider returning fewer candidates than requested (rather than failing outright) no longer
+      reads as a full success. `/generate` and `/generation-history` both show a distinct label and
+      an "N of M requested results were committed" detail line. There is no **per-child** status
+      (an individual result within one multi-result request has no identity, retry or status of its
+      own — the whole request is still one atomic commit), and no transport-archive extraction
+      rules (no provider adapter documents or produces an archive-packaged multi-result response);
+      both remain open.
 - [ ] Add provider safety-response handling: blocked-bytes discard, **Provider Safety Warning**
       concealment/reveal, **Provider Blocked After Delivery**, and the shared classification-event
       model described under Provider Safety Responses.
@@ -261,23 +385,51 @@ in parallel. Both milestones must be complete before the first public release.
       created time, full prompt, result-file links, sanitized error) with no filters, detail view,
       **Use Again**, or recycle-bin integration yet.
 - [x] Add client-side status/mode/model filters and a **Clear filters** action to
-      `/generation-history`. There is no date/provider filter, no separate detail view (the list
-      already shows full prompt/settings/errors/usage inline), and filters are not persisted across
-      navigation.
-- [ ] Add a generation-history browsing page separate from the file library, with the documented
-      filters (status, date, provider, model, output type) and detail view (prompts, settings,
-      sources, outputs, attempts, errors, usage).
+      `/generation-history`, later extended with provider and from/to date-range filters, covering
+      every filter dimension named in the plan (status, date, provider, model, output type). All
+      filtering is client-side over the already-loaded list (no server-side query), and filters are
+      not persisted across navigation.
+- [x] Add a generation-history browsing page separate from the file library, with a dedicated
+      detail view: `/generation-history` now shows a concise summary row per record (model, status,
+      created time, result count, prompt preview) with **View Details** and **Use Again** actions,
+      and a new `/generation-history/{Id}` page shows the full prompt, system-instructions reveal,
+      partial-completion detail, error, token usage, prompt-improvement-used note, source-image
+      link and result-file links that previously lived inline in the list. The prompt-improvement
+      history section on the list page is unchanged (it stays inline, since it is a much shorter
+      record shape with no separate detail worth its own page).
 - [x] Add a minimal **Use Again** (`/generate/history/{HistoryId}`) that repopulates the `/generate`
       form's prompt, result count, destination folder and model from a historical
       `GenerationRecord` without modifying the record, showing a model-unavailable warning when the
       snapshotted model no longer exists. There is no source/model-incompatibility confirmation
       (no source inputs exist yet) or system-instruction-channel-mismatch handling (no system
       instructions exist yet) — those remain open below.
-- [ ] Add **Use Again** to repopulate a new generation tab from a historical snapshot, including
-      the source/model incompatibility and system-instruction-channel-mismatch confirmations.
+- [x] **Use Again** now repopulates a *new* generation draft tab from a historical snapshot
+      (`/generate/history/{HistoryId}` creates a fresh `GenerationDraft` alongside whatever tabs are
+      already open, added as part of the generation-drafts/tabs slice above) rather than replacing
+      the page's only form state. There is still no source/model-incompatibility confirmation (only
+      one optional source-image slot exists, so there is nothing yet for it to conflict with) or
+      system-instruction-channel-mismatch confirmation (it falls through to the existing
+      model-unavailable-style warning rather than a dedicated dialog); those remain open below.
+- [ ] Add the source/model-incompatibility and system-instruction-channel-mismatch confirmations for
+      **Use Again**, once named source-input slots and capability-based validation exist.
 - [ ] Add generation-history recycle/restore/permanent-delete integrated with the unified recycle
       bin, including file/source tombstoning rules.
-- [ ] Add prompt-improvement history records as a distinct lightweight AI-operation entry type.
+- [x] Add prompt-improvement history records as a distinct lightweight AI-operation entry type
+      (schema v19: `prompt_improvement_records`, plus a nullable `generation_records.prompt_improvement_record_id`
+      with `ON DELETE SET NULL`). Every submitted **Improve Prompt** attempt on `/generate` —
+      success or failure — persists its own record (model snapshot, raw prompt, guidance, template
+      version, candidates as JSON, token usage, status/error, timestamps); failed and retried
+      attempts each get their own record rather than overwriting one another. Accepting a
+      candidate via **Use This Suggestion** remembers which attempt it came from, and the
+      resulting `GenerationRecord` is linked to it when the user then generates.
+      `/generation-history` shows a separate **Prompt improvement history** section (not merged
+      into the main filtered generation list — a real scope reduction from the documented unified
+      "Prompt Improvement" operation-type display) and marks a generation record that used an
+      accepted suggestion. There is no cost estimation on these records (matching the
+      already-deferred cost-estimation gap elsewhere), no source-role capture (no source inputs
+      exist for prompt improvement yet), and the accepted-attempt link is not cleared if the user
+      edits the prompt further after accepting — it stays linked to whichever attempt was most
+      recently accepted.
 
 ## Prompt improvement
 
@@ -286,14 +438,24 @@ in parallel. Both milestones must be complete before the first public release.
       guidance, and an **Improve Prompt** action that sends the current prompt plus a built-in
       versioned instruction template (tailored to the output model's mode, delivered through the
       existing `system`-instructions channel) to the improvement model, showing the returned
-      candidate(s) for the user to accept into the prompt textarea or discard untouched. There is
-      no raw-prompt-only-by-default disclosure UI, **Include Target Model Identity**/**Include
-      System Instructions in Improvement**/**Include Compatible Sources** opt-ins, or **View
-      Instruction** display — improvement is a purely in-session prompt-textarea helper with no
-      persisted raw-vs-improved distinction on `GenerationRecord`/`SavedGenerationSetting`; those
-      remain open below.
-- [ ] Add improvement-candidate handling: multiple candidates, size bounds, **Refused**/
-      **Unsupported Response**/**Interrupted** outcomes, and **Needs Review** invalidation rules.
+      candidate(s) for the user to accept into the prompt textarea or discard untouched. Every
+      attempt is now persisted as its own `PromptImprovementRecord` (see below) and an accepted
+      candidate links the eventual `GenerationRecord` to it — but there is still no raw-vs-improved
+      distinction on `SavedGenerationSetting` (saved settings only ever stored the final prompt),
+      no raw-prompt-only-by-default disclosure UI, and no **Include Target Model
+      Identity**/**Include System Instructions in Improvement**/**Include Compatible Sources**
+      opt-ins or **View Instruction** display; those remain open below.
+- [x] Add improvement-candidate size bounds: every returned candidate is validated against the same
+      1 MiB UTF-8 bound as the raw prompt and guidance (`CreatePromptImprovementRecordAsync`) before
+      the attempt is persisted — a provider returning an oversized candidate fails that recorded
+      attempt rather than silently storing unbounded text. Multiple candidates are already handled
+      (each shown separately, never concatenated, from the initial prompt-improvement slice). There
+      is no **Refused**/**Unsupported Response**/**Interrupted** outcome classification — none of
+      those are detectable without provider-specific response inspection this application does not
+      implement, similar to the deferred Provider Safety Response work — and no **Needs Review**
+      invalidation for prompt-improvement candidates specifically (the model/saved-setting **Needs
+      Review** propagation added earlier does not extend to prompt-improvement records, which have
+      no dependents to invalidate).
 
 ## Saved generation settings
 

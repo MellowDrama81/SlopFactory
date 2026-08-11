@@ -44,7 +44,7 @@ internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
         using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, modalitySettings.ModelsPathOverride ?? "models"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true).ConfigureAwait(false);
         if (!isSuccess)
         {
             if (statusCode == System.Net.HttpStatusCode.NotFound)

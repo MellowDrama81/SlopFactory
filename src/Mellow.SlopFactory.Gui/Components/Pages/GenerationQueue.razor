@@ -1,0 +1,99 @@
+@page "/queue"
+@implements IDisposable
+@inject AppLibraryState LibraryState
+@inject GenerationQueueService Queue
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@Strings["QueuePageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div><p class="eyebrow">@Strings["GenerateEyebrow"]</p><h1>@Strings["QueueHeading"]</h1><p class="muted">@Strings["QueueDescription"]</p></div>
+</header>
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else if (_entries.Count == 0)
+{
+    <p class="empty">@Strings["QueueEmpty"]</p>
+}
+else
+{
+    @foreach (var group in _entries.GroupBy(entry => entry.ConnectionId))
+    {
+        <section class="panel">
+            <h2>@ConnectionLabel(group.Key)</h2>
+            <ul class="metadata-list">
+                @foreach (var entry in group.OrderBy(candidate => candidate.Phase).ThenBy(candidate => candidate.QueuePosition ?? 0))
+                {
+                    <li>
+                        <div>
+                            <strong>@entry.SubmittedTabTitle</strong>
+                            <small>@ModelLabel(entry.ModelId) · @(entry.Phase == GenerationJobPhase.Running ? Strings["Generating"] : Strings["QueuePosition", entry.QueuePosition ?? 0])</small>
+                        </div>
+                        <p>@entry.Prompt</p>
+                        <div class="actions">
+                            @if (entry.Phase == GenerationJobPhase.Queued)
+                            {
+                                <button type="button" class="secondary" title="@Strings["MoveTabLeft"]" aria-label="@Strings["MoveTabLeft"]" disabled="@IsFirstQueued(entry)" @onclick="() => MoveJob(entry, -1)">‹</button>
+                                <button type="button" class="secondary" title="@Strings["MoveTabRight"]" aria-label="@Strings["MoveTabRight"]" disabled="@IsLastQueued(entry)" @onclick="() => MoveJob(entry, 1)">›</button>
+                            }
+                            <button type="button" class="secondary" @onclick="() => Queue.Cancel(entry.JobId)">@Strings["CancelGeneration"]</button>
+                            <a class="ghost" href="/generate">@Strings["NavGenerate"]</a>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+}
+
+@code {
+    private IReadOnlyList<GenerationQueueEntry> _entries = [];
+    private IReadOnlyList<Connection> _connections = [];
+    private IReadOnlyList<Model> _models = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Queue.Changed += OnQueueChanged;
+        await LibraryState.InitializeAsync();
+        var workspace = LibraryState.Workspace;
+        if (workspace is not null)
+        {
+            _connections = await workspace.GetActiveConnectionsAsync();
+            _models = await workspace.GetActiveModelsAsync();
+        }
+        _entries = Queue.GetSnapshot();
+    }
+
+    private void OnQueueChanged(object? sender, EventArgs args)
+    {
+        _entries = Queue.GetSnapshot();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Queue.Changed -= OnQueueChanged;
+
+    private string ConnectionLabel(string connectionId) => _connections.FirstOrDefault(connection => connection.Id == connectionId)?.Label ?? Strings["Unknown"];
+    private string ModelLabel(string modelId) => _models.FirstOrDefault(model => model.Id == modelId)?.Label ?? Strings["Unknown"];
+
+    private bool IsFirstQueued(GenerationQueueEntry entry) => QueuedIdsFor(entry.ConnectionId).First() == entry.JobId;
+    private bool IsLastQueued(GenerationQueueEntry entry) => QueuedIdsFor(entry.ConnectionId).Last() == entry.JobId;
+
+    private List<string> QueuedIdsFor(string connectionId) =>
+        _entries.Where(entry => entry.ConnectionId == connectionId && entry.Phase == GenerationJobPhase.Queued)
+            .OrderBy(entry => entry.QueuePosition ?? 0).Select(entry => entry.JobId).ToList();
+
+    private void MoveJob(GenerationQueueEntry entry, int direction)
+    {
+        var queued = QueuedIdsFor(entry.ConnectionId);
+        var index = queued.IndexOf(entry.JobId);
+        var target = index + direction;
+        if (index < 0 || target < 0 || target >= queued.Count) return;
+        (queued[index], queued[target]) = (queued[target], queued[index]);
+        Queue.ReorderQueuedJobs(entry.ConnectionId, queued);
+    }
+}

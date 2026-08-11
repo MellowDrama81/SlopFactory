@@ -38,7 +38,7 @@ internal sealed class OpenAiProviderAdapter : IProviderAdapter
         using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "models"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseModelList(body);
     }

@@ -176,4 +176,45 @@ public sealed class GenerationRecordTests
         var afterDeletion = await workspace.GetGenerationRecordAsync(record.Id);
         Assert.Null(afterDeletion.SourceFileId);
     }
+
+    [Fact]
+    public async Task PromptAndSystemInstructionsAreBoundedTo1MiBOfUtf8Text()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var oversized = new string('a', LibraryRules.MaximumGenerationTextUtf8Bytes + 1);
+        var atLimit = new string('a', LibraryRules.MaximumGenerationTextUtf8Bytes);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RecordTextGenerationResultAsync(model.Id, oversized, 1, workspace.Descriptor.GeneratedFolderId, ["result"], null));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RecordTextGenerationResultAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, ["result"], null, systemInstructions: oversized));
+
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, atLimit, 1, workspace.Descriptor.GeneratedFolderId, ["result"], null);
+        Assert.Equal(GenerationStatus.Completed, record.Status);
+    }
+
+    [Fact]
+    public async Task FewerCommittedResultsThanRequestedIsPartiallyCompleted()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Write three haiku", 3, workspace.Descriptor.GeneratedFolderId, ["Only one came back"], null);
+
+        Assert.Equal(GenerationStatus.PartiallyCompleted, record.Status);
+        Assert.Single(record.ResultFileIds);
+        Assert.Equal(3, record.ResultCount);
+
+        var imageModel = await workspace.CreateModelAsync("Imagen", connection.Id, "gpt-image-1", GenerationMode.Image, false);
+        var imageRecord = await workspace.RecordImageGenerationResultAsync(imageModel.Id, "Two cats", 2, workspace.Descriptor.GeneratedFolderId, [PngSignatureBytes], null);
+        Assert.Equal(GenerationStatus.PartiallyCompleted, imageRecord.Status);
+        Assert.Single(imageRecord.ResultFileIds);
+    }
 }

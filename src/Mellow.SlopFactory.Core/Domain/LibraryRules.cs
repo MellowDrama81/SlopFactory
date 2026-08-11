@@ -8,7 +8,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 18;
+    public const int SchemaVersion = 22;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -16,6 +16,18 @@ public static class LibraryRules
     public const int MaximumMetadataEntriesPerFile = 1_000;
     public const int MaximumMetadataValueUtf8Bytes = 1_048_576;
     public const int MaximumEditableTextUtf8Bytes = 4_194_304;
+    public const int MaximumGenerationTextUtf8Bytes = 1_048_576;
+
+    public static string ValidateGenerationTextLength(string value, string fieldName)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (Encoding.UTF8.GetByteCount(value) > MaximumGenerationTextUtf8Bytes)
+        {
+            throw new LibraryValidationException($"{fieldName} cannot exceed {MaximumGenerationTextUtf8Bytes} UTF-8 bytes.");
+        }
+
+        return value;
+    }
     public const int MaximumRenderedMarkdownCharacters = 262_144;
     public const int MaximumTextSearchScalars = 256;
     public static readonly TimeSpan ModelCatalogueStalenessPeriod = TimeSpan.FromDays(7);
@@ -150,6 +162,22 @@ public static class LibraryRules
 
     public static string NormalizeShortLabel(string value, string fieldName) =>
         NormalizeLabel(value, MaximumLabelScalars, fieldName, allowLineBreaks: false);
+
+    public static string? NormalizeDraftCustomTitle(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim().Normalize(NormalizationForm.FormC);
+        if (normalized.Length == 0) return null;
+        if (normalized.EnumerateRunes().Count() > MaximumLabelScalars)
+        {
+            throw new LibraryValidationException($"Tab title exceeds {MaximumLabelScalars} Unicode characters.");
+        }
+        if (normalized.Any(char.IsControl))
+        {
+            throw new LibraryValidationException("Tab title contains control characters.");
+        }
+        return normalized;
+    }
 
     public static string ComparisonKey(string value) => value.Normalize(NormalizationForm.FormC).ToUpperInvariant();
 

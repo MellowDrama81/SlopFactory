@@ -24,5 +24,7 @@
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\AppLibraryState.cs" Link="Services\AppLibraryState.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IntegrityScanRecommendationService.cs" Link="Services\IntegrityScanRecommendationService.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\SensitiveRevealSessionService.cs" Link="Services\SensitiveRevealSessionService.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\ISecureCredentialStore.cs" Link="Services\ISecureCredentialStore.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\GenerationQueueService.cs" Link="Services\GenerationQueueService.cs" />
   </ItemGroup>
 </Project>

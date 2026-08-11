@@ -241,4 +241,36 @@ public sealed class ConnectionModelTests
         var reloaded = await workspace.GetConnectionAsync(connection.Id);
         Assert.Equal(ProviderType.OpenAi, reloaded.ProviderType);
     }
+
+    [Fact]
+    public async Task ChangingProviderModelIdOrModeMarksModelAndItsActiveSavedSettingsNeedsReview()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var savedSetting = await workspace.CreateSavedSettingAsync("My preset", model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        Assert.False(model.NeedsReview);
+        Assert.False(savedSetting.NeedsReview);
+
+        var relabelled = await workspace.UpdateModelAsync(model.Id, "Renamed GPT", model.ProviderModelId, model.Mode, model.SupportsSystemInstructions);
+        Assert.False(relabelled.NeedsReview);
+        var afterLabelOnly = await workspace.GetSavedSettingAsync(savedSetting.Id);
+        Assert.False(afterLabelOnly.NeedsReview);
+
+        var changedProviderModelId = await workspace.UpdateModelAsync(model.Id, relabelled.Label, "gpt-4o-mini", relabelled.Mode, relabelled.SupportsSystemInstructions);
+        Assert.True(changedProviderModelId.NeedsReview);
+        var reloadedSetting = await workspace.GetSavedSettingAsync(savedSetting.Id);
+        Assert.True(reloadedSetting.NeedsReview);
+
+        var reviewed = await workspace.MarkModelReviewedAsync(model.Id);
+        Assert.False(reviewed.NeedsReview);
+        var settingAfterReview = await workspace.GetSavedSettingAsync(savedSetting.Id);
+        Assert.False(settingAfterReview.NeedsReview);
+
+        var changedMode = await workspace.UpdateModelAsync(model.Id, reviewed.Label, reviewed.ProviderModelId, GenerationMode.Image, reviewed.SupportsSystemInstructions);
+        Assert.True(changedMode.NeedsReview);
+    }
 }

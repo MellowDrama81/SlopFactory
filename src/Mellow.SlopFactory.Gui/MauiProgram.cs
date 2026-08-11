@@ -23,6 +23,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISensitiveRevealSessionService, SensitiveRevealSessionService>();
         builder.Services.AddSingleton<IncomingImportService>();
         builder.Services.AddSingleton<ManagedContentWatchService>();
+        builder.Services.AddSingleton<GenerationQueueService>();
         builder.Services.AddSingleton<IntegrityScanRecommendationService>();
         builder.Services.AddSingleton<IPlatformFileActionService, PlatformFileActionService>();
         builder.Services.AddSingleton<IAppPreferenceStore, MauiAppPreferenceStore>();

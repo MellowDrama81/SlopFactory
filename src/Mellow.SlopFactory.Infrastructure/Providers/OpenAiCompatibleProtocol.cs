@@ -9,21 +9,77 @@ internal static class OpenAiCompatibleProtocol
 {
     public static string CombineUrl(string baseUrl, string relativePath) => $"{baseUrl}/{relativePath.TrimStart('/')}";
 
-    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, string Body)> SendAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken)
+    private const int MaxRetryAttempts = 3;
+    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(30);
+
+    // allowRetry must only be set for idempotent requests (model listing). A generation-submission request is never
+    // safe to retry automatically without provider-confirmed idempotency-key support, which this application does
+    // not implement, so its failures are surfaced on the first attempt.
+    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, string Body)> SendAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken, bool allowRetry = false)
     {
         var timeoutSeconds = connection.TimeoutSeconds ?? LibraryRules.DefaultConnectionTimeoutSeconds;
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
         try
         {
-            using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
-            var body = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
-            return (response.IsSuccessStatusCode, response.StatusCode, body);
+            var currentRequest = request;
+            for (var attempt = 0; ; attempt++)
+            {
+                using var response = await httpClient.SendAsync(currentRequest, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+                var body = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
+
+                if (!allowRetry || response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxRetryAttempts)
+                {
+                    return (response.IsSuccessStatusCode, response.StatusCode, body);
+                }
+
+                await Task.Delay(ComputeRetryDelay(response, attempt), linkedCts.Token).ConfigureAwait(false);
+                currentRequest = await CloneRequestAsync(request).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             throw new ProviderAdapterException($"The request timed out after {timeoutSeconds} seconds.");
         }
+    }
+
+    private static TimeSpan ComputeRetryDelay(HttpResponseMessage response, int attempt)
+    {
+        if (response.Headers.RetryAfter is { } retryAfter)
+        {
+            if (retryAfter.Delta is { } delta) return ClampRetryDelay(delta);
+            if (retryAfter.Date is { } date) return ClampRetryDelay(date - DateTimeOffset.UtcNow);
+        }
+
+        var baseDelay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+        return ClampRetryDelay(baseDelay + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500)));
+    }
+
+    private static TimeSpan ClampRetryDelay(TimeSpan delay)
+    {
+        if (delay < TimeSpan.Zero) return TimeSpan.Zero;
+        return delay > MaxRetryDelay ? MaxRetryDelay : delay;
+    }
+
+    private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage original)
+    {
+        var clone = new HttpRequestMessage(original.Method, original.RequestUri);
+        foreach (var header in original.Headers)
+        {
+            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        if (original.Content is not null)
+        {
+            var bytes = await original.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            clone.Content = new ByteArrayContent(bytes);
+            foreach (var header in original.Content.Headers)
+            {
+                clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+        }
+
+        return clone;
     }
 
     public static void ApplyAuthorization(HttpRequestMessage request, Connection connection, string? apiKey)

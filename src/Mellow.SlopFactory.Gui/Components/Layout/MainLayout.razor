@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject IncomingImportService IncomingImports
 @inject ManagedContentWatchService ContentWatch
+@inject GenerationQueueService Queue
 @inject IThemePreferenceService Theme
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject IStringLocalizer<UiStrings> Strings
@@ -17,6 +18,7 @@
             <NavLink href="/connections">@Strings["NavConnections"]</NavLink>
             <NavLink href="/models">@Strings["NavModels"]</NavLink>
             <NavLink href="/generate">@Strings["NavGenerate"]</NavLink>
+            <NavLink href="/queue">@Strings["NavQueue"]</NavLink>
             <NavLink href="/generation-history">@Strings["NavGenerationHistory"]</NavLink>
             <NavLink href="/saved-settings">@Strings["NavSavedSettings"]</NavLink>
             <NavLink href="/library-settings">@Strings["NavLibrarySettings"]</NavLink>
@@ -44,6 +46,12 @@
                 @if (ContentWatch.Notices.Count > 3) { <div>@Strings["MoreNotices", ContentWatch.Notices.Count - 3]</div> }
             </div>
         }
+        @if (Queue.QueuedCount > 0 || Queue.RunningCount > 0)
+        {
+            <div class="notice generation-queue-notice" role="status">
+                @Strings["GenerationQueueActivity", Queue.QueuedCount, Queue.RunningCount] <a href="/queue">@Strings["NavQueue"]</a>
+            </div>
+        }
         @if (ScanRecommendation.IsRecommended)
         {
             <div class="notice" role="status">
@@ -63,6 +71,8 @@
         IncomingImports.PendingChanged += OnPendingChanged;
         ContentWatch.Changed += OnPendingChanged;
         ContentWatch.Start();
+        Queue.Changed += OnPendingChanged;
+        Queue.Start();
         Theme.Changed += OnPendingChanged;
         ScanRecommendation.Changed += OnPendingChanged;
     }
@@ -71,6 +81,7 @@
     {
         IncomingImports.PendingChanged -= OnPendingChanged;
         ContentWatch.Changed -= OnPendingChanged;
+        Queue.Changed -= OnPendingChanged;
         Theme.Changed -= OnPendingChanged;
         ScanRecommendation.Changed -= OnPendingChanged;
     }

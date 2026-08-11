@@ -1,0 +1,101 @@
+@page "/generation-history/{Id}"
+@inject AppLibraryState LibraryState
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@Strings["GenerationHistoryDetailPageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div><p class="eyebrow">@Strings["GenerateEyebrow"]</p><h1>@Strings["GenerationHistoryDetailHeading"]</h1></div>
+    <a class="button" href="/generation-history">@Strings["BackToGenerationHistory"]</a>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice error" role="alert">@_message</div>
+}
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else if (_record is not null)
+{
+    <section class="panel">
+        <div>
+            <strong>@_record.ModelLabel</strong>
+            <small>@Strings["GenerationRecordSummary", StatusLabel(_record.Status), _record.CreatedAt.ToLocalTime().ToString("g"), _record.ResultFileIds.Count]</small>
+        </div>
+        <p>@_record.Prompt</p>
+        @if (!string.IsNullOrEmpty(_record.SystemInstructions))
+        {
+            <details>
+                <summary>@Strings["ShowSystemInstructions"]</summary>
+                <p>@_record.SystemInstructions</p>
+            </details>
+        }
+        @if (_record.Status == GenerationStatus.PartiallyCompleted)
+        {
+            <p class="muted">@Strings["GenerationPartiallyCompletedDetail", _record.ResultFileIds.Count, _record.ResultCount]</p>
+        }
+        @if (_record.ErrorMessage is not null)
+        {
+            <p class="error">@_record.ErrorMessage</p>
+        }
+        @if (_record.PromptTokens is not null || _record.CompletionTokens is not null)
+        {
+            <p class="muted">@Strings["TokenUsage", _record.PromptTokens?.ToString() ?? Strings["Unknown"], _record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
+        }
+        @if (_record.PromptImprovementRecordId is not null)
+        {
+            <p class="muted">@Strings["PromptImprovementUsed"]</p>
+        }
+        <div class="actions">
+            <a class="button" href="@($"/generate/history/{_record.Id}")">@Strings["UseAgain"]</a>
+            @if (_record.SourceFileId is not null)
+            {
+                <a class="ghost" href="@($"/file/{_record.SourceFileId}")">@Strings["SourceImageUsed"]</a>
+            }
+        </div>
+        @if (_record.ResultFileIds.Count > 0)
+        {
+            <ul class="metadata-list">
+                @foreach (var fileId in _record.ResultFileIds)
+                {
+                    <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
+                }
+            </ul>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+
+    private GenerationRecord? _record;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        try
+        {
+            _record = await workspace.GetGenerationRecordAsync(Id);
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+    }
+
+    private string StatusLabel(GenerationStatus status) => status switch
+    {
+        GenerationStatus.Completed => Strings["GenerationCompleted"],
+        GenerationStatus.Failed => Strings["GenerationFailed"],
+        GenerationStatus.PartiallyCompleted => Strings["GenerationPartiallyCompleted"],
+        _ => status.ToString()
+    };
+}

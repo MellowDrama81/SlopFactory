@@ -41,6 +41,14 @@ else
             }
         </InputSelect>
 
+        @if (!IsNew && _existingNeedsReview)
+        {
+            <div class="notice error" role="alert">
+                @Strings["ModelNeedsReview"]
+                <button type="button" class="secondary" disabled="@_busy" @onclick="MarkReviewedAsync">@Strings["MarkAsReviewed"]</button>
+            </div>
+        }
+
         <label for="model-mode">@Strings["GenerationMode"]</label>
         <InputSelect id="model-mode" @bind-Value="_form.Mode">
             <option value="@GenerationMode.Text">@Strings["ModeText"]</option>
@@ -84,10 +92,41 @@ else
 
         <label class="check"><InputCheckbox @bind-Value="_form.SupportsSystemInstructions" /> @Strings["SupportsSystemInstructions"]</label>
 
-        <div class="actions">
-            <button type="submit" disabled="@_busy">@Strings["Save"]</button>
-            <a class="ghost" href="/models">@Strings["Cancel"]</a>
-        </div>
+        @if (_form.Mode == GenerationMode.Text)
+        {
+            <label for="model-text-format">@Strings["TextResultFormat"]</label>
+            <InputSelect id="model-text-format" @bind-Value="_form.TextFormat">
+                <option value="@TextResultFormat.Markdown">@Strings["TextResultFormatMarkdown"]</option>
+                <option value="@TextResultFormat.PlainText">@Strings["TextResultFormatPlainText"]</option>
+            </InputSelect>
+        }
+
+        @if (_pendingReviewConfirmation)
+        {
+            <div class="notice error" role="alert">
+                <p>@Strings["ModelChangeAffectsSavedSettings", _affectedSavedSettings.Count]</p>
+                @if (_affectedSavedSettings.Count > 0)
+                {
+                    <ul class="metadata-list">
+                        @foreach (var savedSetting in _affectedSavedSettings)
+                        {
+                            <li>@savedSetting.Title</li>
+                        }
+                    </ul>
+                }
+                <div class="actions">
+                    <button type="button" class="danger" disabled="@_busy" @onclick="ConfirmSaveAsync">@Strings["ConfirmModelChange"]</button>
+                    <button type="button" class="secondary" disabled="@_busy" @onclick="() => _pendingReviewConfirmation = false">@Strings["Cancel"]</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="actions">
+                <button type="submit" disabled="@_busy">@Strings["Save"]</button>
+                <a class="ghost" href="/models">@Strings["Cancel"]</a>
+            </div>
+        }
     </EditForm>
 }
 
@@ -103,6 +142,11 @@ else
     private bool _loadingModels;
     private string? _message;
     private bool _isError;
+    private string _originalProviderModelId = string.Empty;
+    private GenerationMode _originalMode;
+    private bool _existingNeedsReview;
+    private bool _pendingReviewConfirmation;
+    private IReadOnlyList<SavedGenerationSetting> _affectedSavedSettings = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -120,6 +164,10 @@ else
                 _form.Mode = existing.Mode;
                 _form.ProviderModelId = existing.ProviderModelId;
                 _form.SupportsSystemInstructions = existing.SupportsSystemInstructions;
+                _form.TextFormat = existing.TextFormat;
+                _originalProviderModelId = existing.ProviderModelId;
+                _originalMode = existing.Mode;
+                _existingNeedsReview = existing.NeedsReview;
             }
             catch (SlopFactoryException exception)
             {
@@ -192,19 +240,61 @@ else
     {
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
+
+        if (!IsNew && (!string.Equals(_form.ProviderModelId, _originalProviderModelId, StringComparison.Ordinal) || _form.Mode != _originalMode))
+        {
+            var activeSavedSettings = await workspace.GetActiveSavedSettingsAsync();
+            _affectedSavedSettings = activeSavedSettings.Where(savedSetting => savedSetting.ModelId == Id).ToArray();
+            _pendingReviewConfirmation = true;
+            return;
+        }
+
+        await SaveModelAsync();
+    }
+
+    private async Task ConfirmSaveAsync()
+    {
+        _pendingReviewConfirmation = false;
+        await SaveModelAsync();
+    }
+
+    private async Task SaveModelAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
         _busy = true;
         try
         {
             if (IsNew)
             {
-                await workspace.CreateModelAsync(_form.Label, _form.ConnectionId, _form.ProviderModelId, _form.Mode, _form.SupportsSystemInstructions);
+                await workspace.CreateModelAsync(_form.Label, _form.ConnectionId, _form.ProviderModelId, _form.Mode, _form.SupportsSystemInstructions, _form.TextFormat);
             }
             else
             {
-                await workspace.UpdateModelAsync(Id, _form.Label, _form.ProviderModelId, _form.Mode, _form.SupportsSystemInstructions);
+                await workspace.UpdateModelAsync(Id, _form.Label, _form.ProviderModelId, _form.Mode, _form.SupportsSystemInstructions, _form.TextFormat);
             }
 
             Navigation.NavigateTo("/models");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task MarkReviewedAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _busy = true;
+        try
+        {
+            await workspace.MarkModelReviewedAsync(Id);
+            _existingNeedsReview = false;
+            _message = Strings["ModelMarkedReviewed"];
+            _isError = false;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
@@ -221,5 +311,6 @@ else
         public GenerationMode Mode { get; set; } = GenerationMode.Text;
         public string ProviderModelId { get; set; } = string.Empty;
         public bool SupportsSystemInstructions { get; set; }
+        public TextResultFormat TextFormat { get; set; } = TextResultFormat.Markdown;
     }
 }

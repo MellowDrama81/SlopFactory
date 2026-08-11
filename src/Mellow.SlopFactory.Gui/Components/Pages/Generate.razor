@@ -1,7 +1,9 @@
 @page "/generate"
 @page "/generate/{SettingsId}"
 @page "/generate/history/{HistoryId}"
+@implements IDisposable
 @inject AppLibraryState LibraryState
+@inject GenerationQueueService Queue
 @inject ISecureCredentialStore Credentials
 @inject IProviderAdapterResolver AdapterResolver
 @inject IStringLocalizer<UiStrings> Strings
@@ -25,15 +27,83 @@
 {
     <p class="empty">@Strings["NoLocationOpen"]</p>
 }
+else if (_models.Count == 0 && _hasNeedsReviewModels)
+{
+    <p class="empty">@Strings["AllModelsNeedReview"] <a href="/models">@Strings["ModelsHeading"]</a></p>
+}
 else if (_models.Count == 0)
 {
     <p class="empty">@Strings["AddModelFirst"] <a href="/models/new">@Strings["AddModel"]</a></p>
 }
 else
 {
+    <div class="tab-strip">
+        @foreach (var draft in _drafts.OrderBy(candidate => candidate.TabOrder))
+        {
+            <div class="tab @(draft.Id == _activeDraftId ? "active" : "")">
+                @if (_closingDraftId == draft.Id && _closeSaveIntentActive)
+                {
+                    <span class="tab-close-confirm">
+                        <input maxlength="100" placeholder="@Strings["SettingsTitle"]" @bind="_closeSaveTitle" />
+                        @if (_closeError is not null)
+                        {
+                            <span class="error">@_closeError</span>
+                        }
+                        <button type="button" class="secondary" disabled="@string.IsNullOrWhiteSpace(_closeSaveTitle)" @onclick="() => SaveAsSettingsAndCloseDraftAsync(draft.Id)">@Strings["SaveAndCloseTab"]</button>
+                        <button type="button" class="secondary" @onclick="() => _closeSaveIntentActive = false">@Strings["BackToCloseOptions"]</button>
+                    </span>
+                }
+                else if (_closingDraftId == draft.Id)
+                {
+                    <span class="tab-close-confirm">
+                        @Strings["CloseTabConfirmMessage"]
+                        <button type="button" class="danger" @onclick="() => ConfirmCloseDraftAsync(draft.Id)">@Strings["ConfirmCloseTab"]</button>
+                        <button type="button" class="secondary" @onclick="BeginSaveAndCloseDraft">@Strings["SaveSettingsAndCloseTab"]</button>
+                        <button type="button" class="secondary" @onclick="() => _closingDraftId = null">@Strings["CancelCloseTab"]</button>
+                    </span>
+                }
+                else
+                {
+                    <button type="button" class="tab-move" title="@Strings["MoveTabLeft"]" aria-label="@Strings["MoveTabLeft"]" disabled="@IsFirstDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, -1)">‹</button>
+                    <button type="button" class="tab-select" @onclick="() => SwitchToDraftAsync(draft.Id)">@DraftDisplayTitle(draft)</button>
+                    <button type="button" class="tab-move" title="@Strings["MoveTabRight"]" aria-label="@Strings["MoveTabRight"]" disabled="@IsLastDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, 1)">›</button>
+                    <button type="button" class="tab-close" title="@Strings["CloseTab"]" aria-label="@Strings["CloseTab"]" disabled="@(Queue.GetActiveJobIdForDraft(draft.Id) is not null)" @onclick="() => BeginCloseDraft(draft.Id)">×</button>
+                }
+            </div>
+        }
+        <button type="button" class="tab-add" title="@Strings["AddDraftTab"]" aria-label="@Strings["AddDraftTab"]" @onclick="AddDraftAsync">+</button>
+    </div>
+
+    <div class="inline-form">
+        <label for="tab-title">@Strings["TabTitle"]</label>
+        <input id="tab-title" maxlength="100" placeholder="@DraftDisplayTitle(ActiveDraft)" @bind="_tabTitleInput" @bind:after="ScheduleAutosave" disabled="@FormDisabled" />
+        @if (!string.IsNullOrEmpty(ActiveDraft?.CustomTitle))
+        {
+            <button type="button" class="secondary" @onclick="ResetTabTitleAsync">@Strings["ResetTabTitle"]</button>
+        }
+        <button type="button" class="secondary" @onclick="DuplicateActiveDraftAsync">@Strings["DuplicateTab"]</button>
+    </div>
+
+    @if (_saveStatus != SaveStatus.Idle)
+    {
+        <p class="muted save-status">
+            @(_saveStatus switch
+            {
+                SaveStatus.Saving => Strings["DraftSaving"],
+                SaveStatus.Saved => Strings["DraftSaved"],
+                SaveStatus.NotSaved => Strings["DraftNotSaved"],
+                _ => string.Empty
+            })
+            @if (_saveStatus == SaveStatus.NotSaved)
+            {
+                <button type="button" class="secondary" @onclick="RetrySaveAsync">@Strings["RetrySaveAction"]</button>
+            }
+        </p>
+    }
+
     <EditForm Model="_form" OnValidSubmit="GenerateAsync" class="stack-form">
         <label for="generate-model">@Strings["Model"]</label>
-        <InputSelect id="generate-model" @bind-Value="_form.ModelId" disabled="@_busy">
+        <InputSelect id="generate-model" @bind-Value="_form.ModelId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
             @foreach (var model in _models)
             {
                 <option value="@model.Id">@model.Label (@ModeLabel(model.Mode))</option>
@@ -54,7 +124,7 @@ else
             @if (SelectedModel?.SupportsSystemInstructions == true)
             {
                 <label for="generate-system-instructions">@Strings["SystemInstructions"]</label>
-                <textarea id="generate-system-instructions" rows="3" maxlength="1048576" @bind="_form.SystemInstructions" disabled="@_busy"></textarea>
+                <textarea id="generate-system-instructions" rows="3" maxlength="1048576" @bind="_form.SystemInstructions" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
             }
             else
             {
@@ -62,7 +132,7 @@ else
             }
 
             <label for="generate-source-image">@Strings["SourceImage"]</label>
-            <InputSelect id="generate-source-image" @bind-Value="_form.SourceFileId" disabled="@_busy">
+            <InputSelect id="generate-source-image" @bind-Value="_form.SourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
                 <option value="">@Strings["NoSourceImage"]</option>
                 @foreach (var file in _activeImageFiles)
                 {
@@ -72,22 +142,34 @@ else
         }
 
         <label for="generate-prompt">@Strings["Prompt"]</label>
-        <textarea id="generate-prompt" rows="8" maxlength="1048576" @bind="_form.Prompt" disabled="@_busy"></textarea>
+        <textarea id="generate-prompt" rows="8" maxlength="1048576" @bind="_form.Prompt" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
 
         <label for="generate-count">@Strings["ResultCount"]</label>
-        <InputNumber id="generate-count" @bind-Value="_form.ResultCount" min="1" max="4" disabled="@_busy" />
+        <InputNumber id="generate-count" @bind-Value="_form.ResultCount" @bind-Value:after="ScheduleAutosave" min="1" max="4" disabled="@FormDisabled" />
 
         <label for="generate-folder">@Strings["DestinationFolder"]</label>
-        <InputSelect id="generate-folder" @bind-Value="_form.DestinationFolderId" disabled="@_busy">
+        <InputSelect id="generate-folder" @bind-Value="_form.DestinationFolderId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
             @foreach (var folder in _activeFolders)
             {
                 <option value="@folder.Id">@FolderPath(folder.Id)</option>
             }
         </InputSelect>
 
+        @if (ActiveJobStatus is { Phase: GenerationJobPhase.Queued } queuedStatus)
+        {
+            <p class="muted">@Strings["QueuePosition", queuedStatus.QueuePosition ?? 0]</p>
+        }
+
         <div class="actions">
-            <button type="submit" disabled="@(_busy || (SelectedConnection is not null && !SelectedConnection.HasCredential))">@(_busy ? Strings["Generating"] : Strings["Generate"])</button>
-            @if (_busy)
+            <button type="submit" disabled="@(FormDisabled || (SelectedConnection is not null && !SelectedConnection.HasCredential))">
+                @(ActiveJobStatus?.Phase switch
+                {
+                    GenerationJobPhase.Queued => Strings["Queued"],
+                    GenerationJobPhase.Running => Strings["Generating"],
+                    _ => Strings["Generate"]
+                })
+            </button>
+            @if (ActiveJobId is not null)
             {
                 <button type="button" class="secondary" @onclick="CancelGeneration">@Strings["CancelGeneration"]</button>
             }
@@ -100,7 +182,7 @@ else
             <h2>@Strings["PromptImprovementHeading"]</h2>
             <p class="muted">@Strings["PromptImprovementDescription"]</p>
             <label for="improvement-model">@Strings["ImprovementModel"]</label>
-            <select id="improvement-model" @bind="_improvementModelId" disabled="@(_busy || _improving)">
+            <select id="improvement-model" @bind="_improvementModelId" @bind:after="ScheduleAutosave" disabled="@(FormDisabled || _improving)">
                 <option value="">@Strings["NoImprovementModel"]</option>
                 @foreach (var textModel in _models.Where(candidate => candidate.Mode == GenerationMode.Text))
                 {
@@ -109,10 +191,10 @@ else
             </select>
 
             <label for="improvement-guidance">@Strings["ImprovementGuidance"]</label>
-            <textarea id="improvement-guidance" rows="2" maxlength="1048576" @bind="_improvementGuidance" disabled="@(_busy || _improving)"></textarea>
+            <textarea id="improvement-guidance" rows="2" maxlength="1048576" @bind="_improvementGuidance" @bind:after="ScheduleAutosave" disabled="@(FormDisabled || _improving)"></textarea>
 
             <div class="actions">
-                <button type="button" class="secondary" disabled="@(_busy || _improving || string.IsNullOrEmpty(_improvementModelId) || string.IsNullOrWhiteSpace(_form.Prompt))" @onclick="ImprovePromptAsync">@(_improving ? Strings["ImprovingPrompt"] : Strings["ImprovePromptAction"])</button>
+                <button type="button" class="secondary" disabled="@(FormDisabled || _improving || string.IsNullOrEmpty(_improvementModelId) || string.IsNullOrWhiteSpace(_form.Prompt))" @onclick="ImprovePromptAsync">@(_improving ? Strings["ImprovingPrompt"] : Strings["ImprovePromptAction"])</button>
             </div>
 
             @if (_improvementCandidates is not null)
@@ -142,37 +224,56 @@ else
         <p class="muted">@Strings["SaveSettingsDescription"]</p>
         <div class="inline-form">
             <label for="settings-title">@Strings["SettingsTitle"]</label>
-            <input id="settings-title" maxlength="100" @bind="_form.Title" disabled="@_busy" />
-            <button type="button" class="secondary" disabled="@(_busy || string.IsNullOrWhiteSpace(_form.Title))" @onclick="SaveSettingsAsync">@Strings["SaveSettingsAction"]</button>
+            <input id="settings-title" maxlength="100" @bind="_settingsTitle" disabled="@FormDisabled" />
+            <button type="button" class="secondary" disabled="@(FormDisabled || string.IsNullOrWhiteSpace(_settingsTitle))" @onclick="SaveSettingsAsync">@Strings["SaveSettingsAction"]</button>
         </div>
     </section>
 
-    @if (_lastResult is not null)
+    @if (LastOutcome is { } outcome)
     {
-        <section class="panel">
-            <h2>@(_lastResult.Status == GenerationStatus.Completed ? Strings["GenerationCompleted"] : Strings["GenerationFailed"])</h2>
-            @if (_lastResult.ErrorMessage is not null)
-            {
-                <p class="error">@_lastResult.ErrorMessage</p>
-            }
-            @if (_lastResult.PromptTokens is not null || _lastResult.CompletionTokens is not null)
-            {
-                <p class="muted">@Strings["TokenUsage", _lastResult.PromptTokens?.ToString() ?? Strings["Unknown"], _lastResult.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
-            }
-            @if (_lastResult.SourceFileId is not null)
-            {
-                <p class="muted">@Strings["SourceImageUsed"] <a href="@($"/file/{_lastResult.SourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
-            }
-            @if (_lastResult.ResultFileIds.Count > 0)
-            {
-                <ul class="metadata-list">
-                    @foreach (var fileId in _lastResult.ResultFileIds)
-                    {
-                        <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
-                    }
-                </ul>
-            }
-        </section>
+        @if (outcome.CancelledBeforeSubmission)
+        {
+            <p class="muted">@Strings["GenerationCancelledBeforeSubmission"]</p>
+        }
+        else if (outcome.Record is null && outcome.LocalErrorMessage is null)
+        {
+            <p class="muted">@Strings["GenerationCancelledByUser"]</p>
+        }
+        else if (outcome.LocalErrorMessage is not null)
+        {
+            <p class="error">@outcome.LocalErrorMessage</p>
+        }
+        else if (outcome.Record is { } record)
+        {
+            <section class="panel">
+                <h2>@GenerationStatusLabel(record.Status)</h2>
+                @if (record.Status == GenerationStatus.PartiallyCompleted)
+                {
+                    <p class="muted">@Strings["GenerationPartiallyCompletedDetail", record.ResultFileIds.Count, record.ResultCount]</p>
+                }
+                @if (record.ErrorMessage is not null)
+                {
+                    <p class="error">@record.ErrorMessage</p>
+                }
+                @if (record.PromptTokens is not null || record.CompletionTokens is not null)
+                {
+                    <p class="muted">@Strings["TokenUsage", record.PromptTokens?.ToString() ?? Strings["Unknown"], record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
+                }
+                @if (record.SourceFileId is not null)
+                {
+                    <p class="muted">@Strings["SourceImageUsed"] <a href="@($"/file/{record.SourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
+                }
+                @if (record.ResultFileIds.Count > 0)
+                {
+                    <ul class="metadata-list">
+                        @foreach (var fileId in record.ResultFileIds)
+                        {
+                            <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
+                        }
+                    </ul>
+                }
+            </section>
+        }
     }
 }
 
@@ -180,59 +281,106 @@ else
     [Parameter] public string SettingsId { get; set; } = string.Empty;
     [Parameter] public string HistoryId { get; set; } = string.Empty;
 
+    private enum SaveStatus { Idle, Saving, Saved, NotSaved }
+
     private GenerateForm _form = new();
     private IReadOnlyList<Model> _models = [];
     private IReadOnlyList<Connection> _activeConnections = [];
     private IReadOnlyList<FolderRecord> _activeFolders = [];
     private IReadOnlyList<FileRecord> _activeImageFiles = [];
+    private IReadOnlyList<GenerationDraft> _drafts = [];
+    private string? _activeDraftId;
+    private string _tabTitleInput = string.Empty;
+    private string? _closingDraftId;
+    private bool _closeSaveIntentActive;
+    private string _closeSaveTitle = string.Empty;
+    private string? _closeError;
+    private CancellationTokenSource? _autosaveCts;
+    private SaveStatus _saveStatus = SaveStatus.Idle;
+    private string? _saveError;
+    private string? _consumedSettingsId;
+    private string? _consumedHistoryId;
     private bool _busy;
     private string? _message;
     private bool _isError;
-    private GenerationRecord? _lastResult;
     private string? _loadedSettingsId;
     private string? _loadedTitle;
-    private CancellationTokenSource? _cancellation;
+    private string _settingsTitle = string.Empty;
     private string _improvementModelId = string.Empty;
     private string _improvementGuidance = string.Empty;
     private IReadOnlyList<string>? _improvementCandidates;
     private bool _improving;
+    private bool _hasNeedsReviewModels;
+
+    private string? _lastImprovementRecordId;
+    private string? _acceptedImprovementRecordId;
 
     private const string PromptImprovementTemplate =
         "You are helping a user write a better prompt for an AI {0} generation request. Rewrite the user's prompt to be clearer and more effective for that purpose. Return only the improved prompt text, with no commentary, labels, quotation marks, or formatting wrappers.";
+    private const string PromptImprovementTemplateVersion = "v1";
+
+    private GenerationDraft? ActiveDraft => _drafts.FirstOrDefault(draft => draft.Id == _activeDraftId);
+    private string? ActiveJobId => _activeDraftId is null ? null : Queue.GetActiveJobIdForDraft(_activeDraftId);
+    private GenerationJobStatusSnapshot? ActiveJobStatus => ActiveJobId is { } jobId ? Queue.GetJobStatus(jobId) : null;
+    private GenerationJobOutcome? LastOutcome => _activeDraftId is null ? null : Queue.GetLastOutcomeForDraft(_activeDraftId);
+    private bool FormDisabled => _busy || ActiveJobId is not null;
 
     protected override async Task OnInitializedAsync()
     {
+        Queue.Changed += OnQueueChanged;
         await LibraryState.InitializeAsync();
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
-        _models = await workspace.GetActiveModelsAsync();
+        var activeModels = await workspace.GetActiveModelsAsync();
+        _hasNeedsReviewModels = activeModels.Any(model => model.NeedsReview);
+        _models = activeModels.Where(model => !model.NeedsReview).ToArray();
         _activeConnections = await workspace.GetActiveConnectionsAsync();
         _activeFolders = await workspace.GetActiveFoldersAsync();
         var activeFiles = await workspace.GetActiveFilesAsync();
         _activeImageFiles = activeFiles.Where(file => file.MediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif").ToArray();
-        _form.DestinationFolderId = workspace.Descriptor.GeneratedFolderId;
 
-        if (!string.IsNullOrEmpty(SettingsId))
+        _drafts = await workspace.GetDraftsAsync();
+        if (_drafts.Count == 0)
         {
+            _drafts = [await workspace.CreateDraftAsync()];
+        }
+
+        LoadDraftIntoForm(_drafts.OrderBy(draft => draft.TabOrder).First().Id);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ConsumeRouteDraftAsync();
+    }
+
+    private void OnQueueChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Queue.Changed -= OnQueueChanged;
+
+    private async Task ConsumeRouteDraftAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+
+        if (!string.IsNullOrEmpty(SettingsId) && !string.Equals(_consumedSettingsId, SettingsId, StringComparison.Ordinal))
+        {
+            _consumedSettingsId = SettingsId;
             try
             {
                 var saved = await workspace.GetSavedSettingAsync(SettingsId);
-                _form.Title = saved.Title;
-                _form.Prompt = saved.Prompt;
-                _form.SystemInstructions = saved.SystemInstructions ?? string.Empty;
-                _form.ResultCount = saved.ResultCount;
-                _form.DestinationFolderId = saved.DestinationFolderId;
-                _form.SourceFileId = saved.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == saved.SourceFileId) ? saved.SourceFileId : string.Empty;
+                await FlushPendingAutosaveAsync();
+                var model = saved.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == saved.ModelId) : null;
+                var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
+                var sourceFileId = saved.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == saved.SourceFileId) ? saved.SourceFileId : null;
+                var draft = await workspace.CreateDraftAsync();
+                draft = await workspace.ReplaceDraftStateAsync(draft.Id, saved.Title, modelId, saved.Prompt, saved.SystemInstructions, sourceFileId, saved.ResultCount, saved.DestinationFolderId, null, null);
+                _drafts = [.. _drafts, draft];
+                LoadDraftIntoForm(draft.Id);
                 _loadedSettingsId = saved.Id;
                 _loadedTitle = saved.Title;
-                var model = saved.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == saved.ModelId) : null;
-                if (model is not null)
+                _settingsTitle = saved.Title;
+                if (model is null && saved.ModelId is not null && _models.Count > 0)
                 {
-                    _form.ModelId = model.Id;
-                }
-                else if (_models.Count > 0)
-                {
-                    _form.ModelId = _models[0].Id;
                     _message = Strings["SavedSettingsModelUnavailable", saved.ModelLabel];
                 }
             }
@@ -242,24 +390,22 @@ else
                 _isError = true;
             }
         }
-        else if (!string.IsNullOrEmpty(HistoryId))
+        else if (!string.IsNullOrEmpty(HistoryId) && !string.Equals(_consumedHistoryId, HistoryId, StringComparison.Ordinal))
         {
+            _consumedHistoryId = HistoryId;
             try
             {
                 var history = await workspace.GetGenerationRecordAsync(HistoryId);
-                _form.Prompt = history.Prompt;
-                _form.SystemInstructions = history.SystemInstructions ?? string.Empty;
-                _form.ResultCount = history.ResultCount;
-                _form.DestinationFolderId = history.DestinationFolderId;
-                _form.SourceFileId = history.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == history.SourceFileId) ? history.SourceFileId : string.Empty;
+                await FlushPendingAutosaveAsync();
                 var model = history.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == history.ModelId) : null;
-                if (model is not null)
+                var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
+                var sourceFileId = history.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == history.SourceFileId) ? history.SourceFileId : null;
+                var draft = await workspace.CreateDraftAsync();
+                draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, modelId, history.Prompt, history.SystemInstructions, sourceFileId, history.ResultCount, history.DestinationFolderId, null, null);
+                _drafts = [.. _drafts, draft];
+                LoadDraftIntoForm(draft.Id);
+                if (model is null && history.ModelId is not null && _models.Count > 0)
                 {
-                    _form.ModelId = model.Id;
-                }
-                else if (_models.Count > 0)
-                {
-                    _form.ModelId = _models[0].Id;
                     _message = Strings["SavedSettingsModelUnavailable", history.ModelLabel];
                 }
             }
@@ -269,8 +415,205 @@ else
                 _isError = true;
             }
         }
+    }
 
-        if (string.IsNullOrEmpty(_form.ModelId) && _models.Count > 0) _form.ModelId = _models[0].Id;
+    private void LoadDraftIntoForm(string draftId)
+    {
+        var draft = _drafts.FirstOrDefault(candidate => candidate.Id == draftId);
+        if (draft is null) return;
+        _activeDraftId = draftId;
+        _form = new GenerateForm
+        {
+            ModelId = draft.ModelId ?? (_models.Count > 0 ? _models[0].Id : string.Empty),
+            Prompt = draft.Prompt,
+            SystemInstructions = draft.SystemInstructions ?? string.Empty,
+            SourceFileId = draft.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == draft.SourceFileId) ? draft.SourceFileId : string.Empty,
+            ResultCount = draft.ResultCount,
+            DestinationFolderId = draft.DestinationFolderId
+        };
+        _improvementModelId = draft.ImprovementModelId ?? string.Empty;
+        _improvementGuidance = draft.ImprovementGuidance ?? string.Empty;
+        _improvementCandidates = null;
+        _lastImprovementRecordId = null;
+        _acceptedImprovementRecordId = null;
+        _tabTitleInput = draft.CustomTitle ?? string.Empty;
+        _loadedSettingsId = null;
+        _loadedTitle = null;
+        _settingsTitle = string.Empty;
+        _saveStatus = SaveStatus.Idle;
+        _saveError = null;
+    }
+
+    private async Task SwitchToDraftAsync(string draftId)
+    {
+        if (draftId == _activeDraftId) return;
+        _closingDraftId = null;
+        await FlushPendingAutosaveAsync();
+        LoadDraftIntoForm(draftId);
+    }
+
+    private async Task AddDraftAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        await FlushPendingAutosaveAsync();
+        var draft = await workspace.CreateDraftAsync();
+        _drafts = [.. _drafts, draft];
+        LoadDraftIntoForm(draft.Id);
+    }
+
+    private async Task DuplicateActiveDraftAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _activeDraftId is null) return;
+        await FlushPendingAutosaveAsync();
+        var duplicate = await workspace.DuplicateDraftAsync(_activeDraftId);
+        _drafts = [.. _drafts, duplicate];
+        LoadDraftIntoForm(duplicate.Id);
+    }
+
+    private bool IsFirstDraft(GenerationDraft draft) => _drafts.OrderBy(candidate => candidate.TabOrder).First().Id == draft.Id;
+    private bool IsLastDraft(GenerationDraft draft) => _drafts.OrderBy(candidate => candidate.TabOrder).Last().Id == draft.Id;
+
+    private async Task MoveDraftAsync(string draftId, int direction)
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        var ordered = _drafts.OrderBy(candidate => candidate.TabOrder).Select(candidate => candidate.Id).ToList();
+        var index = ordered.IndexOf(draftId);
+        var target = index + direction;
+        if (index < 0 || target < 0 || target >= ordered.Count) return;
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+        _drafts = await workspace.ReorderDraftsAsync(ordered);
+    }
+
+    private void BeginCloseDraft(string draftId)
+    {
+        _closingDraftId = draftId;
+        _closeSaveIntentActive = false;
+        _closeSaveTitle = string.Empty;
+        _closeError = null;
+    }
+
+    private void BeginSaveAndCloseDraft()
+    {
+        _closeSaveIntentActive = true;
+        _closeSaveTitle = string.Empty;
+        _closeError = null;
+    }
+
+    private async Task SaveAsSettingsAndCloseDraftAsync(string draftId)
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || string.IsNullOrWhiteSpace(_closeSaveTitle)) return;
+        var draft = _drafts.FirstOrDefault(candidate => candidate.Id == draftId);
+        if (draft is null) return;
+        try
+        {
+            await workspace.CreateSavedSettingAsync(_closeSaveTitle, draft.ModelId, draft.Prompt, draft.ResultCount, draft.DestinationFolderId, draft.SystemInstructions, draft.SourceFileId);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _closeError = exception.Message;
+            return;
+        }
+
+        _closeSaveIntentActive = false;
+        await ConfirmCloseDraftAsync(draftId);
+        _message = Strings["SavedSettingsSaved"];
+        _isError = false;
+    }
+
+    private async Task ConfirmCloseDraftAsync(string draftId)
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        if (draftId == _activeDraftId)
+        {
+            _autosaveCts?.Cancel();
+            _autosaveCts = null;
+        }
+        await workspace.DeleteDraftAsync(draftId);
+        _drafts = _drafts.Where(draft => draft.Id != draftId).ToArray();
+        _closingDraftId = null;
+        if (_drafts.Count == 0)
+        {
+            var fresh = await workspace.CreateDraftAsync();
+            _drafts = [fresh];
+            LoadDraftIntoForm(fresh.Id);
+        }
+        else if (_activeDraftId == draftId)
+        {
+            LoadDraftIntoForm(_drafts.OrderBy(draft => draft.TabOrder).First().Id);
+        }
+    }
+
+    private string DraftDisplayTitle(GenerationDraft? draft)
+    {
+        if (draft is null) return string.Empty;
+        if (!string.IsNullOrEmpty(draft.CustomTitle)) return draft.CustomTitle;
+        var untitledOrdered = _drafts.Where(candidate => string.IsNullOrEmpty(candidate.CustomTitle)).OrderBy(candidate => candidate.TabOrder).ToList();
+        var index = untitledOrdered.FindIndex(candidate => candidate.Id == draft.Id) + 1;
+        return Strings["UntitledDraftTitle", index];
+    }
+
+    private void ScheduleAutosave()
+    {
+        _autosaveCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _autosaveCts = cts;
+        _saveStatus = SaveStatus.Saving;
+        _ = AutosaveAfterDelayAsync(cts.Token);
+    }
+
+    private async Task AutosaveAfterDelayAsync(CancellationToken token)
+    {
+        try { await Task.Delay(TimeSpan.FromMilliseconds(800), token); }
+        catch (TaskCanceledException) { return; }
+        if (token.IsCancellationRequested) return;
+        await PersistCurrentDraftAsync();
+        if (!token.IsCancellationRequested) StateHasChanged();
+    }
+
+    private async Task FlushPendingAutosaveAsync()
+    {
+        _autosaveCts?.Cancel();
+        _autosaveCts = null;
+        if (_activeDraftId is not null) await PersistCurrentDraftAsync();
+    }
+
+    private async Task PersistCurrentDraftAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _activeDraftId is null) return;
+        var draftId = _activeDraftId;
+        try
+        {
+            _saveStatus = SaveStatus.Saving;
+            var systemInstructions = SelectedModel?.SupportsSystemInstructions == true && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
+            var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
+            var improvementModelId = string.IsNullOrEmpty(_improvementModelId) ? null : _improvementModelId;
+            var improvementGuidance = string.IsNullOrWhiteSpace(_improvementGuidance) ? null : _improvementGuidance;
+            var updated = await workspace.ReplaceDraftStateAsync(draftId, _tabTitleInput, string.IsNullOrEmpty(_form.ModelId) ? null : _form.ModelId, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, improvementModelId, improvementGuidance);
+            _drafts = _drafts.Select(existing => existing.Id == updated.Id ? updated : existing).ToArray();
+            _saveError = null;
+            _saveStatus = SaveStatus.Saved;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _saveError = exception.Message;
+            _saveStatus = SaveStatus.NotSaved;
+        }
+    }
+
+    private async Task RetrySaveAsync() => await PersistCurrentDraftAsync();
+
+    private async Task ResetTabTitleAsync()
+    {
+        _autosaveCts?.Cancel();
+        _autosaveCts = null;
+        _tabTitleInput = string.Empty;
+        await PersistCurrentDraftAsync();
     }
 
     private Model? SelectedModel => _models.FirstOrDefault(candidate => candidate.Id == _form.ModelId);
@@ -285,6 +628,14 @@ else
         GenerationMode.Text => Strings["ModeText"],
         GenerationMode.Image => Strings["ModeImage"],
         _ => mode.ToString()
+    };
+
+    private string GenerationStatusLabel(GenerationStatus status) => status switch
+    {
+        GenerationStatus.Completed => Strings["GenerationCompleted"],
+        GenerationStatus.Failed => Strings["GenerationFailed"],
+        GenerationStatus.PartiallyCompleted => Strings["GenerationPartiallyCompleted"],
+        _ => status.ToString()
     };
 
     private string FolderPath(string folderId)
@@ -302,15 +653,15 @@ else
     private async Task SaveSettingsAsync()
     {
         var workspace = LibraryState.Workspace;
-        if (workspace is null || string.IsNullOrWhiteSpace(_form.Title)) return;
+        if (workspace is null || string.IsNullOrWhiteSpace(_settingsTitle)) return;
         _busy = true;
         try
         {
             var systemInstructions = SelectedModel?.SupportsSystemInstructions == true && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
             var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
-            var saved = _loadedSettingsId is not null && string.Equals(_loadedTitle, _form.Title, StringComparison.Ordinal)
-                ? await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _form.Title, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId)
-                : await workspace.CreateSavedSettingAsync(_form.Title, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            var saved = _loadedSettingsId is not null && string.Equals(_loadedTitle, _settingsTitle, StringComparison.Ordinal)
+                ? await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId)
+                : await workspace.CreateSavedSettingAsync(_settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
             _loadedSettingsId = saved.Id;
             _loadedTitle = saved.Title;
             _message = Strings["SavedSettingsSaved"];
@@ -324,10 +675,10 @@ else
         finally { _busy = false; }
     }
 
-    private async Task GenerateAsync()
+    private void GenerateAsync()
     {
         var workspace = LibraryState.Workspace;
-        if (workspace is null) return;
+        if (workspace is null || _activeDraftId is null) return;
         var model = _models.FirstOrDefault(candidate => candidate.Id == _form.ModelId);
         if (model is null) return;
         var connection = _activeConnections.FirstOrDefault(candidate => candidate.Id == model.ConnectionId);
@@ -344,76 +695,18 @@ else
             return;
         }
 
-        _busy = true;
-        _lastResult = null;
-        using var cancellation = new CancellationTokenSource();
-        _cancellation = cancellation;
-        try
-        {
-            var adapter = AdapterResolver.Resolve(connection.ProviderType);
-            var apiKey = connection.HasCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, connection.Id) : null;
-
-            if (model.Mode == GenerationMode.Image)
-            {
-                IReadOnlyList<byte[]>? images = null;
-                string? errorMessage = null;
-                try
-                {
-                    images = await adapter.GenerateImageAsync(connection, model, apiKey, _form.Prompt, _form.ResultCount, cancellationToken: cancellation.Token);
-                }
-                catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
-                {
-                    errorMessage = exception.Message;
-                }
-
-                _lastResult = await workspace.RecordImageGenerationResultAsync(model.Id, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, images, errorMessage, cancellation.Token);
-            }
-            else
-            {
-                var systemInstructions = model.SupportsSystemInstructions && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
-                var sourceFileId = string.IsNullOrEmpty(_form.SourceFileId) ? null : _form.SourceFileId;
-                TextGenerationSourceImage? sourceImage = null;
-                if (sourceFileId is not null)
-                {
-                    var sourceContent = await workspace.ReadImageFileAsync(sourceFileId, cancellation.Token);
-                    sourceImage = new TextGenerationSourceImage(sourceContent.MediaType, sourceContent.Bytes);
-                }
-
-                TextGenerationResult? result = null;
-                string? errorMessage = null;
-                try
-                {
-                    result = await adapter.GenerateTextAsync(connection, model, apiKey, _form.Prompt, _form.ResultCount, systemInstructions, sourceImage, cancellation.Token);
-                }
-                catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
-                {
-                    errorMessage = exception.Message;
-                }
-
-                _lastResult = await workspace.RecordTextGenerationResultAsync(model.Id, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, result?.Texts, errorMessage, systemInstructions, result?.PromptTokens, result?.CompletionTokens, sourceFileId, cancellation.Token);
-            }
-
-            _isError = _lastResult.Status == GenerationStatus.Failed;
-            _message = _isError ? Strings["GenerationFailed"] : Strings["GenerationCompleted"];
-        }
-        catch (OperationCanceledException)
-        {
-            _message = Strings["GenerationCancelledByUser"];
-            _isError = false;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
-        {
-            _message = exception.Message;
-            _isError = true;
-        }
-        finally
-        {
-            _busy = false;
-            _cancellation = null;
-        }
+        var systemInstructions = model.SupportsSystemInstructions && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
+        var sourceFileId = string.IsNullOrEmpty(_form.SourceFileId) ? null : _form.SourceFileId;
+        var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId);
+        Queue.Enqueue(snapshot, model.ConnectionId);
+        _message = null;
+        _isError = false;
     }
 
-    private void CancelGeneration() => _cancellation?.Cancel();
+    private void CancelGeneration()
+    {
+        if (ActiveJobId is { } jobId) Queue.Cancel(jobId);
+    }
 
     private async Task ImprovePromptAsync()
     {
@@ -437,38 +730,61 @@ else
 
         _improving = true;
         _improvementCandidates = null;
+        _acceptedImprovementRecordId = null;
+        var guidance = string.IsNullOrWhiteSpace(_improvementGuidance) ? null : _improvementGuidance;
+        IReadOnlyList<string>? candidates = null;
+        string? attemptError = null;
+        int? promptTokens = null;
+        int? completionTokens = null;
         try
         {
             var adapter = AdapterResolver.Resolve(connection.ProviderType);
             var apiKey = connection.HasCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, connection.Id) : null;
             var outputModeLabel = SelectedModelMode == GenerationMode.Image ? "image" : "text";
             var template = string.Format(PromptImprovementTemplate, outputModeLabel);
-            if (!string.IsNullOrWhiteSpace(_improvementGuidance))
+            if (guidance is not null)
             {
-                template = $"{template} Additional guidance from the user: {_improvementGuidance}";
+                template = $"{template} Additional guidance from the user: {guidance}";
             }
 
             var result = await adapter.GenerateTextAsync(connection, improvementModel, apiKey, _form.Prompt, 1, template);
-            _improvementCandidates = result.Texts;
+            candidates = result.Texts;
+            promptTokens = result.PromptTokens;
+            completionTokens = result.CompletionTokens;
+            _improvementCandidates = candidates;
             _message = null;
         }
         catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
         {
+            attemptError = exception.Message;
             _message = exception.Message;
             _isError = true;
         }
-        finally { _improving = false; }
+        finally
+        {
+            try
+            {
+                var record = await workspace.RecordPromptImprovementAttemptAsync(improvementModel.Id, _form.Prompt, guidance, PromptImprovementTemplateVersion, candidates, attemptError, promptTokens, completionTokens);
+                _lastImprovementRecordId = record.Id;
+            }
+            catch (SlopFactoryException)
+            {
+                _lastImprovementRecordId = null;
+            }
+            _improving = false;
+        }
     }
 
     private void UseImprovedPrompt(string candidate)
     {
         _form.Prompt = candidate;
+        _acceptedImprovementRecordId = _lastImprovementRecordId;
         _improvementCandidates = null;
+        ScheduleAutosave();
     }
 
     private sealed class GenerateForm
     {
-        public string Title { get; set; } = string.Empty;
         public string ModelId { get; set; } = string.Empty;
         public string Prompt { get; set; } = string.Empty;
         public string SystemInstructions { get; set; } = string.Empty;

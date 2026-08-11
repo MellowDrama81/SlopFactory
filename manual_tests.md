@@ -76,6 +76,40 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** every workflow completes without data loss outside the explicitly tested permanent deletion; warnings and recovery paths are clear; sensitive data and diagnostic exports remain minimized.
 
+## MT-07 — Generate tab strip and draft autosave
+
+1. Open **Generate** with at least one configured Text model. Confirm a single default-titled draft tab ("Draft 1") is already open.
+2. Click **+** to add a second tab. Confirm it opens with empty fields and its own automatic title ("Draft 2"), and that the first tab's fields are unaffected.
+3. In the first tab, type a prompt, then immediately switch to the second tab. Confirm the status indicator showed **Saving…** then **Saved**, and switching back to the first tab still shows the prompt you typed (autosave/flush-on-switch did not lose it).
+4. Edit the **Tab title** field on the second tab. Confirm the tab's label updates to the custom title. Click **Reset to automatic title** and confirm it reverts to "Draft 2".
+5. Click **Duplicate tab** on a tab with a model/prompt already set. Confirm a new tab appears next to it with the same field values but no custom title, and that it is not linked to any run or history entry.
+6. With three or more tabs open, use the **‹**/**›** buttons to move a tab. Confirm its position updates immediately, the leftmost tab's **‹** is disabled, the rightmost tab's **›** is disabled, and the new order survives an app restart.
+7. Click the **×** on a tab that is not generating. Confirm the three-way close panel appears: **Discard without saving**, **Save settings first**, and **Keep tab open**.
+8. Click **Keep tab open**. Confirm the tab remains open and unchanged.
+9. Click **×** again, then **Save settings first**. Enter a title already used by an existing saved setting and confirm **Save and close**; confirm an inline error appears and the tab stays open. Enter a new, unused title and confirm **Save and close**: confirm the tab and its draft are gone, and the new saved settings entry appears on `/saved-settings` with the tab's model/prompt/result-count/destination.
+10. Click **×** on another tab and choose **Discard without saving**. Confirm the tab and its draft are gone permanently, with no recycle-bin entry anywhere in the app.
+11. Close every remaining tab. Confirm the app never shows zero tabs — a fresh empty draft appears automatically.
+12. Start a generation on one tab, then switch to another tab while it is still running. Confirm the busy tab's **×** stays disabled until the generation finishes, and that switching tabs does not crash or duplicate the in-flight request.
+13. Restart the app and reopen **Generate**. Confirm previously open draft tabs (title, prompt, model, and other field values) are restored from the library rather than reset.
+14. Simulate an autosave failure (for example, make the library location briefly unwritable) and confirm the status shows **Not saved** with a working **Retry save** action.
+
+**Pass:** tabs create/duplicate/rename/reset/reorder/close correctly; all three close options behave as described, including a duplicate-title error keeping the tab open; autosave never silently loses an edit across a tab switch or restart; a discarded tab is unrecoverable and clearly warned about before confirming; the app never has zero tabs open.
+
+## MT-08 — Generation queue and concurrency
+
+1. With one configured model on one connection, open three draft tabs and click **Generate** on all three in quick succession. Confirm exactly one shows **Generating…** while the other two show **Queued** with an increasing position number, and that the sidebar/top notice shows a matching "N queued, M running" count.
+2. Let the first finish. Confirm the second tab automatically transitions from **Queued** to **Generating…** without any manual action, and the notice count updates.
+3. While a tab is queued, click its **Cancel** button. Confirm the tab returns to its idle prompt/form state immediately (no provider request was ever visibly made — for example, no network activity for that submission), and that `/generation-history` gains no entry for it.
+4. While a tab is actively generating, click its **Cancel** button. Confirm the same behavior as before this change (a cancellation message, no history entry).
+5. Configure a second connection with its own model. Submit one generation on each connection at the same time. Confirm both run concurrently (both tabs show **Generating…** simultaneously), proving per-connection scheduling doesn't serialize unrelated connections.
+6. Start a generation on one tab, then navigate away to a different page (for example `/generation-history`) before it finishes, then navigate back to `/generate` and reselect that tab. Confirm the submission continued in the background and its result (or Queued/Generating status) is still shown correctly, not lost or reset.
+7. With a generation queued (not yet running), close the app's active library or switch to a different one. Confirm the queued job disappears without creating a history entry, and that a job that was actively running at that moment does not crash the app.
+8. Open **Queue** from the sidebar (or click the activity notice) while several jobs are queued/running across one or more connections. Confirm each connection's jobs are grouped together, each entry shows the originating tab title, model, and prompt, and a running entry has no reorder buttons.
+9. Use the **‹**/**›** buttons on a queued entry to move it within its connection's group. Confirm the order updates immediately and matches the order those jobs actually start in. Confirm the leftmost/rightmost queued entry has its respective button disabled.
+10. Click **Cancel** on a queued entry from the **Queue** page (not from `/generate`). Confirm it's removed the same way cancelling from its originating tab would behave.
+
+**Pass:** exactly one job per connection runs at a time; queued jobs start automatically as slots free up; queued-cancel never contacts the provider or creates history; a submission survives navigating away from and back to `/generate`; switching libraries cleanly drops/cancels outstanding work without a crash; the **Queue** page's grouping, reordering and cancellation all match what happens from `/generate` itself.
+
 ## Reporting
 
 For each test case, record:

@@ -47,6 +47,10 @@ else
                             {
                                 <span class="notice">@Strings["ModelNotCurrentlyListed"]</span>
                             }
+                            @if (model.NeedsReview)
+                            {
+                                <span class="notice error">@Strings["NeedsReview"]</span>
+                            }
                         </div>
                         <a class="ghost" href="@($"/models/{model.Id}")">@Strings["Edit"]</a>
                         @if (_recycleCandidate == model.Id)

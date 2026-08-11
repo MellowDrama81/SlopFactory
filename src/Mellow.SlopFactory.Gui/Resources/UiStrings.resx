@@ -645,6 +645,24 @@
   <data name="GenerateEyebrow" xml:space="preserve"><value>AI generation</value></data>
   <data name="GenerateHeading" xml:space="preserve"><value>Generate</value></data>
   <data name="GenerateDescription" xml:space="preserve"><value>Send a prompt to a configured text model and add the result to your library.</value></data>
+  <data name="TabTitle" xml:space="preserve"><value>Tab title</value></data>
+  <data name="UntitledDraftTitle" xml:space="preserve"><value>Draft {0}</value></data>
+  <data name="ResetTabTitle" xml:space="preserve"><value>Reset to automatic title</value></data>
+  <data name="DuplicateTab" xml:space="preserve"><value>Duplicate tab</value></data>
+  <data name="MoveTabLeft" xml:space="preserve"><value>Move tab left</value></data>
+  <data name="MoveTabRight" xml:space="preserve"><value>Move tab right</value></data>
+  <data name="CloseTab" xml:space="preserve"><value>Close tab</value></data>
+  <data name="ConfirmCloseTab" xml:space="preserve"><value>Discard without saving</value></data>
+  <data name="CancelCloseTab" xml:space="preserve"><value>Keep tab open</value></data>
+  <data name="CloseTabConfirmMessage" xml:space="preserve"><value>Closing this tab permanently discards its draft; it cannot be recovered.</value></data>
+  <data name="SaveSettingsAndCloseTab" xml:space="preserve"><value>Save settings first</value></data>
+  <data name="SaveAndCloseTab" xml:space="preserve"><value>Save and close</value></data>
+  <data name="BackToCloseOptions" xml:space="preserve"><value>Back</value></data>
+  <data name="AddDraftTab" xml:space="preserve"><value>New tab</value></data>
+  <data name="DraftSaving" xml:space="preserve"><value>Saving draft…</value></data>
+  <data name="DraftSaved" xml:space="preserve"><value>Draft saved</value></data>
+  <data name="DraftNotSaved" xml:space="preserve"><value>Draft not saved</value></data>
+  <data name="RetrySaveAction" xml:space="preserve"><value>Retry save</value></data>
   <data name="AddModelFirst" xml:space="preserve"><value>Add a model before generating.</value></data>
   <data name="ConnectionUnavailableForModel" xml:space="preserve"><value>The connection for this model is unavailable.</value></data>
   <data name="GenerationCompleted" xml:space="preserve"><value>Generation completed</value></data>
@@ -692,6 +710,15 @@
   <data name="NoFilteredGenerationHistory" xml:space="preserve"><value>No generations match the current filters.</value></data>
   <data name="CancelGeneration" xml:space="preserve"><value>Cancel</value></data>
   <data name="GenerationCancelledByUser" xml:space="preserve"><value>Generation cancelled. The provider may still process or charge for a request that was already sent.</value></data>
+  <data name="Queued" xml:space="preserve"><value>Queued</value></data>
+  <data name="QueuePosition" xml:space="preserve"><value>Position {0} in queue</value></data>
+  <data name="GenerationCancelledBeforeSubmission" xml:space="preserve"><value>Cancelled before any request was sent. No provider charge was incurred.</value></data>
+  <data name="GenerationQueueActivity" xml:space="preserve"><value>{0} queued, {1} running</value></data>
+  <data name="NavQueue" xml:space="preserve"><value>Queue</value></data>
+  <data name="QueuePageTitle" xml:space="preserve"><value>Queue · SlopFactory</value></data>
+  <data name="QueueHeading" xml:space="preserve"><value>Generation queue</value></data>
+  <data name="QueueDescription" xml:space="preserve"><value>Review and reorder waiting generation requests across every connection.</value></data>
+  <data name="QueueEmpty" xml:space="preserve"><value>Nothing is queued or running.</value></data>
   <data name="PromptImprovementHeading" xml:space="preserve"><value>Improve this prompt</value></data>
   <data name="PromptImprovementDescription" xml:space="preserve"><value>Send the prompt above to a text model for a rewritten suggestion. Nothing changes until you choose a suggestion to use.</value></data>
   <data name="ImprovementModel" xml:space="preserve"><value>Improvement model</value></data>
@@ -722,6 +749,29 @@
   <data name="ImageGenerationModality" xml:space="preserve"><value>Image generation</value></data>
   <data name="ResolvedEndpoint" xml:space="preserve"><value>Resolved endpoint: {0}</value></data>
   <data name="ProviderTypeLockedWhileModelsExist" xml:space="preserve"><value>The provider type cannot be changed while this connection has dependent models.</value></data>
+  <data name="PromptImprovementUsed" xml:space="preserve"><value>Prompt improvement was used for this generation.</value></data>
+  <data name="PromptImprovementHistoryHeading" xml:space="preserve"><value>Prompt improvement history</value></data>
+  <data name="PromptImprovementHistoryDescription" xml:space="preserve"><value>Every submitted Improve Prompt attempt, whether or not its suggestion was used.</value></data>
+  <data name="ShowImprovementCandidates" xml:space="preserve"><value>Show {0} suggestion(s)</value></data>
+  <data name="FilterByProvider" xml:space="preserve"><value>Provider</value></data>
+  <data name="FilterByDateFrom" xml:space="preserve"><value>From date</value></data>
+  <data name="FilterByDateTo" xml:space="preserve"><value>To date</value></data>
+  <data name="ModelNeedsReview" xml:space="preserve"><value>This model needs review. Its provider model ID or mode changed since it was last confirmed, and it cannot be used for generation until reviewed.</value></data>
+  <data name="MarkAsReviewed" xml:space="preserve"><value>Mark as reviewed</value></data>
+  <data name="ModelChangeAffectsSavedSettings" xml:space="preserve"><value>Changing the provider model ID or mode will mark this model, and {0} saved setting(s) that use it, as needing review.</value></data>
+  <data name="ConfirmModelChange" xml:space="preserve"><value>Confirm change</value></data>
+  <data name="ModelMarkedReviewed" xml:space="preserve"><value>Model marked as reviewed.</value></data>
+  <data name="NeedsReview" xml:space="preserve"><value>Needs review</value></data>
+  <data name="AllModelsNeedReview" xml:space="preserve"><value>Every configured model needs review before it can generate again.</value></data>
+  <data name="TextResultFormat" xml:space="preserve"><value>Text result format</value></data>
+  <data name="TextResultFormatMarkdown" xml:space="preserve"><value>Markdown (.md)</value></data>
+  <data name="TextResultFormatPlainText" xml:space="preserve"><value>Plain text (.txt)</value></data>
+  <data name="GenerationPartiallyCompleted" xml:space="preserve"><value>Partially completed</value></data>
+  <data name="GenerationPartiallyCompletedDetail" xml:space="preserve"><value>{0} of {1} requested results were committed.</value></data>
+  <data name="ViewDetails" xml:space="preserve"><value>View details</value></data>
+  <data name="GenerationHistoryDetailPageTitle" xml:space="preserve"><value>Generation details · SlopFactory</value></data>
+  <data name="GenerationHistoryDetailHeading" xml:space="preserve"><value>Generation details</value></data>
+  <data name="BackToGenerationHistory" xml:space="preserve"><value>Back to generation history</value></data>
   <data name="InsecureHttpBaseUrlWarning" xml:space="preserve"><value>This base URL uses unencrypted HTTP. Only loopback or private-network addresses are accepted; credentials and data would otherwise travel in cleartext.</value></data>
   <data name="InsecureConnectionBadge" xml:space="preserve"><value>Unencrypted (HTTP)</value></data>
 </root>

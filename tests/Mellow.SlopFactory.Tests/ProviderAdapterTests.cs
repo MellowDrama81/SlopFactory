@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure.Providers;
@@ -368,5 +369,73 @@ public sealed class ProviderAdapterTests
         var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.GenerateTextAsync(connection, model, null, "Hello", 1));
 
         Assert.Contains("disabled", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ListModelsRetriesOnRateLimitingThenSucceeds()
+    {
+        var callCount = 0;
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                var rateLimited = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") };
+                rateLimited.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+                return rateLimited;
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"data":[{"id":"gpt-4o"}]}""", Encoding.UTF8, "application/json")
+            };
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+
+        var models = await adapter.ListModelsAsync(connection, "secret-key");
+
+        Assert.Equal(2, callCount);
+        Assert.Equal("gpt-4o", Assert.Single(models).ProviderModelId);
+    }
+
+    [Fact]
+    public async Task ListModelsGivesUpAfterBoundedRetriesAndReportsRateLimiting()
+    {
+        var callCount = 0;
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            callCount++;
+            var rateLimited = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") };
+            rateLimited.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+            return rateLimited;
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+
+        var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.ListModelsAsync(connection, "secret-key"));
+
+        Assert.Contains("rate limiting", exception.Message, StringComparison.Ordinal);
+        Assert.True(callCount is > 1 and <= 5, $"Expected a small, bounded number of attempts; got {callCount}.");
+    }
+
+    [Fact]
+    public async Task GenerateTextDoesNotAutomaticallyRetryOnRateLimiting()
+    {
+        var callCount = 0;
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            callCount++;
+            var rateLimited = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") };
+            rateLimited.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+            return rateLimited;
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel("gpt-4o");
+
+        await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.GenerateTextAsync(connection, model, "secret-key", "Hello", 1));
+
+        Assert.Equal(1, callCount);
     }
 }

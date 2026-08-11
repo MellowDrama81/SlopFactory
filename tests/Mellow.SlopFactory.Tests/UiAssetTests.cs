@@ -249,6 +249,10 @@ public sealed class UiAssetTests
         Assert.DoesNotContain("Integrity scan finished.", settings, StringComparison.Ordinal);
         Assert.Contains("Strings[\"IncomingImportsPending\",", layout, StringComparison.Ordinal);
         Assert.Contains("Strings[\"ManagedContentNeedsReview\"]", layout, StringComparison.Ordinal);
+        Assert.Contains("name=\"GenerationQueueActivity\"", resources, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"GenerationQueueActivity\",", layout, StringComparison.Ordinal);
+        Assert.Contains("name=\"NavQueue\"", resources, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"NavQueue\"]", layout, StringComparison.Ordinal);
         Assert.DoesNotContain("shared or dropped item(s) are waiting", layout, StringComparison.Ordinal);
         Assert.DoesNotContain("Managed content needs review</strong>", layout, StringComparison.Ordinal);
     }
@@ -265,6 +269,8 @@ public sealed class UiAssetTests
     [InlineData("Components", "Pages", "ModelEdit.razor")]
     [InlineData("Components", "Pages", "Generate.razor")]
     [InlineData("Components", "Pages", "GenerationHistory.razor")]
+    [InlineData("Components", "Pages", "GenerationHistoryDetail.razor")]
+    [InlineData("Components", "Pages", "GenerationQueue.razor")]
     [InlineData("Components", "Pages", "SavedSettings.razor")]
     public void LocalizationTargetComponentsInjectTheUiStringLocalizer(params string[] componentPath)
     {
@@ -467,7 +473,7 @@ public sealed class UiAssetTests
                      "AddConnectionFirst", "NoModels", "ModelSummary", "ConfirmRecycleModel", "RecycleModelWarning",
                      "HideRecycledModels", "ShowRecycledModels", "NoRecycledModels", "ConfirmPermanentlyDeleteModel",
                      "PermanentlyDeleteModelWarning", "ModeText", "ModeImage", "ModelRecycled", "ModelRestored", "ModelPermanentlyDeleted",
-                     "ModelNotCurrentlyListed"
+                     "ModelNotCurrentlyListed", "NeedsReview"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -493,7 +499,9 @@ public sealed class UiAssetTests
                      "AddModel", "EditModel", "AddConnectionFirst", "Connection", "GenerationMode", "ModeText", "ModeImage",
                      "ProviderModelId", "LoadModels", "LoadingModels", "NoModelsDiscovered", "DiscoveredModels",
                      "SelectDiscoveredModel", "SupportsSystemInstructions", "Save", "ModelCatalogueLastRefreshed",
-                     "ModelCatalogueNeverRefreshed", "ModelCataloguePossiblyStale", "ModelCatalogueStale"
+                     "ModelCatalogueNeverRefreshed", "ModelCataloguePossiblyStale", "ModelCatalogueStale",
+                     "ModelNeedsReview", "MarkAsReviewed", "ModelChangeAffectsSavedSettings", "ConfirmModelChange",
+                     "ModelMarkedReviewed", "TextResultFormat", "TextResultFormatMarkdown", "TextResultFormatPlainText"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -524,7 +532,12 @@ public sealed class UiAssetTests
                      "CancelGeneration", "GenerationCancelledByUser", "PromptImprovementHeading", "PromptImprovementDescription",
                      "ImprovementModel", "NoImprovementModel", "ImprovementGuidance", "ImprovePromptAction", "ImprovingPrompt",
                      "NoImprovementCandidates", "UseThisCandidate", "GenerationBlockedCredentialsRequired", "AddApiKey",
-                     "ConnectionUnverifiedWarning", "ModelDoesNotSupportSystemInstructions"
+                     "ConnectionUnverifiedWarning", "ModelDoesNotSupportSystemInstructions", "AllModelsNeedReview", "ModelsHeading",
+                     "GenerationPartiallyCompleted", "GenerationPartiallyCompletedDetail", "TabTitle", "UntitledDraftTitle",
+                     "ResetTabTitle", "DuplicateTab", "MoveTabLeft", "MoveTabRight", "CloseTab", "ConfirmCloseTab", "CancelCloseTab",
+                     "CloseTabConfirmMessage", "AddDraftTab", "DraftSaving", "DraftSaved", "DraftNotSaved", "RetrySaveAction",
+                     "SaveSettingsAndCloseTab", "SaveAndCloseTab", "BackToCloseOptions", "Queued", "QueuePosition",
+                     "GenerationCancelledBeforeSubmission"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -548,8 +561,11 @@ public sealed class UiAssetTests
         foreach (var key in new[]
                  {
                      "GenerationHistoryPageTitle", "GenerationHistoryHeading", "GenerationHistoryDescription", "NoGenerationHistory",
-                     "GenerationRecordSummary", "OpenGeneratedFile", "GenerationCompleted", "GenerationFailed", "UseAgain", "ShowSystemInstructions", "TokenUsage", "SourceImageUsed",
-                     "FilterByStatus", "FilterByMode", "FilterByModel", "NoFilteredGenerationHistory"
+                     "GenerationRecordSummary", "GenerationCompleted", "GenerationFailed", "UseAgain", "TokenUsage",
+                     "FilterByStatus", "FilterByMode", "FilterByModel", "NoFilteredGenerationHistory", "ViewDetails",
+                     "PromptImprovementHistoryHeading", "PromptImprovementHistoryDescription", "ImprovementGuidance", "ShowImprovementCandidates",
+                     "FilterByProvider", "FilterByDateFrom", "FilterByDateTo", "ProviderOpenAi", "ProviderGenericOpenAiCompatible",
+                     "GenerationPartiallyCompleted"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -565,6 +581,56 @@ public sealed class UiAssetTests
     }
 
     [Fact]
+    public void GenerationHistoryDetailUsesLocalizedResourcesForAllApplicationOwnedUiText()
+    {
+        var resources = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Resources", "UiStrings.resx");
+        var detail = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "GenerationHistoryDetail.razor");
+
+        foreach (var key in new[]
+                 {
+                     "GenerationHistoryDetailPageTitle", "GenerationHistoryDetailHeading", "BackToGenerationHistory",
+                     "GenerationRecordSummary", "GenerationCompleted", "GenerationFailed", "GenerationPartiallyCompleted",
+                     "GenerationPartiallyCompletedDetail", "ShowSystemInstructions", "TokenUsage", "SourceImageUsed",
+                     "OpenGeneratedFile", "PromptImprovementUsed", "UseAgain"
+                 })
+        {
+            Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
+            Assert.Contains($"Strings[\"{key}\"", detail, StringComparison.Ordinal);
+        }
+
+        foreach (var literal in new[] { ">Generation details<", "Back to generation history<" })
+        {
+            Assert.DoesNotContain(literal, detail, StringComparison.Ordinal);
+        }
+
+        AssertNoRawVisibleMarkupText(detail);
+    }
+
+    [Fact]
+    public void GenerationQueueUsesLocalizedResourcesForAllApplicationOwnedUiText()
+    {
+        var resources = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Resources", "UiStrings.resx");
+        var queue = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "GenerationQueue.razor");
+
+        foreach (var key in new[]
+                 {
+                     "QueuePageTitle", "QueueHeading", "QueueDescription", "QueueEmpty", "GenerateEyebrow", "Generating",
+                     "QueuePosition", "MoveTabLeft", "MoveTabRight", "CancelGeneration", "NavGenerate", "Unknown"
+                 })
+        {
+            Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
+            Assert.Contains($"Strings[\"{key}\"", queue, StringComparison.Ordinal);
+        }
+
+        foreach (var literal in new[] { ">Generation queue<", "Nothing is queued or running<" })
+        {
+            Assert.DoesNotContain(literal, queue, StringComparison.Ordinal);
+        }
+
+        AssertNoRawVisibleMarkupText(queue);
+    }
+
+    [Fact]
     public void SavedSettingsUsesLocalizedResourcesForAllApplicationOwnedUiText()
     {
         var resources = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Resources", "UiStrings.resx");
@@ -576,7 +642,7 @@ public sealed class UiAssetTests
                      "SavedSettingSummary", "UseSettings", "ConfirmRecycleSavedSettings", "RecycleSavedSettingsWarning",
                      "HideRecycledSavedSettings", "ShowRecycledSavedSettings", "NoRecycledSavedSettings",
                      "ConfirmPermanentlyDeleteSavedSettings", "PermanentlyDeleteSavedSettingsWarning", "DeletePermanently",
-                     "SavedSettingsRecycled", "SavedSettingsRestored", "SavedSettingsPermanentlyDeleted"
+                     "SavedSettingsRecycled", "SavedSettingsRestored", "SavedSettingsPermanentlyDeleted", "NeedsReview"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

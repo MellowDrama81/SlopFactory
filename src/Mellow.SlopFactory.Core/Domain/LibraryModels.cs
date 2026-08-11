@@ -627,6 +627,12 @@ public sealed record GenericConnectionModalitySettings(
     public static readonly GenericConnectionModalitySettings Default = new(true, null, true, null, true, null);
 }
 
+public enum TextResultFormat
+{
+    Markdown = 0,
+    PlainText = 1
+}
+
 public sealed record Model(
     string Id,
     string ConnectionId,
@@ -637,7 +643,9 @@ public sealed record Model(
     LibraryRecordState State,
     DateTimeOffset CreatedAt,
     DateTimeOffset ModifiedAt,
-    DateTimeOffset? RecycledAt);
+    DateTimeOffset? RecycledAt,
+    bool NeedsReview = false,
+    TextResultFormat TextFormat = TextResultFormat.Markdown);
 
 public sealed record ProviderModelInfo(
     string ProviderModelId,
@@ -667,7 +675,8 @@ public sealed record TextGenerationSourceImage(
 public enum GenerationStatus
 {
     Completed = 0,
-    Failed = 1
+    Failed = 1,
+    PartiallyCompleted = 2
 }
 
 public sealed record GenerationRecord(
@@ -688,7 +697,26 @@ public sealed record GenerationRecord(
     IReadOnlyList<string> ResultFileIds,
     int? PromptTokens = null,
     int? CompletionTokens = null,
-    string? SourceFileId = null);
+    string? SourceFileId = null,
+    string? PromptImprovementRecordId = null,
+    TextResultFormat? TextFormat = null);
+
+public sealed record PromptImprovementRecord(
+    string Id,
+    string? ModelId,
+    string ModelLabel,
+    string ProviderModelId,
+    ProviderType ProviderType,
+    string RawPrompt,
+    string? Guidance,
+    string TemplateVersion,
+    GenerationStatus Status,
+    string? ErrorMessage,
+    IReadOnlyList<string> Candidates,
+    int? PromptTokens,
+    int? CompletionTokens,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CompletedAt);
 
 public sealed record SavedGenerationSetting(
     string Id,
@@ -704,4 +732,20 @@ public sealed record SavedGenerationSetting(
     DateTimeOffset CreatedAt,
     DateTimeOffset ModifiedAt,
     DateTimeOffset? RecycledAt,
-    string? SourceFileId = null);
+    string? SourceFileId = null,
+    bool NeedsReview = false);
+
+public sealed record GenerationDraft(
+    string Id,
+    string? CustomTitle,
+    int TabOrder,
+    string? ModelId,
+    string Prompt,
+    string? SystemInstructions,
+    string? SourceFileId,
+    int ResultCount,
+    string DestinationFolderId,
+    string? ImprovementModelId,
+    string? ImprovementGuidance,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ModifiedAt);

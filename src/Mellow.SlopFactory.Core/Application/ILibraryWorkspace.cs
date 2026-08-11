@@ -104,16 +104,20 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<Model>> GetActiveModelsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Model>> GetRecycledModelsAsync(CancellationToken cancellationToken = default);
     Task<Model> GetModelAsync(string modelId, CancellationToken cancellationToken = default);
-    Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, CancellationToken cancellationToken = default);
-    Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, CancellationToken cancellationToken = default);
+    Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat = TextResultFormat.Markdown, CancellationToken cancellationToken = default);
+    Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat = TextResultFormat.Markdown, CancellationToken cancellationToken = default);
+    Task<Model> MarkModelReviewedAsync(string modelId, CancellationToken cancellationToken = default);
     Task RecycleModelAsync(string modelId, CancellationToken cancellationToken = default);
     Task RestoreModelAsync(string modelId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteModelAsync(string modelId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken = default);
     Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
-    Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, CancellationToken cancellationToken = default);
-    Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, CancellationToken cancellationToken = default);
+    Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default);
+    Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PromptImprovementRecord>> GetPromptImprovementHistoryAsync(CancellationToken cancellationToken = default);
+    Task<PromptImprovementRecord> RecordPromptImprovementAttemptAsync(string modelId, string rawPrompt, string? guidance, string templateVersion, IReadOnlyList<string>? candidates, string? errorMessage, int? promptTokens = null, int? completionTokens = null, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<SavedGenerationSetting>> GetActiveSavedSettingsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SavedGenerationSetting>> GetRecycledSavedSettingsAsync(CancellationToken cancellationToken = default);
@@ -123,6 +127,14 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
     Task RestoreSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<GenerationDraft>> GetDraftsAsync(CancellationToken cancellationToken = default);
+    Task<GenerationDraft> GetDraftAsync(string draftId, CancellationToken cancellationToken = default);
+    Task<GenerationDraft> CreateDraftAsync(CancellationToken cancellationToken = default);
+    Task<GenerationDraft> ReplaceDraftStateAsync(string draftId, string? customTitle, string? modelId, string prompt, string? systemInstructions, string? sourceFileId, int resultCount, string destinationFolderId, string? improvementModelId, string? improvementGuidance, CancellationToken cancellationToken = default);
+    Task<GenerationDraft> DuplicateDraftAsync(string draftId, CancellationToken cancellationToken = default);
+    Task DeleteDraftAsync(string draftId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<GenerationDraft>> ReorderDraftsAsync(IReadOnlyList<string> orderedDraftIds, CancellationToken cancellationToken = default);
 }
 
 public interface ILibraryWorkspaceFactory

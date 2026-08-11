@@ -1286,15 +1286,15 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 1", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 1", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycledLinksAsync());
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
         Assert.False(File.Exists(databasePath + ".upgrade-backup"));
-        Assert.Contains("\"schemaVersion\": 18", await File.ReadAllTextAsync(manifestPath));
+        Assert.Contains("\"schemaVersion\": 22", await File.ReadAllTextAsync(manifestPath));
     }
 
     [Fact]
@@ -1315,11 +1315,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 2", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 2", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
     }
 
@@ -1349,12 +1349,12 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 3", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 3", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
         var file = await upgraded.GetFileAsync(fileId);
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         Assert.Equal("current-name.txt", file.OriginalFileName);
     }
 
@@ -1382,11 +1382,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 4", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 4", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         Assert.Equal(FileContentState.Healthy, (await upgraded.GetFileAsync(fileId)).ContentState);
     }
 
@@ -1418,12 +1418,12 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 5", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 5", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
         var provenance = await upgraded.GetFileContentProvenanceAsync(fileId);
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         Assert.Equal(originalHash, provenance.OriginalContentHash);
         Assert.Null(provenance.ReplacedAt);
     }
@@ -1451,11 +1451,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 14", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 14", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         var catalogue = await upgraded.GetModelCatalogueAsync(connectionId);
         Assert.Null(catalogue.RetrievedAt);
         Assert.False(catalogue.PossiblyStale);
@@ -1487,11 +1487,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 15", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 15", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         var reloaded = await upgraded.GetConnectionAsync(connectionId);
         Assert.Null(reloaded.TimeoutSeconds);
         var updated = await upgraded.UpdateConnectionAsync(connectionId, reloaded.Label, reloaded.BaseUrl, reloaded.CredentialHeaderName, reloaded.AuthPrefix, 45);
@@ -1521,11 +1521,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 16", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 16", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         var reloaded = await upgraded.GetConnectionAsync(connectionId);
         Assert.Empty(reloaded.AdditionalHeaders!);
         var updated = await upgraded.UpdateConnectionAsync(connectionId, reloaded.Label, reloaded.BaseUrl, reloaded.CredentialHeaderName, reloaded.AuthPrefix, reloaded.TimeoutSeconds, [new ConnectionHeader("X-Organization", "org_123")]);
@@ -1555,11 +1555,11 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 18", "\"schemaVersion\": 17", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 17", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
-        Assert.Equal(18, upgraded.Descriptor.SchemaVersion);
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
         var reloaded = await upgraded.GetConnectionAsync(connectionId);
         Assert.True(reloaded.GenericModalitySettings!.ModelsEnabled);
         Assert.True(reloaded.GenericModalitySettings!.TextGenerationEnabled);
@@ -1568,6 +1568,149 @@ public sealed class LibraryWorkspaceTests
             new GenericConnectionModalitySettings(true, null, false, null, true, "v2/images/generations"));
         Assert.False(updated.GenericModalitySettings!.TextGenerationEnabled);
         Assert.Equal("v2/images/generations", updated.GenericModalitySettings!.ImageGenerationPathOverride);
+    }
+
+    [Fact]
+    public async Task OpeningVersionEighteenLibraryAddsPromptImprovementHistory()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        string modelId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            var connection = await created.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+            var model = await created.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+            modelId = model.Id;
+        }
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "ALTER TABLE generation_records DROP COLUMN prompt_improvement_record_id; DROP TABLE prompt_improvement_records; UPDATE library_info SET schema_version=18 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 18", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
+        Assert.Empty(await upgraded.GetPromptImprovementHistoryAsync());
+        var improvement = await upgraded.RecordPromptImprovementAttemptAsync(modelId, "raw prompt", "guidance", "v1", ["candidate one"], null, 10, 5);
+        Assert.Equal(GenerationStatus.Completed, improvement.Status);
+        var record = await upgraded.RecordTextGenerationResultAsync(modelId, "candidate one", 1, upgraded.Descriptor.GeneratedFolderId, ["generated text"], null, promptImprovementRecordId: improvement.Id);
+        Assert.Equal(improvement.Id, record.PromptImprovementRecordId);
+    }
+
+    [Fact]
+    public async Task OpeningVersionNineteenLibraryAddsNeedsReviewColumns()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        string modelId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            var connection = await created.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+            var model = await created.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+            modelId = model.Id;
+        }
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "ALTER TABLE models DROP COLUMN needs_review; ALTER TABLE saved_generation_settings DROP COLUMN needs_review; UPDATE library_info SET schema_version=19 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 19", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
+        var reloaded = await upgraded.GetModelAsync(modelId);
+        Assert.False(reloaded.NeedsReview);
+        var updated = await upgraded.UpdateModelAsync(modelId, reloaded.Label, "gpt-4o-mini", reloaded.Mode, reloaded.SupportsSystemInstructions);
+        Assert.True(updated.NeedsReview);
+    }
+
+    [Fact]
+    public async Task OpeningVersionTwentyLibraryAddsTextResultFormat()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        string modelId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            var connection = await created.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+            var model = await created.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+            modelId = model.Id;
+        }
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "ALTER TABLE models DROP COLUMN text_format; ALTER TABLE generation_records DROP COLUMN text_format; UPDATE library_info SET schema_version=20 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 20", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
+        var reloaded = await upgraded.GetModelAsync(modelId);
+        Assert.Equal(TextResultFormat.Markdown, reloaded.TextFormat);
+        var updated = await upgraded.UpdateModelAsync(modelId, reloaded.Label, reloaded.ProviderModelId, reloaded.Mode, reloaded.SupportsSystemInstructions, TextResultFormat.PlainText);
+        Assert.Equal(TextResultFormat.PlainText, updated.TextFormat);
+        var record = await upgraded.RecordTextGenerationResultAsync(modelId, "a prompt", 1, upgraded.Descriptor.GeneratedFolderId, ["generated text"], null);
+        Assert.Equal(TextResultFormat.PlainText, record.TextFormat);
+        var file = await upgraded.GetFileAsync(record.ResultFileIds[0]);
+        Assert.Equal("text/plain", file.MediaType);
+        Assert.EndsWith(".txt", file.DisplayName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OpeningVersionTwentyOneLibraryAddsGenerationDrafts()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE generation_drafts; UPDATE library_info SET schema_version=21 WHERE singleton=1;";
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 22", "\"schemaVersion\": 21", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+
+        Assert.Equal(22, upgraded.Descriptor.SchemaVersion);
+        var draft = await upgraded.CreateDraftAsync();
+        Assert.Equal(upgraded.Descriptor.GeneratedFolderId, draft.DestinationFolderId);
+        Assert.Equal(1, draft.ResultCount);
+        var updated = await upgraded.ReplaceDraftStateAsync(draft.Id, "Custom Title", null, "a prompt", null, null, 2, upgraded.Descriptor.GeneratedFolderId, null, null);
+        Assert.Equal("Custom Title", updated.CustomTitle);
+        Assert.Equal("a prompt", updated.Prompt);
     }
 
     [Fact]

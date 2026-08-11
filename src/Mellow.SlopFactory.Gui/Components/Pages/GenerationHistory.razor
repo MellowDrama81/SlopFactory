@@ -27,6 +27,7 @@ else
                     <option value="">@Strings["All"]</option>
                     <option value="@GenerationStatus.Completed">@Strings["GenerationCompleted"]</option>
                     <option value="@GenerationStatus.Failed">@Strings["GenerationFailed"]</option>
+                    <option value="@GenerationStatus.PartiallyCompleted">@Strings["GenerationPartiallyCompleted"]</option>
                 </select>
             </label>
             <label for="history-mode-filter">@Strings["FilterByMode"]
@@ -44,6 +45,19 @@ else
                         <option value="@modelLabel">@modelLabel</option>
                     }
                 </select>
+            </label>
+            <label for="history-provider-filter">@Strings["FilterByProvider"]
+                <select id="history-provider-filter" @bind="_providerFilter">
+                    <option value="">@Strings["All"]</option>
+                    <option value="@ProviderType.OpenAi">@Strings["ProviderOpenAi"]</option>
+                    <option value="@ProviderType.GenericOpenAiCompatible">@Strings["ProviderGenericOpenAiCompatible"]</option>
+                </select>
+            </label>
+            <label for="history-date-from-filter">@Strings["FilterByDateFrom"]
+                <input id="history-date-from-filter" type="date" @bind="_dateFromFilter" />
+            </label>
+            <label for="history-date-to-filter">@Strings["FilterByDateTo"]
+                <input id="history-date-to-filter" type="date" @bind="_dateToFilter" />
             </label>
             <button type="button" class="secondary" @onclick="ClearFilters">@Strings["ClearSearchAndFilters"]</button>
         </div>
@@ -64,12 +78,33 @@ else
                         <small>@Strings["GenerationRecordSummary", StatusLabel(record.Status), record.CreatedAt.ToLocalTime().ToString("g"), record.ResultFileIds.Count]</small>
                     </div>
                     <p>@record.Prompt</p>
-                    @if (!string.IsNullOrEmpty(record.SystemInstructions))
+                    <div class="actions">
+                        <a class="button" href="@($"/generation-history/{record.Id}")">@Strings["ViewDetails"]</a>
+                        <a class="ghost" href="@($"/generate/history/{record.Id}")">@Strings["UseAgain"]</a>
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+}
+
+@if (LibraryState.Workspace is not null && _improvementRecords.Count > 0)
+{
+    <section class="panel">
+        <h2>@Strings["PromptImprovementHistoryHeading"]</h2>
+        <p class="muted">@Strings["PromptImprovementHistoryDescription"]</p>
+        <ul class="metadata-list">
+            @foreach (var record in _improvementRecords)
+            {
+                <li>
+                    <div>
+                        <strong>@record.ModelLabel</strong>
+                        <small>@Strings["GenerationRecordSummary", StatusLabel(record.Status), record.CreatedAt.ToLocalTime().ToString("g"), record.Candidates.Count]</small>
+                    </div>
+                    <p>@record.RawPrompt</p>
+                    @if (!string.IsNullOrEmpty(record.Guidance))
                     {
-                        <details>
-                            <summary>@Strings["ShowSystemInstructions"]</summary>
-                            <p>@record.SystemInstructions</p>
-                        </details>
+                        <p class="muted">@Strings["ImprovementGuidance"]: @record.Guidance</p>
                     }
                     @if (record.ErrorMessage is not null)
                     {
@@ -79,28 +114,33 @@ else
                     {
                         <p class="muted">@Strings["TokenUsage", record.PromptTokens?.ToString() ?? Strings["Unknown"], record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
                     }
-                    <div class="actions">
-                        <a class="ghost" href="@($"/generate/history/{record.Id}")">@Strings["UseAgain"]</a>
-                        @if (record.SourceFileId is not null)
-                        {
-                            <a class="ghost" href="@($"/file/{record.SourceFileId}")">@Strings["SourceImageUsed"]</a>
-                        }
-                        @foreach (var fileId in record.ResultFileIds)
-                        {
-                            <a class="ghost" href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a>
-                        }
-                    </div>
+                    @if (record.Candidates.Count > 0)
+                    {
+                        <details>
+                            <summary>@Strings["ShowImprovementCandidates", record.Candidates.Count]</summary>
+                            <ul class="metadata-list">
+                                @foreach (var candidate in record.Candidates)
+                                {
+                                    <li>@candidate</li>
+                                }
+                            </ul>
+                        </details>
+                    }
                 </li>
             }
         </ul>
-    }
+    </section>
 }
 
 @code {
     private IReadOnlyList<GenerationRecord> _records = [];
+    private IReadOnlyList<PromptImprovementRecord> _improvementRecords = [];
     private string _statusFilter = string.Empty;
     private string _modeFilter = string.Empty;
     private string _modelFilter = string.Empty;
+    private string _providerFilter = string.Empty;
+    private DateOnly? _dateFromFilter;
+    private DateOnly? _dateToFilter;
 
     protected override async Task OnInitializedAsync()
     {
@@ -108,6 +148,7 @@ else
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
         _records = await workspace.GetGenerationHistoryAsync();
+        _improvementRecords = await workspace.GetPromptImprovementHistoryAsync();
     }
 
     private IReadOnlyList<string> _knownModelLabels => _records.Select(record => record.ModelLabel).Distinct(StringComparer.Ordinal).OrderBy(label => label, StringComparer.Ordinal).ToArray();
@@ -116,6 +157,9 @@ else
         .Where(record => string.IsNullOrEmpty(_statusFilter) || record.Status.ToString() == _statusFilter)
         .Where(record => string.IsNullOrEmpty(_modeFilter) || record.Mode.ToString() == _modeFilter)
         .Where(record => string.IsNullOrEmpty(_modelFilter) || string.Equals(record.ModelLabel, _modelFilter, StringComparison.Ordinal))
+        .Where(record => string.IsNullOrEmpty(_providerFilter) || record.ProviderType.ToString() == _providerFilter)
+        .Where(record => _dateFromFilter is not { } from || DateOnly.FromDateTime(record.CreatedAt.ToLocalTime().DateTime) >= from)
+        .Where(record => _dateToFilter is not { } to || DateOnly.FromDateTime(record.CreatedAt.ToLocalTime().DateTime) <= to)
         .ToArray();
 
     private void ClearFilters()
@@ -123,12 +167,16 @@ else
         _statusFilter = string.Empty;
         _modeFilter = string.Empty;
         _modelFilter = string.Empty;
+        _providerFilter = string.Empty;
+        _dateFromFilter = null;
+        _dateToFilter = null;
     }
 
     private string StatusLabel(GenerationStatus status) => status switch
     {
         GenerationStatus.Completed => Strings["GenerationCompleted"],
         GenerationStatus.Failed => Strings["GenerationFailed"],
+        GenerationStatus.PartiallyCompleted => Strings["GenerationPartiallyCompleted"],
         _ => status.ToString()
     };
 }

@@ -36,6 +36,10 @@ else
                         <div>
                             <strong>@setting.Title</strong>
                             <small>@Strings["SavedSettingSummary", setting.ModelLabel, ModeLabel(setting.Mode)]</small>
+                            @if (setting.NeedsReview)
+                            {
+                                <span class="notice error">@Strings["NeedsReview"]</span>
+                            }
                         </div>
                         <p>@setting.Prompt</p>
                         <a class="ghost" href="@($"/generate/{setting.Id}")">@Strings["UseSettings"]</a>
