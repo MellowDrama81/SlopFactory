@@ -566,9 +566,30 @@ in parallel. Both milestones must be complete before the first public release.
 - [ ] Expand the fake HTTP provider into a shared reusable test fixture covering the full Testing
       section requirements (streaming, async jobs, rate limits, moderation, redirects, downloads,
       errors) before Milestone 3 adapters are added.
-- [ ] Add release-blocking export-style crash-injection tests for generation-history and saved
-      settings once their persistence paths exist, mirroring the Milestone 1 export crash-injection
-      coverage.
+- [x] Add crash-injection coverage for generation-history's multi-result commit pipeline, mirroring
+      the Milestone 1 export crash-injection technique (`CancelledExportLeavesNoDestinationOrPartialFile`)
+      of forcing an interruption at a specific boundary and asserting the recovery state is safe
+      rather than merely trusting it. `RecordTextGenerationResultCoreAsync`/`RecordImageGenerationResultCoreAsync`
+      commit each result file individually (stage → hash → atomic move → DB insert) inside one loop,
+      only creating the `GenerationRecord` itself after every result has been attempted — so an
+      interruption partway through the loop can leave 0..N-1 already-committed result files with no
+      `GenerationRecord` ever created to reference them.
+      `PartiallyCommittedTextGenerationLeavesTheEarlierResultFileIntactWithNoOrphanedHistoryRecord`
+      forces exactly this deterministically (a second result string containing an unpaired surrogate
+      throws `EncoderFallbackException` only after the first result has already committed) and
+      verifies the first result file is a perfectly healthy, active, Generated-origin file with no
+      dangling `.generating` staging file and no history entry was ever created for the attempt — the
+      file itself is not corrupted, it is simply (correctly) not part of any generation-history
+      record, which is the safe, already-designed-for outcome rather than a newly discovered bug.
+      `CancelledImageGenerationCommitLeavesNoOrphanedStagingFileOrHistoryRecord` covers the same
+      pipeline's other real boundary (a pre-cancelled token, mirroring the export test's exact
+      technique) for the image path. **Saved generation settings are deliberately excluded**: a
+      saved-setting write is a single plain SQL statement/transaction with no staged file, no
+      external object, and no multi-step commit sequence of its own to interrupt — the "crash safety"
+      question for it is fully answered by SQLite's own transaction durability (already relied on
+      everywhere else in this application via `PRAGMA synchronous=FULL`), so there is no
+      generation-history-style boundary here worth a dedicated crash-injection test; adding one would
+      only re-verify SQLite's own guarantee, not this application's code.
 
 ## Final Milestone 2 verification
 

@@ -66,6 +66,27 @@ public sealed class GenerationRecordTests
     }
 
     [Fact]
+    public async Task PartiallyCommittedTextGenerationLeavesTheEarlierResultFileIntactWithNoOrphanedHistoryRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() =>
+            workspace.RecordTextGenerationResultAsync(model.Id, "Write a haiku", 2, workspace.Descriptor.GeneratedFolderId, ["First result", "\uD800"], null));
+
+        var committed = Assert.Single(await workspace.GetActiveFilesAsync());
+        Assert.Equal(FileOrigin.Generated, committed.Origin);
+        var content = await workspace.ReadTextFileAsync(committed.Id);
+        Assert.Equal("First result", content.Content);
+        Assert.Empty(await workspace.GetGenerationHistoryAsync());
+        Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(root, ".staging")), path => path.EndsWith(".generating", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RecordingATextGenerationWithSystemInstructionsPersistsAndReloadsThem()
     {
         using var temporary = new TemporaryDirectory();
@@ -131,6 +152,26 @@ public sealed class GenerationRecordTests
         Assert.Equal("image/png", file.MediaType);
         Assert.EndsWith(".png", file.ManagedName, StringComparison.Ordinal);
         Assert.Equal(PngSignatureBytes.LongLength, file.ByteSize);
+    }
+
+    [Fact]
+    public async Task CancelledImageGenerationCommitLeavesNoOrphanedStagingFileOrHistoryRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Image Model", connection.Id, "gpt-image-1", GenerationMode.Image, false);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            workspace.RecordImageGenerationResultAsync(model.Id, "A watercolor fox", 1, workspace.Descriptor.GeneratedFolderId, [PngSignatureBytes], null, null, cancellation.Token));
+
+        Assert.Empty(await workspace.GetActiveFilesAsync());
+        Assert.Empty(await workspace.GetGenerationHistoryAsync());
+        Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(root, ".staging")), path => path.EndsWith(".generating", StringComparison.Ordinal));
     }
 
     [Fact]
