@@ -115,6 +115,7 @@ public sealed class GenerationQueueService
     }
 
     public event EventHandler? Changed;
+    public event EventHandler<GenerationJobOutcome>? JobCompleted;
 
     public int QueuedCount { get { lock (_gate) return _jobsById.Values.Count(job => job.Phase == GenerationJobPhase.Queued); } }
     public int RunningCount { get { lock (_gate) return _runningTotal; } }
@@ -321,6 +322,7 @@ public sealed class GenerationQueueService
             _runningTotal--;
         }
         cancellation.Dispose();
+        JobCompleted?.Invoke(this, outcome);
         RaiseChanged();
         Pump();
     }

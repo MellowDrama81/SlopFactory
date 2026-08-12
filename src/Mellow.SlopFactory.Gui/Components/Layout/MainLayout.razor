@@ -6,9 +6,13 @@
 @inject IThemePreferenceService Theme
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject CredentialReconciliationService CredentialReconciliation
+@inject GenerationNotificationCoordinator NotificationCoordinator
+@inject INotificationService Notifications
+@inject NavigationManager Navigation
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
+@using Mellow.SlopFactory.Domain
 
 <div class="app-shell @Theme.CssClass">
     <aside class="sidebar" aria-label="@Strings["PrimaryNavigation"]">
@@ -79,8 +83,20 @@
         Theme.Changed += OnPendingChanged;
         ScanRecommendation.Changed += OnPendingChanged;
         CredentialReconciliation.Start();
+        NotificationCoordinator.Start();
+        NotificationCoordinator.NotifyRequested += OnNotifyRequested;
+        Notifications.Tapped += OnNotificationTapped;
     }
     private void OnPendingChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+    private void OnNotifyRequested(object? sender, GenerationRecord record) => Notifications.Show(record.Id, record.ModelLabel, StatusLabel(record.Status));
+    private void OnNotificationTapped(object? sender, string recordId) => _ = InvokeAsync(() => Navigation.NavigateTo($"/generation-history/{recordId}"));
+    private string StatusLabel(GenerationStatus status) => status switch
+    {
+        GenerationStatus.Completed => Strings["GenerationCompleted"],
+        GenerationStatus.Failed => Strings["GenerationFailed"],
+        GenerationStatus.PartiallyCompleted => Strings["GenerationPartiallyCompleted"],
+        _ => status.ToString()
+    };
     public void Dispose()
     {
         IncomingImports.PendingChanged -= OnPendingChanged;
@@ -88,5 +104,7 @@
         Queue.Changed -= OnPendingChanged;
         Theme.Changed -= OnPendingChanged;
         ScanRecommendation.Changed -= OnPendingChanged;
+        NotificationCoordinator.NotifyRequested -= OnNotifyRequested;
+        Notifications.Tapped -= OnNotificationTapped;
     }
 }

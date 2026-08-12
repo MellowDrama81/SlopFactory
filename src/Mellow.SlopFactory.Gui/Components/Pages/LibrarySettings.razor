@@ -6,6 +6,7 @@
 @inject IRecentLibraryService RecentLibraries
 @inject IThemePreferenceService Theme
 @inject GenerationQueueService Queue
+@inject GenerationNotificationCoordinator NotificationCoordinator
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject IPlatformFileActionService PlatformFiles
 @using Mellow.SlopFactory.Application
@@ -42,6 +43,12 @@
         <InputNumber id="device-cap" @bind-Value="_queueCapForm.Value" min="@GenerationQueueService.MinDeviceCap" max="@GenerationQueueService.MaxDeviceCap" />
         <button type="submit">@Strings["SaveDeviceCap"]</button>
     </EditForm>
+</section>
+
+<section class="panel">
+    <h2>@Strings["GenerationNotificationsHeading"]</h2>
+    <p class="muted">@Strings["GenerationNotificationsHelp"]</p>
+    <label><input type="checkbox" checked="@NotificationCoordinator.Enabled" @onchange="ToggleNotificationsAsync" /> @Strings["EnableGenerationNotifications"]</label>
 </section>
 
 <section class="panel">
@@ -229,6 +236,12 @@
         Queue.SetDeviceCap(_queueCapForm.Value);
         _queueCapForm.Value = Queue.DeviceCap;
         _message = Strings["DeviceCapSaved"];
+    }
+    private async Task ToggleNotificationsAsync(ChangeEventArgs args)
+    {
+        var enable = args.Value is bool value && value;
+        var granted = await NotificationCoordinator.SetEnabledAsync(enable);
+        _message = Strings[granted ? (enable ? "GenerationNotificationsEnabled" : "GenerationNotificationsDisabled") : "NotificationPermissionDenied"];
     }
     private IReadOnlyList<AppLibraryLocation> _availableLocations = [];
     private LocationForm _form = new();

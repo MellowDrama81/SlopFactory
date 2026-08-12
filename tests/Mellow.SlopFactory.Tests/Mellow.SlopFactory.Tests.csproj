@@ -28,5 +28,8 @@
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\GenerationQueueService.cs" Link="Services\GenerationQueueService.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\CredentialReconciliationService.cs" Link="Services\CredentialReconciliationService.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IDeviceEnergyStateProvider.cs" Link="Services\IDeviceEnergyStateProvider.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IAppLifecycleState.cs" Link="Services\IAppLifecycleState.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\INotificationService.cs" Link="Services\INotificationService.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\GenerationNotificationCoordinator.cs" Link="Services\GenerationNotificationCoordinator.cs" />
   </ItemGroup>
 </Project>

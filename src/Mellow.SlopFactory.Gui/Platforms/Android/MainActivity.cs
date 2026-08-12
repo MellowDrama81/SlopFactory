@@ -3,6 +3,7 @@ using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using Android.Provider;
+using AndroidX.Core.App;
 using Mellow.SlopFactory.Gui.Services;
 
 namespace Mellow.SlopFactory.Gui;
@@ -18,8 +19,11 @@ public sealed class MainActivity : MauiAppCompatActivity
 {
     private const int PickTreeRequest = 4101;
     private const int CreateDocumentRequest = 4102;
+    private const int NotificationPermissionRequest = 4103;
+    private const string NotificationRecordIdExtra = "generationRecordId";
     private TaskCompletionSource<Android.Net.Uri?>? _pickTreeCompletion;
     private TaskCompletionSource<Android.Net.Uri?>? _createDocumentCompletion;
+    private TaskCompletionSource<bool>? _notificationPermissionCompletion;
     public static MainActivity? Current { get; private set; }
 
     protected override void OnCreate(Bundle? savedInstanceState)
@@ -27,6 +31,7 @@ public sealed class MainActivity : MauiAppCompatActivity
         base.OnCreate(savedInstanceState);
         Current = this;
         QueueSharedContent(Intent);
+        HandleNotificationTap(Intent);
     }
 
     protected override void OnDestroy()
@@ -34,7 +39,33 @@ public sealed class MainActivity : MauiAppCompatActivity
         if (ReferenceEquals(Current, this)) Current = null;
         _pickTreeCompletion?.TrySetCanceled();
         _createDocumentCompletion?.TrySetCanceled();
+        _notificationPermissionCompletion?.TrySetCanceled();
         base.OnDestroy();
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("android33.0")]
+    public Task<bool> RequestNotificationPermissionAsync()
+    {
+        if (_notificationPermissionCompletion is not null) throw new InvalidOperationException("A notification-permission request is already in progress.");
+        _notificationPermissionCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        ActivityCompat.RequestPermissions(this, [Android.Manifest.Permission.PostNotifications], NotificationPermissionRequest);
+        return _notificationPermissionCompletion.Task;
+    }
+
+    public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Android.Content.PM.Permission[] grantResults)
+    {
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != NotificationPermissionRequest) return;
+        var completion = _notificationPermissionCompletion;
+        _notificationPermissionCompletion = null;
+        completion?.TrySetResult(grantResults.Length > 0 && grantResults[0] == Android.Content.PM.Permission.Granted);
+    }
+
+    private static void HandleNotificationTap(Intent? intent)
+    {
+        var recordId = intent?.GetStringExtra(NotificationRecordIdExtra);
+        if (string.IsNullOrEmpty(recordId)) return;
+        if (IPlatformApplication.Current?.Services.GetService<INotificationService>() is MauiNotificationService notifications) notifications.RaiseTapped(recordId);
     }
 
     public Task<Android.Net.Uri?> PickDocumentTreeAsync(CancellationToken cancellationToken)
@@ -90,6 +121,7 @@ public sealed class MainActivity : MauiAppCompatActivity
         base.OnNewIntent(intent);
         Intent = intent;
         QueueSharedContent(intent);
+        HandleNotificationTap(intent);
     }
 
     private void QueueSharedContent(Intent? intent)

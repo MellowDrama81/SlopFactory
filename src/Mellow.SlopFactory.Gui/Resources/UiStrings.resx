@@ -28,6 +28,12 @@
   <data name="DeviceWideSubmissionCapHelp" xml:space="preserve"><value>The maximum number of generation requests this device runs at the same time, across all connections.</value></data>
   <data name="SaveDeviceCap" xml:space="preserve"><value>Save cap</value></data>
   <data name="DeviceCapSaved" xml:space="preserve"><value>Submission cap saved.</value></data>
+  <data name="GenerationNotificationsHeading" xml:space="preserve"><value>Generation notifications</value></data>
+  <data name="GenerationNotificationsHelp" xml:space="preserve"><value>Show an OS notification with the model and status when a generation finishes or fails while SlopFactory is backgrounded or unfocused. Notifications never include prompts, filenames or provider error details.</value></data>
+  <data name="EnableGenerationNotifications" xml:space="preserve"><value>Enable generation notifications</value></data>
+  <data name="GenerationNotificationsEnabled" xml:space="preserve"><value>Generation notifications enabled.</value></data>
+  <data name="GenerationNotificationsDisabled" xml:space="preserve"><value>Generation notifications disabled.</value></data>
+  <data name="NotificationPermissionDenied" xml:space="preserve"><value>Generation notifications could not be enabled because notification permission was denied.</value></data>
   <data name="ActiveLibrary" xml:space="preserve"><value>Active library</value></data>
   <data name="Name" xml:space="preserve"><value>Name</value></data>
   <data name="Location" xml:space="preserve"><value>Location</value></data>

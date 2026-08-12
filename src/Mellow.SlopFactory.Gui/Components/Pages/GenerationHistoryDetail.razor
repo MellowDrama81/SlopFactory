@@ -1,5 +1,7 @@
 @page "/generation-history/{Id}"
+@implements IDisposable
 @inject AppLibraryState LibraryState
+@inject GenerationNotificationCoordinator NotificationCoordinator
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -78,6 +80,7 @@ else if (_record is not null)
 
     protected override async Task OnInitializedAsync()
     {
+        NotificationCoordinator.VisibleGenerationRecordId = Id;
         await LibraryState.InitializeAsync();
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
@@ -90,6 +93,8 @@ else if (_record is not null)
             _message = exception.Message;
         }
     }
+
+    public void Dispose() => NotificationCoordinator.VisibleGenerationRecordId = null;
 
     private string StatusLabel(GenerationStatus status) => status switch
     {

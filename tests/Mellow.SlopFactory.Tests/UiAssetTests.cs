@@ -269,6 +269,16 @@ public sealed class UiAssetTests
         Assert.Contains("Strings[\"DeviceWideSubmissionCapHelp\"]", settings, StringComparison.Ordinal);
         Assert.Contains("Strings[\"SaveDeviceCap\"]", settings, StringComparison.Ordinal);
         Assert.Contains("Strings[\"DeviceCapSaved\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("name=\"GenerationNotificationsHeading\"", resources, StringComparison.Ordinal);
+        Assert.Contains("name=\"GenerationNotificationsHelp\"", resources, StringComparison.Ordinal);
+        Assert.Contains("name=\"EnableGenerationNotifications\"", resources, StringComparison.Ordinal);
+        Assert.Contains("name=\"GenerationNotificationsEnabled\"", resources, StringComparison.Ordinal);
+        Assert.Contains("name=\"GenerationNotificationsDisabled\"", resources, StringComparison.Ordinal);
+        Assert.Contains("name=\"NotificationPermissionDenied\"", resources, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"GenerationNotificationsHeading\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"GenerationNotificationsHelp\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"EnableGenerationNotifications\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("NotificationCoordinator.Enabled", settings, StringComparison.Ordinal);
         Assert.Contains("GenerationQueueService.MinDeviceCap", settings, StringComparison.Ordinal);
         Assert.Contains("GenerationQueueService.MaxDeviceCap", settings, StringComparison.Ordinal);
         Assert.Contains("Strings[\"IntegrityProgress\",", settings, StringComparison.Ordinal);

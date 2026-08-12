@@ -469,6 +469,41 @@ public sealed class GenerationQueueServiceTests
         _ = runningJobId;
     }
 
+    [Fact]
+    public async Task JobCompletedFiresExactlyOnceForEveryFinishedJobAcrossSuccessFailureAndCancellation()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var modelKept = await workspace.CreateModelAsync("Kept", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var modelDoomed = await workspace.CreateModelAsync("Doomed", connection.Id, "gpt-4o-mini", GenerationMode.Text, true);
+        await workspace.RecycleModelAsync(modelDoomed.Id);
+        await workspace.PermanentlyDeleteModelAsync(modelDoomed.Id);
+        var completions = new List<GenerationJobOutcome>();
+        queue.JobCompleted += (_, outcome) => { lock (completions) completions.Add(outcome); };
+
+        queue.Enqueue(Snapshot("draft-success", modelKept.Id, "success", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("success"));
+        adapter.Complete("success", new TextGenerationResult(["r"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-success") is not null);
+
+        var cancelJobId = queue.Enqueue(Snapshot("draft-cancel", modelKept.Id, "cancel-me", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("cancel-me"));
+        queue.Cancel(cancelJobId);
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-cancel") is not null);
+
+        queue.Enqueue(Snapshot("draft-doomed", modelDoomed.Id, "doomed", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-doomed") is not null);
+
+        await WaitUntilAsync(() => completions.Count(outcome => outcome.DraftId is "draft-success" or "draft-cancel" or "draft-doomed") == 3);
+        await Task.Delay(50);
+
+        Assert.Single(completions, outcome => outcome.DraftId == "draft-success" && outcome.Record is not null);
+        Assert.Single(completions, outcome => outcome.DraftId == "draft-cancel" && outcome.Record is null && !outcome.CancelledBeforeSubmission);
+        Assert.Single(completions, outcome => outcome.DraftId == "draft-doomed" && outcome.Record is null && outcome.LocalErrorMessage is not null);
+        Assert.DoesNotContain("doomed", adapter.InvokedPrompts);
+    }
+
     private sealed class FakeProviderAdapter : IProviderAdapter
     {
         private readonly object _gate = new();

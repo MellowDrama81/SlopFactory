@@ -638,8 +638,27 @@ in parallel. Both milestones must be complete before the first public release.
       **Cost unknown** acknowledgement, and confirmation thresholds keyed by currency/credit unit.
 - [ ] Add a local cost-summary view aggregating provider-reported actual cost, filterable by date,
       provider, connection, model and operation type.
-- [ ] Add OS generation-completion/failure notifications (enabled by default off, sanitized
-      content, **Submission outcome needs attention** alert) per Generation Notifications.
+- [x] Add OS generation-completion/failure notifications, disabled by default, toggled from
+      `/library-settings`. `Plugin.LocalNotification` (the community-standard MAUI local-notification
+      package) was evaluated and rejected: its own README states "Only support **iOS** and **Android**
+      for the moment" under Limitations even though its NuGet listing also carries a
+      `net10.0-windows10.0.19041` target — a contradiction that couldn't be resolved from its docs, and
+      Windows is one of this app's two target platforms. Hand-rolled instead, with **zero new NuGet
+      packages**: Windows uses `Microsoft.Windows.AppNotifications`/`.Builder` (Windows App SDK,
+      already a transitive dependency of the MAUI Windows target — this project already ships a
+      packaged `Package.appxmanifest`), Android uses
+      `AndroidX.Core.App.NotificationCompat`/`NotificationManagerCompat` plus a runtime
+      `POST_NOTIFICATIONS` permission request (API 33+ only) gated to only fire when the user enables
+      the setting. `GenerationQueueService` gained a `JobCompleted` event (fired for every finished job,
+      success or failure); `GenerationNotificationCoordinator` gates on the setting, a new
+      `IAppLifecycleState` (wired from `Window.Activated`/`Deactivated`/`Resumed`/`Stopped` in
+      `App.xaml.cs`) being non-foreground, the outcome having a real `GenerationRecord` (local
+      pre-submission failures and cancellations never notify — they never had a record to summarize),
+      and the generation-history detail page for that record not already being open; the notification
+      body is limited to model label + status, never prompts/filenames/provider error details. Tapping
+      a notification navigates to `/generation-history/{id}`. **Excludes** the
+      **Submission Outcome Unknown**/**Submission outcome needs attention** alert variant — this app has
+      no async-job/reconciliation infrastructure, so that state can't occur.
 
 ## Testing infrastructure
 

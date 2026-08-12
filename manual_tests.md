@@ -140,6 +140,19 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** Connections/Models/SavedSettings pages only handle recycling; all restore and permanent-delete actions live in `/recycle-bin`; a recycled connection's models and saved settings are folded into its own entry rather than double-listed; the category filter, batch restore, and Empty Recycle Bin all work correctly across the three new kinds; permanently deleting a connection through the bin (individually or via Empty Recycle Bin, including multiple connections at once) also removes its secure-storage credential entries, not just its database rows; a label/title conflict is reported before restoring rather than failing silently or overwriting.
 
+## MT-11 — Generation-completion OS notifications
+
+1. On Library Settings, confirm **Generation notifications** is off by default and no notification permission has been requested yet.
+2. Turn the toggle on. On Android, confirm the system notification-permission prompt appears at this moment (not before) and only on Android 13+; on Windows, confirm the toggle simply enables with no prompt.
+3. On Android, deny the permission prompt from step 2. Confirm the toggle reports it could not be enabled and stays off.
+4. Re-enable it and grant permission this time. Start a generation, then background the app (Android: press Home; Windows: minimize or switch to another window) before it finishes. Confirm an OS notification appears once it completes, showing only the model label and a status (Completed/Failed/Partially Completed) — no prompt text, filename, or provider error text anywhere in the notification.
+5. Tap/click the notification. Confirm the app comes to the foreground (or launches, if it was fully closed) and navigates directly to that generation's `/generation-history/{id}` detail page.
+6. Start another generation while the app stays in the foreground and focused the whole time. Confirm no OS notification appears for it at all — only the in-app status update.
+7. Start a generation, background the app, but keep that record's own `/generation-history/{id}` page open in another window/already navigated to before backgrounding (Windows: two windows if supported, or navigate to the page, then background). Confirm no redundant OS notification appears for that specific record while its page is the one currently open.
+8. Turn the notifications toggle back off. Start a generation and background the app before it finishes. Confirm no OS notification appears, with no repeated permission prompt.
+
+**Pass:** the setting defaults off; Android's notification permission is requested only on enabling, and denial keeps the feature off without crashing; a backgrounded/unfocused completed or failed generation produces an OS notification containing only the model label and status; tapping it opens the correct generation-history record; no notification appears while foregrounded, while its own record page is already open, or while the setting is off.
+
 ## Reporting
 
 For each test case, record:
