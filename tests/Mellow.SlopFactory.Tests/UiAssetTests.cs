@@ -278,6 +278,8 @@ public sealed class UiAssetTests
         Assert.Contains("Strings[\"ManagedContentNeedsReview\"]", layout, StringComparison.Ordinal);
         Assert.Contains("name=\"GenerationQueueActivity\"", resources, StringComparison.Ordinal);
         Assert.Contains("Strings[\"GenerationQueueActivity\",", layout, StringComparison.Ordinal);
+        Assert.Contains("name=\"EnergySaverCapActive\"", resources, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"EnergySaverCapActive\",", layout, StringComparison.Ordinal);
         Assert.Contains("name=\"NavQueue\"", resources, StringComparison.Ordinal);
         Assert.Contains("Strings[\"NavQueue\"]", layout, StringComparison.Ordinal);
         Assert.DoesNotContain("shared or dropped item(s) are waiting", layout, StringComparison.Ordinal);
@@ -644,7 +646,8 @@ public sealed class UiAssetTests
         foreach (var key in new[]
                  {
                      "QueuePageTitle", "QueueHeading", "QueueDescription", "QueueEmpty", "GenerateEyebrow", "Generating",
-                     "QueuePosition", "MoveTabLeft", "MoveTabRight", "CancelGeneration", "NavGenerate", "Unknown"
+                     "QueuePosition", "MoveTabLeft", "MoveTabRight", "CancelGeneration", "NavGenerate", "Unknown",
+                     "EnergySaverCapActive"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

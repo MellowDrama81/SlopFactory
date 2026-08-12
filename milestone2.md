@@ -381,7 +381,25 @@ in parallel. Both milestones must be complete before the first public release.
       the per-connection FIFO model); there is no cross-connection priority and no reordering of a
       job that has already started.
 - [ ] Add multiple concurrent run cards from the same generation tab.
-- [ ] Add OS thermal/battery-driven temporary cap reduction.
+- [x] Add OS battery-driven temporary cap reduction, scoped to energy-saver mode (device thermal
+      status has no simple cross-platform MAUI API, so that half remains open below).
+      `GenerationQueueService` gains `EffectiveDeviceCap` (the configured `DeviceCap` clamped to 1
+      while `IDeviceEnergyStateProvider.IsEnergySaverOn` is true) and `EnergySaverCapActive`; the pump
+      loop's cap check now reads `EffectiveDeviceCap` instead of `DeviceCap` directly, so this only
+      ever stops new jobs from starting — nothing already running is cancelled, matching plan.md's
+      "stops only new starts and never cancels active requests." `IDeviceEnergyStateProvider`
+      (Gui/Services, plain testable interface) is backed by `MauiDeviceEnergyStateProvider` wrapping
+      `Microsoft.Maui.Devices.Battery.Default.EnergySaverStatus`/`EnergySaverStatusChanged` — no new
+      package dependency, since `Microsoft.Maui.Devices` is already a default MAUI global using and
+      the Android manifest already registers Essentials' `EnergySaverBroadcastReceiver` automatically.
+      `Start()` also subscribes to the provider's `Changed` event and re-runs the pump loop on every
+      transition, so a queued job starts immediately the moment energy-saver mode clears rather than
+      waiting for the next unrelated queue event — matching "resumes automatically when the constraint
+      clears." `/queue` and the `MainLayout.razor` aggregate activity notice both show
+      **Energy Saver is limiting submissions to N at a time** while active. **True OS thermal-pressure
+      detection remains open** — MAUI has no built-in cross-platform thermal-state API comparable to
+      `Battery`, and inventing a platform-specific one (Windows power-throttling APIs, Android
+      `PowerManager.getCurrentThermalStatus`) was judged out of scope for this slice.
 - [x] Add a minimal **Cancel** action on `/generate` backed by a `CancellationTokenSource` passed
       through to the adapter call, the result-file commit and the history-record insert. On
       cancellation, the page shows a message warning that the provider may still process or charge

@@ -50,7 +50,9 @@
         @if (Queue.QueuedCount > 0 || Queue.RunningCount > 0)
         {
             <div class="notice generation-queue-notice" role="status">
-                @Strings["GenerationQueueActivity", Queue.QueuedCount, Queue.RunningCount] <a href="/queue">@Strings["NavQueue"]</a>
+                @Strings["GenerationQueueActivity", Queue.QueuedCount, Queue.RunningCount]
+                @if (Queue.EnergySaverCapActive) { <span>@Strings["EnergySaverCapActive", Queue.EffectiveDeviceCap]</span> }
+                <a href="/queue">@Strings["NavQueue"]</a>
             </div>
         }
         @if (ScanRecommendation.IsRecommended)

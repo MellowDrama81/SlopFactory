@@ -49,6 +49,7 @@ public sealed class GenerationQueueService
     private readonly IProviderAdapterResolver _adapterResolver;
     private readonly ISecureCredentialStore _credentials;
     private readonly IAppPreferenceStore _preferences;
+    private readonly IDeviceEnergyStateProvider _energy;
     private readonly object _gate = new();
 
     private sealed class QueuedJob
@@ -94,12 +95,23 @@ public sealed class GenerationQueueService
         Pump();
     }
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences)
+    /// <summary>
+    /// The cap actually enforced by the pump loop right now. Reduced to 1 while the OS reports
+    /// energy-saver mode is on, regardless of the configured <see cref="DeviceCap"/> — this only
+    /// ever stops new jobs from starting; it never cancels one already running.
+    /// </summary>
+    public int EffectiveDeviceCap => _energy.IsEnergySaverOn ? 1 : DeviceCap;
+
+    /// <summary>Whether the OS-reported energy-saver constraint is currently in effect.</summary>
+    public bool EnergySaverCapActive => _energy.IsEnergySaverOn;
+
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
         _credentials = credentials;
         _preferences = preferences;
+        _energy = energy;
     }
 
     public event EventHandler? Changed;
@@ -112,6 +124,13 @@ public sealed class GenerationQueueService
         if (_started) return;
         _started = true;
         _libraries.Changed += OnLibraryChanged;
+        _energy.Changed += OnEnergyStateChanged;
+    }
+
+    private void OnEnergyStateChanged(object? sender, EventArgs args)
+    {
+        RaiseChanged();
+        Pump();
     }
 
     public string Enqueue(GenerationJobSnapshot snapshot, string connectionId)
@@ -263,7 +282,7 @@ public sealed class GenerationQueueService
             QueuedJob? started = null;
             lock (_gate)
             {
-                if (_runningTotal >= DeviceCap) break;
+                if (_runningTotal >= EffectiveDeviceCap) break;
                 var count = _connectionOrder.Count;
                 for (var i = 0; i < count; i++)
                 {

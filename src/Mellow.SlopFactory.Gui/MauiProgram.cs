@@ -30,6 +30,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IThemePreferenceService, ThemePreferenceService>();
         builder.Services.AddSingleton<ISecureCredentialStore, MauiSecureCredentialStore>();
         builder.Services.AddSingleton<CredentialReconciliationService>();
+        builder.Services.AddSingleton<IDeviceEnergyStateProvider, MauiDeviceEnergyStateProvider>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif

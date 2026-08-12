@@ -12,6 +12,11 @@
     <div><p class="eyebrow">@Strings["GenerateEyebrow"]</p><h1>@Strings["QueueHeading"]</h1><p class="muted">@Strings["QueueDescription"]</p></div>
 </header>
 
+@if (Queue.EnergySaverCapActive)
+{
+    <div class="notice" role="status">@Strings["EnergySaverCapActive", Queue.EffectiveDeviceCap]</div>
+}
+
 @if (LibraryState.Workspace is null)
 {
     <p class="empty">@Strings["NoLocationOpen"]</p>

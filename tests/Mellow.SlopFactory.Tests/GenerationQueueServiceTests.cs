@@ -9,13 +9,14 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
         var adapter = new FakeProviderAdapter();
         preferences ??= new FakeAppPreferenceStore();
-        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences);
+        energy ??= new FakeDeviceEnergyStateProvider();
+        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy);
         queue.Start();
         return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
@@ -140,7 +141,7 @@ public sealed class GenerationQueueServiceTests
         var (libraries, _, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), preferences);
         queue.SetDeviceCap(1);
 
-        var secondQueue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences);
+        var secondQueue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, new FakeDeviceEnergyStateProvider());
 
         Assert.Equal(1, secondQueue.DeviceCap);
     }
@@ -171,6 +172,60 @@ public sealed class GenerationQueueServiceTests
         await WaitUntilAsync(() => adapter.InvokedPrompts.Count == 4);
         Assert.Equal(0, queue.QueuedCount);
         Assert.Equal(4, queue.RunningCount);
+    }
+
+    [Fact]
+    public async Task EnergySaverCapActiveReflectsTheProviderState()
+    {
+        using var temporary = new TemporaryDirectory();
+        var energy = new FakeDeviceEnergyStateProvider();
+        var (_, _, queue, _, _) = await CreateHarnessAsync(temporary.Child("library"), energy: energy);
+
+        Assert.False(queue.EnergySaverCapActive);
+        Assert.Equal(queue.DeviceCap, queue.EffectiveDeviceCap);
+
+        energy.IsEnergySaverOn = true;
+
+        Assert.True(queue.EnergySaverCapActive);
+        Assert.Equal(1, queue.EffectiveDeviceCap);
+    }
+
+    [Fact]
+    public async Task EnablingEnergySaverStopsNewStartsWithoutCancellingAlreadyRunningJobs()
+    {
+        using var temporary = new TemporaryDirectory();
+        var energy = new FakeDeviceEnergyStateProvider();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), energy: energy);
+        var connections = new List<(Connection Connection, Model Model)>();
+        for (var i = 0; i < 4; i++)
+        {
+            var connection = await CreateReadyConnectionAsync(workspace, $"Connection{i}");
+            var model = await workspace.CreateModelAsync($"GPT{i}", connection.Id, "gpt-4o", GenerationMode.Text, true);
+            connections.Add((connection, model));
+        }
+        for (var i = 0; i < 4; i++)
+        {
+            queue.Enqueue(Snapshot($"draft-{i}", connections[i].Model.Id, $"prompt{i}", workspace.Descriptor.GeneratedFolderId), connections[i].Connection.Id);
+        }
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Count == 3);
+
+        energy.IsEnergySaverOn = true;
+        await Task.Delay(50);
+
+        Assert.Equal(3, queue.RunningCount);
+        Assert.Equal(1, queue.QueuedCount);
+
+        adapter.Complete("prompt0", new TextGenerationResult(["result0"], null, null));
+        await WaitUntilAsync(() => queue.RunningCount == 2);
+        await Task.Delay(50);
+
+        Assert.Equal(1, queue.QueuedCount);
+        Assert.DoesNotContain("prompt3", adapter.InvokedPrompts);
+
+        energy.IsEnergySaverOn = false;
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Count == 4);
+        Assert.Equal(0, queue.QueuedCount);
     }
 
     [Fact]
@@ -447,6 +502,22 @@ public sealed class GenerationQueueServiceTests
     private sealed class FakeProviderAdapterResolver(FakeProviderAdapter adapter) : IProviderAdapterResolver
     {
         public IProviderAdapter Resolve(ProviderType providerType) => adapter;
+    }
+
+    private sealed class FakeDeviceEnergyStateProvider : IDeviceEnergyStateProvider
+    {
+        private bool _isEnergySaverOn;
+        public bool IsEnergySaverOn
+        {
+            get => _isEnergySaverOn;
+            set
+            {
+                if (_isEnergySaverOn == value) return;
+                _isEnergySaverOn = value;
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        public event EventHandler? Changed;
     }
 
     private sealed class FakeSecureCredentialStore : ISecureCredentialStore
