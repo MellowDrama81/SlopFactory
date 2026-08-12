@@ -1942,6 +1942,42 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.PermanentlyDeleteConnectionAsync(connectionId, cancellationToken), cancellationToken);
     }
 
+    public Task<string> BeginCredentialCandidateAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.BeginCredentialCandidateAsync(connectionId, cancellationToken), cancellationToken);
+    }
+
+    public Task DiscardCredentialCandidateAsync(string connectionId, string revisionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.DiscardCredentialCandidateAsync(connectionId, revisionId, cancellationToken), cancellationToken);
+    }
+
+    public Task<CredentialPromotionResult> PromoteCredentialRevisionAsync(string connectionId, string revisionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.PromoteCredentialRevisionAsync(connectionId, revisionId, cancellationToken), cancellationToken);
+    }
+
+    public Task<Connection> MarkCredentialRequiresRepairAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.MarkCredentialRequiresRepairAsync(connectionId, cancellationToken), cancellationToken);
+    }
+
+    public Task<IReadOnlyList<CredentialLedgerConnectionSnapshot>> GetCredentialLedgerSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetCredentialLedgerSnapshotAsync(cancellationToken);
+    }
+
+    public Task DeleteCredentialLedgerRowAsync(string connectionId, string revisionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.DeleteCredentialLedgerRowAsync(connectionId, revisionId, cancellationToken), cancellationToken);
+    }
+
     public Task<IReadOnlyList<Model>> GetActiveModelsAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

@@ -23,6 +23,17 @@
 {
     <p class="empty">@Strings["NoLocationOpen"]</p>
 }
+else if (_awaitingKeyDecision)
+{
+    <div class="notice error" role="dialog" aria-label="@Strings["ConnectionTestFailed", _pendingFailureMessage ?? string.Empty]">
+        <p>@Strings["ConnectionTestFailed", _pendingFailureMessage ?? string.Empty]</p>
+        <div class="actions">
+            <button type="button" class="secondary" disabled="@_busy" @onclick="KeepExistingKeyAsync">@Strings["KeepExistingKey"]</button>
+            <button type="button" class="danger" disabled="@_busy" @onclick="SaveNewKeyAsUnverifiedAsync">@Strings["SaveNewKeyAsUnverified"]</button>
+        </div>
+        <p class="muted">@Strings["SaveNewKeyAsUnverifiedWarning"]</p>
+    </div>
+}
 else
 {
     <EditForm Model="_form" OnValidSubmit="SaveAsync" class="stack-form">
@@ -79,7 +90,12 @@ else
         </details>
 
         <label for="connection-api-key">@Strings["ApiKey"]</label>
-        @if (_hasStoredCredential && !_editingCredential)
+        @if (_credentialRequiresRepair)
+        {
+            <div class="notice error" role="alert">@Strings["CredentialRequiresRepairBanner"]</div>
+            <input id="connection-api-key" type="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" @bind="_form.ApiKey" />
+        }
+        else if (_hasStoredCredential && !_editingCredential)
         {
             <div class="inline-form">
                 <span>@Strings["CredentialStored"]</span>
@@ -115,12 +131,19 @@ else
     private bool _busy;
     private bool _testing;
     private bool _hasStoredCredential;
+    private bool _credentialRequiresRepair;
+    private string? _credentialRevisionId;
     private bool _hasDependentModels;
     private ProviderType _originalProviderType;
     private bool _editingCredential;
     private string? _message;
     private bool _isError;
     private ConnectionTestResult? _testResult;
+    private bool _awaitingKeyDecision;
+    private string? _pendingConnectionId;
+    private string? _pendingRevisionId;
+    private string? _pendingFailureMessage;
+    private string? _libraryId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -149,6 +172,8 @@ else
                 _form.ImageGenerationEnabled = modalitySettings.ImageGenerationEnabled;
                 _form.ImageGenerationPathOverride = modalitySettings.ImageGenerationPathOverride ?? string.Empty;
                 _hasStoredCredential = existing.HasCredential;
+                _credentialRequiresRepair = existing.CredentialRequiresRepair;
+                _credentialRevisionId = existing.CredentialRevisionId;
             }
             catch (SlopFactoryException exception)
             {
@@ -178,7 +203,7 @@ else
             var probeConnection = new Connection(Id, _form.Label, _form.ProviderType, _form.BaseUrl.TrimEnd('/'), _form.CredentialHeaderName, _form.AuthPrefix,
                 _hasStoredCredential, ConnectionTestStatus.Untested, null, null, LibraryRecordState.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, _form.TimeoutSeconds, candidateHeaders, candidateModalitySettings);
             var apiKey = string.IsNullOrEmpty(_form.ApiKey)
-                ? _hasStoredCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, Id) : null
+                ? _hasStoredCredential && _credentialRevisionId is not null ? await Credentials.GetActiveAsync(workspace.Descriptor.LibraryId, Id, _credentialRevisionId) : null
                 : _form.ApiKey;
             _testResult = await adapter.TestConnectionAsync(probeConnection, apiKey);
         }
@@ -216,18 +241,85 @@ else
                 connection = await workspace.SetConnectionTestResultAsync(connection.Id, _testResult.Success, _testResult.Message);
             }
 
-            if (!string.IsNullOrEmpty(_form.ApiKey))
+            if (string.IsNullOrEmpty(_form.ApiKey))
             {
-                await Credentials.SetAsync(workspace.Descriptor.LibraryId, connection.Id, _form.ApiKey);
-                await workspace.SetConnectionCredentialStateAsync(connection.Id, true);
+                Navigation.NavigateTo("/connections");
+                return;
             }
 
-            Navigation.NavigateTo("/connections");
+            _libraryId = workspace.Descriptor.LibraryId;
+            _pendingConnectionId = connection.Id;
+            var revisionId = await workspace.BeginCredentialCandidateAsync(connection.Id);
+            await Credentials.SetCandidateAsync(_libraryId, connection.Id, revisionId, _form.ApiKey);
+
+            var adapter = AdapterResolver.Resolve(_form.ProviderType);
+            ConnectionTestResult result;
+            try
+            {
+                result = await adapter.TestConnectionAsync(connection, _form.ApiKey);
+            }
+            catch (Exception exception) when (exception is HttpRequestException or SlopFactoryException)
+            {
+                result = new ConnectionTestResult(false, exception.Message, null, false);
+            }
+
+            if (result.Success)
+            {
+                await PromoteCandidateAsync(workspace, _libraryId, connection.Id, revisionId);
+                await workspace.SetConnectionTestResultAsync(connection.Id, true, result.Message);
+                Navigation.NavigateTo("/connections");
+                return;
+            }
+
+            await workspace.SetConnectionTestResultAsync(connection.Id, false, result.Message);
+            _awaitingKeyDecision = true;
+            _pendingRevisionId = revisionId;
+            _pendingFailureMessage = result.Message;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
             _message = exception.Message;
             _isError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task PromoteCandidateAsync(ILibraryWorkspace workspace, string libraryId, string connectionId, string revisionId)
+    {
+        var candidateValue = await Credentials.GetCandidateAsync(libraryId, connectionId, revisionId);
+        if (candidateValue is null) throw new LibraryValidationException("The staged credential could not be found.");
+        await Credentials.SetActiveAsync(libraryId, connectionId, revisionId, candidateValue);
+        var verified = await Credentials.GetActiveAsync(libraryId, connectionId, revisionId);
+        if (verified != candidateValue) throw new LibraryValidationException("The credential could not be verified after saving.");
+        var promotion = await workspace.PromoteCredentialRevisionAsync(connectionId, revisionId);
+        await Credentials.RemoveCandidateAsync(libraryId, connectionId, revisionId);
+        foreach (var supersededId in promotion.SupersededRevisionIds)
+        {
+            await Credentials.RemoveActiveAsync(libraryId, connectionId, supersededId);
+        }
+    }
+
+    private async Task KeepExistingKeyAsync()
+    {
+        if (_pendingConnectionId is null || _pendingRevisionId is null || _libraryId is null) return;
+        _busy = true;
+        try
+        {
+            await LibraryState.Workspace!.DiscardCredentialCandidateAsync(_pendingConnectionId, _pendingRevisionId);
+            await Credentials.RemoveCandidateAsync(_libraryId, _pendingConnectionId, _pendingRevisionId);
+            Navigation.NavigateTo("/connections");
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SaveNewKeyAsUnverifiedAsync()
+    {
+        if (_pendingConnectionId is null || _pendingRevisionId is null || _libraryId is null) return;
+        _busy = true;
+        try
+        {
+            await PromoteCandidateAsync(LibraryState.Workspace!, _libraryId, _pendingConnectionId, _pendingRevisionId);
+            Navigation.NavigateTo("/connections");
         }
         finally { _busy = false; }
     }

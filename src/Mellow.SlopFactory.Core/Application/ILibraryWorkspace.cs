@@ -101,6 +101,13 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task RestoreConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
 
+    Task<string> BeginCredentialCandidateAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task DiscardCredentialCandidateAsync(string connectionId, string revisionId, CancellationToken cancellationToken = default);
+    Task<CredentialPromotionResult> PromoteCredentialRevisionAsync(string connectionId, string revisionId, CancellationToken cancellationToken = default);
+    Task<Connection> MarkCredentialRequiresRepairAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CredentialLedgerConnectionSnapshot>> GetCredentialLedgerSnapshotAsync(CancellationToken cancellationToken = default);
+    Task DeleteCredentialLedgerRowAsync(string connectionId, string revisionId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Model>> GetActiveModelsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Model>> GetRecycledModelsAsync(CancellationToken cancellationToken = default);
     Task<Model> GetModelAsync(string modelId, CancellationToken cancellationToken = default);

@@ -5,6 +5,7 @@
 @inject GenerationQueueService Queue
 @inject IThemePreferenceService Theme
 @inject IntegrityScanRecommendationService ScanRecommendation
+@inject CredentialReconciliationService CredentialReconciliation
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -75,6 +76,7 @@
         Queue.Start();
         Theme.Changed += OnPendingChanged;
         ScanRecommendation.Changed += OnPendingChanged;
+        CredentialReconciliation.Start();
     }
     private void OnPendingChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
     public void Dispose()

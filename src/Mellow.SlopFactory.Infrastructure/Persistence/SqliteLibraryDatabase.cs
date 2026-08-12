@@ -162,9 +162,20 @@ internal sealed class SqliteLibraryDatabase
                 generic_text_enabled INTEGER NOT NULL DEFAULT 1,
                 generic_text_path TEXT NULL,
                 generic_image_enabled INTEGER NOT NULL DEFAULT 1,
-                generic_image_path TEXT NULL
+                generic_image_path TEXT NULL,
+                credential_revision_id TEXT NULL,
+                credential_requires_repair INTEGER NOT NULL DEFAULT 0
             );
             CREATE UNIQUE INDEX ux_connections_active_label ON connections(label_key) WHERE state = 0;
+
+            CREATE TABLE connection_credential_revisions (
+                connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+                revision_id TEXT NOT NULL,
+                purpose INTEGER NOT NULL CHECK(purpose IN (0,1)),
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(connection_id, revision_id)
+            );
+            CREATE INDEX ix_connection_credential_revisions_connection ON connection_credential_revisions(connection_id, purpose);
 
             CREATE TABLE connection_headers (
                 connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
@@ -442,6 +453,14 @@ internal sealed class SqliteLibraryDatabase
         {
             await ExecuteNonQueryAsync(connection,
                 "CREATE TABLE IF NOT EXISTS generation_drafts (id TEXT PRIMARY KEY,custom_title TEXT NULL,tab_order INTEGER NOT NULL,model_id TEXT NULL REFERENCES models(id) ON DELETE SET NULL,prompt TEXT NOT NULL DEFAULT '',system_instructions TEXT NULL,source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,result_count INTEGER NOT NULL DEFAULT 1,destination_folder_id TEXT NOT NULL,improvement_model_id TEXT NULL REFERENCES models(id) ON DELETE SET NULL,improvement_guidance TEXT NULL,created_at TEXT NOT NULL,modified_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS ix_generation_drafts_order ON generation_drafts(tab_order);",
+                cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 23)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "credential_revision_id", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "connections", "credential_requires_repair", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection,
+                "CREATE TABLE IF NOT EXISTS connection_credential_revisions (connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,revision_id TEXT NOT NULL,purpose INTEGER NOT NULL CHECK(purpose IN (0,1)),created_at TEXT NOT NULL,PRIMARY KEY(connection_id, revision_id)); CREATE INDEX IF NOT EXISTS ix_connection_credential_revisions_connection ON connection_credential_revisions(connection_id, purpose);",
                 cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
@@ -1814,6 +1833,118 @@ internal sealed class SqliteLibraryDatabase
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<string> BeginCredentialCandidateAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        var revisionId = LibraryRules.NewId();
+        var now = Format(DateTimeOffset.UtcNow);
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO connection_credential_revisions(connection_id,revision_id,purpose,created_at) VALUES($cid,$rid,0,$now);",
+            cancellationToken, null, ("$cid", connectionId), ("$rid", revisionId), ("$now", now)).ConfigureAwait(false);
+        return revisionId;
+    }
+
+    public async Task DiscardCredentialCandidateAsync(string connectionId, string revisionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "DELETE FROM connection_credential_revisions WHERE connection_id=$cid AND revision_id=$rid AND purpose=0;",
+            cancellationToken, null, ("$cid", connectionId), ("$rid", revisionId)).ConfigureAwait(false);
+    }
+
+    public async Task<CredentialPromotionResult> PromoteCredentialRevisionAsync(string connectionId, string revisionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken, transaction).ConfigureAwait(false);
+
+        var flipped = await ExecuteNonQueryWithCountAsync(connection,
+            "UPDATE connection_credential_revisions SET purpose=1 WHERE connection_id=$cid AND revision_id=$rid;",
+            cancellationToken, transaction, ("$cid", connectionId), ("$rid", revisionId)).ConfigureAwait(false);
+        if (flipped == 0) throw new RecordNotFoundException("Credential revision not found.");
+
+        var superseded = new List<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT revision_id FROM connection_credential_revisions WHERE connection_id=$cid AND purpose=1 AND revision_id<>$rid;";
+            command.Parameters.AddWithValue("$cid", connectionId);
+            command.Parameters.AddWithValue("$rid", revisionId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) superseded.Add(reader.GetString(0));
+        }
+
+        await ExecuteNonQueryAsync(connection, "DELETE FROM connection_credential_revisions WHERE connection_id=$cid AND revision_id<>$rid;",
+            cancellationToken, transaction, ("$cid", connectionId), ("$rid", revisionId)).ConfigureAwait(false);
+
+        var now = DateTimeOffset.UtcNow;
+        await ExecuteNonQueryAsync(connection,
+            "UPDATE connections SET credential_revision_id=$rid,has_credential=1,credential_requires_repair=0,modified_at=$now WHERE id=$cid;",
+            cancellationToken, transaction, ("$rid", revisionId), ("$now", Format(now)), ("$cid", connectionId)).ConfigureAwait(false);
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        var updated = existing with { CredentialRevisionId = revisionId, HasCredential = true, CredentialRequiresRepair = false, ModifiedAt = now };
+        return new CredentialPromotionResult(updated, superseded);
+    }
+
+    public async Task<Connection> MarkCredentialRequiresRepairAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
+        var now = DateTimeOffset.UtcNow;
+        await ExecuteNonQueryAsync(connection, "UPDATE connections SET credential_requires_repair=1,modified_at=$now WHERE id=$id;",
+            cancellationToken, null, ("$now", Format(now)), ("$id", connectionId)).ConfigureAwait(false);
+        return existing with { CredentialRequiresRepair = true, ModifiedAt = now };
+    }
+
+    public async Task<IReadOnlyList<CredentialLedgerConnectionSnapshot>> GetCredentialLedgerSnapshotAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var revisionsByConnection = new Dictionary<string, List<CredentialLedgerRevision>>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT connection_id,revision_id,purpose FROM connection_credential_revisions;";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var connectionId = reader.GetString(0);
+                if (!revisionsByConnection.TryGetValue(connectionId, out var list))
+                {
+                    list = new List<CredentialLedgerRevision>();
+                    revisionsByConnection[connectionId] = list;
+                }
+                list.Add(new CredentialLedgerRevision(reader.GetString(1), (CredentialRevisionPurpose)reader.GetInt32(2)));
+            }
+        }
+
+        var snapshots = new List<CredentialLedgerConnectionSnapshot>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT id,has_credential,credential_revision_id FROM connections;";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var connectionId = reader.GetString(0);
+                var hasCredential = reader.GetBoolean(1);
+                var committedRevisionId = reader.IsDBNull(2) ? null : reader.GetString(2);
+                revisionsByConnection.TryGetValue(connectionId, out var revisions);
+                snapshots.Add(new CredentialLedgerConnectionSnapshot(connectionId, hasCredential, committedRevisionId,
+                    (IReadOnlyList<CredentialLedgerRevision>?)revisions ?? Array.Empty<CredentialLedgerRevision>()));
+            }
+        }
+
+        return snapshots;
+    }
+
+    public async Task DeleteCredentialLedgerRowAsync(string connectionId, string revisionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "DELETE FROM connection_credential_revisions WHERE connection_id=$cid AND revision_id=$rid;",
+            cancellationToken, null, ("$cid", connectionId), ("$rid", revisionId)).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<Model>> GetActiveModelsAsync(CancellationToken cancellationToken) =>
         await ListModelsAsync(LibraryRecordState.Active, cancellationToken).ConfigureAwait(false);
 
@@ -2466,7 +2597,7 @@ internal sealed class SqliteLibraryDatabase
         return ReadLink(reader);
     }
 
-    private const string ConnectionSelect = "SELECT id,label,provider_type,base_url,credential_header_name,auth_prefix,has_credential,last_test_status,last_tested_at,last_test_message,state,created_at,modified_at,recycled_at,timeout_seconds,generic_models_enabled,generic_models_path,generic_text_enabled,generic_text_path,generic_image_enabled,generic_image_path FROM connections";
+    private const string ConnectionSelect = "SELECT id,label,provider_type,base_url,credential_header_name,auth_prefix,has_credential,last_test_status,last_tested_at,last_test_message,state,created_at,modified_at,recycled_at,timeout_seconds,generic_models_enabled,generic_models_path,generic_text_enabled,generic_text_path,generic_image_enabled,generic_image_path,credential_revision_id,credential_requires_repair FROM connections";
     private const string ModelSelect = "SELECT id,connection_id,label,provider_model_id,mode,supports_system_instructions,state,created_at,modified_at,recycled_at,needs_review,text_format FROM models";
 
     private static async Task<Connection> GetConnectionAsync(SqliteConnection connection, string connectionId, CancellationToken cancellationToken, SqliteTransaction? transaction = null)
@@ -2529,7 +2660,8 @@ internal sealed class SqliteLibraryDatabase
         reader.IsDBNull(14) ? null : reader.GetInt32(14), null,
         new GenericConnectionModalitySettings(reader.GetBoolean(15), reader.IsDBNull(16) ? null : reader.GetString(16),
             reader.GetBoolean(17), reader.IsDBNull(18) ? null : reader.GetString(18),
-            reader.GetBoolean(19), reader.IsDBNull(20) ? null : reader.GetString(20)));
+            reader.GetBoolean(19), reader.IsDBNull(20) ? null : reader.GetString(20)),
+        reader.IsDBNull(21) ? null : reader.GetString(21), reader.GetBoolean(22));
 
     private static async Task<ModelCatalogue> ReadModelCatalogueAsync(SqliteConnection connection, string connectionId, CancellationToken cancellationToken)
     {

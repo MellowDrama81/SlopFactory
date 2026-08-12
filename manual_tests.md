@@ -111,6 +111,18 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** exactly one job per connection runs at a time; queued jobs start automatically as slots free up; queued-cancel never contacts the provider or creates history; a submission survives navigating away from and back to `/generate`; switching libraries cleanly drops/cancels outstanding work without a crash; the **Queue** page's grouping, reordering and cancellation all match what happens from `/generate` itself.
 
+## MT-09 — Revisioned credential lifecycle
+
+1. Create a connection with a valid API key that passes **Test Connection**, then click **Save**. Confirm it saves immediately without any extra prompt (the happy path is unchanged from the user's perspective).
+2. Edit that connection, click **Replace API key**, type a key you know is invalid, and click **Save**. Confirm Save does *not* navigate away; instead a decision panel appears with **Keep Existing Key** and **Save New Key as Unverified**, showing the test failure reason.
+3. From that panel, click **Keep Existing Key**. Confirm you're returned to the Connections list, the connection's status is unchanged, and re-opening the editor shows the original masked "Credential stored" view (the invalid key was never persisted).
+4. Repeat step 2, then click **Save New Key as Unverified** instead. Confirm you're returned to the Connections list and the connection's status shows an unverified/failed state rather than **Credentials Required** (the new key was saved despite failing the test).
+5. Edit the same connection again with a key that passes the test, click **Save**, and confirm it saves normally and the status becomes verified — proving the previously-saved unverified key was fully replaced, not left alongside the new one.
+6. On a device or emulator with an existing library created before this feature shipped (or restore one from a backup taken before this change), open it in the current build. Confirm every connection that had a working credential still generates successfully with no forced re-entry of any key and no visible change in status — this exercises the silent one-time legacy-credential adoption on first open.
+7. If reachable in a debug build (for example by directly clearing a connection's secure-storage entry via a debug tool while leaving its database row untouched, or by restoring a library snapshot known to be in this state), force a connection into **Credential State Requires Repair**. Confirm the Connections list shows that status ahead of any test-result status, the editor skips the masked "Credential stored" view and shows the key input directly behind an error banner, and entering and saving a working key clears the repair state.
+
+**Pass:** a successful Save behaves exactly as before this feature; a failed test blocks navigation until the user explicitly chooses Keep or Save-Unverified; Keep Existing Key never persists the failed candidate; Save New Key as Unverified persists it and reflects an unverified/failed status; a subsequent successful Save fully supersedes it; a pre-existing library upgrades silently with no connection incorrectly losing its working credential; and a **Credential State Requires Repair** connection is clearly surfaced and recoverable.
+
 ## Reporting
 
 For each test case, record:

@@ -604,6 +604,11 @@
   <data name="TestingConnection" xml:space="preserve"><value>Testing…</value></data>
   <data name="ConnectionTestSucceeded" xml:space="preserve"><value>Connection succeeded ({0}).</value></data>
   <data name="ConnectionTestFailed" xml:space="preserve"><value>Connection test failed: {0}</value></data>
+  <data name="ConnectionCredentialRequiresRepair" xml:space="preserve"><value>Credential state requires repair</value></data>
+  <data name="CredentialRequiresRepairBanner" xml:space="preserve"><value>This connection's stored credential could not be verified and needs to be replaced.</value></data>
+  <data name="KeepExistingKey" xml:space="preserve"><value>Keep existing key</value></data>
+  <data name="SaveNewKeyAsUnverified" xml:space="preserve"><value>Save new key as unverified</value></data>
+  <data name="SaveNewKeyAsUnverifiedWarning" xml:space="preserve"><value>The new key will be saved even though it failed the connection test. Generation requests may fail until this is corrected.</value></data>
   <data name="ModelsPageTitle" xml:space="preserve"><value>Models · SlopFactory</value></data>
   <data name="ModelsEyebrow" xml:space="preserve"><value>AI providers</value></data>
   <data name="ModelsHeading" xml:space="preserve"><value>Models</value></data>

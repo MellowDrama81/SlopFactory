@@ -609,12 +609,30 @@ public sealed record Connection(
     DateTimeOffset? RecycledAt,
     int? TimeoutSeconds = null,
     IReadOnlyList<ConnectionHeader>? AdditionalHeaders = null,
-    GenericConnectionModalitySettings? GenericModalitySettings = null)
+    GenericConnectionModalitySettings? GenericModalitySettings = null,
+    string? CredentialRevisionId = null,
+    bool CredentialRequiresRepair = false)
 {
     public bool IsUnverified => LastTestStatus != ConnectionTestStatus.Success;
 }
 
 public sealed record ConnectionHeader(string Name, string Value);
+
+public enum CredentialRevisionPurpose
+{
+    Candidate = 0,
+    Active = 1
+}
+
+public sealed record CredentialLedgerRevision(string RevisionId, CredentialRevisionPurpose Purpose);
+
+public sealed record CredentialLedgerConnectionSnapshot(
+    string ConnectionId,
+    bool HasCredential,
+    string? CommittedRevisionId,
+    IReadOnlyList<CredentialLedgerRevision> Revisions);
+
+public sealed record CredentialPromotionResult(Connection Connection, IReadOnlyList<string> SupersededRevisionIds);
 
 public sealed record GenericConnectionModalitySettings(
     bool ModelsEnabled,

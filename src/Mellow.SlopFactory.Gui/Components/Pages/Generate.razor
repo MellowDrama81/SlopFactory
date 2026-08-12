@@ -110,9 +110,9 @@ else
             }
         </InputSelect>
 
-        @if (SelectedConnection is not null && !SelectedConnection.HasCredential)
+        @if (SelectedConnection is not null && CredentialBlocked(SelectedConnection))
         {
-            <div class="notice error" role="alert">@Strings["GenerationBlockedCredentialsRequired"] <a href="@($"/connections/{SelectedConnection.Id}")">@Strings["AddApiKey"]</a></div>
+            <div class="notice error" role="alert">@(SelectedConnection.CredentialRequiresRepair ? Strings["CredentialRequiresRepairBanner"] : Strings["GenerationBlockedCredentialsRequired"]) <a href="@($"/connections/{SelectedConnection.Id}")">@Strings["AddApiKey"]</a></div>
         }
         else if (SelectedConnection is not null && SelectedConnection.IsUnverified)
         {
@@ -161,7 +161,7 @@ else
         }
 
         <div class="actions">
-            <button type="submit" disabled="@(FormDisabled || (SelectedConnection is not null && !SelectedConnection.HasCredential))">
+            <button type="submit" disabled="@(FormDisabled || (SelectedConnection is not null && CredentialBlocked(SelectedConnection)))">
                 @(ActiveJobStatus?.Phase switch
                 {
                     GenerationJobPhase.Queued => Strings["Queued"],
@@ -324,6 +324,7 @@ else
     private GenerationJobStatusSnapshot? ActiveJobStatus => ActiveJobId is { } jobId ? Queue.GetJobStatus(jobId) : null;
     private GenerationJobOutcome? LastOutcome => _activeDraftId is null ? null : Queue.GetLastOutcomeForDraft(_activeDraftId);
     private bool FormDisabled => _busy || ActiveJobId is not null;
+    private static bool CredentialBlocked(Connection connection) => !connection.HasCredential || connection.CredentialRequiresRepair;
 
     protected override async Task OnInitializedAsync()
     {
@@ -703,9 +704,9 @@ else
             _isError = true;
             return;
         }
-        if (!connection.HasCredential)
+        if (CredentialBlocked(connection))
         {
-            _message = Strings["GenerationBlockedCredentialsRequired"];
+            _message = connection.CredentialRequiresRepair ? Strings["CredentialRequiresRepairBanner"] : Strings["GenerationBlockedCredentialsRequired"];
             _isError = true;
             return;
         }
@@ -736,9 +737,9 @@ else
             _isError = true;
             return;
         }
-        if (!connection.HasCredential)
+        if (CredentialBlocked(connection))
         {
-            _message = Strings["GenerationBlockedCredentialsRequired"];
+            _message = connection.CredentialRequiresRepair ? Strings["CredentialRequiresRepairBanner"] : Strings["GenerationBlockedCredentialsRequired"];
             _isError = true;
             return;
         }
@@ -754,7 +755,7 @@ else
         try
         {
             var adapter = AdapterResolver.Resolve(connection.ProviderType);
-            var apiKey = connection.HasCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, connection.Id) : null;
+            var apiKey = connection is { HasCredential: true, CredentialRevisionId: { } revisionId } ? await Credentials.GetActiveAsync(workspace.Descriptor.LibraryId, connection.Id, revisionId) : null;
             var outputModeLabel = SelectedModelMode == GenerationMode.Image ? "image" : "text";
             var template = string.Format(PromptImprovementTemplate, outputModeLabel);
             if (guidance is not null)

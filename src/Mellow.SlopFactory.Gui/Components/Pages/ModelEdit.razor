@@ -204,7 +204,7 @@ else
         try
         {
             var adapter = AdapterResolver.Resolve(connection.ProviderType);
-            var apiKey = connection.HasCredential ? await Credentials.GetAsync(workspace.Descriptor.LibraryId, connection.Id) : null;
+            var apiKey = connection is { HasCredential: true, CredentialRevisionId: { } revisionId } ? await Credentials.GetActiveAsync(workspace.Descriptor.LibraryId, connection.Id, revisionId) : null;
             _discoveredModels = await adapter.ListModelsAsync(connection, apiKey);
             _catalogue = await workspace.RefreshModelCatalogueAsync(connection.Id, _discoveredModels);
             if (_discoveredModels.Count == 0) _message = Strings["NoModelsDiscovered"];

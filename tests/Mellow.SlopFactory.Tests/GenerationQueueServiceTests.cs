@@ -35,7 +35,8 @@ public sealed class GenerationQueueServiceTests
     private static async Task<Connection> CreateReadyConnectionAsync(ILibraryWorkspace workspace, string label)
     {
         var connection = await workspace.CreateConnectionAsync(label, ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
-        return await workspace.SetConnectionCredentialStateAsync(connection.Id, true);
+        var revisionId = await workspace.BeginCredentialCandidateAsync(connection.Id);
+        return (await workspace.PromoteCredentialRevisionAsync(connection.Id, revisionId)).Connection;
     }
 
     [Fact]
@@ -395,9 +396,14 @@ public sealed class GenerationQueueServiceTests
 
     private sealed class FakeSecureCredentialStore : ISecureCredentialStore
     {
-        public Task<string?> GetAsync(string libraryId, string connectionId) => Task.FromResult<string?>("test-api-key");
-        public Task SetAsync(string libraryId, string connectionId, string value) => Task.CompletedTask;
-        public Task RemoveAsync(string libraryId, string connectionId) => Task.CompletedTask;
+        public Task<string?> GetActiveAsync(string libraryId, string connectionId, string revisionId) => Task.FromResult<string?>("test-api-key");
+        public Task SetActiveAsync(string libraryId, string connectionId, string revisionId, string value) => Task.CompletedTask;
+        public Task RemoveActiveAsync(string libraryId, string connectionId, string revisionId) => Task.CompletedTask;
+        public Task<string?> GetCandidateAsync(string libraryId, string connectionId, string revisionId) => Task.FromResult<string?>("test-api-key");
+        public Task SetCandidateAsync(string libraryId, string connectionId, string revisionId, string value) => Task.CompletedTask;
+        public Task RemoveCandidateAsync(string libraryId, string connectionId, string revisionId) => Task.CompletedTask;
+        public Task<string?> GetLegacyAsync(string libraryId, string connectionId) => Task.FromResult<string?>("test-api-key");
+        public Task RemoveLegacyAsync(string libraryId, string connectionId) => Task.CompletedTask;
     }
 
     private sealed class FakeLibraryLocationService(string defaultPath) : ILibraryLocationService

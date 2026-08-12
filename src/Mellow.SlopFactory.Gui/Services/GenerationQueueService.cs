@@ -293,10 +293,10 @@ public sealed class GenerationQueueService
             if (model is null) return LocalFailureOutcome(job, "The model configured for this submission is no longer available.");
             var connections = await job.Workspace.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
             var connection = connections.FirstOrDefault(candidate => candidate.Id == model.ConnectionId);
-            if (connection is null || !connection.HasCredential) return LocalFailureOutcome(job, "The connection configured for this submission is no longer available.");
+            if (connection is not { HasCredential: true, CredentialRequiresRepair: false, CredentialRevisionId: { } revisionId }) return LocalFailureOutcome(job, "The connection configured for this submission is no longer available.");
 
             var adapter = _adapterResolver.Resolve(connection.ProviderType);
-            var apiKey = await _credentials.GetAsync(job.Workspace.Descriptor.LibraryId, connection.Id).ConfigureAwait(false);
+            var apiKey = await _credentials.GetActiveAsync(job.Workspace.Descriptor.LibraryId, connection.Id, revisionId).ConfigureAwait(false);
 
             GenerationRecord record;
             if (snapshot.Mode == GenerationMode.Image)

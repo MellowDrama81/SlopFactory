@@ -23,9 +23,31 @@ in parallel. Both milestones must be complete before the first public release.
 - [x] Add a Connections list page (active + recycled) and add/edit form (label, provider type,
       base URL, credential header name/prefix, API key) with masked credential display and a
       **Test Connection** action; verify the localization guard and manual add/edit/delete flow.
-- [ ] Implement the full revisioned secure-storage credential lifecycle: candidate namespace during
+- [x] Implement the full revisioned secure-storage credential lifecycle: candidate namespace during
       key replacement, promotion only after a successful test, crash-safe reconciliation trusting
-      only a committed revision pointer, and **Credential State Requires Repair** handling.
+      only a committed revision pointer, and **Credential State Requires Repair** handling. Schema
+      v23 adds a non-secret `connection_credential_revisions` ledger (`CredentialLedgerRevision`,
+      `CredentialLedgerConnectionSnapshot`, `CredentialPromotionResult`) plus
+      `connections.credential_revision_id`/`credential_requires_repair`, with
+      `BeginCredentialCandidateAsync`/`PromoteCredentialRevisionAsync`/`DiscardCredentialCandidateAsync`/
+      `MarkCredentialRequiresRepairAsync`/`GetCredentialLedgerSnapshotAsync`/`DeleteCredentialLedgerRowAsync`
+      on `ILibraryWorkspace`. `ISecureCredentialStore` moved to a revision-aware
+      active/candidate/legacy API (`MauiSecureCredentialStore` namespaces candidate keys separately
+      from active keys, per plan.md's "separate indexed secure-storage namespace"). `ConnectionEdit.razor`
+      stages a candidate, runs a fresh test against the exact staged value, and only promotes after
+      writing-and-verifying the new secure-storage entry; a failed test surfaces a **Keep Existing
+      Key**/**Save New Key as Unverified** decision panel instead of silently discarding or saving.
+      A new `CredentialReconciliationService` singleton (mirroring `ManagedContentWatchService`'s
+      shape) sweeps orphaned candidates, detects a committed pointer with no matching/readable active
+      revision (**Credential State Requires Repair**, touching nothing else), cleans up superseded
+      active revisions, and silently one-time-adopts each pre-existing connection's legacy
+      (non-revisioned) credential into revision 1 without a forced retest or visible change — every
+      existing library upgrades without any connection being incorrectly flagged. Deliberately
+      excludes plan.md's unresolved-cleanup/remote-job gating and **Submission Outcome Unknown**
+      reconciliation (below, still open) — both depend on remote-job/cleanup-tracking infrastructure
+      this app doesn't have, since every provider call here is synchronous request/response. Verified
+      by `CredentialRevisionLifecycleTests.cs`, `CredentialReconciliationServiceTests.cs`, and the
+      `OpeningVersionTwentyTwoLibraryAddsCredentialRevisionLedger` migration test.
 - [x] Distinguish a **Credentials Required** connection status (no stored API key, checked ahead of
       any test result) from **Unverified**/**Verified**/**Test Failed** on the Connections list
       (`StatusLabel`), and surface both on `/generate`: a missing credential blocks the **Generate**

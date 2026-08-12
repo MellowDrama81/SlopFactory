@@ -134,7 +134,9 @@ else
         _ => providerType.ToString()
     };
 
-    private string StatusLabel(Connection connection) => !connection.HasCredential
+    private string StatusLabel(Connection connection) => connection.CredentialRequiresRepair
+        ? Strings["ConnectionCredentialRequiresRepair"]
+        : !connection.HasCredential
         ? Strings["ConnectionCredentialsRequired"]
         : connection.LastTestStatus switch
         {
@@ -181,9 +183,19 @@ else
         _busy = true;
         try
         {
-            var libraryId = LibraryState.Workspace!.Descriptor.LibraryId;
-            await LibraryState.Workspace!.PermanentlyDeleteConnectionAsync(connectionId);
-            await Credentials.RemoveAsync(libraryId, connectionId);
+            var workspace = LibraryState.Workspace!;
+            var libraryId = workspace.Descriptor.LibraryId;
+            var ledger = (await workspace.GetCredentialLedgerSnapshotAsync()).FirstOrDefault(snapshot => snapshot.ConnectionId == connectionId);
+            await workspace.PermanentlyDeleteConnectionAsync(connectionId);
+            if (ledger is not null)
+            {
+                foreach (var revision in ledger.Revisions)
+                {
+                    if (revision.Purpose == CredentialRevisionPurpose.Active) await Credentials.RemoveActiveAsync(libraryId, connectionId, revision.RevisionId);
+                    else await Credentials.RemoveCandidateAsync(libraryId, connectionId, revision.RevisionId);
+                }
+            }
+            await Credentials.RemoveLegacyAsync(libraryId, connectionId);
             _deleteCandidate = null;
             _message = Strings["ConnectionPermanentlyDeleted"];
             await ReloadAsync();

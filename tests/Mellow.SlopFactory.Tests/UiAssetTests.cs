@@ -435,7 +435,7 @@ public sealed class UiAssetTests
                      "ConfirmPermanentlyDeleteConnection", "PermanentlyDeleteConnectionWarning", "DeletePermanently",
                      "ProviderOpenAi", "ProviderGenericOpenAiCompatible", "ConnectionVerified", "ConnectionTestFailedStatus",
                      "ConnectionUnverified", "ConnectionRecycled", "ConnectionRestored", "ConnectionPermanentlyDeleted",
-                     "ConnectionCredentialsRequired", "InsecureConnectionBadge"
+                     "ConnectionCredentialsRequired", "InsecureConnectionBadge", "ConnectionCredentialRequiresRepair"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -463,7 +463,8 @@ public sealed class UiAssetTests
                      "TestConnection", "TestingConnection", "Save", "ConnectionTestSucceeded", "ConnectionTestFailed",
                      "InsecureHttpBaseUrlWarning", "ConnectionTimeoutSeconds", "ConnectionTimeoutHelp", "AdditionalHeaders",
                      "AdditionalHeadersHelp", "ModalitySettingsHeading", "ModalitySettingsDescription", "ModelsModality",
-                     "TextGenerationModality", "ImageGenerationModality", "ResolvedEndpoint", "ProviderTypeLockedWhileModelsExist"
+                     "TextGenerationModality", "ImageGenerationModality", "ResolvedEndpoint", "ProviderTypeLockedWhileModelsExist",
+                     "CredentialRequiresRepairBanner", "KeepExistingKey", "SaveNewKeyAsUnverified", "SaveNewKeyAsUnverifiedWarning"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -554,7 +555,7 @@ public sealed class UiAssetTests
                      "ResetTabTitle", "DuplicateTab", "MoveTabLeft", "MoveTabRight", "CloseTab", "ConfirmCloseTab", "CancelCloseTab",
                      "CloseTabConfirmMessage", "AddDraftTab", "DraftSaving", "DraftSaved", "DraftNotSaved", "RetrySaveAction",
                      "SaveSettingsAndCloseTab", "SaveAndCloseTab", "BackToCloseOptions", "Queued", "QueuePosition",
-                     "GenerationCancelledBeforeSubmission", "DraftModelUnavailable"
+                     "GenerationCancelledBeforeSubmission", "DraftModelUnavailable", "CredentialRequiresRepairBanner"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
