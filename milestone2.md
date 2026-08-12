@@ -472,6 +472,18 @@ in parallel. Both milestones must be complete before the first public release.
       provider-declared format; verify PNG detection, hash and the failed-attempt path. Direct
       provider-hosted image URLs, provider result-status/content-type/checksum validation, the
       unverified-binary retention path, and audio/video results all remain open.
+- [x] Fix a genuine, always-reproducible bug found while scoping the generation-history recycle-bin
+      item below: `generation_results.file_id` had no `ON DELETE` clause on its foreign key to
+      `files(id)`, so permanently deleting *any* generation-result file (a completely ordinary
+      action, always available from the recycle bin) threw `LibraryValidationException("The library
+      database could not finalize permanent deletion.")` every time, unconditionally. Schema v25
+      rebuilds `generation_results` with `ON DELETE CASCADE` on `file_id` (SQLite requires a full
+      table rebuild to change a foreign key, matching the standard rename/recreate/copy/drop
+      procedure); permanently deleting a result file now simply drops that one `generation_results`
+      row — the owning `GenerationRecord`/history entry stays intact with one fewer entry in
+      `ResultFileIds`, exactly mirroring how `source_file_id`'s existing `ON DELETE SET NULL` already
+      clears a reference rather than blocking or cascading further. Verified by a direct regression
+      test and a `fromVersion < 25` migration test reproducing the old (pre-fix) schema shape.
 - [ ] Add result download, validation (status/content-type/media-category/checksum), atomic
       managed-file commit, and the unverified-binary/unrecognized-content-type retention paths.
 - [x] Add text-result formatting: `.md` remains the default, and a per-model **Text result
@@ -535,7 +547,12 @@ in parallel. Both milestones must be complete before the first public release.
 - [ ] Add the source/model-incompatibility and system-instruction-channel-mismatch confirmations for
       **Use Again**, once named source-input slots and capability-based validation exist.
 - [ ] Add generation-history recycle/restore/permanent-delete integrated with the unified recycle
-      bin, including file/source tombstoning rules.
+      bin, including file/source tombstoning rules. Still fully open — `generation_records` has no
+      state/`recycled_at` lifecycle at all today, and neither source nor result files capture any
+      tombstone data (former display name/media type/hash) for when they're later gone. A real
+      `generation_results.file_id` schema bug found while scoping this item (missing `ON DELETE`
+      clause, causing every generation-result file's permanent deletion to throw) was fixed separately
+      above under Generation results and result ingestion, independent of this still-open item.
 - [x] Add prompt-improvement history records as a distinct lightweight AI-operation entry type
       (schema v19: `prompt_improvement_records`, plus a nullable `generation_records.prompt_improvement_record_id`
       with `ON DELETE SET NULL`). Every submitted **Improve Prompt** attempt on `/generate` —

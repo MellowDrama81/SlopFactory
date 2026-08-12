@@ -254,7 +254,7 @@ internal sealed class SqliteLibraryDatabase
             CREATE TABLE generation_results (
                 id TEXT PRIMARY KEY,
                 generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,
-                file_id TEXT NOT NULL REFERENCES files(id),
+                file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
                 position INTEGER NOT NULL
             );
             CREATE INDEX ix_generation_results_generation ON generation_results(generation_id);
@@ -467,6 +467,18 @@ internal sealed class SqliteLibraryDatabase
         if (fromVersion < 24)
         {
             await AddColumnIfMissingAsync(connection, transaction, "saved_generation_settings", "revision", "INTEGER NOT NULL DEFAULT 1", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 25)
+        {
+            await ExecuteNonQueryAsync(connection,
+                """
+                ALTER TABLE generation_results RENAME TO generation_results_old_v24;
+                CREATE TABLE generation_results (id TEXT PRIMARY KEY,generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,position INTEGER NOT NULL);
+                INSERT INTO generation_results(id,generation_id,file_id,position) SELECT id,generation_id,file_id,position FROM generation_results_old_v24;
+                DROP TABLE generation_results_old_v24;
+                CREATE INDEX IF NOT EXISTS ix_generation_results_generation ON generation_results(generation_id);
+                """,
+                cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

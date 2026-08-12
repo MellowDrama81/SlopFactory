@@ -45,6 +45,30 @@ public sealed class GenerationRecordTests
     }
 
     [Fact]
+    public async Task PermanentlyDeletingAGenerationResultFileClearsItsResultReferenceWithoutRemovingTheHistoryRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Write a haiku", 2, workspace.Descriptor.GeneratedFolderId, ["First result", "Second result"], null);
+        var firstFileId = record.ResultFileIds[0];
+        var secondFileId = record.ResultFileIds[1];
+
+        await workspace.RecycleFileAsync(firstFileId);
+        await workspace.PermanentlyDeleteFileAsync(firstFileId);
+
+        var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
+        Assert.DoesNotContain(firstFileId, reloaded.ResultFileIds);
+        Assert.Contains(secondFileId, reloaded.ResultFileIds);
+        Assert.Equal(2, reloaded.ResultCount);
+        Assert.Equal(GenerationStatus.Completed, reloaded.Status);
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetFileAsync(firstFileId));
+    }
+
+    [Fact]
     public async Task RecordingAFailedTextGenerationCreatesNoFilesButKeepsHistory()
     {
         using var temporary = new TemporaryDirectory();
