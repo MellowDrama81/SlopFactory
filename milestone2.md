@@ -230,16 +230,17 @@ in parallel. Both milestones must be complete before the first public release.
 - [x] Add debounced draft autosave (800 ms, cancel-and-restart on each edit) with
       **Saving**/**Saved**/**Not Saved** status and a **Retry Save** action
       (`GenerationDraftTests`, `LibraryWorkspaceTests.OpeningVersionTwentyOneLibraryAddsGenerationDrafts`).
-      There are no library-switch or application-exit unsaved-edit gates yet (an unflushed autosave
-      in flight at exit could still be lost); that remains open. `Generate.razor.Dispose()` now
-      cancels any pending debounced autosave timer, closing a real bug where navigating away
-      mid-debounce left the timer running in the background: it would still fire ~800 ms later and
-      call `PersistCurrentDraftAsync`, which reads `AppLibraryState.Workspace` at that later
-      moment — whichever library happens to be active by then, not necessarily the one the edit
-      belonged to — and attempt to update a draft ID that may no longer exist there. The edit made
-      in the last debounce window before navigating away is still lost exactly as already
-      documented above; the fix only stops the orphaned write from silently targeting the wrong
-      library's database afterward.
+      The library-switch and in-app navigate-away gates described further below now flush a pending
+      autosave rather than losing it in those two cases; true OS-driven application-exit remains
+      open for the platform reasons documented there. `Generate.razor`'s original fix here (before
+      those gates existed) only *cancelled* any pending debounced autosave timer on disposal, closing
+      a real bug where navigating away mid-debounce left the timer running in the background: it
+      would still fire ~800 ms later and call `PersistCurrentDraftAsync`, which reads
+      `AppLibraryState.Workspace` at that later moment — whichever library happens to be active by
+      then, not necessarily the one the edit belonged to — and attempt to update a draft ID that may
+      no longer exist there. That cancel-only fix stopped the orphaned write from silently targeting
+      the wrong library's database, but still lost the edit itself; the gates below replace it with an
+      actual flush.
 - [x] Add tab reordering: `ILibraryWorkspace.ReorderDraftsAsync` takes the full ordered list of
       draft IDs (a whole-order-replace, matching `ReplaceDraftStateAsync`'s philosophy rather than a
       granular move-by-index method), validates it contains exactly the current set of drafts, and
@@ -257,7 +258,28 @@ in parallel. Both milestones must be complete before the first public release.
       behavior for that path.
 - [ ] Add the Android compact tab-switcher and virtualization for a large number of drafts (the
       current tab strip is the same plain, unvirtualized markup on both platforms).
-- [ ] Add the library-switch and application-exit unsaved-edit gates.
+- [x] Add the library-switch unsaved-edit gate, and the in-app navigate-away gate that was the other
+      real (non-OS-driven) way a pending debounced autosave could previously be lost silently.
+      `AppLibraryState` gained a `Closing` event (`event Func<Task>?`, awaited across every
+      subscriber in registration order via `GetInvocationList()`) raised immediately before
+      `SwitchAsync`/`RelinkAsync`/`AdoptCopyAsync`/`CloseInvalidLibraryAsync` replace or null out
+      `Workspace` — while the outgoing workspace is still valid and reachable, so a flush against it
+      can actually succeed before it's disposed. `Generate.razor` subscribes in `OnInitializedAsync`
+      and its handler calls the same `FlushPendingAutosaveAsync` already used for in-page tab
+      switches. `Generate.razor` also changed from `IDisposable` to `IAsyncDisposable`, so navigating
+      away from `/generate` entirely (a different page in the nav sidebar) now flushes the pending
+      autosave the same way instead of merely cancelling the debounce timer and discarding the edit —
+      closing what was actually the more common real bug (this path needs no library switch or
+      programmatic close at all, just clicking anywhere else within roughly 800 ms of the last
+      keystroke). `Closing` is deliberately **not** raised ahead of `CloseUnavailableLibraryAsync`,
+      since that path only runs once the workspace's storage is already confirmed unreachable and a
+      flush attempt there could only add a doomed I/O wait, never succeed. **True OS-driven
+      application-exit remains open and is not attempted here**: MAUI's `Window.Destroying` is a
+      plain synchronous event with no cross-platform way to defer/await async cleanup before the
+      process actually exits, and Android in particular can kill the process without invoking any
+      lifecycle callback at all under memory pressure — a fully reliable exit-time flush is not
+      buildable within those platform constraints, only a best-effort one, which is a materially
+      different (and not yet made) guarantee.
 - [ ] Add emergency draft snapshot staging and reconciliation for an unavailable/read-only library,
       per Session Recovery.
 

@@ -2670,6 +2670,85 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task ClosingIsRaisedBeforeASwitchWhileTheOutgoingWorkspaceIsStillValid()
+    {
+        using var temporary = new TemporaryDirectory();
+        var firstRoot = temporary.Child("first-library");
+        var secondRoot = temporary.Child("second-library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var first = await factory.CreateAsync(firstRoot)) { }
+        await using (var second = await factory.CreateAsync(secondRoot)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(firstRoot, secondRoot), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(firstRoot);
+        var invocationCount = 0;
+        string? observedLibraryId = null;
+        state.Closing += () =>
+        {
+            invocationCount++;
+            observedLibraryId = state.Workspace?.Descriptor.LibraryId;
+            return Task.CompletedTask;
+        };
+
+        await state.SwitchAsync(secondRoot);
+
+        Assert.Equal(1, invocationCount);
+        Assert.NotNull(observedLibraryId);
+        Assert.NotEqual(state.Workspace!.Descriptor.LibraryId, observedLibraryId);
+    }
+
+    [Fact]
+    public async Task ClosingIsNotRaisedOnTheFirstSwitchWhenNoWorkspaceWasPreviouslyOpen()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var state = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        var invoked = false;
+        state.Closing += () => { invoked = true; return Task.CompletedTask; };
+
+        await state.SwitchAsync(root);
+
+        Assert.False(invoked);
+    }
+
+    [Fact]
+    public async Task ClosingIsRaisedBeforeAnInvalidLibraryCloses()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: true), new TestPreferenceStore());
+        await state.SwitchAsync(root);
+        var activeWorkspace = Assert.IsAssignableFrom<ILibraryWorkspace>(state.Workspace);
+        var invoked = false;
+        state.Closing += () => { invoked = true; Assert.NotNull(state.Workspace); return Task.CompletedTask; };
+
+        await state.CloseInvalidLibraryAsync(activeWorkspace, "invalid");
+
+        Assert.True(invoked);
+        Assert.Null(state.Workspace);
+    }
+
+    [Fact]
+    public async Task ClosingIsNotRaisedBeforeAnUnavailableLibraryCloses()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(root);
+        var activeWorkspace = Assert.IsAssignableFrom<ILibraryWorkspace>(state.Workspace);
+        var invoked = false;
+        state.Closing += () => { invoked = true; return Task.CompletedTask; };
+
+        await state.CloseUnavailableLibraryAsync(activeWorkspace, "not-writable");
+
+        Assert.False(invoked);
+    }
+
+    [Fact]
     public void DeferringAnIntegrityScanRecommendationDismissesItWithoutStartingAScan()
     {
         var recommendation = new IntegrityScanRecommendationService();

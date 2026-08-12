@@ -28,6 +28,25 @@ public sealed class AppLibraryState : IAsyncDisposable
     public LibraryBrowserSession BrowserSession { get; private set; } = new();
     public event EventHandler? Changed;
 
+    /// <summary>
+    /// Raised while the current <see cref="Workspace"/> is still expected to be reachable,
+    /// immediately before it is replaced or closed, so subscribers can flush in-flight state (e.g. a
+    /// debounced autosave) to the outgoing workspace before it is disposed. Awaited in registration
+    /// order. Not raised ahead of <see cref="CloseUnavailableLibraryAsync"/>, since that path only
+    /// runs once the workspace's storage is already confirmed unreachable and a flush attempt could
+    /// only add a doomed I/O wait, never succeed.
+    /// </summary>
+    public event Func<Task>? Closing;
+
+    private async Task RaiseClosingAsync()
+    {
+        if (Closing is null) return;
+        foreach (var handler in Closing.GetInvocationList().Cast<Func<Task>>())
+        {
+            await handler().ConfigureAwait(false);
+        }
+    }
+
     public async Task InitializeAsync()
     {
         if (IsInitialized) return;
@@ -103,6 +122,7 @@ public sealed class AppLibraryState : IAsyncDisposable
                 throw new LibraryValidationException("Another available location is already registered with this library ID. Open the registered location or remove the copied directory conflict.");
             }
             var previous = Workspace;
+            if (previous is not null) await RaiseClosingAsync().ConfigureAwait(false);
             Workspace = replacement;
             ActivePath = fullPath;
             Error = null;
@@ -149,6 +169,7 @@ public sealed class AppLibraryState : IAsyncDisposable
                 throw new LibraryValidationException("The selected library has a different permanent ID and cannot be used for relinking.");
             }
             var previous = Workspace;
+            if (previous is not null) await RaiseClosingAsync().ConfigureAwait(false);
             Workspace = replacement;
             ActivePath = fullPath;
             Error = null;
@@ -181,6 +202,7 @@ public sealed class AppLibraryState : IAsyncDisposable
 
             var replacement = await _factory.AdoptCopyAsync(fullPath).ConfigureAwait(false);
             var previous = Workspace;
+            if (previous is not null) await RaiseClosingAsync().ConfigureAwait(false);
             Workspace = replacement;
             ActivePath = fullPath;
             Error = null;
@@ -202,6 +224,7 @@ public sealed class AppLibraryState : IAsyncDisposable
         try
         {
             if (!ReferenceEquals(Workspace, expectedWorkspace)) return;
+            await RaiseClosingAsync().ConfigureAwait(false);
             Workspace = null;
             Error = message;
             BrowserSession = new LibraryBrowserSession();
