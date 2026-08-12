@@ -71,52 +71,16 @@ else
         }
     </section>
 
-    <section class="panel">
-        <button class="secondary" @onclick="() => _showRecycled = !_showRecycled">@(_showRecycled ? Strings["HideRecycledModels"] : Strings["ShowRecycledModels"])</button>
-        @if (_showRecycled)
-        {
-            @if (_recycledModels.Count == 0)
-            {
-                <p class="empty">@Strings["NoRecycledModels"]</p>
-            }
-            else
-            {
-                <ul class="metadata-list">
-                    @foreach (var model in _recycledModels)
-                    {
-                        <li>
-                            <div><strong>@model.Label</strong><small>@ModeLabel(model.Mode)</small></div>
-                            <button class="ghost" disabled="@_busy" @onclick="() => RestoreAsync(model.Id)">@Strings["Restore"]</button>
-                            @if (_deleteCandidate == model.Id)
-                            {
-                                <span role="dialog" aria-label="@Strings["ConfirmPermanentlyDeleteModel"]">
-                                    <span>@Strings["PermanentlyDeleteModelWarning"]</span>
-                                    <button class="danger" disabled="@_busy" @onclick="() => PermanentlyDeleteAsync(model.Id)">@Strings["DeletePermanently"]</button>
-                                    <button class="secondary" disabled="@_busy" @onclick="() => _deleteCandidate = null">@Strings["Cancel"]</button>
-                                </span>
-                            }
-                            else
-                            {
-                                <button class="ghost danger" disabled="@_busy" @onclick="() => _deleteCandidate = model.Id">@Strings["DeletePermanently"]</button>
-                            }
-                        </li>
-                    }
-                </ul>
-            }
-        }
-    </section>
+    <p class="muted">@Strings["RecycledItemsMovedToBin"] <a class="ghost" href="/recycle-bin">@Strings["NavRecycleBin"]</a></p>
 }
 
 @code {
     private IReadOnlyList<Model> _activeModels = [];
-    private IReadOnlyList<Model> _recycledModels = [];
     private IReadOnlyList<Connection> _activeConnections = [];
     private readonly Dictionary<string, ModelCatalogue> _catalogues = [];
     private bool _busy;
-    private bool _showRecycled;
     private string? _message;
     private string? _recycleCandidate;
-    private string? _deleteCandidate;
 
     protected override async Task OnInitializedAsync()
     {
@@ -129,7 +93,6 @@ else
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
         _activeModels = await workspace.GetActiveModelsAsync();
-        _recycledModels = await workspace.GetRecycledModelsAsync();
         _activeConnections = await workspace.GetActiveConnectionsAsync();
         _catalogues.Clear();
         foreach (var connectionId in _activeModels.Select(model => model.ConnectionId).Distinct())
@@ -167,39 +130,6 @@ else
             await LibraryState.Workspace!.RecycleModelAsync(modelId);
             _recycleCandidate = null;
             _message = Strings["ModelRecycled"];
-            await ReloadAsync();
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
-        {
-            _message = exception.Message;
-        }
-        finally { _busy = false; }
-    }
-
-    private async Task RestoreAsync(string modelId)
-    {
-        _busy = true;
-        try
-        {
-            await LibraryState.Workspace!.RestoreModelAsync(modelId);
-            _message = Strings["ModelRestored"];
-            await ReloadAsync();
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
-        {
-            _message = exception.Message;
-        }
-        finally { _busy = false; }
-    }
-
-    private async Task PermanentlyDeleteAsync(string modelId)
-    {
-        _busy = true;
-        try
-        {
-            await LibraryState.Workspace!.PermanentlyDeleteModelAsync(modelId);
-            _deleteCandidate = null;
-            _message = Strings["ModelPermanentlyDeleted"];
             await ReloadAsync();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)

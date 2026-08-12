@@ -1,5 +1,6 @@
 @page "/recycle-bin"
 @inject AppLibraryState LibraryState
+@inject ISecureCredentialStore Credentials
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -75,6 +76,9 @@
             <option value="folder">@Strings["Folders"]</option>
             <option value="file">@Strings["Files"]</option>
             <option value="link">@Strings["FileLinks"]</option>
+            <option value="connection">@Strings["NavConnections"]</option>
+            <option value="model">@Strings["NavModels"]</option>
+            <option value="savedsetting">@Strings["NavSavedSettings"]</option>
         </select>
     </label>
     <label>@Strings["Sort"]
@@ -162,6 +166,9 @@ else
                 "folder" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.Folder),
                 "file" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.File),
                 "link" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.FileLink),
+                "connection" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.Connection),
+                "model" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.Model),
+                "savedsetting" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.SavedSetting),
                 _ => query
             };
             if (!string.IsNullOrWhiteSpace(_search))
@@ -261,12 +268,50 @@ else
         _isBusy = true;
         try
         {
+            var workspace = LibraryState.Workspace;
+            var libraryId = workspace.Descriptor.LibraryId;
+            var connectionLedgers = new Dictionary<string, CredentialLedgerConnectionSnapshot>(StringComparer.Ordinal);
+            if (_pendingAction != RecycleBinAction.Restore)
+            {
+                var connectionIds = _pendingEntries.Where(entry => entry.Reference.Kind == RecycleBinItemKind.Connection)
+                    .Select(entry => entry.Reference.Id).ToHashSet(StringComparer.Ordinal);
+                if (connectionIds.Count > 0)
+                {
+                    foreach (var snapshot in await workspace.GetCredentialLedgerSnapshotAsync())
+                    {
+                        if (connectionIds.Contains(snapshot.ConnectionId)) connectionLedgers[snapshot.ConnectionId] = snapshot;
+                    }
+                }
+            }
+
             var result = _pendingAction switch
             {
-                RecycleBinAction.Restore => await LibraryState.Workspace.RestoreRecycleBinItemsAsync(_restorePreview.Items.Where(item => item.CanRestore).Select(item => item.Entry.Reference).ToArray()),
-                RecycleBinAction.Empty => await LibraryState.Workspace.EmptyRecycleBinAsync(),
-                _ => await LibraryState.Workspace.PermanentlyDeleteRecycleBinItemsAsync(_pendingEntries.Select(entry => entry.Reference).ToArray())
+                RecycleBinAction.Restore => await workspace.RestoreRecycleBinItemsAsync(_restorePreview.Items.Where(item => item.CanRestore).Select(item => item.Entry.Reference).ToArray()),
+                RecycleBinAction.Empty => await workspace.EmptyRecycleBinAsync(),
+                _ => await workspace.PermanentlyDeleteRecycleBinItemsAsync(_pendingEntries.Select(entry => entry.Reference).ToArray())
             };
+
+            foreach (var success in result.Items.Where(item => item.Succeeded && item.Reference.Kind == RecycleBinItemKind.Connection))
+            {
+                if (!connectionLedgers.TryGetValue(success.Reference.Id, out var ledger)) continue;
+                try
+                {
+                    foreach (var revision in ledger.Revisions)
+                    {
+                        if (revision.Purpose == CredentialRevisionPurpose.Active) await Credentials.RemoveActiveAsync(libraryId, success.Reference.Id, revision.RevisionId);
+                        else await Credentials.RemoveCandidateAsync(libraryId, success.Reference.Id, revision.RevisionId);
+                    }
+                    await Credentials.RemoveLegacyAsync(libraryId, success.Reference.Id);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+                {
+                    // Best-effort: the connection's DB rows are already gone and cannot be rolled back
+                    // here. A leftover secure-storage entry is harmless (never referenced again), and
+                    // this is isolated per connection so one failure doesn't block cleanup for the rest
+                    // of the batch (e.g. Empty Recycle Bin deleting several connections at once).
+                }
+            }
+
             foreach (var success in result.Items.Where(item => item.Succeeded)) _selected.Remove(success.Reference);
             _failures = result.Items.Where(item => !item.Succeeded).ToArray();
             _message = result.FailedCount == 0
@@ -283,12 +328,34 @@ else
         }
     }
 
-    private string KindName(RecycleBinItemKind kind) => kind switch { RecycleBinItemKind.Folder => Strings["Folder"], RecycleBinItemKind.File => Strings["File"], _ => Strings["FileLink"] };
+    private string KindName(RecycleBinItemKind kind) => kind switch
+    {
+        RecycleBinItemKind.Folder => Strings["Folder"],
+        RecycleBinItemKind.File => Strings["File"],
+        RecycleBinItemKind.FileLink => Strings["FileLink"],
+        RecycleBinItemKind.Connection => Strings["Connection"],
+        RecycleBinItemKind.Model => Strings["Model"],
+        _ => Strings["SavedSetting"]
+    };
     private string StateName(LibraryRecordState state) => state == LibraryRecordState.PendingPermanentDeletion ? Strings["PendingPermanentDeletion"] : Strings["Recycled"];
-    private string EntryCascadeSummary(RecycleBinEntry entry) => CascadeSummary([entry]);
+    private string EntryCascadeSummary(RecycleBinEntry entry) => entry.Reference.Kind switch
+    {
+        RecycleBinItemKind.Connection => Strings["CascadeSummaryConnection", entry.OwnedModelCount, entry.OwnedSavedSettingCount],
+        RecycleBinItemKind.Model => Strings["CascadeSummaryModel", entry.OwnedSavedSettingCount],
+        RecycleBinItemKind.SavedSetting => Strings["NoDependents"],
+        _ => Strings["CascadeSummary", entry.OwnedFolderCount, entry.OwnedFileCount, entry.OwnedLinkCount]
+    };
     private string CascadeSummary(IEnumerable<RecycleBinEntry> entries)
     {
         var snapshot = entries.ToArray();
-        return Strings["CascadeSummary", snapshot.Sum(entry => entry.OwnedFolderCount), snapshot.Sum(entry => entry.OwnedFileCount), snapshot.Sum(entry => entry.OwnedLinkCount)];
+        var segments = new List<string>();
+        var folders = snapshot.Sum(entry => entry.OwnedFolderCount);
+        var files = snapshot.Sum(entry => entry.OwnedFileCount);
+        var links = snapshot.Sum(entry => entry.OwnedLinkCount);
+        if (folders > 0 || files > 0 || links > 0) segments.Add(Strings["CascadeSummary", folders, files, links]);
+        var models = snapshot.Sum(entry => entry.OwnedModelCount);
+        var savedSettings = snapshot.Sum(entry => entry.OwnedSavedSettingCount);
+        if (models > 0 || savedSettings > 0) segments.Add(Strings["CascadeSummaryConnection", models, savedSettings]);
+        return segments.Count == 0 ? Strings["CascadeSummary", 0, 0, 0] : string.Join(' ', segments);
     }
 }

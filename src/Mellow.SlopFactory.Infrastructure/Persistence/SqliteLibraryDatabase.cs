@@ -860,6 +860,65 @@ internal sealed class SqliteLibraryDatabase
             }
         }
 
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT c.id,c.label,c.state,c.recycled_at,
+                    (SELECT COUNT(*) FROM models m WHERE m.connection_id=c.id),
+                    (SELECT COUNT(*) FROM saved_generation_settings s JOIN models m2 ON m2.id=s.model_id WHERE m2.connection_id=c.id)
+                FROM connections c
+                WHERE c.state IN (1,2);
+                """;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                results.Add(new RecycleBinEntry(
+                    new RecycleBinItemReference(RecycleBinItemKind.Connection, reader.GetString(0)),
+                    reader.GetString(1), "Connections", (LibraryRecordState)reader.GetInt32(2), Parse(reader.GetString(3)),
+                    0, 0, 0, null, reader.GetInt32(4), reader.GetInt32(5)));
+            }
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT m.id,m.label,c.label,m.state,m.recycled_at,
+                    (SELECT COUNT(*) FROM saved_generation_settings s WHERE s.model_id=m.id)
+                FROM models m
+                JOIN connections c ON c.id=m.connection_id
+                WHERE m.state IN (1,2) AND c.state NOT IN (1,2);
+                """;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                results.Add(new RecycleBinEntry(
+                    new RecycleBinItemReference(RecycleBinItemKind.Model, reader.GetString(0)),
+                    reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3), Parse(reader.GetString(4)),
+                    0, 0, 0, null, 0, reader.GetInt32(5)));
+            }
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT s.id,s.title,COALESCE(m.label,'Unassigned model'),s.state,s.recycled_at
+                FROM saved_generation_settings s
+                LEFT JOIN models m ON m.id=s.model_id
+                LEFT JOIN connections c ON c.id=m.connection_id
+                WHERE s.state IN (1,2)
+                  AND (m.id IS NULL OR m.state NOT IN (1,2))
+                  AND (c.id IS NULL OR c.state NOT IN (1,2));
+                """;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                results.Add(new RecycleBinEntry(
+                    new RecycleBinItemReference(RecycleBinItemKind.SavedSetting, reader.GetString(0)),
+                    reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3), Parse(reader.GetString(4)),
+                    0, 0, 0, null));
+            }
+        }
+
         return results.OrderByDescending(item => item.RecycledAt).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -961,6 +1020,47 @@ internal sealed class SqliteLibraryDatabase
                 var target = await GetFileAsync(connection, link.TargetFileId, cancellationToken).ConfigureAwait(false);
                 if (source.State != LibraryRecordState.Active && !selectedFileIds.Contains(source.Id)) blockers.Add($"Source file '{source.DisplayName}' must be restored first or included in this selection.");
                 if (target.State != LibraryRecordState.Active && !selectedFileIds.Contains(target.Id)) blockers.Add($"Target file '{target.DisplayName}' must be restored first or included in this selection.");
+                break;
+            }
+            case RecycleBinItemKind.Connection:
+            {
+                var conn = await GetConnectionAsync(connection, reference.Id, cancellationToken).ConfigureAwait(false);
+                if (conn.State != LibraryRecordState.Recycled) blockers.Add("Only a recycled connection can be restored.");
+                await using var conflict = connection.CreateCommand();
+                conflict.CommandText = "SELECT EXISTS(SELECT 1 FROM connections candidate JOIN connections restoring ON restoring.id=$id WHERE candidate.label_key=restoring.label_key AND candidate.state=0 AND candidate.id<>restoring.id);";
+                conflict.Parameters.AddWithValue("$id", reference.Id);
+                if (Convert.ToInt32(await conflict.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) != 0)
+                {
+                    blockers.Add($"An active connection labelled '{conn.Label}' already exists.");
+                }
+                break;
+            }
+            case RecycleBinItemKind.Model:
+            {
+                var model = await GetModelAsync(connection, reference.Id, cancellationToken).ConfigureAwait(false);
+                if (model.State != LibraryRecordState.Recycled) blockers.Add("Only a recycled model can be restored.");
+                var owningConnection = await GetConnectionAsync(connection, model.ConnectionId, cancellationToken).ConfigureAwait(false);
+                if (owningConnection.State != LibraryRecordState.Active) blockers.Add($"Its owning connection '{owningConnection.Label}' must be restored first.");
+                await using var conflict = connection.CreateCommand();
+                conflict.CommandText = "SELECT EXISTS(SELECT 1 FROM models candidate JOIN models restoring ON restoring.id=$id WHERE candidate.label_key=restoring.label_key AND candidate.state=0 AND candidate.id<>restoring.id);";
+                conflict.Parameters.AddWithValue("$id", reference.Id);
+                if (Convert.ToInt32(await conflict.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) != 0)
+                {
+                    blockers.Add($"An active model labelled '{model.Label}' already exists.");
+                }
+                break;
+            }
+            case RecycleBinItemKind.SavedSetting:
+            {
+                var setting = await GetSavedSettingAsync(connection, reference.Id, cancellationToken).ConfigureAwait(false);
+                if (setting.State != LibraryRecordState.Recycled) blockers.Add("Only a recycled saved setting can be restored.");
+                await using var conflict = connection.CreateCommand();
+                conflict.CommandText = "SELECT EXISTS(SELECT 1 FROM saved_generation_settings candidate JOIN saved_generation_settings restoring ON restoring.id=$id WHERE candidate.title_key=restoring.title_key AND candidate.state=0 AND candidate.id<>restoring.id);";
+                conflict.Parameters.AddWithValue("$id", reference.Id);
+                if (Convert.ToInt32(await conflict.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) != 0)
+                {
+                    blockers.Add($"An active saved setting titled '{setting.Title}' already exists.");
+                }
                 break;
             }
             default:

@@ -1545,9 +1545,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             {
                 RecycleBinItemKind.Folder => $"Restores {entry.OwnedFolderCount} folder(s) and {entry.OwnedFileCount} file(s) at their original locations.",
                 RecycleBinItemKind.File => "Restores the file and its attached metadata at the original location.",
-                _ => "Restores the directed file link after both endpoint files are active."
+                RecycleBinItemKind.FileLink => "Restores the directed file link after both endpoint files are active.",
+                RecycleBinItemKind.Connection => $"Restores the connection and its {entry.OwnedModelCount} model(s) and {entry.OwnedSavedSettingCount} saved setting(s).",
+                RecycleBinItemKind.Model => $"Restores the model and its {entry.OwnedSavedSettingCount} saved setting(s).",
+                _ => "Restores the saved setting."
             });
-            if (reference.Kind != RecycleBinItemKind.FileLink && entry.OwnedLinkCount > 0)
+            if (reference.Kind is RecycleBinItemKind.Folder or RecycleBinItemKind.File && entry.OwnedLinkCount > 0)
             {
                 effects.Add($"Up to {entry.OwnedLinkCount} endpoint-owned link(s) may reactivate when both endpoints are available; explicitly recycled links remain recycled.");
             }
@@ -2416,6 +2419,9 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                         case RecycleBinItemKind.Folder: await RestoreFolderCoreAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         case RecycleBinItemKind.File: await RestoreFileCoreAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         case RecycleBinItemKind.FileLink: await _database.RestoreLinkAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.Connection: await _database.RestoreConnectionAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.Model: await _database.RestoreModelAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.SavedSetting: await _database.RestoreSavedSettingAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         default: throw new LibraryValidationException("The recycle-bin item type is not supported.");
                     }
                 }
@@ -2426,12 +2432,15 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                         case RecycleBinItemKind.Folder: await PermanentlyDeleteFolderCoreAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         case RecycleBinItemKind.File: await PermanentlyDeleteFileCoreAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         case RecycleBinItemKind.FileLink: await _database.PermanentlyDeleteLinkAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.Connection: await _database.PermanentlyDeleteConnectionAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.Model: await _database.PermanentlyDeleteModelAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.SavedSetting: await _database.PermanentlyDeleteSavedSettingAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         default: throw new LibraryValidationException("The recycle-bin item type is not supported.");
                     }
                 }
                 results.Add(new RecycleBinOperationItemResult(reference, name, true, null));
             }
-            catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is SlopFactoryException or IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
             {
                 results.Add(new RecycleBinOperationItemResult(reference, name, false, SanitizeRecycleBinError(exception)));
             }

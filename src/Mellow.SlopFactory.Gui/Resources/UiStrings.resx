@@ -7,6 +7,7 @@
   <data name="ApplicationName" xml:space="preserve"><value>SlopFactory</value></data>
   <data name="NavLibrary" xml:space="preserve"><value>Library</value></data>
   <data name="NavRecycleBin" xml:space="preserve"><value>Recycle bin</value></data>
+  <data name="RecycledItemsMovedToBin" xml:space="preserve"><value>Recycled items can be restored or permanently deleted from the</value></data>
   <data name="NavLibrarySettings" xml:space="preserve"><value>Library settings</value></data>
   <data name="NavAbout" xml:space="preserve"><value>About</value></data>
   <data name="PrimaryNavigation" xml:space="preserve"><value>Primary navigation</value></data>
@@ -82,6 +83,10 @@
   <data name="PendingPermanentDeletion" xml:space="preserve"><value>Pending permanent deletion</value></data>
   <data name="Recycled" xml:space="preserve"><value>Recycled</value></data>
   <data name="CascadeSummary" xml:space="preserve"><value>{0} folder(s), {1} file(s), and {2} link(s)</value></data>
+  <data name="SavedSetting" xml:space="preserve"><value>Saved setting</value></data>
+  <data name="CascadeSummaryConnection" xml:space="preserve"><value>{0} model(s), {1} saved setting(s)</value></data>
+  <data name="CascadeSummaryModel" xml:space="preserve"><value>{0} saved setting(s)</value></data>
+  <data name="NoDependents" xml:space="preserve"><value>No dependents</value></data>
   <data name="RestoreSelectedItemsQuestion" xml:space="preserve"><value>Restore selected items?</value></data>
   <data name="EmptyRecycleBinQuestion" xml:space="preserve"><value>Empty the recycle bin?</value></data>
   <data name="PermanentlyDeleteSelectedItemsQuestion" xml:space="preserve"><value>Permanently delete selected items?</value></data>
@@ -586,17 +591,10 @@
   <data name="ConnectionSummary" xml:space="preserve"><value>{0} · {1}</value></data>
   <data name="ConfirmRecycleConnection" xml:space="preserve"><value>Confirm recycle connection</value></data>
   <data name="RecycleConnectionWarning" xml:space="preserve"><value>Recycling this connection will also recycle {0} dependent model(s).</value></data>
-  <data name="HideRecycledConnections" xml:space="preserve"><value>Hide recycled connections</value></data>
-  <data name="ShowRecycledConnections" xml:space="preserve"><value>Show recycled connections</value></data>
-  <data name="NoRecycledConnections" xml:space="preserve"><value>No recycled connections.</value></data>
-  <data name="ConfirmPermanentlyDeleteConnection" xml:space="preserve"><value>Confirm permanently delete connection</value></data>
-  <data name="PermanentlyDeleteConnectionWarning" xml:space="preserve"><value>This permanently deletes the connection, its dependent models, and its stored API key.</value></data>
   <data name="ConnectionVerified" xml:space="preserve"><value>Verified</value></data>
   <data name="ConnectionTestFailedStatus" xml:space="preserve"><value>Last test failed</value></data>
   <data name="ConnectionUnverified" xml:space="preserve"><value>Unverified</value></data>
   <data name="ConnectionRecycled" xml:space="preserve"><value>Connection recycled.</value></data>
-  <data name="ConnectionRestored" xml:space="preserve"><value>Connection restored.</value></data>
-  <data name="ConnectionPermanentlyDeleted" xml:space="preserve"><value>Connection permanently deleted.</value></data>
   <data name="ProviderType" xml:space="preserve"><value>Provider type</value></data>
   <data name="BaseUrl" xml:space="preserve"><value>Base URL</value></data>
   <data name="AdvancedConnectionSettings" xml:space="preserve"><value>Advanced connection settings</value></data>
@@ -625,16 +623,9 @@
   <data name="ModelSummary" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
   <data name="ConfirmRecycleModel" xml:space="preserve"><value>Confirm recycle model</value></data>
   <data name="RecycleModelWarning" xml:space="preserve"><value>Recycling this model also recycles its dependent saved generation settings.</value></data>
-  <data name="HideRecycledModels" xml:space="preserve"><value>Hide recycled models</value></data>
-  <data name="ShowRecycledModels" xml:space="preserve"><value>Show recycled models</value></data>
-  <data name="NoRecycledModels" xml:space="preserve"><value>No recycled models.</value></data>
-  <data name="ConfirmPermanentlyDeleteModel" xml:space="preserve"><value>Confirm permanently delete model</value></data>
-  <data name="PermanentlyDeleteModelWarning" xml:space="preserve"><value>This permanently deletes the model. Files already generated with it keep their provider and model provenance.</value></data>
   <data name="ModeText" xml:space="preserve"><value>Text</value></data>
   <data name="ModeImage" xml:space="preserve"><value>Image</value></data>
   <data name="ModelRecycled" xml:space="preserve"><value>Model recycled.</value></data>
-  <data name="ModelRestored" xml:space="preserve"><value>Model restored.</value></data>
-  <data name="ModelPermanentlyDeleted" xml:space="preserve"><value>Model permanently deleted.</value></data>
   <data name="Connection" xml:space="preserve"><value>Connection</value></data>
   <data name="GenerationMode" xml:space="preserve"><value>Generation mode</value></data>
   <data name="ProviderModelId" xml:space="preserve"><value>Provider model ID</value></data>
@@ -704,14 +695,7 @@
   <data name="UseSettings" xml:space="preserve"><value>Use</value></data>
   <data name="ConfirmRecycleSavedSettings" xml:space="preserve"><value>Confirm recycle saved settings</value></data>
   <data name="RecycleSavedSettingsWarning" xml:space="preserve"><value>Recycling these saved settings does not affect the model or any previously generated files.</value></data>
-  <data name="HideRecycledSavedSettings" xml:space="preserve"><value>Hide recycled saved settings</value></data>
-  <data name="ShowRecycledSavedSettings" xml:space="preserve"><value>Show recycled saved settings</value></data>
-  <data name="NoRecycledSavedSettings" xml:space="preserve"><value>No recycled saved settings.</value></data>
-  <data name="ConfirmPermanentlyDeleteSavedSettings" xml:space="preserve"><value>Confirm permanently delete saved settings</value></data>
-  <data name="PermanentlyDeleteSavedSettingsWarning" xml:space="preserve"><value>This permanently deletes the saved settings. It does not affect the model or any previously generated files.</value></data>
   <data name="SavedSettingsRecycled" xml:space="preserve"><value>Saved settings recycled.</value></data>
-  <data name="SavedSettingsRestored" xml:space="preserve"><value>Saved settings restored.</value></data>
-  <data name="SavedSettingsPermanentlyDeleted" xml:space="preserve"><value>Saved settings permanently deleted.</value></data>
   <data name="UseAgain" xml:space="preserve"><value>Use again</value></data>
   <data name="SystemInstructions" xml:space="preserve"><value>System instructions (optional)</value></data>
   <data name="ShowSystemInstructions" xml:space="preserve"><value>Show system instructions</value></data>

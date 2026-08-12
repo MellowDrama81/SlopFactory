@@ -1,6 +1,5 @@
 @page "/connections"
 @inject AppLibraryState LibraryState
-@inject ISecureCredentialStore Credentials
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -62,51 +61,15 @@ else
         }
     </section>
 
-    <section class="panel">
-        <button class="secondary" @onclick="() => _showRecycled = !_showRecycled">@(_showRecycled ? Strings["HideRecycledConnections"] : Strings["ShowRecycledConnections"])</button>
-        @if (_showRecycled)
-        {
-            @if (_recycledConnections.Count == 0)
-            {
-                <p class="empty">@Strings["NoRecycledConnections"]</p>
-            }
-            else
-            {
-                <ul class="metadata-list">
-                    @foreach (var connection in _recycledConnections)
-                    {
-                        <li>
-                            <div><strong>@connection.Label</strong><small>@ProviderTypeLabel(connection.ProviderType)</small></div>
-                            <button class="ghost" disabled="@_busy" @onclick="() => RestoreAsync(connection.Id)">@Strings["Restore"]</button>
-                            @if (_deleteCandidate == connection.Id)
-                            {
-                                <span role="dialog" aria-label="@Strings["ConfirmPermanentlyDeleteConnection"]">
-                                    <span>@Strings["PermanentlyDeleteConnectionWarning"]</span>
-                                    <button class="danger" disabled="@_busy" @onclick="() => PermanentlyDeleteAsync(connection.Id)">@Strings["DeletePermanently"]</button>
-                                    <button class="secondary" disabled="@_busy" @onclick="() => _deleteCandidate = null">@Strings["Cancel"]</button>
-                                </span>
-                            }
-                            else
-                            {
-                                <button class="ghost danger" disabled="@_busy" @onclick="() => _deleteCandidate = connection.Id">@Strings["DeletePermanently"]</button>
-                            }
-                        </li>
-                    }
-                </ul>
-            }
-        }
-    </section>
+    <p class="muted">@Strings["RecycledItemsMovedToBin"] <a class="ghost" href="/recycle-bin">@Strings["NavRecycleBin"]</a></p>
 }
 
 @code {
     private IReadOnlyList<Connection> _activeConnections = [];
-    private IReadOnlyList<Connection> _recycledConnections = [];
     private IReadOnlyList<Model> _activeModels = [];
     private bool _busy;
-    private bool _showRecycled;
     private string? _message;
     private string? _recycleCandidate;
-    private string? _deleteCandidate;
 
     protected override async Task OnInitializedAsync()
     {
@@ -119,7 +82,6 @@ else
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
         _activeConnections = await workspace.GetActiveConnectionsAsync();
-        _recycledConnections = await workspace.GetRecycledConnectionsAsync();
         _activeModels = await workspace.GetActiveModelsAsync();
     }
 
@@ -153,51 +115,6 @@ else
             await LibraryState.Workspace!.RecycleConnectionAsync(connectionId);
             _recycleCandidate = null;
             _message = Strings["ConnectionRecycled"];
-            await ReloadAsync();
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
-        {
-            _message = exception.Message;
-        }
-        finally { _busy = false; }
-    }
-
-    private async Task RestoreAsync(string connectionId)
-    {
-        _busy = true;
-        try
-        {
-            await LibraryState.Workspace!.RestoreConnectionAsync(connectionId);
-            _message = Strings["ConnectionRestored"];
-            await ReloadAsync();
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
-        {
-            _message = exception.Message;
-        }
-        finally { _busy = false; }
-    }
-
-    private async Task PermanentlyDeleteAsync(string connectionId)
-    {
-        _busy = true;
-        try
-        {
-            var workspace = LibraryState.Workspace!;
-            var libraryId = workspace.Descriptor.LibraryId;
-            var ledger = (await workspace.GetCredentialLedgerSnapshotAsync()).FirstOrDefault(snapshot => snapshot.ConnectionId == connectionId);
-            await workspace.PermanentlyDeleteConnectionAsync(connectionId);
-            if (ledger is not null)
-            {
-                foreach (var revision in ledger.Revisions)
-                {
-                    if (revision.Purpose == CredentialRevisionPurpose.Active) await Credentials.RemoveActiveAsync(libraryId, connectionId, revision.RevisionId);
-                    else await Credentials.RemoveCandidateAsync(libraryId, connectionId, revision.RevisionId);
-                }
-            }
-            await Credentials.RemoveLegacyAsync(libraryId, connectionId);
-            _deleteCandidate = null;
-            _message = Strings["ConnectionPermanentlyDeleted"];
             await ReloadAsync();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)

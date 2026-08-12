@@ -107,9 +107,40 @@ in parallel. Both milestones must be complete before the first public release.
       generic-modality settings to their default, and requires retesting; `ConnectionEdit.razor`
       only disables the provider-type selector when the connection already has active dependent
       models. Recycled (non-active) dependent models do not block the change.
-- [ ] Extend the unified recycle bin (`RecycleBin.razor` and its shared category/search/sort
+- [x] Extend the unified recycle bin (`RecycleBin.razor` and its shared category/search/sort
       workflow) to include connections, models and saved generation settings instead of the
-      dedicated recycle sections added in these milestone slices.
+      dedicated recycle sections added in these milestone slices. `RecycleBinItemKind` gains
+      `Connection`/`Model`/`SavedSetting`; `GetRecycleBinEntriesAsync` gains three query blocks
+      mirroring the existing folder/file "hidden while its parent is also recycled" filter exactly
+      (a model never shows as its own top-level entry while its connection is recycled too, and
+      likewise for a saved setting under a recycled model) — this was already safe because
+      `RecycleConnectionAsync`/`RestoreConnectionAsync` and `RecycleModelAsync`/`RestoreModelAsync`
+      already cascade fully to their dependents inside one DB transaction (already tested
+      independently in `SavedGenerationSettingTests.cs`), so this slice is purely a listing/preview/
+      dispatch layer over already-solid domain logic, not new cascade logic. `GetRestoreBlockersAsync`
+      gains matching cases: Connection and Model both check recycled-state, an owning-parent-must-be-
+      Active precondition (Model only — Connection has no parent), and an active-label conflict;
+      **SavedSetting deliberately does not check its owning model's state**, since
+      `RestoreSavedSettingAsync` itself never enforces that (a real, verified difference from Model,
+      not an oversight — mirroring it would have silently blocked restores that the underlying
+      domain method actually allows). New `connections_credential_revisions`-aware permanent-delete
+      handling was **not** needed: unlike folder/file permanent-delete (non-transactional filesystem
+      I/O, hence the `permanent_deletion_failures` retry table), connection/model/saved-setting
+      permanent-delete is pure transactional SQL with no filesystem component, so it can never leave a
+      retryable partial state. One real relocation was required: `Connections.razor`'s old dedicated
+      permanent-delete handler also cleaned up the deleted connection's secure-storage credential
+      ledger entries (`ISecureCredentialStore`), which `Infrastructure` cannot do (Gui-layer only,
+      and `CredentialReconciliationService` can't serve as a safety net here either — once a
+      connection's DB row is gone, its cascade-deleted ledger rows can never be found again). This
+      cleanup now lives in `RecycleBin.razor` itself, wrapped around its delete/empty-bin actions,
+      isolated per connection so one connection's secure-storage failure doesn't block cleanup for
+      the rest of a batch. `Connections.razor`/`Models.razor`/`SavedSettings.razor` keep only their
+      active list and the **Recycle** action; restore and permanent delete now live exclusively in
+      `/recycle-bin`, with a plain link back to it from each page. While in this code, also fixed a
+      pre-existing gap (not introduced by this slice, but touched by it): `ProcessRecycleBinItemsAsync`'s
+      catch filter didn't include `SqliteException`, so a raw SQLite error from `FileLink`'s (already
+      direct, unwrapped) restore/delete calls could have aborted an entire batch instead of being
+      recorded as one item's failure like every other kind already does.
 
 ## Models and discovery
 

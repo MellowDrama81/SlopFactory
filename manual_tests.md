@@ -127,6 +127,19 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** a successful Save behaves exactly as before this feature; a failed test blocks navigation until the user explicitly chooses Keep or Save-Unverified; Keep Existing Key never persists the failed candidate; Save New Key as Unverified persists it and reflects an unverified/failed status; a subsequent successful Save fully supersedes it; a pre-existing library upgrades silently with no connection incorrectly losing its working credential; and a **Credential State Requires Repair** connection is clearly surfaced and recoverable.
 
+## MT-10 — Unified recycle bin for connections, models, and saved settings
+
+1. On `/connections`, `/models`, and `/saved-settings`, confirm each page now shows only its active list and a **Recycle** action — no recycled-list toggle, and no Restore/Delete Permanently buttons remain — with a link to the recycle bin at the bottom.
+2. Recycle a connection that has at least one model with a saved setting attached. Open `/recycle-bin`. Confirm the connection shows as one entry with a summary like "2 model(s), 1 saved setting(s)", and that the model and saved setting do **not** also appear as their own separate rows.
+3. Filter the recycle bin's category dropdown to **Connections**, then **Models**, then **Saved settings** in turn. Confirm each filter shows only entries of that kind.
+4. Recycle a model directly from `/models` while its connection stays active. Confirm it now appears in the recycle bin as its own row (originally in the connection's label), and that restoring it from the bin succeeds and the model reappears as active on `/models`.
+5. Select the recycled connection from step 2 and click **Restore** from the recycle bin. Confirm the connection, its model, and its saved setting are all active again afterward (check `/connections`, `/models`, `/saved-settings`), and none of them show as separate recycle-bin entries anymore.
+6. Recycle a different connection that has a stored, working API key. From the recycle bin, click **Delete Permanently** on it (confirm the warning) or use **Empty Recycle Bin** with it included. Confirm the connection, its models and saved settings are all gone from their respective pages, and — using whatever debug/inspection means are available for this build — confirm its secure-storage credential entries are also gone, not just its database rows.
+7. Recycle two or more connections (each with a stored credential) at once, then use **Empty Recycle Bin**. Confirm all of them are fully removed, including their credential entries, and that the operation completes normally even though multiple connections' credentials are being cleaned up in the same action.
+8. Try to restore a recycled connection whose label now collides with an existing active connection (create a new active connection reusing the recycled one's exact label first). Confirm the recycle bin's restore preview reports a name-conflict blocker and does not restore it silently.
+
+**Pass:** Connections/Models/SavedSettings pages only handle recycling; all restore and permanent-delete actions live in `/recycle-bin`; a recycled connection's models and saved settings are folded into its own entry rather than double-listed; the category filter, batch restore, and Empty Recycle Bin all work correctly across the three new kinds; permanently deleting a connection through the bin (individually or via Empty Recycle Bin, including multiple connections at once) also removes its secure-storage credential entries, not just its database rows; a label/title conflict is reported before restoring rather than failing silently or overwriting.
+
 ## Reporting
 
 For each test case, record:

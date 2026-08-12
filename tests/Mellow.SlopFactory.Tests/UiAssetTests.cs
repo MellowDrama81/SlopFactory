@@ -314,7 +314,7 @@ public sealed class UiAssetTests
         var resources = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Resources", "UiStrings.resx");
         var recycleBin = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "RecycleBin.razor");
 
-        foreach (var key in new[] { "RecycleBinPageTitle", "RecentlyDeleted", "RestoreSelected", "RetryPermanentDeletion", "ItemsProcessedSuccessfully", "CascadeSummary" })
+        foreach (var key in new[] { "RecycleBinPageTitle", "RecentlyDeleted", "RestoreSelected", "RetryPermanentDeletion", "ItemsProcessedSuccessfully", "CascadeSummary", "SavedSetting", "CascadeSummaryConnection", "CascadeSummaryModel", "NoDependents" })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
             Assert.Contains($"Strings[\"{key}\"", recycleBin, StringComparison.Ordinal);
@@ -443,11 +443,10 @@ public sealed class UiAssetTests
                  {
                      "ConnectionsPageTitle", "ConnectionsEyebrow", "ConnectionsHeading", "ConnectionsDescription", "AddConnection",
                      "NoConnections", "ConnectionSummary", "ConfirmRecycleConnection", "RecycleConnectionWarning",
-                     "HideRecycledConnections", "ShowRecycledConnections", "NoRecycledConnections",
-                     "ConfirmPermanentlyDeleteConnection", "PermanentlyDeleteConnectionWarning", "DeletePermanently",
                      "ProviderOpenAi", "ProviderGenericOpenAiCompatible", "ConnectionVerified", "ConnectionTestFailedStatus",
-                     "ConnectionUnverified", "ConnectionRecycled", "ConnectionRestored", "ConnectionPermanentlyDeleted",
-                     "ConnectionCredentialsRequired", "InsecureConnectionBadge", "ConnectionCredentialRequiresRepair"
+                     "ConnectionUnverified", "ConnectionRecycled",
+                     "ConnectionCredentialsRequired", "InsecureConnectionBadge", "ConnectionCredentialRequiresRepair",
+                     "RecycledItemsMovedToBin", "NavRecycleBin"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -501,9 +500,8 @@ public sealed class UiAssetTests
                  {
                      "ModelsPageTitle", "ModelsEyebrow", "ModelsHeading", "ModelsDescription", "AddModel",
                      "AddConnectionFirst", "NoModels", "ModelSummary", "ConfirmRecycleModel", "RecycleModelWarning",
-                     "HideRecycledModels", "ShowRecycledModels", "NoRecycledModels", "ConfirmPermanentlyDeleteModel",
-                     "PermanentlyDeleteModelWarning", "ModeText", "ModeImage", "ModelRecycled", "ModelRestored", "ModelPermanentlyDeleted",
-                     "ModelNotCurrentlyListed", "NeedsReview"
+                     "ModeText", "ModeImage", "ModelRecycled",
+                     "ModelNotCurrentlyListed", "NeedsReview", "RecycledItemsMovedToBin", "NavRecycleBin"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -672,9 +670,7 @@ public sealed class UiAssetTests
                  {
                      "SavedSettingsPageTitle", "SavedSettingsHeading", "SavedSettingsDescription", "NewGeneration", "NoSavedSettings",
                      "SavedSettingSummary", "UseSettings", "ConfirmRecycleSavedSettings", "RecycleSavedSettingsWarning",
-                     "HideRecycledSavedSettings", "ShowRecycledSavedSettings", "NoRecycledSavedSettings",
-                     "ConfirmPermanentlyDeleteSavedSettings", "PermanentlyDeleteSavedSettingsWarning", "DeletePermanently",
-                     "SavedSettingsRecycled", "SavedSettingsRestored", "SavedSettingsPermanentlyDeleted", "NeedsReview"
+                     "SavedSettingsRecycled", "NeedsReview", "RecycledItemsMovedToBin", "NavRecycleBin"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

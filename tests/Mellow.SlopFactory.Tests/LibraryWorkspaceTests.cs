@@ -574,6 +574,157 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task RecycledConnectionAppearsWithOwnedCountsAndHidesItsModelsAndSavedSettings()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var connection = await workspace.CreateConnectionAsync("Bin Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var modelA = await workspace.CreateModelAsync("Bin Model A", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var modelB = await workspace.CreateModelAsync("Bin Model B", connection.Id, "gpt-4o-mini", GenerationMode.Text, true);
+        await workspace.CreateSavedSettingAsync("Bin Preset", modelA.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
+
+        await workspace.RecycleConnectionAsync(connection.Id);
+
+        var entries = await workspace.GetRecycleBinEntriesAsync();
+        var entry = Assert.Single(entries, e => e.Reference.Kind == RecycleBinItemKind.Connection);
+        Assert.Equal(connection.Id, entry.Reference.Id);
+        Assert.Equal(2, entry.OwnedModelCount);
+        Assert.Equal(1, entry.OwnedSavedSettingCount);
+        Assert.DoesNotContain(entries, e => e.Reference.Kind == RecycleBinItemKind.Model);
+        Assert.DoesNotContain(entries, e => e.Reference.Kind == RecycleBinItemKind.SavedSetting);
+        _ = modelB;
+    }
+
+    [Fact]
+    public async Task RecycledModelAppearsSeparatelyWhenItsConnectionStaysActive()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var connection = await workspace.CreateConnectionAsync("Active Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Standalone Model", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        await workspace.CreateSavedSettingAsync("Model Preset", model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
+
+        await workspace.RecycleModelAsync(model.Id);
+
+        var entries = await workspace.GetRecycleBinEntriesAsync();
+        var entry = Assert.Single(entries, e => e.Reference.Kind == RecycleBinItemKind.Model);
+        Assert.Equal(model.Id, entry.Reference.Id);
+        Assert.Equal(connection.Label, entry.OriginalLocation);
+        Assert.Equal(1, entry.OwnedSavedSettingCount);
+        Assert.DoesNotContain(entries, e => e.Reference.Kind == RecycleBinItemKind.Connection);
+        Assert.DoesNotContain(entries, e => e.Reference.Kind == RecycleBinItemKind.SavedSetting);
+    }
+
+    [Fact]
+    public async Task RecycledSavedSettingWithNoModelReferenceStillAppearsInTheBin()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var saved = await workspace.CreateSavedSettingAsync("Modelless Preset", null, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
+
+        await workspace.RecycleSavedSettingAsync(saved.Id);
+
+        var entry = Assert.Single(await workspace.GetRecycleBinEntriesAsync(), e => e.Reference.Kind == RecycleBinItemKind.SavedSetting);
+        Assert.Equal(saved.Id, entry.Reference.Id);
+    }
+
+    [Fact]
+    public async Task RestorePreviewReportsConnectionModelAndSavedSettingLabelConflicts()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var connection = await workspace.CreateConnectionAsync("Duplicate Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Duplicate Model", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var saved = await workspace.CreateSavedSettingAsync("Duplicate Preset", model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        await workspace.RecycleSavedSettingAsync(saved.Id);
+        await workspace.RecycleModelAsync(model.Id);
+        await workspace.RecycleConnectionAsync(connection.Id);
+        await workspace.CreateConnectionAsync("Duplicate Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+
+        var preview = await workspace.GetRecycleBinRestorePreviewAsync([new RecycleBinItemReference(RecycleBinItemKind.Connection, connection.Id)]);
+
+        var item = Assert.Single(preview.Items);
+        Assert.Contains(item.BlockingReasons, reason => reason.Contains("already exist", StringComparison.OrdinalIgnoreCase));
+        Assert.False(item.CanRestore);
+    }
+
+    [Fact]
+    public async Task RestoringASavedSettingWithAnActiveModelReportsNoOwningModelBlocker()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Model", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var saved = await workspace.CreateSavedSettingAsync("Preset", model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        await workspace.RecycleSavedSettingAsync(saved.Id);
+
+        var preview = await workspace.GetRecycleBinRestorePreviewAsync([new RecycleBinItemReference(RecycleBinItemKind.SavedSetting, saved.Id)]);
+
+        var item = Assert.Single(preview.Items);
+        Assert.Empty(item.BlockingReasons);
+        Assert.True(item.CanRestore);
+    }
+
+    [Fact]
+    public async Task BatchRestoreAndEmptyRecycleBinHandleConnectionsModelsAndSavedSettingsTogether()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var connection = await workspace.CreateConnectionAsync("Batch Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Batch Model", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var standaloneConnection = await workspace.CreateConnectionAsync("Standalone Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var standaloneModel = await workspace.CreateModelAsync("Standalone Model", standaloneConnection.Id, "gpt-4o", GenerationMode.Text, true);
+        _ = model;
+
+        await workspace.RecycleModelAsync(standaloneModel.Id);
+        await workspace.RecycleConnectionAsync(connection.Id);
+        var references = (await workspace.GetRecycleBinEntriesAsync()).Select(entry => entry.Reference).ToArray();
+
+        var restored = await workspace.RestoreRecycleBinItemsAsync(references);
+
+        Assert.Equal(2, restored.SucceededCount);
+        Assert.Equal(0, restored.FailedCount);
+        Assert.Empty(await workspace.GetRecycleBinEntriesAsync());
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetConnectionAsync(connection.Id)).State);
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetModelAsync(standaloneModel.Id)).State);
+
+        await workspace.RecycleModelAsync(standaloneModel.Id);
+        await workspace.RecycleConnectionAsync(connection.Id);
+        var emptied = await workspace.EmptyRecycleBinAsync();
+
+        Assert.Equal(2, emptied.SucceededCount);
+        Assert.Equal(0, emptied.FailedCount);
+        Assert.Empty(await workspace.GetRecycleBinEntriesAsync());
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetConnectionAsync(connection.Id));
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetModelAsync(standaloneModel.Id));
+    }
+
+    [Fact]
+    public async Task PermanentlyDeletingAConnectionThroughTheBinCascadesItsModelsAndSavedSettings()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var connection = await workspace.CreateConnectionAsync("Delete Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Delete Model", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var saved = await workspace.CreateSavedSettingAsync("Delete Preset", model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        await workspace.RecycleConnectionAsync(connection.Id);
+
+        var result = await workspace.PermanentlyDeleteRecycleBinItemsAsync([new RecycleBinItemReference(RecycleBinItemKind.Connection, connection.Id)]);
+
+        Assert.Equal(1, result.SucceededCount);
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetConnectionAsync(connection.Id));
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetModelAsync(model.Id));
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetSavedSettingAsync(saved.Id));
+    }
+
+    [Fact]
     public async Task RestorePreviewResolvesSelectedLinkEndpointsAndBlocksMissingManagedContent()
     {
         using var temporary = new TemporaryDirectory();

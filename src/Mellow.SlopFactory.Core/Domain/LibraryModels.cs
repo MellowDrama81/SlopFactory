@@ -107,7 +107,10 @@ public enum RecycleBinItemKind
 {
     Folder = 0,
     File = 1,
-    FileLink = 2
+    FileLink = 2,
+    Connection = 3,
+    Model = 4,
+    SavedSetting = 5
 }
 
 public enum LibraryIntegrityIssueKind
@@ -289,7 +292,9 @@ public sealed record RecycleBinEntry(
     int OwnedFolderCount,
     int OwnedFileCount,
     int OwnedLinkCount,
-    PermanentDeletionFailure? DeletionFailure);
+    PermanentDeletionFailure? DeletionFailure,
+    int OwnedModelCount = 0,
+    int OwnedSavedSettingCount = 0);
 
 public sealed record PermanentDeletionFailure(
     string SanitizedError,
