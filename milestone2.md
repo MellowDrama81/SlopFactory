@@ -624,9 +624,19 @@ in parallel. Both milestones must be complete before the first public release.
       alongside settings-schema/sources/improvement-state capture. Verified by
       `SavedGenerationSettingTests` and the `OpeningVersionTwentyThreeLibraryAddsSavedSettingRevision`
       migration test.
-- [ ] Add saved generation settings support for settings-schema/sources/improvement-state capture,
-      the **Review Changes** field-level diff view on a save conflict, and dependency-restoration
-      handling matching the recycled/missing-model-or-source rules.
+- [x] Add the **Review Changes** field-level diff view offered alongside Overwrite/Save As/Cancel on
+      a save conflict. `Generate.razor`'s conflict panel gained a `<details>` disclosure (matching the
+      `<details>`/`<summary>` pattern `GenerationHistoryDetail.razor` already uses) that diffs the
+      current form/tab values against `SavedSettingRevisionConflictException.Current` — model label,
+      prompt, system instructions, source image, destination folder path and result count — showing
+      only the fields that actually differ, as a read-only `<dl>` list (no new CSS/table needed; this
+      app has no other `<table>` markup, so the existing `<dl>` idiom from `LibrarySettings.razor`'s
+      Active Library panel was reused instead) without modifying either version. **Excludes**
+      settings-schema/sources/improvement-state capture and the recycled/missing-model-or-source
+      dependency-restoration handling, both of which remain open below since neither exists yet for
+      this diff to draw on.
+- [ ] Add saved generation settings support for settings-schema/sources/improvement-state capture and
+      dependency-restoration handling matching the recycled/missing-model-or-source rules.
 
 ## Cost, usage and notifications
 

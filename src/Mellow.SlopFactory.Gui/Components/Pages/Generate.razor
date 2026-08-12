@@ -226,6 +226,25 @@ else
         {
             <div class="notice error" role="dialog" aria-label="@Strings["SavedSettingsConflictTitle"]">
                 <p>@Strings["SavedSettingsConflictMessage"]</p>
+                <details>
+                    <summary>@Strings["ReviewChangesSummary"]</summary>
+                    @{ var diffRows = BuildConflictDiffRows(); }
+                    @if (diffRows.Count == 0)
+                    {
+                        <p class="muted">@Strings["ReviewChangesNoDifferences"]</p>
+                    }
+                    else
+                    {
+                        <dl>
+                            @foreach (var row in diffRows)
+                            {
+                                <dt>@row.Field</dt>
+                                <dd>@Strings["ReviewChangesYourVersionColumn"]: @row.Mine</dd>
+                                <dd>@Strings["ReviewChangesSavedVersionColumn"]: @row.Theirs</dd>
+                            }
+                        </dl>
+                    }
+                </details>
                 <div class="actions">
                     <button type="button" class="danger" disabled="@_busy" @onclick="OverwriteConflictedSettingsAsync">@Strings["OverwriteSavedSettings"]</button>
                     <button type="button" class="secondary" disabled="@(_busy || string.IsNullOrWhiteSpace(_settingsTitle))" @onclick="SaveAsNewAsync">@Strings["SaveSettingsAsAction"]</button>
@@ -687,6 +706,25 @@ else
             current = current.ParentId is { } parentId ? _activeFolders.FirstOrDefault(folder => folder.Id == parentId) : null;
         }
         return names.Count == 0 ? Strings["UnknownFolder"] : string.Join(" / ", names);
+    }
+
+    private string ResolveSourceFileName(string? fileId) =>
+        fileId is null ? Strings["ReviewChangesNoValue"] : _activeImageFiles.FirstOrDefault(file => file.Id == fileId)?.DisplayName ?? Strings["UnknownFile"];
+
+    private IReadOnlyList<(string Field, string Mine, string Theirs)> BuildConflictDiffRows()
+    {
+        if (_settingsConflict is not { } conflict) return [];
+        var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
+        (string Field, string Mine, string Theirs)[] rows =
+        [
+            (Strings["ReviewChangesModelField"], SelectedModel?.Label ?? Strings["Unavailable"], conflict.ModelLabel),
+            (Strings["ReviewChangesPromptField"], _form.Prompt, conflict.Prompt),
+            (Strings["ReviewChangesSystemInstructionsField"], systemInstructions ?? Strings["ReviewChangesNoValue"], conflict.SystemInstructions ?? Strings["ReviewChangesNoValue"]),
+            (Strings["ReviewChangesSourceFileField"], ResolveSourceFileName(sourceFileId), ResolveSourceFileName(conflict.SourceFileId)),
+            (Strings["ReviewChangesDestinationField"], FolderPath(_form.DestinationFolderId), FolderPath(conflict.DestinationFolderId)),
+            (Strings["ReviewChangesResultCountField"], _form.ResultCount.ToString(), conflict.ResultCount.ToString())
+        ];
+        return rows.Where(row => !string.Equals(row.Mine, row.Theirs, StringComparison.Ordinal)).ToList();
     }
 
     private async Task SaveInPlaceAsync()

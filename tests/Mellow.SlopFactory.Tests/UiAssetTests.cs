@@ -576,7 +576,10 @@ public sealed class UiAssetTests
                      "CloseTabConfirmMessage", "AddDraftTab", "DraftSaving", "DraftSaved", "DraftNotSaved", "RetrySaveAction",
                      "SaveSettingsAndCloseTab", "SaveAndCloseTab", "BackToCloseOptions", "Queued", "QueuePosition",
                      "GenerationCancelledBeforeSubmission", "DraftModelUnavailable", "CredentialRequiresRepairBanner",
-                     "SaveSettingsAsAction", "SavedSettingsConflictTitle", "SavedSettingsConflictMessage", "OverwriteSavedSettings"
+                     "SaveSettingsAsAction", "SavedSettingsConflictTitle", "SavedSettingsConflictMessage", "OverwriteSavedSettings",
+                     "ReviewChangesSummary", "ReviewChangesNoDifferences", "ReviewChangesYourVersionColumn", "ReviewChangesSavedVersionColumn",
+                     "ReviewChangesModelField", "ReviewChangesPromptField", "ReviewChangesSystemInstructionsField", "ReviewChangesSourceFileField",
+                     "ReviewChangesDestinationField", "ReviewChangesResultCountField", "ReviewChangesNoValue", "UnknownFile"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

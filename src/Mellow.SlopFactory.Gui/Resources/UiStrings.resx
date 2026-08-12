@@ -691,6 +691,18 @@
   <data name="SavedSettingsConflictMessage" xml:space="preserve"><value>These saved settings changed since you opened them, most likely from another tab. Overwrite the other change, save your changes as a new saved setting, or cancel and reload.</value></data>
   <data name="OverwriteSavedSettings" xml:space="preserve"><value>Overwrite</value></data>
   <data name="SavedSettingsSaved" xml:space="preserve"><value>Saved generation settings saved.</value></data>
+  <data name="ReviewChangesSummary" xml:space="preserve"><value>Review changes</value></data>
+  <data name="ReviewChangesNoDifferences" xml:space="preserve"><value>No fields differ.</value></data>
+  <data name="ReviewChangesYourVersionColumn" xml:space="preserve"><value>Your version</value></data>
+  <data name="ReviewChangesSavedVersionColumn" xml:space="preserve"><value>Saved version</value></data>
+  <data name="ReviewChangesModelField" xml:space="preserve"><value>Model</value></data>
+  <data name="ReviewChangesPromptField" xml:space="preserve"><value>Prompt</value></data>
+  <data name="ReviewChangesSystemInstructionsField" xml:space="preserve"><value>System instructions</value></data>
+  <data name="ReviewChangesSourceFileField" xml:space="preserve"><value>Source image</value></data>
+  <data name="ReviewChangesDestinationField" xml:space="preserve"><value>Destination folder</value></data>
+  <data name="ReviewChangesResultCountField" xml:space="preserve"><value>Result count</value></data>
+  <data name="ReviewChangesNoValue" xml:space="preserve"><value>None</value></data>
+  <data name="UnknownFile" xml:space="preserve"><value>Unknown file</value></data>
   <data name="SavedSettingsModelUnavailable" xml:space="preserve"><value>The model saved with these settings ({0}) is unavailable. Choose another model.</value></data>
   <data name="DraftModelUnavailable" xml:space="preserve"><value>The model previously selected for this tab is no longer available. Choose another model.</value></data>
   <data name="SavedSettingsPageTitle" xml:space="preserve"><value>Saved settings · SlopFactory</value></data>

@@ -153,6 +153,18 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** the setting defaults off; Android's notification permission is requested only on enabling, and denial keeps the feature off without crashing; a backgrounded/unfocused completed or failed generation produces an OS notification containing only the model label and status; tapping it opens the correct generation-history record; no notification appears while foregrounded, while its own record page is already open, or while the setting is off.
 
+## MT-12 — Saved-settings Review Changes diff
+
+1. Open the same saved generation setting into two separate tabs (use **Use** from `/saved-settings` twice, or once and duplicate the tab).
+2. In the first tab, change the prompt and click **Save**. Confirm it saves normally (no conflict, since it's the first change).
+3. In the second tab (still holding the original loaded revision), change the destination folder and result count, then click **Save**. Confirm the conflict panel appears instead of silently overwriting.
+4. Click **Review Changes**. Confirm it expands a list showing only the fields that actually differ between your unsaved change and the just-saved version from step 2 — for this scenario, at least **Prompt** (yours: original prompt; saved: the tab-1 prompt) plus your own actually-changed fields (destination folder, result count) if they differ from what's currently saved. Confirm fields you didn't touch that also happen to match the saved version are *not* listed.
+5. Confirm the diff shows human-readable values, not raw IDs — the destination folder as a path (e.g. "Library / Subfolder") and the model as its label, not a GUID.
+6. Without closing Review Changes, click **Overwrite**. Confirm it saves successfully using your second tab's values, and that neither version was mutated by merely viewing the diff (re-open the setting fresh afterward and confirm it matches what you saved, not some merged result).
+7. Repeat steps 1–3, but this time have both tabs load the setting with truly identical field values and only the title differing between them. Reproduce a conflict where nothing else actually changed, and click **Review Changes**. Confirm it reports no fields differ, rather than showing an empty or broken list.
+
+**Pass:** Review Changes shows exactly the fields that differ between the two versions, with human-readable values, and never modifies either version; Overwrite/Save As/Cancel remain fully usable regardless of whether Review Changes was opened; a conflict with no actual field differences is handled gracefully.
+
 ## Reporting
 
 For each test case, record:
