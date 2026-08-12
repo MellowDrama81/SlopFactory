@@ -185,7 +185,18 @@ in parallel. Both milestones must be complete before the first public release.
       `ReplaceDraftStateAsync`/`DuplicateDraftAsync`/`DeleteDraftAsync`). There are no source
       roles/order (a draft still has a single optional source image, matching the current
       single-source generation form) and no Session Recovery emergency-snapshot staging; those
-      remain separate unchecked items below.
+      remain separate unchecked items below. `GenerationDraft` deliberately snapshots no
+      `ModelLabel` (unlike `SavedGenerationSetting`) since a draft is ephemeral working state, not a
+      permanent artifact — so when a draft's stored model becomes unavailable (recycled, permanently
+      deleted, or newly marked **Needs Review**), `LoadDraftIntoForm` falls back to the first active
+      model and shows a generic **DraftModelUnavailable** notice rather than a specific "model X is
+      gone" message with a label it doesn't have. This closes what was a real gap when first
+      shipped: the model select previously kept the stale ID with no matching `<option>` and no
+      warning, and clicking **Generate** silently did nothing. The prompt-improvement model select
+      had the identical gap and is fixed the same way, but silently (falling back to **None** rather
+      than showing its own notice) — matching the already-established convention for the source-image
+      reference, which has always silently cleared to "no source" rather than warning when its file
+      is gone, since it is a secondary field rather than the one that blocks submission.
 - [x] Add tab lifecycle on `/generate`: a plain-HTML tab strip with create (**+**), duplicate
       (`DuplicateDraftAsync`, without any run/history association), rename (an editable **Tab
       title** field) and **Reset to automatic title**, and close via an inline confirm/cancel
@@ -198,7 +209,15 @@ in parallel. Both milestones must be complete before the first public release.
       **Saving**/**Saved**/**Not Saved** status and a **Retry Save** action
       (`GenerationDraftTests`, `LibraryWorkspaceTests.OpeningVersionTwentyOneLibraryAddsGenerationDrafts`).
       There are no library-switch or application-exit unsaved-edit gates yet (an unflushed autosave
-      in flight at exit could still be lost); that remains open.
+      in flight at exit could still be lost); that remains open. `Generate.razor.Dispose()` now
+      cancels any pending debounced autosave timer, closing a real bug where navigating away
+      mid-debounce left the timer running in the background: it would still fire ~800 ms later and
+      call `PersistCurrentDraftAsync`, which reads `AppLibraryState.Workspace` at that later
+      moment — whichever library happens to be active by then, not necessarily the one the edit
+      belonged to — and attempt to update a draft ID that may no longer exist there. The edit made
+      in the last debounce window before navigating away is still lost exactly as already
+      documented above; the fix only stops the orphaned write from silently targeting the wrong
+      library's database afterward.
 - [x] Add tab reordering: `ILibraryWorkspace.ReorderDraftsAsync` takes the full ordered list of
       draft IDs (a whole-order-replace, matching `ReplaceDraftStateAsync`'s philosophy rather than a
       granular move-by-index method), validates it contains exactly the current set of drafts, and

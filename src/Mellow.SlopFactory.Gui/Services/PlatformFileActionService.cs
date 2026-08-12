@@ -76,7 +76,14 @@ public sealed class PlatformFileActionService(IncomingImportService incoming) : 
             await using var verify = activity.ContentResolver?.OpenInputStream(uri) ?? throw new IOException("The exported document could not be reopened for verification.");
             var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(verify, cancellationToken).ConfigureAwait(false));
             if (!string.Equals(hash, staged.ContentHash, StringComparison.Ordinal)) throw new IOException("The exported document failed byte-for-byte verification.");
+            HasPermissionBlock = false;
             return staged with { DestinationPath = "Android document provider" };
+        }
+        catch (Java.Lang.SecurityException)
+        {
+            try { activity.ContentResolver?.Delete(uri, null, null); } catch (Exception exception) when (exception is Java.Lang.SecurityException or InvalidOperationException) { }
+            HasPermissionBlock = true;
+            return new FileExportResult(file.Id, string.Empty, FileExportOutcome.Failed, 0, null, "The document provider denied access. Choose another destination or open system settings if access was permanently denied.");
         }
         catch
         {

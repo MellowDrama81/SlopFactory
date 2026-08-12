@@ -43,7 +43,7 @@ else
             <div class="tab @(draft.Id == _activeDraftId ? "active" : "")">
                 @if (_closingDraftId == draft.Id && _closeSaveIntentActive)
                 {
-                    <span class="tab-close-confirm">
+                    <span class="tab-close-confirm" role="dialog" aria-label="@Strings["CloseTab"]">
                         <input maxlength="100" placeholder="@Strings["SettingsTitle"]" @bind="_closeSaveTitle" />
                         @if (_closeError is not null)
                         {
@@ -55,7 +55,7 @@ else
                 }
                 else if (_closingDraftId == draft.Id)
                 {
-                    <span class="tab-close-confirm">
+                    <span class="tab-close-confirm" role="dialog" aria-label="@Strings["CloseTab"]">
                         @Strings["CloseTabConfirmMessage"]
                         <button type="button" class="danger" @onclick="() => ConfirmCloseDraftAsync(draft.Id)">@Strings["ConfirmCloseTab"]</button>
                         <button type="button" class="secondary" @onclick="BeginSaveAndCloseDraft">@Strings["SaveSettingsAndCloseTab"]</button>
@@ -355,7 +355,11 @@ else
 
     private void OnQueueChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
 
-    public void Dispose() => Queue.Changed -= OnQueueChanged;
+    public void Dispose()
+    {
+        Queue.Changed -= OnQueueChanged;
+        _autosaveCts?.Cancel();
+    }
 
     private async Task ConsumeRouteDraftAsync()
     {
@@ -422,16 +426,17 @@ else
         var draft = _drafts.FirstOrDefault(candidate => candidate.Id == draftId);
         if (draft is null) return;
         _activeDraftId = draftId;
+        var model = draft.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == draft.ModelId) : null;
         _form = new GenerateForm
         {
-            ModelId = draft.ModelId ?? (_models.Count > 0 ? _models[0].Id : string.Empty),
+            ModelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : string.Empty),
             Prompt = draft.Prompt,
             SystemInstructions = draft.SystemInstructions ?? string.Empty,
             SourceFileId = draft.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == draft.SourceFileId) ? draft.SourceFileId : string.Empty,
             ResultCount = draft.ResultCount,
             DestinationFolderId = draft.DestinationFolderId
         };
-        _improvementModelId = draft.ImprovementModelId ?? string.Empty;
+        _improvementModelId = draft.ImprovementModelId is not null && _models.Any(candidate => candidate.Id == draft.ImprovementModelId) ? draft.ImprovementModelId : string.Empty;
         _improvementGuidance = draft.ImprovementGuidance ?? string.Empty;
         _improvementCandidates = null;
         _lastImprovementRecordId = null;
@@ -442,6 +447,16 @@ else
         _settingsTitle = string.Empty;
         _saveStatus = SaveStatus.Idle;
         _saveError = null;
+        if (model is null && draft.ModelId is not null && _models.Count > 0)
+        {
+            _message = Strings["DraftModelUnavailable"];
+            _isError = false;
+        }
+        else
+        {
+            _message = null;
+            _isError = false;
+        }
     }
 
     private async Task SwitchToDraftAsync(string draftId)

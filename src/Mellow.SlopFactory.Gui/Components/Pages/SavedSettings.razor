@@ -45,7 +45,7 @@ else
                         <a class="ghost" href="@($"/generate/{setting.Id}")">@Strings["UseSettings"]</a>
                         @if (_recycleCandidate == setting.Id)
                         {
-                            <span role="group" aria-label="@Strings["ConfirmRecycleSavedSettings"]">
+                            <span role="dialog" aria-label="@Strings["ConfirmRecycleSavedSettings"]">
                                 <span>@Strings["RecycleSavedSettingsWarning"]</span>
                                 <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(setting.Id)">@Strings["Recycle"]</button>
                                 <button class="secondary" disabled="@_busy" @onclick="() => _recycleCandidate = null">@Strings["Cancel"]</button>
@@ -79,7 +79,7 @@ else
                             <button class="ghost" disabled="@_busy" @onclick="() => RestoreAsync(setting.Id)">@Strings["Restore"]</button>
                             @if (_deleteCandidate == setting.Id)
                             {
-                                <span role="group" aria-label="@Strings["ConfirmPermanentlyDeleteSavedSettings"]">
+                                <span role="dialog" aria-label="@Strings["ConfirmPermanentlyDeleteSavedSettings"]">
                                     <span>@Strings["PermanentlyDeleteSavedSettingsWarning"]</span>
                                     <button class="danger" disabled="@_busy" @onclick="() => PermanentlyDeleteAsync(setting.Id)">@Strings["DeletePermanently"]</button>
                                     <button class="secondary" disabled="@_busy" @onclick="() => _deleteCandidate = null">@Strings["Cancel"]</button>

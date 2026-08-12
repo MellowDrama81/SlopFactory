@@ -92,8 +92,9 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 12. Start a generation on one tab, then switch to another tab while it is still running. Confirm the busy tab's **×** stays disabled until the generation finishes, and that switching tabs does not crash or duplicate the in-flight request.
 13. Restart the app and reopen **Generate**. Confirm previously open draft tabs (title, prompt, model, and other field values) are restored from the library rather than reset.
 14. Simulate an autosave failure (for example, make the library location briefly unwritable) and confirm the status shows **Not saved** with a working **Retry save** action.
+15. On a tab with a model selected, recycle and permanently delete that model (or mark it **Needs Review**) from `/models` in another tab, then switch back to the affected tab. Confirm a notice explains the previously selected model is no longer available, the model select falls back to another active model instead of showing a blank/mismatched selection, and clicking **Generate** works normally with the fallback model rather than silently doing nothing.
 
-**Pass:** tabs create/duplicate/rename/reset/reorder/close correctly; all three close options behave as described, including a duplicate-title error keeping the tab open; autosave never silently loses an edit across a tab switch or restart; a discarded tab is unrecoverable and clearly warned about before confirming; the app never has zero tabs open.
+**Pass:** tabs create/duplicate/rename/reset/reorder/close correctly; all three close options behave as described, including a duplicate-title error keeping the tab open; autosave never silently loses an edit across a tab switch or restart; a discarded tab is unrecoverable and clearly warned about before confirming; the app never has zero tabs open; a draft whose model became unavailable is clearly explained rather than silently broken.
 
 ## MT-08 — Generation queue and concurrency
 

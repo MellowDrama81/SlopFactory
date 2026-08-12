@@ -5,9 +5,44 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 ## Platform shell and baseline UI
 
 - [x] Enforce the documented minimum Windows and Android versions at startup, show a blocking unsupported-version message, and verify the decision logic with platform-version unit tests.
-- [ ] Add device-local Follow System, Light, and Dark theme settings that apply immediately and survive restart; verify preference persistence and [MT-01](manual_tests.md#mt-01--theme-persistence-and-windows-high-contrast).
-- [ ] Make all primary library workflows usable at phone width, tablet width, and desktop width without clipped controls; verify with fixed viewport UI tests and [MT-02](manual_tests.md#mt-02--responsive-layout-and-touch-interaction).
-- [ ] Add visible keyboard focus, keyboard activation, and focus restoration for primary library/recycle-bin controls; verify with keyboard-driven UI tests and [MT-03](manual_tests.md#mt-03--windows-keyboard-and-focus-recovery).
+- [ ] Add device-local Follow System, Light, and Dark theme settings that apply immediately and
+      survive restart. The implementation is in place — `IThemePreferenceService`/`ThemePreferenceService`
+      persists the choice via MAUI `Preferences` under a dedicated key, `MainLayout.razor` applies
+      `Theme.CssClass` immediately on change, `LibrarySettings.razor`'s **Appearance** panel exposes
+      the Follow System/Light/Dark picker, and `app.css` defines the default-dark/`.theme-light`/
+      `@media (prefers-color-scheme)` rules backing all three choices — and `UiAssetTests.ThemePreferencePersistsAndTheShellUpdatesImmediately`
+      locks in the persistence key, all three enum values and the change-event wiring at the source
+      level. This item stays unchecked only because it also requires the
+      [MT-01](manual_tests.md#mt-01--theme-persistence-and-windows-high-contrast) device pass per
+      this checklist's rule that platform-labelled items need the applicable device check too.
+- [ ] Make all primary library workflows usable at phone width, tablet width, and desktop width
+      without clipped controls; verify with fixed viewport UI tests and
+      [MT-02](manual_tests.md#mt-02--responsive-layout-and-touch-interaction). `app.css` already has
+      the responsive breakpoints (900px/720px/420px) and a `pointer: coarse` touch-target rule,
+      checked by `UiAssetTests.ResponsiveAndFocusStylesCoverDesktopTouchAndHighContrast`, but that
+      test only confirms the CSS rules exist in source — there is no rendered, fixed-viewport UI
+      test (no bUnit/Playwright/Selenium harness exists in this repository at all), so "verify with
+      fixed viewport UI tests" is not actually satisfied yet; that would mean adopting a new test
+      technology, which is a real scope/dependency decision this checklist item cannot resolve on
+      its own.
+- [ ] Add visible keyboard focus, keyboard activation, and focus restoration for primary
+      library/recycle-bin controls. Keyboard focus/activation was already covered (every interactive
+      control across the app is a real `<button>`/`<a>`, so the existing `:focus-visible` outline and
+      native Enter/Space activation in `app.css` already apply everywhere; `ui.js` already
+      implements a `MutationObserver`-based focus-restoration helper that focuses the first control
+      of an appearing `[role="dialog"]` element and restores focus to the invoking control when it's
+      removed). What was missing — and is now fixed — is that every appear/disappear confirmation
+      panel across the app (`RecycleBin.razor`, `Home.razor`'s bulk-action panel,
+      `LibrarySettings.razor`'s five confirm blocks, `Connections.razor`/`Models.razor`/`SavedSettings.razor`'s
+      recycle/permanent-delete confirms, and `Generate.razor`'s tab-close confirms) used `role="group"`
+      or no role at all instead of `role="dialog"`, so the existing JS helper never actually fired for
+      any of them. They now all use `role="dialog"`, and
+      `UiAssetTests.AppearAndDisappearConfirmationPanelsUseTheDialogRoleSoFocusIsRestoredOnClose`
+      locks this in across every affected page. This stays unchecked only because it also requires
+      the [MT-03](manual_tests.md#mt-03--windows-keyboard-and-focus-recovery) device/keyboard pass,
+      and because "verify with keyboard-driven UI tests" implies the same rendered-UI test
+      capability gap noted above — the current tests are source-level guards, not live keyboard
+      interaction tests.
 - [x] Move application-owned UI strings into localizable resources without changing rendered English text; verify a resource-coverage test that rejects newly hard-coded UI strings in target components.
 
 ## Library location, availability, and recovery
@@ -23,10 +58,53 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 
 ## Android storage and permissions
 
-- [ ] Track Android app-specific external storage by stable volume identity and close/reopen the active library as that volume disappears/reappears; verify with [MT-04](manual_tests.md#mt-04--android-app-specific-and-removable-storage).
-- [ ] Add Android uninstall/app-specific-storage warnings and exclude SlopFactory application data from Android backup; verify manifest configuration and [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions).
-- [ ] Use Android system document pickers for both import and export, request only operation-specific permissions, and declare no broad-storage/camera/microphone/contact/location/media-library permissions; verify the built manifest and [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions).
-- [ ] Provide a contextual system-settings shortcut when a permanently denied permission blocks the requested action; verify with [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions).
+- [ ] Track Android app-specific external storage by stable volume identity and close/reopen the
+      active library as that volume disappears/reappears. `LibraryVolumeIdentity.ForPath` already
+      has a real Android branch (`#if ANDROID`, using `Android.OS.Storage.StorageManager.GetStorageVolume`
+      to return a stable `"android-volume:primary"`/`"android-volume:{uuid}"` identity), and the
+      close/reopen mechanism (`LibraryAvailabilityProbe.IsAvailable`, `ManagedContentWatchService.CheckAvailability`
+      on its 2-second timer, `AppLibraryState.CloseUnavailableLibraryAsync`/`RetryAsync`) is
+      platform-agnostic — none of it is gated to Windows only. This stays unchecked because
+      `tests/Mellow.SlopFactory.Tests.csproj` targets only `net10.0` (no `net10.0-android` test
+      target exists), so the `#if ANDROID` branch is never compiled or exercised by any automated
+      test, and because [MT-04](manual_tests.md#mt-04--android-app-specific-and-removable-storage)
+      still requires an actual device/emulator pass.
+- [ ] Add Android uninstall/app-specific-storage warnings and exclude SlopFactory application data
+      from Android backup. Already implemented: `Platforms/Android/AndroidManifest.xml` sets
+      `android:allowBackup="false"` and `android:fullBackupContent="false"`, and
+      `LibrarySettings.razor`'s Android-only panel shows the retention/permissions warning text with
+      an **Open system settings** action. `UiAssetTests.AndroidManifestAndStorageGuidanceExcludeBackupAndBroadPermissions`
+      already asserts both manifest flags and the warning strings at the source level. This stays
+      unchecked only because [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions)
+      still requires the device pass.
+- [ ] Use Android system document pickers for both import and export, request only
+      operation-specific permissions, and declare no broad-storage/camera/microphone/contact/location/media-library
+      permissions. Already implemented: the manifest declares only `android.permission.INTERNET`;
+      import uses `Intent.ActionOpenDocumentTree` and export uses `Intent.ActionCreateDocument` via
+      `MainActivity.PickDocumentTreeAsync`/`CreateDocumentAsync` — genuine Storage Access Framework
+      pickers, never a broad-storage API.
+      `UiAssetTests.AndroidManifestAndStorageGuidanceExcludeBackupAndBroadPermissions` asserts the
+      manifest declares none of `MANAGE_EXTERNAL_STORAGE`/`READ_MEDIA_*`/`READ_EXTERNAL_STORAGE`/
+      `WRITE_EXTERNAL_STORAGE`/`CAMERA`/`RECORD_AUDIO`/`READ_CONTACTS`/`ACCESS_FINE_LOCATION`. This
+      stays unchecked only because "verify the built manifest" implies inspecting the actual
+      merged/compiled manifest (not just the source file) and because
+      [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions)
+      still requires the device pass.
+- [ ] Provide a contextual system-settings shortcut when a permanently denied permission blocks the
+      requested action. `PlatformFileActionService`'s Android import path already catches
+      `Java.Lang.SecurityException`, sets `HasPermissionBlock = true`, and `Home.razor` conditionally
+      renders the **Open system settings** shortcut only `@if (PlatformFiles.HasPermissionBlock)` —
+      contextual, not an always-visible button. The Android export path previously had no equivalent
+      handling (a document-provider `SecurityException` during export would have propagated
+      uncaught, since the callers in `FileDetails.razor` only catch
+      `IOException`/`UnauthorizedAccessException`/`InvalidOperationException`/`SlopFactoryException`);
+      it now catches `Java.Lang.SecurityException` the same way, sets `HasPermissionBlock`, and
+      returns a `FileExportResult` with `Outcome: Failed` instead of throwing, matching import's
+      contextual-shortcut behavior and the existing "return a result, don't throw" convention its
+      callers already expect. There is still no automated test for this (the Android-conditional
+      code isn't compiled by the `net10.0`-only test project, same limitation as the volume-identity
+      item above), and [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions)
+      still requires the device pass.
 
 ## Import preflight and source safety
 
@@ -74,7 +152,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 - [x] Persist immediate read-only provenance for Duplicate and Edit as Copy; verify it points to the direct source and does not create transitive links.
 - [x] Add a read-only provenance-chain view that stops safely at missing/non-restorable endpoints; verify rename/move does not break ID-based traversal.
 - [x] Make provenance relationships recycle/restore with endpoints and replace permanently deleted sources with a non-restorable identity snapshot; verify neither deletion nor restore creates editable provenance links.
-- [x] Add current-file/overall progress and cancellation for bulk duplication; verify completed copies remain, unstarted copies do not begin, and the active atomic copy either commits or rolls back.
+- [x] Add current-file/overall progress and cancellation for bulk duplication; verify completed copies remain, unstarted copies do not begin, and the active atomic copy either commits or rolls back. `Home.razor.Dispose()` now also cancels `_bulkDuplicateCancellation` (it previously cancelled its sibling `_thumbnailCancellation`/`_importCancellation` operations but not this one), closing a gap where navigating away from a page mid-bulk-duplicate let the operation keep running in the background to completion instead of honoring the same "leaving cancels it" behavior already applied to the other two long-running operations on this page.
 - [x] Disable folders and ineligible records in bulk duplicate review with explanations; verify a duplicate never copies generation-history relationships.
 
 ## Final Milestone 1 verification

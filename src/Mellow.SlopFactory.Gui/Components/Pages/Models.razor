@@ -55,7 +55,7 @@ else
                         <a class="ghost" href="@($"/models/{model.Id}")">@Strings["Edit"]</a>
                         @if (_recycleCandidate == model.Id)
                         {
-                            <span role="group" aria-label="@Strings["ConfirmRecycleModel"]">
+                            <span role="dialog" aria-label="@Strings["ConfirmRecycleModel"]">
                                 <span>@Strings["RecycleModelWarning"]</span>
                                 <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(model.Id)">@Strings["Recycle"]</button>
                                 <button class="secondary" disabled="@_busy" @onclick="() => _recycleCandidate = null">@Strings["Cancel"]</button>
@@ -89,7 +89,7 @@ else
                             <button class="ghost" disabled="@_busy" @onclick="() => RestoreAsync(model.Id)">@Strings["Restore"]</button>
                             @if (_deleteCandidate == model.Id)
                             {
-                                <span role="group" aria-label="@Strings["ConfirmPermanentlyDeleteModel"]">
+                                <span role="dialog" aria-label="@Strings["ConfirmPermanentlyDeleteModel"]">
                                     <span>@Strings["PermanentlyDeleteModelWarning"]</span>
                                     <button class="danger" disabled="@_busy" @onclick="() => PermanentlyDeleteAsync(model.Id)">@Strings["DeletePermanently"]</button>
                                     <button class="secondary" disabled="@_busy" @onclick="() => _deleteCandidate = null">@Strings["Cancel"]</button>

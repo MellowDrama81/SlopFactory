@@ -46,7 +46,7 @@ else
                         <a class="ghost" href="@($"/connections/{connection.Id}")">@Strings["Edit"]</a>
                         @if (_recycleCandidate == connection.Id)
                         {
-                            <span role="group" aria-label="@Strings["ConfirmRecycleConnection"]">
+                            <span role="dialog" aria-label="@Strings["ConfirmRecycleConnection"]">
                                 <span>@Strings["RecycleConnectionWarning", DependentModelCount(connection.Id)]</span>
                                 <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(connection.Id)">@Strings["Recycle"]</button>
                                 <button class="secondary" disabled="@_busy" @onclick="() => _recycleCandidate = null">@Strings["Cancel"]</button>
@@ -80,7 +80,7 @@ else
                             <button class="ghost" disabled="@_busy" @onclick="() => RestoreAsync(connection.Id)">@Strings["Restore"]</button>
                             @if (_deleteCandidate == connection.Id)
                             {
-                                <span role="group" aria-label="@Strings["ConfirmPermanentlyDeleteConnection"]">
+                                <span role="dialog" aria-label="@Strings["ConfirmPermanentlyDeleteConnection"]">
                                     <span>@Strings["PermanentlyDeleteConnectionWarning"]</span>
                                     <button class="danger" disabled="@_busy" @onclick="() => PermanentlyDeleteAsync(connection.Id)">@Strings["DeletePermanently"]</button>
                                     <button class="secondary" disabled="@_busy" @onclick="() => _deleteCandidate = null">@Strings["Cancel"]</button>

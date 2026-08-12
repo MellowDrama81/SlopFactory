@@ -335,7 +335,7 @@ else
 
             @if (_bulkAction != BulkAction.None)
             {
-                <section class="panel confirmation-panel" aria-labelledby="bulk-action-title">
+                <section class="panel confirmation-panel" role="dialog" aria-labelledby="bulk-action-title">
                     <div class="section-heading"><h2 id="bulk-action-title">@BulkActionTitle()</h2><button class="ghost" @onclick="CancelBulkAction">@Strings["Cancel"]</button></div>
                     <p>@Strings["BulkActionApplies", _selectedFileIds.Count]</p>
                     @if (_bulkAction == BulkAction.Move)
@@ -1409,6 +1409,8 @@ else
         _thumbnailCancellation?.Dispose();
         _importCancellation?.Cancel();
         _importCancellation?.Dispose();
+        _bulkDuplicateCancellation?.Cancel();
+        _bulkDuplicateCancellation?.Dispose();
         IncomingImports.ReturnPending(_pendingImports.Where(item => !_activeImportPaths.Contains(item.Path)).Select(item => new IncomingImportItem(item.Path, item.DisplayName, item.ByteSize, item.IsTemporary, item.RelativeFolder)));
     }
 

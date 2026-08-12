@@ -56,7 +56,7 @@
             }
             else
             {
-                <div class="inline-form" role="group" aria-label="@Strings["ConfirmOpenLibraryLocation"]">
+                <div class="inline-form" role="dialog" aria-label="@Strings["ConfirmOpenLibraryLocation"]">
                     <span>@Strings["ManagedDirectoryWarning"]</span>
                     <button class="secondary" @onclick="OpenLibraryLocationAsync">@Strings["OpenLocation"]</button>
                     <button class="secondary" @onclick="() => _confirmOpenLocation = false">Cancel</button>
@@ -86,7 +86,7 @@
     </EditForm>
     @if (_adoptCandidatePath is not null)
     {
-        <div class="inline-form" role="group" aria-label="@Strings["ConfirmAdoptCopiedLibrary"]">
+        <div class="inline-form" role="dialog" aria-label="@Strings["ConfirmAdoptCopiedLibrary"]">
             <span>@Strings["AdoptCopiedLibraryWarning"]</span>
             <button class="danger" disabled="@_busy" @onclick="ConfirmAdoptionAsync">@Strings["AdoptCopiedLibrary"]</button>
             <button class="secondary" disabled="@_busy" @onclick="() => _adoptCandidatePath = null">Cancel</button>
@@ -94,7 +94,7 @@
     }
     @if (_cloudSyncCandidatePath is not null)
     {
-        <div class="inline-form" role="group" aria-label="@Strings["ConfirmCloudLibraryLocation"]">
+        <div class="inline-form" role="dialog" aria-label="@Strings["ConfirmCloudLibraryLocation"]">
             <span>@Strings["CloudLibraryWarning"]</span>
             <button class="danger" disabled="@_busy" @onclick="ConfirmCloudLocationAsync">@Strings["UseThisLocation"]</button>
             <button class="secondary" disabled="@_busy" @onclick="() => _cloudSyncCandidatePath = null">Cancel</button>
@@ -139,7 +139,7 @@
     @if (_previewRebuildProgress is not null) { <p class="muted" role="status">@Strings["RebuildPreviewProgress", _previewRebuildProgress.DisplayName, _previewRebuildProgress.ProcessedItems, _previewRebuildProgress.TotalItems]</p> }
     @if (_forgetCandidate is not null)
     {
-        <div class="inline-form" role="group" aria-label="@Strings["ConfirmForgetLibrary"]"><span>@Strings["ForgetLibraryWarning", _forgetCandidate.DisplayName]</span><button class="danger" @onclick="ForgetRecentAsync">@Strings["ForgetLibrary"]</button>
+        <div class="inline-form" role="dialog" aria-label="@Strings["ConfirmForgetLibrary"]"><span>@Strings["ForgetLibraryWarning", _forgetCandidate.DisplayName]</span><button class="danger" @onclick="ForgetRecentAsync">@Strings["ForgetLibrary"]</button>
             <button class="secondary" @onclick="() => _forgetCandidate = null">@Strings["Cancel"]</button>
         </div>
     }
@@ -162,7 +162,7 @@
     }
     else
     {
-        <div class="inline-form" role="group" aria-label="@Strings["ConfirmClearPreviewCache"]"><span>@Strings["ClearPreviewCacheWarning"]</span><button class="danger" @onclick="ClearCacheAsync">@Strings["ClearPreviews"]</button>
+        <div class="inline-form" role="dialog" aria-label="@Strings["ConfirmClearPreviewCache"]"><span>@Strings["ClearPreviewCacheWarning"]</span><button class="danger" @onclick="ClearCacheAsync">@Strings["ClearPreviews"]</button>
             <button class="secondary" @onclick="() => _confirmClearCache = false">@Strings["Cancel"]</button>
         </div>
     }

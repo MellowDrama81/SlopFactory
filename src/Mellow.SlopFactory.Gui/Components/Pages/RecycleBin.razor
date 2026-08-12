@@ -28,7 +28,7 @@
 
 @if (_pendingAction is not null)
 {
-    <section class="panel confirmation-panel" aria-labelledby="confirmation-title">
+    <section class="panel confirmation-panel" role="dialog" aria-labelledby="confirmation-title">
         <h2 id="confirmation-title">@ConfirmationTitle</h2>
         <p>@ConfirmationMessage</p>
         <p><strong>@Strings["AffectedContent"]</strong> @CascadeSummary(_pendingEntries)</p>

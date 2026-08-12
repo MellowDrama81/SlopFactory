@@ -231,6 +231,23 @@ public sealed class UiAssetTests
         Assert.Contains("returnFocus.focus()", script, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("Components", "Pages", "FileDetails.razor")]
+    [InlineData("Components", "Pages", "RecycleBin.razor")]
+    [InlineData("Components", "Pages", "Home.razor")]
+    [InlineData("Components", "Pages", "LibrarySettings.razor")]
+    [InlineData("Components", "Pages", "Connections.razor")]
+    [InlineData("Components", "Pages", "Models.razor")]
+    [InlineData("Components", "Pages", "SavedSettings.razor")]
+    [InlineData("Components", "Pages", "Generate.razor")]
+    public void AppearAndDisappearConfirmationPanelsUseTheDialogRoleSoFocusIsRestoredOnClose(params string[] componentPath)
+    {
+        var component = ReadRepositoryFile(["src", "Mellow.SlopFactory.Gui", .. componentPath]);
+
+        Assert.Contains("role=\"dialog\"", component, StringComparison.Ordinal);
+        Assert.DoesNotContain("role=\"group\"", component, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ApplicationShellAndLibrarySettingsUseLocalizableResources()
     {
@@ -537,7 +554,7 @@ public sealed class UiAssetTests
                      "ResetTabTitle", "DuplicateTab", "MoveTabLeft", "MoveTabRight", "CloseTab", "ConfirmCloseTab", "CancelCloseTab",
                      "CloseTabConfirmMessage", "AddDraftTab", "DraftSaving", "DraftSaved", "DraftNotSaved", "RetrySaveAction",
                      "SaveSettingsAndCloseTab", "SaveAndCloseTab", "BackToCloseOptions", "Queued", "QueuePosition",
-                     "GenerationCancelledBeforeSubmission"
+                     "GenerationCancelledBeforeSubmission", "DraftModelUnavailable"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

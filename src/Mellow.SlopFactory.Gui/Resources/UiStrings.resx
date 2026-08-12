@@ -681,6 +681,7 @@
   <data name="SaveSettingsAction" xml:space="preserve"><value>Save settings</value></data>
   <data name="SavedSettingsSaved" xml:space="preserve"><value>Saved generation settings saved.</value></data>
   <data name="SavedSettingsModelUnavailable" xml:space="preserve"><value>The model saved with these settings ({0}) is unavailable. Choose another model.</value></data>
+  <data name="DraftModelUnavailable" xml:space="preserve"><value>The model previously selected for this tab is no longer available. Choose another model.</value></data>
   <data name="SavedSettingsPageTitle" xml:space="preserve"><value>Saved settings · SlopFactory</value></data>
   <data name="SavedSettingsHeading" xml:space="preserve"><value>Saved settings</value></data>
   <data name="SavedSettingsDescription" xml:space="preserve"><value>Reuse a saved model, prompt, result count and destination.</value></data>
