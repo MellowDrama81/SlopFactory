@@ -22,6 +22,11 @@
   <data name="FollowSystem" xml:space="preserve"><value>Follow system</value></data>
   <data name="Light" xml:space="preserve"><value>Light</value></data>
   <data name="Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="GenerationQueueSettingsHeading" xml:space="preserve"><value>Generation queue</value></data>
+  <data name="DeviceWideSubmissionCap" xml:space="preserve"><value>Device-wide submission cap</value></data>
+  <data name="DeviceWideSubmissionCapHelp" xml:space="preserve"><value>The maximum number of generation requests this device runs at the same time, across all connections.</value></data>
+  <data name="SaveDeviceCap" xml:space="preserve"><value>Save cap</value></data>
+  <data name="DeviceCapSaved" xml:space="preserve"><value>Submission cap saved.</value></data>
   <data name="ActiveLibrary" xml:space="preserve"><value>Active library</value></data>
   <data name="Name" xml:space="preserve"><value>Name</value></data>
   <data name="Location" xml:space="preserve"><value>Location</value></data>

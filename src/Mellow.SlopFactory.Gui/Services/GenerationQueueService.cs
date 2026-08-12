@@ -1,3 +1,4 @@
+using System.Globalization;
 using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure.Providers;
@@ -47,6 +48,7 @@ public sealed class GenerationQueueService
     private readonly AppLibraryState _libraries;
     private readonly IProviderAdapterResolver _adapterResolver;
     private readonly ISecureCredentialStore _credentials;
+    private readonly IAppPreferenceStore _preferences;
     private readonly object _gate = new();
 
     private sealed class QueuedJob
@@ -70,13 +72,34 @@ public sealed class GenerationQueueService
     private int _runningTotal;
     private bool _started;
 
-    private static int DeviceCap => OperatingSystem.IsAndroid() ? 2 : 3;
+    private const string DeviceCapPreferenceKey = "slopfactory.queue.devicecap";
+    private static int DefaultDeviceCap => OperatingSystem.IsAndroid() ? 2 : 3;
+    public static int MinDeviceCap => 1;
+    public static int MaxDeviceCap => OperatingSystem.IsAndroid() ? 4 : 8;
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials)
+    public int DeviceCap
+    {
+        get
+        {
+            var stored = _preferences.ReadString(DeviceCapPreferenceKey, DefaultDeviceCap.ToString(CultureInfo.InvariantCulture));
+            return int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? Math.Clamp(value, MinDeviceCap, MaxDeviceCap) : DefaultDeviceCap;
+        }
+    }
+
+    public void SetDeviceCap(int value)
+    {
+        var clamped = Math.Clamp(value, MinDeviceCap, MaxDeviceCap);
+        _preferences.WriteString(DeviceCapPreferenceKey, clamped.ToString(CultureInfo.InvariantCulture));
+        RaiseChanged();
+        Pump();
+    }
+
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
         _credentials = credentials;
+        _preferences = preferences;
     }
 
     public event EventHandler? Changed;

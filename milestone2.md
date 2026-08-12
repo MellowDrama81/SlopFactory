@@ -336,7 +336,17 @@ in parallel. Both milestones must be complete before the first public release.
       thermal/battery-driven cap reduction all remain open, tracked below.
 - [ ] Add adjustable per-connection submission concurrency once an adapter declares a safe range
       above one.
-- [ ] Add an adjustable device-wide submission cap settings UI (1–8 on Windows, 1–4 on Android).
+- [x] Add an adjustable device-wide submission cap settings UI (1–8 on Windows, 1–4 on Android).
+      `GenerationQueueService.DeviceCap` is now an instance property backed by `IAppPreferenceStore`
+      (falling back to the prior hardcoded default — 3 on Windows, 2 on Android — when unset or
+      invalid) instead of a hardcoded constant; `SetDeviceCap` clamps to the platform's
+      `MinDeviceCap`/`MaxDeviceCap` range, persists it, and immediately re-runs the pump loop so
+      raising the cap starts additional already-queued jobs without waiting for a running job to
+      finish first. `LibrarySettings.razor` exposes it as a plain number input (mirroring the
+      existing preview-cache-limit form) under a new **Generation queue** panel. Lowering the cap
+      below the current running count does not stop already-running jobs — it only limits how many
+      new ones the pump loop starts, matching the non-preemptive scheduling model used everywhere
+      else in the queue.
 - [x] Add a dedicated **Queue** page (`/queue`) with visible cross-tab job ordering and reordering
       of waiting jobs: `GenerationQueueService.GetSnapshot()` exposes every non-terminal job across
       every connection (queued with position, or running), and `ReorderQueuedJobs(connectionId,

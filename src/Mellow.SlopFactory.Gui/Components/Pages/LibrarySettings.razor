@@ -5,6 +5,7 @@
 @inject PreviewCacheService PreviewCache
 @inject IRecentLibraryService RecentLibraries
 @inject IThemePreferenceService Theme
+@inject GenerationQueueService Queue
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject IPlatformFileActionService PlatformFiles
 @using Mellow.SlopFactory.Application
@@ -31,6 +32,16 @@
         <option value="@ThemePreference.Light">@Strings["Light"]</option>
         <option value="@ThemePreference.Dark">@Strings["Dark"]</option>
     </select>
+</section>
+
+<section class="panel">
+    <h2>@Strings["GenerationQueueSettingsHeading"]</h2>
+    <p class="muted">@Strings["DeviceWideSubmissionCapHelp"]</p>
+    <EditForm Model="_queueCapForm" OnValidSubmit="SaveDeviceCap" class="inline-form">
+        <label for="device-cap">@Strings["DeviceWideSubmissionCap"]</label>
+        <InputNumber id="device-cap" @bind-Value="_queueCapForm.Value" min="@GenerationQueueService.MinDeviceCap" max="@GenerationQueueService.MaxDeviceCap" />
+        <button type="submit">@Strings["SaveDeviceCap"]</button>
+    </EditForm>
 </section>
 
 <section class="panel">
@@ -212,6 +223,13 @@
 
 @code {
     private void ChangeTheme(ChangeEventArgs args) => Theme.SetPreference(Enum.Parse<ThemePreference>(args.Value?.ToString() ?? nameof(ThemePreference.System)));
+    private QueueCapForm _queueCapForm = new();
+    private void SaveDeviceCap()
+    {
+        Queue.SetDeviceCap(_queueCapForm.Value);
+        _queueCapForm.Value = Queue.DeviceCap;
+        _message = Strings["DeviceCapSaved"];
+    }
     private IReadOnlyList<AppLibraryLocation> _availableLocations = [];
     private LocationForm _form = new();
     private NameForm _nameForm = new();
@@ -247,6 +265,7 @@
         _availableLocations = Locations.GetAvailableLocations();
         _form.Path = LibraryState.ActivePath ?? _availableLocations.FirstOrDefault()?.Path ?? Locations.DefaultPath;
         _nameForm.Name = LibraryState.Workspace?.Descriptor.DisplayName ?? string.Empty;
+        _queueCapForm.Value = Queue.DeviceCap;
         ReloadRecentLibraries();
         await ReloadCacheStatusAsync();
     }
@@ -528,4 +547,5 @@
     private sealed class LocationForm { public string Path { get; set; } = string.Empty; }
     private sealed class NameForm { public string Name { get; set; } = string.Empty; }
     private sealed class CacheForm { public long LimitMiB { get; set; } }
+    private sealed class QueueCapForm { public int Value { get; set; } }
 }

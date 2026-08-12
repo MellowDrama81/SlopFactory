@@ -9,14 +9,15 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter)> CreateHarnessAsync(string root)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
         var adapter = new FakeProviderAdapter();
-        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore());
+        preferences ??= new FakeAppPreferenceStore();
+        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences);
         queue.Start();
-        return (libraries, libraries.Workspace!, queue, adapter);
+        return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 3000)
@@ -43,7 +44,7 @@ public sealed class GenerationQueueServiceTests
     public async Task EnqueueingMultipleJobsOnOneConnectionRunsThemInFifoSubmissionOrder()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
@@ -70,7 +71,7 @@ public sealed class GenerationQueueServiceTests
     public async Task PerConnectionConcurrencyIsOneEvenWithManyJobsQueued()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
@@ -94,7 +95,7 @@ public sealed class GenerationQueueServiceTests
     public async Task DeviceWideCapLimitsTotalRunningAcrossConnections()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connections = new List<(Connection Connection, Model Model)>();
         for (var i = 0; i < 4; i++)
         {
@@ -119,10 +120,64 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task SetDeviceCapClampsToThePlatformValidRange()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, _, queue, _, _) = await CreateHarnessAsync(temporary.Child("library"));
+
+        queue.SetDeviceCap(GenerationQueueService.MinDeviceCap - 10);
+        Assert.Equal(GenerationQueueService.MinDeviceCap, queue.DeviceCap);
+
+        queue.SetDeviceCap(GenerationQueueService.MaxDeviceCap + 10);
+        Assert.Equal(GenerationQueueService.MaxDeviceCap, queue.DeviceCap);
+    }
+
+    [Fact]
+    public async Task SetDeviceCapPersistsAcrossServiceInstancesSharingTheSamePreferenceStore()
+    {
+        using var temporary = new TemporaryDirectory();
+        var preferences = new FakeAppPreferenceStore();
+        var (libraries, _, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), preferences);
+        queue.SetDeviceCap(1);
+
+        var secondQueue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences);
+
+        Assert.Equal(1, secondQueue.DeviceCap);
+    }
+
+    [Fact]
+    public async Task RaisingTheDeviceCapImmediatelyStartsAnAdditionalWaitingJob()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connections = new List<(Connection Connection, Model Model)>();
+        for (var i = 0; i < 4; i++)
+        {
+            var connection = await CreateReadyConnectionAsync(workspace, $"Connection{i}");
+            var model = await workspace.CreateModelAsync($"GPT{i}", connection.Id, "gpt-4o", GenerationMode.Text, true);
+            connections.Add((connection, model));
+        }
+
+        for (var i = 0; i < 4; i++)
+        {
+            queue.Enqueue(Snapshot($"draft-{i}", connections[i].Model.Id, $"prompt{i}", workspace.Descriptor.GeneratedFolderId), connections[i].Connection.Id);
+        }
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Count == 3);
+        Assert.Equal(1, queue.QueuedCount);
+
+        queue.SetDeviceCap(4);
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Count == 4);
+        Assert.Equal(0, queue.QueuedCount);
+        Assert.Equal(4, queue.RunningCount);
+    }
+
+    [Fact]
     public async Task RoundRobinGivesASecondConnectionATurnRatherThanLettingABacklogConnectionHogAllStartedSlots()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connectionA = await CreateReadyConnectionAsync(workspace, "ConnectionA");
         var modelA = await workspace.CreateModelAsync("GPT-A", connectionA.Id, "gpt-4o", GenerationMode.Text, true);
         var connectionB = await CreateReadyConnectionAsync(workspace, "ConnectionB");
@@ -148,7 +203,7 @@ public sealed class GenerationQueueServiceTests
     public async Task CursorPicksUpAConnectionsNewArrivalAfterItsQueueHadEmptiedMidRotation()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connectionA = await CreateReadyConnectionAsync(workspace, "ConnectionA");
         var modelA = await workspace.CreateModelAsync("GPT-A", connectionA.Id, "gpt-4o", GenerationMode.Text, true);
         var connectionB = await CreateReadyConnectionAsync(workspace, "ConnectionB");
@@ -169,7 +224,7 @@ public sealed class GenerationQueueServiceTests
     public async Task CancellingAQueuedJobNeverInvokesTheAdapterAndRecordsNoGenerationHistory()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
@@ -195,7 +250,7 @@ public sealed class GenerationQueueServiceTests
     public async Task CancellingARunningJobTriggersItsTokenAndProducesNoGenerationRecord()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
@@ -215,7 +270,7 @@ public sealed class GenerationQueueServiceTests
     public async Task SuccessfulJobCommitsAGenerationRecordAndRemainsTheDraftsLastOutcomeUntilSuperseded()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
@@ -242,7 +297,7 @@ public sealed class GenerationQueueServiceTests
     public async Task EnqueueingTwiceForTheSameDraftWhileAJobIsActiveIsIdempotent()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
@@ -261,7 +316,7 @@ public sealed class GenerationQueueServiceTests
     public async Task AJobWhoseModelBecameUnavailableWhileQueuedFailsLocallyWithoutFabricatingARecord()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var modelKept = await workspace.CreateModelAsync("Kept", connection.Id, "gpt-4o", GenerationMode.Text, true);
         var modelDoomed = await workspace.CreateModelAsync("Doomed", connection.Id, "gpt-4o-mini", GenerationMode.Text, true);
@@ -288,7 +343,7 @@ public sealed class GenerationQueueServiceTests
     public async Task LibrarySwitchDropsQueuedAndCancelsRunningJobsTiedToTheOutgoingWorkspace()
     {
         using var temporary = new TemporaryDirectory();
-        var (libraries, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (libraries, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
@@ -309,7 +364,7 @@ public sealed class GenerationQueueServiceTests
     public async Task GetSnapshotReflectsQueuedAndRunningJobsAcrossConnections()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
@@ -334,7 +389,7 @@ public sealed class GenerationQueueServiceTests
     public async Task ReorderQueuedJobsRewritesOrderAndRejectsAMismatchedSet()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter) = await CreateHarnessAsync(temporary.Child("library"));
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 

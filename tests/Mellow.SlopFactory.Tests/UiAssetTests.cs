@@ -261,6 +261,16 @@ public sealed class UiAssetTests
         Assert.Contains("IStringLocalizer<UiStrings>", settings, StringComparison.Ordinal);
         Assert.Contains("Strings[\"NavLibrarySettings\"]", layout, StringComparison.Ordinal);
         Assert.Contains("Strings[\"Theme\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("name=\"DeviceWideSubmissionCap\"", resources, StringComparison.Ordinal);
+        Assert.Contains("name=\"DeviceWideSubmissionCapHelp\"", resources, StringComparison.Ordinal);
+        Assert.Contains("name=\"SaveDeviceCap\"", resources, StringComparison.Ordinal);
+        Assert.Contains("name=\"DeviceCapSaved\"", resources, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"DeviceWideSubmissionCap\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"DeviceWideSubmissionCapHelp\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"SaveDeviceCap\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("Strings[\"DeviceCapSaved\"]", settings, StringComparison.Ordinal);
+        Assert.Contains("GenerationQueueService.MinDeviceCap", settings, StringComparison.Ordinal);
+        Assert.Contains("GenerationQueueService.MaxDeviceCap", settings, StringComparison.Ordinal);
         Assert.Contains("Strings[\"IntegrityProgress\",", settings, StringComparison.Ordinal);
         Assert.Contains("Strings[\"IssueManifestInvalid\"]", settings, StringComparison.Ordinal);
         Assert.DoesNotContain("Integrity scan finished.", settings, StringComparison.Ordinal);
