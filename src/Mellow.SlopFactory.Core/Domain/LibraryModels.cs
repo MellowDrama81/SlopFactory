@@ -751,7 +751,8 @@ public sealed record SavedGenerationSetting(
     DateTimeOffset ModifiedAt,
     DateTimeOffset? RecycledAt,
     string? SourceFileId = null,
-    bool NeedsReview = false);
+    bool NeedsReview = false,
+    int Revision = 1);
 
 public sealed record GenerationDraft(
     string Id,

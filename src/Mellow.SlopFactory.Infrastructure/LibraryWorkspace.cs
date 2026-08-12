@@ -2092,10 +2092,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.CreateSavedSettingAsync(title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceFileId, cancellationToken), cancellationToken);
     }
 
-    public Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default)
+    public Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, int expectedRevision, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => _database.UpdateSavedSettingAsync(savedSettingId, title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceFileId, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => _database.UpdateSavedSettingAsync(savedSettingId, expectedRevision, title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceFileId, cancellationToken), cancellationToken);
     }
 
     public Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default)

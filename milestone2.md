@@ -535,15 +535,32 @@ in parallel. Both milestones must be complete before the first public release.
 - [x] Add a minimal `SavedGenerationSetting` (schema v11: `saved_generation_settings`; title, model
       snapshot, prompt, result count, destination folder) with CRUD through `ILibraryWorkspace`,
       title uniqueness, and recycle/restore/permanent-delete cascading correctly from and to its
-      owning model and connection (mirroring the connection→model cascade). The `/generate` page
-      offers **Save settings**, which updates in place only when reopened from the same saved
-      setting with an unchanged title, otherwise creates a new one; `/saved-settings` lists, uses,
-      recycles, restores and permanently deletes them. There is no true **Save**/**Save As**
-      revision-conflict review, no settings-schema/sources/improvement-state capture, and no
-      dependency "Needs Review" handling yet — those remain open below.
-- [ ] Add saved generation settings (title, model, prompts, settings, sources, improvement state)
-      with **Save**/**Save As**, revision-conflict review, and dependency-restoration handling
-      matching the recycled/missing-model-or-source rules.
+      owning model and connection (mirroring the connection→model cascade); `/saved-settings` lists,
+      uses, recycles, restores and permanently deletes them.
+- [x] Add explicit **Save**/**Save As** actions and revision-conflict detection, replacing the
+      original same-title-means-update heuristic. Schema v24 adds
+      `saved_generation_settings.revision` (an opaque counter starting at 1, incremented on every
+      successful update); `UpdateSavedSettingAsync` takes the tab's loaded `expectedRevision` and
+      throws a new `SavedSettingRevisionConflictException` (carrying the current, authoritative
+      record) without writing anything when it no longer matches the stored value, rather than
+      silently last-write-wins overwriting a change made from another tab opened against the same
+      saved setting (this is genuinely reachable in this single-window app, since **Use** already
+      supports opening the same saved settings into more than one tab at once). `Generate.razor` now
+      shows **Save** (always updates the loaded record in place; disabled when no saved setting is
+      loaded) beside **Save As** (always creates a new, separate record) instead of one button that
+      guessed the intent from whether the title matched; a conflict shows **Overwrite** (retries the
+      update using the just-fetched current revision, so it always succeeds cleanly), **Save As**, or
+      **Cancel**, instead of the previous silent overwrite. **Deliberately excludes** plan.md's
+      **Review Changes** field-level diff view (Overwrite/Save As/Cancel is offered without first
+      showing what changed) and the recycled/permanently-deleted-source special handling (**Save**
+      on a since-recycled or since-deleted saved setting still surfaces only the existing generic
+      validation-error message, not a dedicated restore-or-Save-As flow) — both remain open below,
+      alongside settings-schema/sources/improvement-state capture. Verified by
+      `SavedGenerationSettingTests` and the `OpeningVersionTwentyThreeLibraryAddsSavedSettingRevision`
+      migration test.
+- [ ] Add saved generation settings support for settings-schema/sources/improvement-state capture,
+      the **Review Changes** field-level diff view on a save conflict, and dependency-restoration
+      handling matching the recycled/missing-model-or-source rules.
 
 ## Cost, usage and notifications
 

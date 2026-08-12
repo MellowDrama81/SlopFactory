@@ -26,10 +26,11 @@ public sealed class SavedGenerationSettingTests
 
         await Assert.ThrowsAsync<NameConflictException>(() => workspace.CreateSavedSettingAsync("My Preset", model.Id, "Different prompt", 1, workspace.Descriptor.GeneratedFolderId));
 
-        var updated = await workspace.UpdateSavedSettingAsync(saved.Id, "Renamed Preset", model.Id, "Updated prompt", 3, workspace.Descriptor.GeneratedFolderId);
+        var updated = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, "Renamed Preset", model.Id, "Updated prompt", 3, workspace.Descriptor.GeneratedFolderId);
         Assert.Equal("Renamed Preset", updated.Title);
         Assert.Equal("Updated prompt", updated.Prompt);
         Assert.Equal(3, updated.ResultCount);
+        Assert.Equal(saved.Revision + 1, updated.Revision);
 
         var active = await workspace.GetActiveSavedSettingsAsync();
         Assert.Single(active);
@@ -53,7 +54,7 @@ public sealed class SavedGenerationSettingTests
         var reloaded = await workspace.GetSavedSettingAsync(saved.Id);
         Assert.Equal("Respond only in French.", reloaded.SystemInstructions);
 
-        var cleared = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Title, model.Id, saved.Prompt, saved.ResultCount, saved.DestinationFolderId);
+        var cleared = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, saved.Prompt, saved.ResultCount, saved.DestinationFolderId);
         Assert.Null(cleared.SystemInstructions);
     }
 
@@ -76,7 +77,7 @@ public sealed class SavedGenerationSettingTests
         var reloaded = await workspace.GetSavedSettingAsync(saved.Id);
         Assert.Equal(imported.Id, reloaded.SourceFileId);
 
-        var cleared = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Title, model.Id, saved.Prompt, saved.ResultCount, saved.DestinationFolderId);
+        var cleared = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, saved.Prompt, saved.ResultCount, saved.DestinationFolderId);
         Assert.Null(cleared.SourceFileId);
     }
 
@@ -177,6 +178,62 @@ public sealed class SavedGenerationSettingTests
         await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateSavedSettingAsync("Too Long", model.Id, oversized, 1, workspace.Descriptor.GeneratedFolderId));
 
         var saved = await workspace.CreateSavedSettingAsync("Preset", model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId);
-        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.UpdateSavedSettingAsync(saved.Id, saved.Title, model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, systemInstructions: oversized));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, systemInstructions: oversized));
+    }
+
+    [Fact]
+    public async Task CreatingASavedSettingStartsAtRevisionOne()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId);
+
+        Assert.Equal(1, saved.Revision);
+    }
+
+    [Fact]
+    public async Task UpdatingWithAStaleRevisionThrowsAConflictCarryingTheCurrentRecordWithoutWriting()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId);
+        var updatedElsewhere = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, "Changed by another tab", saved.ResultCount, saved.DestinationFolderId);
+
+        var exception = await Assert.ThrowsAsync<SavedSettingRevisionConflictException>(() =>
+            workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, "Changed by this tab", saved.ResultCount, saved.DestinationFolderId));
+
+        Assert.Equal(updatedElsewhere.Revision, exception.Current.Revision);
+        Assert.Equal("Changed by another tab", exception.Current.Prompt);
+        var reloaded = await workspace.GetSavedSettingAsync(saved.Id);
+        Assert.Equal("Changed by another tab", reloaded.Prompt);
+    }
+
+    [Fact]
+    public async Task OverwritingAfterAConflictSucceedsUsingTheFreshCurrentRevision()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId);
+        var updatedElsewhere = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, "Changed by another tab", saved.ResultCount, saved.DestinationFolderId);
+        var conflict = await Assert.ThrowsAsync<SavedSettingRevisionConflictException>(() =>
+            workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, "Changed by this tab", saved.ResultCount, saved.DestinationFolderId));
+
+        var overwritten = await workspace.UpdateSavedSettingAsync(saved.Id, conflict.Current.Revision, saved.Title, model.Id, "Changed by this tab", saved.ResultCount, saved.DestinationFolderId);
+
+        Assert.Equal("Changed by this tab", overwritten.Prompt);
+        Assert.Equal(updatedElsewhere.Revision + 1, overwritten.Revision);
     }
 }

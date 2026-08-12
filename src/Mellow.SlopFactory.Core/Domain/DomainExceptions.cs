@@ -39,3 +39,14 @@ public sealed class RecordNotFoundException : SlopFactoryException
     }
 }
 
+public sealed class SavedSettingRevisionConflictException : SlopFactoryException
+{
+    public SavedGenerationSetting Current { get; }
+
+    public SavedSettingRevisionConflictException(SavedGenerationSetting current)
+        : base("The saved settings changed since they were loaded.")
+    {
+        Current = current;
+    }
+}
+

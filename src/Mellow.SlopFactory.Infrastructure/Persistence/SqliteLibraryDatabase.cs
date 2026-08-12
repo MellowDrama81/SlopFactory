@@ -275,7 +275,8 @@ internal sealed class SqliteLibraryDatabase
                 modified_at TEXT NOT NULL,
                 recycled_at TEXT NULL,
                 source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,
-                needs_review INTEGER NOT NULL DEFAULT 0
+                needs_review INTEGER NOT NULL DEFAULT 0,
+                revision INTEGER NOT NULL DEFAULT 1
             );
             CREATE UNIQUE INDEX ux_saved_settings_active_title ON saved_generation_settings(title_key) WHERE state = 0;
             CREATE INDEX ix_saved_settings_model ON saved_generation_settings(model_id, state);
@@ -462,6 +463,10 @@ internal sealed class SqliteLibraryDatabase
             await ExecuteNonQueryAsync(connection,
                 "CREATE TABLE IF NOT EXISTS connection_credential_revisions (connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,revision_id TEXT NOT NULL,purpose INTEGER NOT NULL CHECK(purpose IN (0,1)),created_at TEXT NOT NULL,PRIMARY KEY(connection_id, revision_id)); CREATE INDEX IF NOT EXISTS ix_connection_credential_revisions_connection ON connection_credential_revisions(connection_id, purpose);",
                 cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 24)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "saved_generation_settings", "revision", "INTEGER NOT NULL DEFAULT 1", cancellationToken).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -2087,7 +2092,7 @@ internal sealed class SqliteLibraryDatabase
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private const string SavedSettingSelect = "SELECT id,title,model_id,model_label,mode,prompt,system_instructions,result_count,destination_folder_id,state,created_at,modified_at,recycled_at,source_file_id,needs_review FROM saved_generation_settings";
+    private const string SavedSettingSelect = "SELECT id,title,model_id,model_label,mode,prompt,system_instructions,result_count,destination_folder_id,state,created_at,modified_at,recycled_at,source_file_id,needs_review,revision FROM saved_generation_settings";
 
     public async Task<IReadOnlyList<SavedGenerationSetting>> GetActiveSavedSettingsAsync(CancellationToken cancellationToken) =>
         await ListSavedSettingsAsync(LibraryRecordState.Active, cancellationToken).ConfigureAwait(false);
@@ -2141,7 +2146,7 @@ internal sealed class SqliteLibraryDatabase
         return new SavedGenerationSetting(id, normalizedTitle, modelId, modelLabel, mode, prompt, systemInstructions, resultCount, destinationFolderId, LibraryRecordState.Active, now, now, null, sourceFileId);
     }
 
-    public async Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions, string? sourceFileId, CancellationToken cancellationToken)
+    public async Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, int expectedRevision, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions, string? sourceFileId, CancellationToken cancellationToken)
     {
         var normalizedTitle = LibraryRules.NormalizeShortLabel(title, "Settings title");
         LibraryRules.ValidateGenerationTextLength(prompt, "Prompt");
@@ -2149,25 +2154,28 @@ internal sealed class SqliteLibraryDatabase
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var existing = await GetSavedSettingAsync(connection, savedSettingId, cancellationToken).ConfigureAwait(false);
         if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only active saved settings can be edited.");
+        if (existing.Revision != expectedRevision) throw new SavedSettingRevisionConflictException(existing);
         var (modelLabel, mode) = modelId is null
             ? (existing.ModelLabel, existing.Mode)
             : await ResolveModelSnapshotAsync(connection, modelId, cancellationToken).ConfigureAwait(false);
         var modified = DateTimeOffset.UtcNow;
+        var newRevision = existing.Revision + 1;
         try
         {
             await ExecuteNonQueryAsync(connection,
-                "UPDATE saved_generation_settings SET title=$title,title_key=$key,model_id=$model,model_label=$modelLabel,mode=$mode,prompt=$prompt,system_instructions=$sysInstr,result_count=$count,destination_folder_id=$folder,modified_at=$modified,source_file_id=$source WHERE id=$id AND state=0;",
+                "UPDATE saved_generation_settings SET title=$title,title_key=$key,model_id=$model,model_label=$modelLabel,mode=$mode,prompt=$prompt,system_instructions=$sysInstr,result_count=$count,destination_folder_id=$folder,modified_at=$modified,source_file_id=$source,revision=$revision WHERE id=$id AND state=0;",
                 cancellationToken, null,
                 ("$title", normalizedTitle), ("$key", LibraryRules.ComparisonKey(normalizedTitle)), ("$model", modelId is null ? DBNull.Value : modelId),
                 ("$modelLabel", modelLabel), ("$mode", (int)mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions),
-                ("$count", resultCount), ("$folder", destinationFolderId), ("$modified", Format(modified)), ("$source", sourceFileId is null ? DBNull.Value : sourceFileId), ("$id", savedSettingId)).ConfigureAwait(false);
+                ("$count", resultCount), ("$folder", destinationFolderId), ("$modified", Format(modified)), ("$source", sourceFileId is null ? DBNull.Value : sourceFileId),
+                ("$revision", newRevision), ("$id", savedSettingId)).ConfigureAwait(false);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
         {
             throw new NameConflictException($"Saved settings titled '{normalizedTitle}' already exist.");
         }
 
-        return existing with { Title = normalizedTitle, ModelId = modelId, ModelLabel = modelLabel, Mode = mode, Prompt = prompt, SystemInstructions = systemInstructions, ResultCount = resultCount, DestinationFolderId = destinationFolderId, ModifiedAt = modified, SourceFileId = sourceFileId };
+        return existing with { Title = normalizedTitle, ModelId = modelId, ModelLabel = modelLabel, Mode = mode, Prompt = prompt, SystemInstructions = systemInstructions, ResultCount = resultCount, DestinationFolderId = destinationFolderId, ModifiedAt = modified, SourceFileId = sourceFileId, Revision = newRevision };
     }
 
     public async Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken)
@@ -2225,7 +2233,7 @@ internal sealed class SqliteLibraryDatabase
         reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetString(3), (GenerationMode)reader.GetInt32(4),
         reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetString(6), reader.GetInt32(7), reader.GetString(8), (LibraryRecordState)reader.GetInt32(9),
         Parse(reader.GetString(10)), Parse(reader.GetString(11)), reader.IsDBNull(12) ? null : Parse(reader.GetString(12)), reader.IsDBNull(13) ? null : reader.GetString(13),
-        reader.GetBoolean(14));
+        reader.GetBoolean(14), reader.GetInt32(15));
 
     private const string GenerationDraftSelect = "SELECT id,custom_title,tab_order,model_id,prompt,system_instructions,source_file_id,result_count,destination_folder_id,improvement_model_id,improvement_guidance,created_at,modified_at FROM generation_drafts";
 

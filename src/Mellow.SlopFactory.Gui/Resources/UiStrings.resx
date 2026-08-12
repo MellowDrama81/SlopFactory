@@ -689,6 +689,10 @@
   <data name="SaveSettingsDescription" xml:space="preserve"><value>Save the current model, prompt, result count and destination for reuse.</value></data>
   <data name="SettingsTitle" xml:space="preserve"><value>Title</value></data>
   <data name="SaveSettingsAction" xml:space="preserve"><value>Save settings</value></data>
+  <data name="SaveSettingsAsAction" xml:space="preserve"><value>Save as new</value></data>
+  <data name="SavedSettingsConflictTitle" xml:space="preserve"><value>Saved settings changed</value></data>
+  <data name="SavedSettingsConflictMessage" xml:space="preserve"><value>These saved settings changed since you opened them, most likely from another tab. Overwrite the other change, save your changes as a new saved setting, or cancel and reload.</value></data>
+  <data name="OverwriteSavedSettings" xml:space="preserve"><value>Overwrite</value></data>
   <data name="SavedSettingsSaved" xml:space="preserve"><value>Saved generation settings saved.</value></data>
   <data name="SavedSettingsModelUnavailable" xml:space="preserve"><value>The model saved with these settings ({0}) is unavailable. Choose another model.</value></data>
   <data name="DraftModelUnavailable" xml:space="preserve"><value>The model previously selected for this tab is no longer available. Choose another model.</value></data>

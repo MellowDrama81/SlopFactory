@@ -130,7 +130,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<SavedGenerationSetting>> GetRecycledSavedSettingsAsync(CancellationToken cancellationToken = default);
     Task<SavedGenerationSetting> GetSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
     Task<SavedGenerationSetting> CreateSavedSettingAsync(string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default);
-    Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default);
+    Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, int expectedRevision, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, CancellationToken cancellationToken = default);
     Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
     Task RestoreSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);

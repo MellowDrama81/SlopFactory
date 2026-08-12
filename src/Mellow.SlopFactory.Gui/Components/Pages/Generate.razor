@@ -222,11 +222,26 @@ else
     <section class="panel">
         <h2>@Strings["SaveSettingsHeading"]</h2>
         <p class="muted">@Strings["SaveSettingsDescription"]</p>
-        <div class="inline-form">
-            <label for="settings-title">@Strings["SettingsTitle"]</label>
-            <input id="settings-title" maxlength="100" @bind="_settingsTitle" disabled="@FormDisabled" />
-            <button type="button" class="secondary" disabled="@(FormDisabled || string.IsNullOrWhiteSpace(_settingsTitle))" @onclick="SaveSettingsAsync">@Strings["SaveSettingsAction"]</button>
-        </div>
+        @if (_settingsConflict is not null)
+        {
+            <div class="notice error" role="dialog" aria-label="@Strings["SavedSettingsConflictTitle"]">
+                <p>@Strings["SavedSettingsConflictMessage"]</p>
+                <div class="actions">
+                    <button type="button" class="danger" disabled="@_busy" @onclick="OverwriteConflictedSettingsAsync">@Strings["OverwriteSavedSettings"]</button>
+                    <button type="button" class="secondary" disabled="@(_busy || string.IsNullOrWhiteSpace(_settingsTitle))" @onclick="SaveAsNewAsync">@Strings["SaveSettingsAsAction"]</button>
+                    <button type="button" class="secondary" disabled="@_busy" @onclick="CancelSettingsConflict">@Strings["Cancel"]</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="inline-form">
+                <label for="settings-title">@Strings["SettingsTitle"]</label>
+                <input id="settings-title" maxlength="100" @bind="_settingsTitle" disabled="@FormDisabled" />
+                <button type="button" class="secondary" disabled="@(FormDisabled || _loadedSettingsId is null || string.IsNullOrWhiteSpace(_settingsTitle))" @onclick="SaveInPlaceAsync">@Strings["SaveSettingsAction"]</button>
+                <button type="button" class="secondary" disabled="@(FormDisabled || string.IsNullOrWhiteSpace(_settingsTitle))" @onclick="SaveAsNewAsync">@Strings["SaveSettingsAsAction"]</button>
+            </div>
+        }
     </section>
 
     @if (LastOutcome is { } outcome)
@@ -305,7 +320,9 @@ else
     private bool _isError;
     private string? _loadedSettingsId;
     private string? _loadedTitle;
+    private int _loadedRevision;
     private string _settingsTitle = string.Empty;
+    private SavedGenerationSetting? _settingsConflict;
     private string _improvementModelId = string.Empty;
     private string _improvementGuidance = string.Empty;
     private IReadOnlyList<string>? _improvementCandidates;
@@ -386,6 +403,7 @@ else
                 LoadDraftIntoForm(draft.Id);
                 _loadedSettingsId = saved.Id;
                 _loadedTitle = saved.Title;
+                _loadedRevision = saved.Revision;
                 _settingsTitle = saved.Title;
                 if (model is null && saved.ModelId is not null && _models.Count > 0)
                 {
@@ -448,7 +466,9 @@ else
         _tabTitleInput = draft.CustomTitle ?? string.Empty;
         _loadedSettingsId = null;
         _loadedTitle = null;
+        _loadedRevision = 0;
         _settingsTitle = string.Empty;
+        _settingsConflict = null;
         _saveStatus = SaveStatus.Idle;
         _saveError = null;
         if (model is null && draft.ModelId is not null && _models.Count > 0)
@@ -669,22 +689,20 @@ else
         return names.Count == 0 ? Strings["UnknownFolder"] : string.Join(" / ", names);
     }
 
-    private async Task SaveSettingsAsync()
+    private async Task SaveInPlaceAsync()
     {
         var workspace = LibraryState.Workspace;
-        if (workspace is null || string.IsNullOrWhiteSpace(_settingsTitle)) return;
+        if (workspace is null || _loadedSettingsId is null || string.IsNullOrWhiteSpace(_settingsTitle)) return;
         _busy = true;
         try
         {
-            var systemInstructions = SelectedModel?.SupportsSystemInstructions == true && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
-            var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
-            var saved = _loadedSettingsId is not null && string.Equals(_loadedTitle, _settingsTitle, StringComparison.Ordinal)
-                ? await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId)
-                : await workspace.CreateSavedSettingAsync(_settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
-            _loadedSettingsId = saved.Id;
-            _loadedTitle = saved.Title;
-            _message = Strings["SavedSettingsSaved"];
-            _isError = false;
+            var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _loadedRevision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            ApplySavedSettingsResult(saved);
+        }
+        catch (SavedSettingRevisionConflictException exception)
+        {
+            _settingsConflict = exception.Current;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
@@ -692,6 +710,68 @@ else
             _isError = true;
         }
         finally { _busy = false; }
+    }
+
+    private async Task SaveAsNewAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || string.IsNullOrWhiteSpace(_settingsTitle)) return;
+        _busy = true;
+        try
+        {
+            var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
+            var saved = await workspace.CreateSavedSettingAsync(_settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            ApplySavedSettingsResult(saved);
+            _settingsConflict = null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task OverwriteConflictedSettingsAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _settingsConflict is null || _loadedSettingsId is null) return;
+        _busy = true;
+        try
+        {
+            var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            ApplySavedSettingsResult(saved);
+            _settingsConflict = null;
+        }
+        catch (SavedSettingRevisionConflictException exception)
+        {
+            _settingsConflict = exception.Current;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private void CancelSettingsConflict() => _settingsConflict = null;
+
+    private (string? SystemInstructions, string? SourceFileId) CurrentSavedSettingFields()
+    {
+        var systemInstructions = SelectedModel?.SupportsSystemInstructions == true && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
+        var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
+        return (systemInstructions, sourceFileId);
+    }
+
+    private void ApplySavedSettingsResult(SavedGenerationSetting saved)
+    {
+        _loadedSettingsId = saved.Id;
+        _loadedTitle = saved.Title;
+        _loadedRevision = saved.Revision;
+        _message = Strings["SavedSettingsSaved"];
+        _isError = false;
     }
 
     private void GenerateAsync()

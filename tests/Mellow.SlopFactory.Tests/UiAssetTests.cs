@@ -565,7 +565,8 @@ public sealed class UiAssetTests
                      "ResetTabTitle", "DuplicateTab", "MoveTabLeft", "MoveTabRight", "CloseTab", "ConfirmCloseTab", "CancelCloseTab",
                      "CloseTabConfirmMessage", "AddDraftTab", "DraftSaving", "DraftSaved", "DraftNotSaved", "RetrySaveAction",
                      "SaveSettingsAndCloseTab", "SaveAndCloseTab", "BackToCloseOptions", "Queued", "QueuePosition",
-                     "GenerationCancelledBeforeSubmission", "DraftModelUnavailable", "CredentialRequiresRepairBanner"
+                     "GenerationCancelledBeforeSubmission", "DraftModelUnavailable", "CredentialRequiresRepairBanner",
+                     "SaveSettingsAsAction", "SavedSettingsConflictTitle", "SavedSettingsConflictMessage", "OverwriteSavedSettings"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
