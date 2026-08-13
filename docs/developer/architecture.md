@@ -295,6 +295,61 @@ Adjustable per-connection concurrency, multiple concurrent run cards from the sa
 
 Permanent deletion of a connection/model/saved-setting needed no `permanent_deletion_failures`-style retry tracking: unlike folder/file permanent-delete (which involves non-transactional managed-file I/O, hence that retry table), `PermanentlyDeleteConnectionAsync`/`PermanentlyDeleteModelAsync` are pure transactional SQL with no filesystem component, so a mid-cascade failure can't leave a partial state to retry — `RecycleBinEntry.DeletionFailure` stays `null` for these three kinds. One real behavior had to move, though: the old dedicated `Connections.razor` permanent-delete handler also cleaned up the deleted connection's secure-storage credential-ledger entries (`ISecureCredentialStore`), which `Infrastructure` cannot do (Gui-layer only) and which `CredentialReconciliationService` cannot retroactively catch (once a connection's row and its cascade-deleted ledger rows are gone, they can never be found again by that service's sweep). This cleanup now lives in `RecycleBin.razor` itself: before calling `PermanentlyDeleteRecycleBinItemsAsync`/`EmptyRecycleBinAsync`, it captures `GetCredentialLedgerSnapshotAsync()` filtered to the connection references in the pending batch; afterward, for each connection whose deletion actually succeeded, it removes every ledger revision's secure-storage entry, with each connection's cleanup wrapped in its own try/catch so one connection's secure-storage failure can't block cleanup for the rest of a batch (relevant for **Empty Recycle Bin**, which can delete many connections in one call).
 
+## Generation-history recycle bin and file tombstoning
+
+`GenerationRecord` was the last major entity with no `LibraryRecordState`/`recycled_at` lifecycle at
+all (schema v26 adds `generation_records.state`/`recycled_at`, the exact shape `SavedGenerationSetting`
+already has). `RecycleBinItemKind.GenerationRecord` slots into the existing unified recycle-bin
+plumbing with no new cascade logic to invent, because plan.md is explicit that recycling or
+permanently deleting a generation-history record touches neither its source nor result files in
+either direction: `generation_results.generation_id`'s already-existing `ON DELETE CASCADE` only ever
+removes the *link* rows when a generation record is permanently deleted, never the underlying `files`
+rows, so `GetRecycleBinEntriesAsync`'s new query block needs no "hidden while parent recycled"
+filtering at all (a generation record has no folder/connection/model relationship that would
+double-list it) and `GetRestoreBlockersAsync`'s new case checks only recycled-state — there's no
+title/label uniqueness constraint on generation records to conflict on, unlike every other named
+entity. `GenerationHistory.razor`/`GenerationHistoryDetail.razor` each gained a **Recycle** action
+matching the same "list/detail recycles, the bin restores/permanently-deletes" convention already
+established for Connections/Models/SavedSettings; `GetGenerationHistoryAsync` gained a `WHERE state=0`
+filter so a recycled record simply stops appearing on `/generation-history`, while
+`GetGenerationRecordAsync(id)` deliberately stays unfiltered by state (matching `GetModelAsync`'s
+"fetch regardless of state" precedent) so the bin's "view details" link still resolves a recycled
+record's page.
+
+File tombstoning closes the other half of the same milestone2.md item: previously, permanently
+deleting a source or result file just silently cleared or dropped the reference (`source_file_id` to
+`NULL`, or the `generation_results` row cascade-deleted entirely — the exact v25 fix from earlier this
+session). Now both leave a snapshot of the file's former display name, media type and content hash
+instead, mirroring the **already-existing, already-tested** `file_derivation_provenance` tombstone
+pattern in `SqliteLibraryDatabase.DeleteFileRecordAsync` exactly: two more `UPDATE ... WHERE
+source_file_id=$id`/`WHERE file_id=$id` statements run immediately before `DELETE FROM files`, in the
+same transaction, using the already-fetched `FileRecord`'s `DisplayName`/`MediaType`/`ContentHash`.
+Making the result side of this possible required changing `generation_results.file_id` from `ON
+DELETE CASCADE` (the v25 fix, whose whole point was making permanent deletion not throw) to `ON DELETE
+SET NULL` — the row now survives as a tombstoned placeholder instead of disappearing, since a deleted
+row can't carry a tombstone. `FileIdentitySnapshot(DisplayName, MediaType, ContentHash)` — the exact
+value type `file_derivation_provenance` already uses — is reused verbatim for both
+`GenerationRecord.SourceFileTombstone` and the new `TombstonedResults` list, both purely additive:
+`ResultFileIds` keeps its exact original meaning (currently-live result files only), so no existing
+consumer (`GenerationHistory.razor`'s count, `GenerationHistoryDetail.razor`'s link list, every
+existing test) needed any changes at all. An adversarial plan review before implementation
+specifically re-verified the FK/cascade ordering (confirmed safe — SQLite applies `ON DELETE SET NULL`
+as part of executing the `DELETE` statement itself, no deferral hazard) and the schema-version-bump
+housekeeping (the routine `"schemaVersion": 25`→`26` replace across ~17 existing migration tests,
+already the established mechanical step for every prior bump this session) before any code was written.
+
+**Explicitly out of scope**, consistent with facts already established repeatedly this session (every
+provider call is a synchronous in-process request/response, no async-job infrastructure exists):
+plan.md's **Submission Outcome Unknown** recycling rules, **Refresh Provider Status**/**Output
+Recycled** labeling, and **Reacquire Permanently Deleted Output** (which needs a persistent
+provider-hosted result URL to re-download from later — neither adapter has one; both return inline
+base64 content that's already committed as a local file at record-creation time). **Known, inherited
+limitation, not newly introduced by this slice**: `DeleteFolderRecordAsync`'s batch descendant-file
+delete already skipped the `file_derivation_provenance` tombstone update before this slice (confirmed
+by reading it), and likewise skips the two new generation-tombstone updates — only the single-file
+permanent-delete path (`DeleteFileRecordAsync`) is tombstoned, matching the scope the provenance
+feature itself already settled for.
+
 ## Generation notifications
 
 MAUI has no built-in cross-platform local-notification API (unlike `Battery`/`SecureStorage`/`Preferences`, all already used elsewhere in this app with no extra package). The community-standard package, `Plugin.LocalNotification`, was evaluated and rejected: its own README states "Only support **iOS** and **Android** for the moment" under Limitations even though its NuGet listing also carries a `net10.0-windows10.0.19041` target depending on `Microsoft.WindowsAppSDK` — a contradiction that couldn't be resolved from its docs, and Windows is one of this app's two target platforms. Notifications are hand-rolled instead, with **zero new NuGet packages**: `INotificationService`/`MauiNotificationService` (`src/Mellow.SlopFactory.Gui/Services/`) is one class split by `#if WINDOWS`/`#elif ANDROID` (the same single-file-with-conditional-blocks convention `PlatformFileActionService` already uses, rather than separate per-platform files). Windows uses `Microsoft.Windows.AppNotifications`/`.Builder` — already a transitive dependency of the MAUI Windows target, since this project already ships a packaged `Package.appxmanifest`; the implementation registers `AppNotificationManager.Default.NotificationInvoked` from the service's own constructor rather than from `Platforms/Windows/App.xaml.cs`'s `OnLaunched`, and deliberately skips the manifest COM-server/CLSID registration the official quickstart uses for the "app fully terminated, relaunched by tapping the notification" cold path — that case cannot occur here, because `GenerationQueueService` runs every job fully in-process with no persistence or background-service component, so a generation can only ever complete (and thus notify) while the app process is already alive. Android uses `AndroidX.Core.App.NotificationCompat`/`NotificationManagerCompat`, a `POST_NOTIFICATIONS` runtime permission requested only when the setting is enabled (via a `TaskCompletionSource`-based bridge on `MainActivity`, mirroring the existing `PickDocumentTreeAsync`/`CreateDocumentAsync` pattern), and a tapped notification's `PendingIntent` delivers the generation-record ID back through `MainActivity.OnCreate`/`OnNewIntent` to the DI-resolved `MauiNotificationService` — the same `IPlatformApplication.Current?.Services.GetService<T>()` bridge `Platforms/Windows/App.xaml.cs` already uses to reach `IncomingImportService` from platform activation code.

@@ -119,9 +119,13 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task PermanentlyDeleteModelAsync(string modelId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken = default);
     Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
     Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default);
     Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default);
+    Task RecycleGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
+    Task RestoreGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
+    Task PermanentlyDeleteGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PromptImprovementRecord>> GetPromptImprovementHistoryAsync(CancellationToken cancellationToken = default);
     Task<PromptImprovementRecord> RecordPromptImprovementAttemptAsync(string modelId, string rawPrompt, string? guidance, string templateVersion, IReadOnlyList<string>? candidates, string? errorMessage, int? promptTokens = null, int? completionTokens = null, CancellationToken cancellationToken = default);

@@ -81,11 +81,24 @@ else
                     <div class="actions">
                         <a class="button" href="@($"/generation-history/{record.Id}")">@Strings["ViewDetails"]</a>
                         <a class="ghost" href="@($"/generate/history/{record.Id}")">@Strings["UseAgain"]</a>
+                        @if (_recycleCandidate == record.Id)
+                        {
+                            <span role="dialog" aria-label="@Strings["ConfirmRecycleGenerationRecord"]">
+                                <span>@Strings["RecycleGenerationRecordWarning"]</span>
+                                <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(record.Id)">@Strings["Recycle"]</button>
+                                <button class="secondary" disabled="@_busy" @onclick="() => _recycleCandidate = null">@Strings["Cancel"]</button>
+                            </span>
+                        }
+                        else
+                        {
+                            <button class="ghost danger" disabled="@_busy" @onclick="() => _recycleCandidate = record.Id">@Strings["Recycle"]</button>
+                        }
                     </div>
                 </li>
             }
         </ul>
     }
+    <p class="muted">@Strings["RecycledItemsMovedToBin"] <a class="ghost" href="/recycle-bin">@Strings["NavRecycleBin"]</a></p>
 }
 
 @if (LibraryState.Workspace is not null && _improvementRecords.Count > 0)
@@ -141,6 +154,8 @@ else
     private string _providerFilter = string.Empty;
     private DateOnly? _dateFromFilter;
     private DateOnly? _dateToFilter;
+    private string? _recycleCandidate;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -149,6 +164,19 @@ else
         if (workspace is null) return;
         _records = await workspace.GetGenerationHistoryAsync();
         _improvementRecords = await workspace.GetPromptImprovementHistoryAsync();
+    }
+
+    private async Task RecycleAsync(string generationId)
+    {
+        if (LibraryState.Workspace is null) return;
+        _busy = true;
+        try
+        {
+            await LibraryState.Workspace.RecycleGenerationRecordAsync(generationId);
+            _recycleCandidate = null;
+            _records = await LibraryState.Workspace.GetGenerationHistoryAsync();
+        }
+        finally { _busy = false; }
     }
 
     private IReadOnlyList<string> _knownModelLabels => _records.Select(record => record.ModelLabel).Distinct(StringComparer.Ordinal).OrderBy(label => label, StringComparer.Ordinal).ToArray();

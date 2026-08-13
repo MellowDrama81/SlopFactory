@@ -53,19 +53,42 @@ else if (_record is not null)
         {
             <p class="muted">@Strings["PromptImprovementUsed"]</p>
         }
+        @if (_record.SourceFileId is null && _record.SourceFileTombstone is { } sourceTombstone)
+        {
+            <p class="muted">@Strings["SourceFilePermanentlyDeleted", sourceTombstone.DisplayName, sourceTombstone.MediaType]</p>
+        }
         <div class="actions">
             <a class="button" href="@($"/generate/history/{_record.Id}")">@Strings["UseAgain"]</a>
             @if (_record.SourceFileId is not null)
             {
                 <a class="ghost" href="@($"/file/{_record.SourceFileId}")">@Strings["SourceImageUsed"]</a>
             }
+            @if (_record.State == LibraryRecordState.Active)
+            {
+                @if (_recycleConfirm)
+                {
+                    <span role="dialog" aria-label="@Strings["ConfirmRecycleGenerationRecord"]">
+                        <span>@Strings["RecycleGenerationRecordWarning"]</span>
+                        <button class="danger" disabled="@_busy" @onclick="RecycleAsync">@Strings["Recycle"]</button>
+                        <button class="secondary" disabled="@_busy" @onclick="() => _recycleConfirm = false">@Strings["Cancel"]</button>
+                    </span>
+                }
+                else
+                {
+                    <button class="ghost danger" disabled="@_busy" @onclick="() => _recycleConfirm = true">@Strings["Recycle"]</button>
+                }
+            }
         </div>
-        @if (_record.ResultFileIds.Count > 0)
+        @if (_record.ResultFileIds.Count > 0 || _record.TombstonedResults.Count > 0)
         {
             <ul class="metadata-list">
                 @foreach (var fileId in _record.ResultFileIds)
                 {
                     <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
+                }
+                @foreach (var tombstone in _record.TombstonedResults)
+                {
+                    <li>@Strings["ResultFilePermanentlyDeleted", tombstone.DisplayName, tombstone.MediaType]</li>
                 }
             </ul>
         }
@@ -77,6 +100,8 @@ else if (_record is not null)
 
     private GenerationRecord? _record;
     private string? _message;
+    private bool _recycleConfirm;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -95,6 +120,24 @@ else if (_record is not null)
     }
 
     public void Dispose() => NotificationCoordinator.VisibleGenerationRecordId = null;
+
+    private async Task RecycleAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _busy = true;
+        try
+        {
+            await workspace.RecycleGenerationRecordAsync(Id);
+            _recycleConfirm = false;
+            _record = await workspace.GetGenerationRecordAsync(Id);
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
 
     private string StatusLabel(GenerationStatus status) => status switch
     {

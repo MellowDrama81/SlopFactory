@@ -685,6 +685,11 @@
   <data name="GenerationHistoryDescription" xml:space="preserve"><value>Review past generation attempts and their results.</value></data>
   <data name="NoGenerationHistory" xml:space="preserve"><value>No generations yet.</value></data>
   <data name="GenerationRecordSummary" xml:space="preserve"><value>{0} · {1} · {2} result(s)</value></data>
+  <data name="ConfirmRecycleGenerationRecord" xml:space="preserve"><value>Confirm recycle generation record</value></data>
+  <data name="RecycleGenerationRecordWarning" xml:space="preserve"><value>Recycling this generation record does not recycle its source or result files.</value></data>
+  <data name="GenerationRecordKind" xml:space="preserve"><value>Generation record</value></data>
+  <data name="SourceFilePermanentlyDeleted" xml:space="preserve"><value>Source image: {0} ({1}) — permanently deleted</value></data>
+  <data name="ResultFilePermanentlyDeleted" xml:space="preserve"><value>{0} ({1}) — permanently deleted</value></data>
   <data name="NavSavedSettings" xml:space="preserve"><value>Saved settings</value></data>
   <data name="NewGeneration" xml:space="preserve"><value>New generation</value></data>
   <data name="SaveSettingsHeading" xml:space="preserve"><value>Save these settings</value></data>

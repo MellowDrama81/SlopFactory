@@ -208,6 +208,20 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** a recycled model shows a specific message naming it with a working inline Restore action; a permanently deleted model blocks Generate until an explicit replacement is chosen, with the dropdown visibly showing no selection rather than a silent substitution; restoring into a recycled-connection or label-conflict state fails with a clear message; the Needs-Review case and the source-image field are both unaffected by this change.
 
+## MT-16 — Generation-history recycle bin and file tombstoning
+
+1. Generate at least one text result and one image result so `/generation-history` has entries with result files.
+2. From `/generation-history`, click **Recycle** on one record. Confirm it disappears from the list immediately and a link to the recycle bin is shown.
+3. Open `/recycle-bin`. Confirm the recycled record appears with the model's label as its name and "Generation History" as its original location, and confirm its source/result files are **not** also listed as separately recycled.
+4. Restore it from the bin. Confirm it reappears on `/generation-history` and its detail page (`/generation-history/{id}`) loads normally with all its result files still linkable.
+5. Recycle the same record again, then permanently delete it from the bin (or via **Empty Recycle Bin**). Confirm the record is gone, but its result files are still present and active (check the destination folder or `/file/{id}` directly) — permanently deleting a generation record must never delete its files.
+6. From `/generation-history/{id}` (a still-active record), click **Recycle** directly from the detail page. Confirm the same recycle behavior as step 2, and confirm the confirmation panel explains that the record's files are not affected.
+7. On an active generation record with a result file, permanently delete just that result file (via `/file/{id}` or the recycle bin, not the generation record). Return to `/generation-history/{id}`. Confirm the result list shows a "permanently deleted" entry with the file's former name and type instead of a broken link, and the record itself is untouched (still active, other results still linkable).
+8. Do the same for a record's source image: permanently delete the source file directly. Return to the record's detail page. Confirm it now shows a "permanently deleted" message with the source file's former name and type instead of silently showing nothing.
+9. Confirm a recycled generation record's detail page (reached via the bin's "view details" link) still displays correctly — prompt, status, result/tombstone list — even though it's not on the active `/generation-history` list.
+
+**Pass:** generation records can be recycled, restored, and permanently deleted through both the list, detail page, and unified recycle bin; recycling or permanently deleting a record never touches its source or result files; a permanently deleted source or result file leaves a readable "permanently deleted" tombstone (former name and type) in generation history instead of a broken link or silent disappearance; a recycled record's detail page remains viewable via the bin.
+
 ## Reporting
 
 For each test case, record:

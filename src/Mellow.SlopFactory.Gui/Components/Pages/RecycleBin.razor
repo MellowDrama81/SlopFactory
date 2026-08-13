@@ -79,6 +79,7 @@
             <option value="connection">@Strings["NavConnections"]</option>
             <option value="model">@Strings["NavModels"]</option>
             <option value="savedsetting">@Strings["NavSavedSettings"]</option>
+            <option value="generationrecord">@Strings["NavGenerationHistory"]</option>
         </select>
     </label>
     <label>@Strings["Sort"]
@@ -169,6 +170,7 @@ else
                 "connection" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.Connection),
                 "model" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.Model),
                 "savedsetting" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.SavedSetting),
+                "generationrecord" => query.Where(entry => entry.Reference.Kind == RecycleBinItemKind.GenerationRecord),
                 _ => query
             };
             if (!string.IsNullOrWhiteSpace(_search))
@@ -335,14 +337,15 @@ else
         RecycleBinItemKind.FileLink => Strings["FileLink"],
         RecycleBinItemKind.Connection => Strings["Connection"],
         RecycleBinItemKind.Model => Strings["Model"],
-        _ => Strings["SavedSetting"]
+        RecycleBinItemKind.SavedSetting => Strings["SavedSetting"],
+        _ => Strings["GenerationRecordKind"]
     };
     private string StateName(LibraryRecordState state) => state == LibraryRecordState.PendingPermanentDeletion ? Strings["PendingPermanentDeletion"] : Strings["Recycled"];
     private string EntryCascadeSummary(RecycleBinEntry entry) => entry.Reference.Kind switch
     {
         RecycleBinItemKind.Connection => Strings["CascadeSummaryConnection", entry.OwnedModelCount, entry.OwnedSavedSettingCount],
         RecycleBinItemKind.Model => Strings["CascadeSummaryModel", entry.OwnedSavedSettingCount],
-        RecycleBinItemKind.SavedSetting => Strings["NoDependents"],
+        RecycleBinItemKind.SavedSetting or RecycleBinItemKind.GenerationRecord => Strings["NoDependents"],
         _ => Strings["CascadeSummary", entry.OwnedFolderCount, entry.OwnedFileCount, entry.OwnedLinkCount]
     };
     private string CascadeSummary(IEnumerable<RecycleBinEntry> entries)

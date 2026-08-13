@@ -1548,7 +1548,8 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                 RecycleBinItemKind.FileLink => "Restores the directed file link after both endpoint files are active.",
                 RecycleBinItemKind.Connection => $"Restores the connection and its {entry.OwnedModelCount} model(s) and {entry.OwnedSavedSettingCount} saved setting(s).",
                 RecycleBinItemKind.Model => $"Restores the model and its {entry.OwnedSavedSettingCount} saved setting(s).",
-                _ => "Restores the saved setting."
+                RecycleBinItemKind.SavedSetting => "Restores the saved setting.",
+                _ => "Restores the generation-history record."
             });
             if (reference.Kind is RecycleBinItemKind.Folder or RecycleBinItemKind.File && entry.OwnedLinkCount > 0)
             {
@@ -2047,6 +2048,30 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetGenerationRecordAsync(generationId, cancellationToken);
     }
 
+    public Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetRecycledGenerationHistoryAsync(cancellationToken);
+    }
+
+    public Task RecycleGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RecycleGenerationRecordAsync(generationId, cancellationToken), cancellationToken);
+    }
+
+    public Task RestoreGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.RestoreGenerationRecordAsync(generationId, cancellationToken), cancellationToken);
+    }
+
+    public Task PermanentlyDeleteGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.PermanentlyDeleteGenerationRecordAsync(generationId, cancellationToken), cancellationToken);
+    }
+
     public Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -2422,6 +2447,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                         case RecycleBinItemKind.Connection: await _database.RestoreConnectionAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         case RecycleBinItemKind.Model: await _database.RestoreModelAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         case RecycleBinItemKind.SavedSetting: await _database.RestoreSavedSettingAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.GenerationRecord: await _database.RestoreGenerationRecordAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         default: throw new LibraryValidationException("The recycle-bin item type is not supported.");
                     }
                 }
@@ -2435,6 +2461,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                         case RecycleBinItemKind.Connection: await _database.PermanentlyDeleteConnectionAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         case RecycleBinItemKind.Model: await _database.PermanentlyDeleteModelAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         case RecycleBinItemKind.SavedSetting: await _database.PermanentlyDeleteSavedSettingAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
+                        case RecycleBinItemKind.GenerationRecord: await _database.PermanentlyDeleteGenerationRecordAsync(reference.Id, cancellationToken).ConfigureAwait(false); break;
                         default: throw new LibraryValidationException("The recycle-bin item type is not supported.");
                     }
                 }

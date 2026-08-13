@@ -240,6 +240,8 @@ public sealed class UiAssetTests
     [InlineData("Components", "Pages", "Models.razor")]
     [InlineData("Components", "Pages", "SavedSettings.razor")]
     [InlineData("Components", "Pages", "Generate.razor")]
+    [InlineData("Components", "Pages", "GenerationHistory.razor")]
+    [InlineData("Components", "Pages", "GenerationHistoryDetail.razor")]
     public void AppearAndDisappearConfirmationPanelsUseTheDialogRoleSoFocusIsRestoredOnClose(params string[] componentPath)
     {
         var component = ReadRepositoryFile(["src", "Mellow.SlopFactory.Gui", .. componentPath]);
@@ -324,7 +326,7 @@ public sealed class UiAssetTests
         var resources = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Resources", "UiStrings.resx");
         var recycleBin = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "RecycleBin.razor");
 
-        foreach (var key in new[] { "RecycleBinPageTitle", "RecentlyDeleted", "RestoreSelected", "RetryPermanentDeletion", "ItemsProcessedSuccessfully", "CascadeSummary", "SavedSetting", "CascadeSummaryConnection", "CascadeSummaryModel", "NoDependents" })
+        foreach (var key in new[] { "RecycleBinPageTitle", "RecentlyDeleted", "RestoreSelected", "RetryPermanentDeletion", "ItemsProcessedSuccessfully", "CascadeSummary", "SavedSetting", "CascadeSummaryConnection", "CascadeSummaryModel", "NoDependents", "GenerationRecordKind" })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
             Assert.Contains($"Strings[\"{key}\"", recycleBin, StringComparison.Ordinal);
@@ -626,7 +628,8 @@ public sealed class UiAssetTests
                      "FilterByStatus", "FilterByMode", "FilterByModel", "NoFilteredGenerationHistory", "ViewDetails",
                      "PromptImprovementHistoryHeading", "PromptImprovementHistoryDescription", "ImprovementGuidance", "ShowImprovementCandidates",
                      "FilterByProvider", "FilterByDateFrom", "FilterByDateTo", "ProviderOpenAi", "ProviderGenericOpenAiCompatible",
-                     "GenerationPartiallyCompleted"
+                     "GenerationPartiallyCompleted", "Recycle", "ConfirmRecycleGenerationRecord", "RecycleGenerationRecordWarning",
+                     "Cancel", "RecycledItemsMovedToBin", "NavRecycleBin"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -652,7 +655,8 @@ public sealed class UiAssetTests
                      "GenerationHistoryDetailPageTitle", "GenerationHistoryDetailHeading", "BackToGenerationHistory",
                      "GenerationRecordSummary", "GenerationCompleted", "GenerationFailed", "GenerationPartiallyCompleted",
                      "GenerationPartiallyCompletedDetail", "ShowSystemInstructions", "TokenUsage", "SourceImageUsed",
-                     "OpenGeneratedFile", "PromptImprovementUsed", "UseAgain"
+                     "OpenGeneratedFile", "PromptImprovementUsed", "UseAgain", "Recycle", "ConfirmRecycleGenerationRecord",
+                     "RecycleGenerationRecordWarning", "Cancel", "SourceFilePermanentlyDeleted", "ResultFilePermanentlyDeleted"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

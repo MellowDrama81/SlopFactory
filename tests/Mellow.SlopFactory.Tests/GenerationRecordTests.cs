@@ -66,6 +66,60 @@ public sealed class GenerationRecordTests
         Assert.Equal(2, reloaded.ResultCount);
         Assert.Equal(GenerationStatus.Completed, reloaded.Status);
         await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetFileAsync(firstFileId));
+
+        var tombstone = Assert.Single(reloaded.TombstonedResults);
+        Assert.Equal("text/markdown", tombstone.MediaType);
+        Assert.False(string.IsNullOrWhiteSpace(tombstone.DisplayName));
+        Assert.False(string.IsNullOrWhiteSpace(tombstone.ContentHash));
+    }
+
+    [Fact]
+    public async Task RecyclingRestoringAndPermanentlyDeletingAGenerationRecordNeverTouchesItsFiles()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId, ["Result"], null);
+        var resultFileId = record.ResultFileIds[0];
+        Assert.Equal(LibraryRecordState.Active, record.State);
+
+        await workspace.RecycleGenerationRecordAsync(record.Id);
+        var recycled = await workspace.GetGenerationRecordAsync(record.Id);
+        Assert.Equal(LibraryRecordState.Recycled, recycled.State);
+        Assert.NotNull(recycled.RecycledAt);
+        Assert.Empty(await workspace.GetGenerationHistoryAsync());
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetFileAsync(resultFileId)).State);
+
+        await workspace.RestoreGenerationRecordAsync(record.Id);
+        var restored = await workspace.GetGenerationRecordAsync(record.Id);
+        Assert.Equal(LibraryRecordState.Active, restored.State);
+        Assert.Single(await workspace.GetGenerationHistoryAsync());
+
+        await workspace.RecycleGenerationRecordAsync(record.Id);
+        await workspace.PermanentlyDeleteGenerationRecordAsync(record.Id);
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetGenerationRecordAsync(record.Id));
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetFileAsync(resultFileId)).State);
+    }
+
+    [Fact]
+    public async Task OnlyARecycledGenerationRecordCanBeRestoredOrPermanentlyDeleted()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId, ["Result"], null);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RestoreGenerationRecordAsync(record.Id));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.PermanentlyDeleteGenerationRecordAsync(record.Id));
+
+        await workspace.RecycleGenerationRecordAsync(record.Id);
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.RecycleGenerationRecordAsync(record.Id));
     }
 
     [Fact]
@@ -240,6 +294,10 @@ public sealed class GenerationRecordTests
 
         var afterDeletion = await workspace.GetGenerationRecordAsync(record.Id);
         Assert.Null(afterDeletion.SourceFileId);
+        Assert.NotNull(afterDeletion.SourceFileTombstone);
+        Assert.Equal(imported.DisplayName, afterDeletion.SourceFileTombstone!.DisplayName);
+        Assert.Equal(imported.MediaType, afterDeletion.SourceFileTombstone.MediaType);
+        Assert.Equal(imported.ContentHash, afterDeletion.SourceFileTombstone.ContentHash);
     }
 
     [Fact]

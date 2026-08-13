@@ -560,13 +560,43 @@ in parallel. Both milestones must be complete before the first public release.
       model-unavailable-style warning rather than a dedicated dialog); those remain open below.
 - [ ] Add the source/model-incompatibility and system-instruction-channel-mismatch confirmations for
       **Use Again**, once named source-input slots and capability-based validation exist.
-- [ ] Add generation-history recycle/restore/permanent-delete integrated with the unified recycle
-      bin, including file/source tombstoning rules. Still fully open — `generation_records` has no
-      state/`recycled_at` lifecycle at all today, and neither source nor result files capture any
-      tombstone data (former display name/media type/hash) for when they're later gone. A real
-      `generation_results.file_id` schema bug found while scoping this item (missing `ON DELETE`
-      clause, causing every generation-result file's permanent deletion to throw) was fixed separately
-      above under Generation results and result ingestion, independent of this still-open item.
+- [x] Add generation-history recycle/restore/permanent-delete integrated with the unified recycle
+      bin, plus file/source tombstoning. Schema v26 adds `generation_records.state`/`recycled_at`
+      (the same shape every other entity already has) and, per plan.md's explicit rules, recycling or
+      permanently deleting a generation record touches neither its source nor result files in either
+      direction — `generation_results.generation_id`'s existing `ON DELETE CASCADE` only ever removes
+      the link rows, never the underlying `files` rows. `RecycleBinItemKind.GenerationRecord` follows
+      the exact same plumbing every other kind already established (`GetRecycleBinEntriesAsync`
+      query block, `GetRestoreBlockersAsync` case — recycled-state only, since a generation record has
+      no uniqueness constraint to conflict on — `ProcessRecycleBinItemsAsync` dispatch,
+      `GetRecycleBinRestorePreviewAsync` effects arm); `GenerationHistory.razor`/
+      `GenerationHistoryDetail.razor` each gained a **Recycle** action matching every other page's
+      "list/detail recycles; the bin restores/permanently-deletes" convention, and
+      `GetGenerationHistoryAsync` now filters to active records so a recycled one drops off
+      `/generation-history` naturally.
+
+      Tombstoning mirrors the already-existing `file_derivation_provenance` pattern exactly: when a
+      source or result file is permanently deleted (`DeleteFileRecordAsync`), its display
+      name/media type/content hash are snapshotted onto the referencing `generation_records`/
+      `generation_results` row immediately before the file row is removed, in the same transaction.
+      This required changing `generation_results.file_id` from the `ON DELETE CASCADE` added just
+      earlier this session (schema v25, to stop permanent deletion from throwing) to `ON DELETE SET
+      NULL` — the row now survives as a tombstoned placeholder instead of disappearing, which is what
+      makes a preserved tombstone possible at all. `GenerationRecord`'s new `SourceFileTombstone`/
+      `TombstonedResults` fields are purely additive; `ResultFileIds` keeps its exact original meaning
+      (currently-live result files only), so no existing consumer needed any changes — verified via an
+      adversarial plan review before implementation, alongside the FK/cascade ordering, which confirmed
+      no other issues.
+
+      **Explicitly out of scope**, matching this app's actual architecture (no async-job infrastructure,
+      confirmed repeatedly this session): plan.md's **Submission Outcome Unknown** recycling rules,
+      **Refresh Provider Status**/**Output Recycled** labeling, and **Reacquire Permanently Deleted
+      Output** (which needs a provider-hosted result URL to re-download from — neither adapter has one;
+      both return inline base64 content already committed as a local file). **Known, inherited
+      limitation, not newly introduced**: `DeleteFolderRecordAsync`'s batch descendant-file delete
+      already skipped the `file_derivation_provenance` tombstone update before this slice, and likewise
+      skips the two new generation-tombstone updates — only the single-file permanent-delete path is
+      tombstoned, matching the scope the provenance feature itself already settled for.
 - [x] Add prompt-improvement history records as a distinct lightweight AI-operation entry type
       (schema v19: `prompt_improvement_records`, plus a nullable `generation_records.prompt_improvement_record_id`
       with `ON DELETE SET NULL`). Every submitted **Improve Prompt** attempt on `/generate` —

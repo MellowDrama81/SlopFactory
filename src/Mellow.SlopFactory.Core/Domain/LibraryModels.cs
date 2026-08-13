@@ -110,7 +110,8 @@ public enum RecycleBinItemKind
     FileLink = 2,
     Connection = 3,
     Model = 4,
-    SavedSetting = 5
+    SavedSetting = 5,
+    GenerationRecord = 6
 }
 
 public enum LibraryIntegrityIssueKind
@@ -722,7 +723,14 @@ public sealed record GenerationRecord(
     int? CompletionTokens = null,
     string? SourceFileId = null,
     string? PromptImprovementRecordId = null,
-    TextResultFormat? TextFormat = null);
+    TextResultFormat? TextFormat = null,
+    LibraryRecordState State = LibraryRecordState.Active,
+    DateTimeOffset? RecycledAt = null,
+    FileIdentitySnapshot? SourceFileTombstone = null,
+    IReadOnlyList<FileIdentitySnapshot> TombstonedResults = default!)
+{
+    public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
+}
 
 public sealed record PromptImprovementRecord(
     string Id,

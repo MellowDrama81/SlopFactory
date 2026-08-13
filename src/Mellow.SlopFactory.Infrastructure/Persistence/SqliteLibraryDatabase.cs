@@ -228,7 +228,12 @@ internal sealed class SqliteLibraryDatabase
                 completion_tokens INTEGER NULL,
                 source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,
                 prompt_improvement_record_id TEXT NULL REFERENCES prompt_improvement_records(id) ON DELETE SET NULL,
-                text_format INTEGER NULL
+                text_format INTEGER NULL,
+                state INTEGER NOT NULL DEFAULT 0,
+                recycled_at TEXT NULL,
+                tombstone_source_display_name TEXT NULL,
+                tombstone_source_media_type TEXT NULL,
+                tombstone_source_content_hash TEXT NULL
             );
             CREATE INDEX ix_generation_records_created ON generation_records(created_at);
 
@@ -254,8 +259,11 @@ internal sealed class SqliteLibraryDatabase
             CREATE TABLE generation_results (
                 id TEXT PRIMARY KEY,
                 generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,
-                file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-                position INTEGER NOT NULL
+                file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,
+                position INTEGER NOT NULL,
+                tombstone_display_name TEXT NULL,
+                tombstone_media_type TEXT NULL,
+                tombstone_content_hash TEXT NULL
             );
             CREATE INDEX ix_generation_results_generation ON generation_results(generation_id);
 
@@ -476,6 +484,23 @@ internal sealed class SqliteLibraryDatabase
                 CREATE TABLE generation_results (id TEXT PRIMARY KEY,generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,position INTEGER NOT NULL);
                 INSERT INTO generation_results(id,generation_id,file_id,position) SELECT id,generation_id,file_id,position FROM generation_results_old_v24;
                 DROP TABLE generation_results_old_v24;
+                CREATE INDEX IF NOT EXISTS ix_generation_results_generation ON generation_results(generation_id);
+                """,
+                cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 26)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "state", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "recycled_at", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "tombstone_source_display_name", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "tombstone_source_media_type", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "tombstone_source_content_hash", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection,
+                """
+                ALTER TABLE generation_results RENAME TO generation_results_old_v25;
+                CREATE TABLE generation_results (id TEXT PRIMARY KEY,generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,position INTEGER NOT NULL,tombstone_display_name TEXT NULL,tombstone_media_type TEXT NULL,tombstone_content_hash TEXT NULL);
+                INSERT INTO generation_results(id,generation_id,file_id,position) SELECT id,generation_id,file_id,position FROM generation_results_old_v25;
+                DROP TABLE generation_results_old_v25;
                 CREATE INDEX IF NOT EXISTS ix_generation_results_generation ON generation_results(generation_id);
                 """,
                 cancellationToken, transaction).ConfigureAwait(false);
@@ -931,6 +956,19 @@ internal sealed class SqliteLibraryDatabase
             }
         }
 
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT id,model_label,state,recycled_at FROM generation_records WHERE state IN (1,2);";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                results.Add(new RecycleBinEntry(
+                    new RecycleBinItemReference(RecycleBinItemKind.GenerationRecord, reader.GetString(0)),
+                    reader.GetString(1), "Generation History", (LibraryRecordState)reader.GetInt32(2), Parse(reader.GetString(3)),
+                    0, 0, 0, null));
+            }
+        }
+
         return results.OrderByDescending(item => item.RecycledAt).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -1073,6 +1111,12 @@ internal sealed class SqliteLibraryDatabase
                 {
                     blockers.Add($"An active saved setting titled '{setting.Title}' already exists.");
                 }
+                break;
+            }
+            case RecycleBinItemKind.GenerationRecord:
+            {
+                var record = await GetGenerationRecordAsync(connection, reference.Id, cancellationToken).ConfigureAwait(false);
+                if (record.State != LibraryRecordState.Recycled) blockers.Add("Only a recycled generation record can be restored.");
                 break;
             }
             default:
@@ -1628,6 +1672,8 @@ internal sealed class SqliteLibraryDatabase
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var file = await GetFileAsync(connection, fileId, cancellationToken, transaction).ConfigureAwait(false);
         await ExecuteNonQueryAsync(connection, "UPDATE file_derivation_provenance SET source_file_id=NULL,deleted_source_name=$name,deleted_source_media_type=$media,deleted_source_content_hash=$hash WHERE source_file_id=$id;", cancellationToken, transaction, ("$id", fileId), ("$name", file.DisplayName), ("$media", file.MediaType), ("$hash", file.ContentHash)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "UPDATE generation_records SET tombstone_source_display_name=$name,tombstone_source_media_type=$media,tombstone_source_content_hash=$hash WHERE source_file_id=$id;", cancellationToken, transaction, ("$id", fileId), ("$name", file.DisplayName), ("$media", file.MediaType), ("$hash", file.ContentHash)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "UPDATE generation_results SET tombstone_display_name=$name,tombstone_media_type=$media,tombstone_content_hash=$hash WHERE file_id=$id;", cancellationToken, transaction, ("$id", fileId), ("$name", file.DisplayName), ("$media", file.MediaType), ("$hash", file.ContentHash)).ConfigureAwait(false);
         var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM files WHERE id=$id AND state=2;", cancellationToken, transaction, ("$id", fileId)).ConfigureAwait(false);
         if (deleted == 0) throw new LibraryValidationException("The pending file aggregate could not be found for permanent deletion.");
         await ExecuteNonQueryAsync(connection, "DELETE FROM permanent_deletion_failures WHERE record_kind=1 AND record_id=$id;", cancellationToken, transaction, ("$id", fileId)).ConfigureAwait(false);
@@ -2487,7 +2533,7 @@ internal sealed class SqliteLibraryDatabase
         reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9), reader.IsDBNull(10) ? null : reader.GetString(10),
         Parse(reader.GetString(11)), Parse(reader.GetString(12)));
 
-    private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format FROM generation_records";
+    private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,state,recycled_at,tombstone_source_display_name,tombstone_source_media_type,tombstone_source_content_hash FROM generation_records";
 
     public async Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken)
     {
@@ -2495,14 +2541,15 @@ internal sealed class SqliteLibraryDatabase
         var records = new List<GenerationRecord>();
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = GenerationRecordSelect + " ORDER BY created_at DESC;";
+            command.CommandText = GenerationRecordSelect + " WHERE state=0 ORDER BY created_at DESC;";
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadGenerationRecord(reader));
         }
         var results = new List<GenerationRecord>(records.Count);
         foreach (var record in records)
         {
-            results.Add(record with { ResultFileIds = await GetGenerationResultFileIdsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false) });
+            var (fileIds, tombstones) = await GetGenerationResultsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false);
+            results.Add(record with { ResultFileIds = fileIds, TombstonedResults = tombstones });
         }
         return results;
     }
@@ -2519,8 +2566,63 @@ internal sealed class SqliteLibraryDatabase
             if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Generation record not found.");
             record = ReadGenerationRecord(reader);
         }
-        var fileIds = await GetGenerationResultFileIdsAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
-        return record with { ResultFileIds = fileIds };
+        var (fileIds, tombstones) = await GetGenerationResultsAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
+        return record with { ResultFileIds = fileIds, TombstonedResults = tombstones };
+    }
+
+    public async Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var records = new List<GenerationRecord>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = GenerationRecordSelect + " WHERE state=1 ORDER BY recycled_at DESC;";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadGenerationRecord(reader));
+        }
+        var results = new List<GenerationRecord>(records.Count);
+        foreach (var record in records)
+        {
+            var (fileIds, tombstones) = await GetGenerationResultsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false);
+            results.Add(record with { ResultFileIds = fileIds, TombstonedResults = tombstones });
+        }
+        return results;
+    }
+
+    private static async Task<GenerationRecord> GetGenerationRecordAsync(SqliteConnection connection, string generationId, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = GenerationRecordSelect + " WHERE id=$id;";
+        command.Parameters.AddWithValue("$id", generationId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Generation record not found.");
+        return ReadGenerationRecord(reader);
+    }
+
+    public async Task RecycleGenerationRecordAsync(string generationId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetGenerationRecordAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active generation record can be recycled.");
+        var now = Format(DateTimeOffset.UtcNow);
+        await ExecuteNonQueryAsync(connection, "UPDATE generation_records SET state=1,recycled_at=$now WHERE id=$id;", cancellationToken, null, ("$now", now), ("$id", generationId)).ConfigureAwait(false);
+    }
+
+    public async Task RestoreGenerationRecordAsync(string generationId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetGenerationRecordAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled generation record can be restored.");
+        await ExecuteNonQueryAsync(connection, "UPDATE generation_records SET state=0,recycled_at=NULL WHERE id=$id;", cancellationToken, null, ("$id", generationId)).ConfigureAwait(false);
+    }
+
+    public async Task PermanentlyDeleteGenerationRecordAsync(string generationId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetGenerationRecordAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
+        if (existing.State != LibraryRecordState.Recycled) throw new LibraryValidationException("Only a recycled generation record can be permanently deleted.");
+        var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM generation_records WHERE id=$id;", cancellationToken, null, ("$id", generationId)).ConfigureAwait(false);
+        if (deleted == 0) throw new RecordNotFoundException("Generation record not found.");
     }
 
     public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, TextResultFormat? textFormat, CancellationToken cancellationToken)
@@ -2595,23 +2697,37 @@ internal sealed class SqliteLibraryDatabase
         reader.IsDBNull(11) ? null : reader.GetInt32(11), reader.IsDBNull(12) ? null : reader.GetInt32(12),
         Parse(reader.GetString(13)), reader.IsDBNull(14) ? null : Parse(reader.GetString(14)));
 
-    private static async Task<IReadOnlyList<string>> GetGenerationResultFileIdsAsync(SqliteConnection connection, string generationId, CancellationToken cancellationToken)
+    private static async Task<(IReadOnlyList<string> ResultFileIds, IReadOnlyList<FileIdentitySnapshot> TombstonedResults)> GetGenerationResultsAsync(SqliteConnection connection, string generationId, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT file_id FROM generation_results WHERE generation_id=$id ORDER BY position;";
+        command.CommandText = "SELECT file_id,tombstone_display_name,tombstone_media_type,tombstone_content_hash FROM generation_results WHERE generation_id=$id ORDER BY position;";
         command.Parameters.AddWithValue("$id", generationId);
         var ids = new List<string>();
+        var tombstones = new List<FileIdentitySnapshot>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) ids.Add(reader.GetString(0));
-        return ids;
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!reader.IsDBNull(0)) { ids.Add(reader.GetString(0)); continue; }
+            if (!reader.IsDBNull(1)) tombstones.Add(new FileIdentitySnapshot(reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        }
+        return (ids, tombstones);
     }
 
-    private static GenerationRecord ReadGenerationRecord(SqliteDataReader reader) => new(
-        reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), reader.GetString(3), (ProviderType)reader.GetInt32(4),
-        (GenerationMode)reader.GetInt32(5), reader.GetString(6), reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetInt32(8), (GenerationStatus)reader.GetInt32(9),
-        reader.IsDBNull(10) ? null : reader.GetString(10), reader.GetString(11), Parse(reader.GetString(12)), reader.IsDBNull(13) ? null : Parse(reader.GetString(13)),
-        Array.Empty<string>(), reader.IsDBNull(14) ? null : reader.GetInt32(14), reader.IsDBNull(15) ? null : reader.GetInt32(15), reader.IsDBNull(16) ? null : reader.GetString(16),
-        reader.IsDBNull(17) ? null : reader.GetString(17), reader.IsDBNull(18) ? null : (TextResultFormat)reader.GetInt32(18));
+    private static GenerationRecord ReadGenerationRecord(SqliteDataReader reader)
+    {
+        var sourceFileId = reader.IsDBNull(16) ? null : reader.GetString(16);
+        var sourceTombstoneName = reader.IsDBNull(21) ? null : reader.GetString(21);
+        var sourceTombstone = sourceFileId is null && sourceTombstoneName is not null
+            ? new FileIdentitySnapshot(sourceTombstoneName, reader.GetString(22), reader.GetString(23))
+            : null;
+        return new(
+            reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), reader.GetString(3), (ProviderType)reader.GetInt32(4),
+            (GenerationMode)reader.GetInt32(5), reader.GetString(6), reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetInt32(8), (GenerationStatus)reader.GetInt32(9),
+            reader.IsDBNull(10) ? null : reader.GetString(10), reader.GetString(11), Parse(reader.GetString(12)), reader.IsDBNull(13) ? null : Parse(reader.GetString(13)),
+            Array.Empty<string>(), reader.IsDBNull(14) ? null : reader.GetInt32(14), reader.IsDBNull(15) ? null : reader.GetInt32(15), sourceFileId,
+            reader.IsDBNull(17) ? null : reader.GetString(17), reader.IsDBNull(18) ? null : (TextResultFormat)reader.GetInt32(18),
+            (LibraryRecordState)reader.GetInt32(19), reader.IsDBNull(20) ? null : Parse(reader.GetString(20)), sourceTombstone);
+    }
 
     private async Task SetFileStateAndLinksAsync(string fileId, LibraryRecordState state, CancellationToken cancellationToken)
     {
