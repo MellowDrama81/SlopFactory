@@ -193,6 +193,21 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** a recycled source saved setting offers Restore-and-save/Save-As/Cancel instead of a generic error; Restore and save both un-recycles the original and applies the tab's current changes in one action; a permanently deleted source clears the tab's save-in-place link so only Save As remains; a title conflict at restore time is reported clearly rather than failing silently.
 
+## MT-15 — A generation tab's own model recycled or permanently deleted
+
+1. Select a model on a `/generate` tab, then recycle that model from `/models` (in another tab or after navigating away and back).
+2. Return to the affected tab (switch away and back, or reopen `/generate`). Confirm a notice specifically names the recycled model (not a generic "unavailable" message) and offers a **Restore model** button, while the model dropdown has already fallen back to another active model so the tab stays usable in the meantime.
+3. Click **Restore model**. Confirm the model becomes active again on `/models`, the notice disappears, and the dropdown now shows that model selected again on this tab.
+4. Repeat steps 1–2, but this time manually pick a different model from the dropdown instead of clicking Restore. Confirm the notice clears once you've made an explicit selection and Generate works normally with your chosen model.
+5. Select a model on a tab, then permanently delete that model (recycle it, then permanently delete from `/recycle-bin` or `/models`). Return to the affected tab. Confirm a message explains the model was permanently deleted, the dropdown shows no model selected (a visible "Choose a model" placeholder, not a silently-substituted real model), and the **Generate** button is disabled.
+6. From that same tab, select any active model from the dropdown. Confirm the notice clears, **Generate** becomes enabled again, and generating works normally.
+7. Recycle a model whose owning connection is also currently recycled. From the affected tab, click **Restore model**. Confirm it fails with a message explaining the connection must be restored first, rather than silently succeeding or leaving the tab in a broken state.
+8. Recycle a model, then create a new active model reusing its exact label before clicking **Restore model** from the affected tab. Confirm the restore fails with a name-conflict message rather than silently succeeding or corrupting either model.
+9. Mark a tab's model **Needs Review** (via a provider-model-ID or mode change on `/models`) rather than recycling or deleting it. Confirm the tab still shows the existing generic "model unavailable, choose another" message and auto-falls-back to another model as before — this case should be unaffected by this change.
+10. On a tab whose source image was separately recycled or permanently deleted (not the model), confirm the source-image field still just silently reverts to "None" with no restore button or blocking notice — this remains intentionally unchanged.
+
+**Pass:** a recycled model shows a specific message naming it with a working inline Restore action; a permanently deleted model blocks Generate until an explicit replacement is chosen, with the dropdown visibly showing no selection rather than a silent substitution; restoring into a recycled-connection or label-conflict state fails with a clear message; the Needs-Review case and the source-image field are both unaffected by this change.
+
 ## Reporting
 
 For each test case, record:

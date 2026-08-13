@@ -75,6 +75,43 @@ public sealed class ConnectionModelTests
     }
 
     [Fact]
+    public async Task ARecycledModelCanBeFetchedByIdWithItsLabelIntactAndRestoredDirectlyWithoutRecyclingItsConnection()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        await workspace.RecycleModelAsync(model.Id);
+        var recycled = await workspace.GetModelAsync(model.Id);
+        Assert.Equal(LibraryRecordState.Recycled, recycled.State);
+        Assert.Equal("GPT", recycled.Label);
+        Assert.Empty(await workspace.GetActiveModelsAsync());
+
+        await workspace.RestoreModelAsync(model.Id);
+        var restored = await workspace.GetModelAsync(model.Id);
+        Assert.Equal(LibraryRecordState.Active, restored.State);
+        Assert.Single(await workspace.GetActiveModelsAsync());
+    }
+
+    [Fact]
+    public async Task RestoringARecycledModelWhoseLabelNowCollidesWithAnActiveOneThrowsANameConflict()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        await workspace.RecycleModelAsync(model.Id);
+        await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o-mini", GenerationMode.Text, true);
+
+        await Assert.ThrowsAsync<NameConflictException>(() => workspace.RestoreModelAsync(model.Id));
+    }
+
+    [Fact]
     public async Task PermanentlyDeletingAConnectionCascadesToItsRecycledModels()
     {
         using var temporary = new TemporaryDirectory();

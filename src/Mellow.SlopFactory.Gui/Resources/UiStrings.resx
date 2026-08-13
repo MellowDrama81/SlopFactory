@@ -714,6 +714,10 @@
   <data name="RestoreAndSaveSettings" xml:space="preserve"><value>Restore and save</value></data>
   <data name="SavedSettingsSourceDeleted" xml:space="preserve"><value>These saved settings were permanently deleted since you opened them. Save your changes as a new saved setting instead.</value></data>
   <data name="DraftModelUnavailable" xml:space="preserve"><value>The model previously selected for this tab is no longer available. Choose another model.</value></data>
+  <data name="DraftModelRecycled" xml:space="preserve"><value>The model previously selected for this tab, {0}, was moved to the recycle bin.</value></data>
+  <data name="RestoreModelAction" xml:space="preserve"><value>Restore model</value></data>
+  <data name="DraftModelDeleted" xml:space="preserve"><value>The model previously selected for this tab was permanently deleted. Choose a replacement before generating.</value></data>
+  <data name="ChooseReplacementModel" xml:space="preserve"><value>Choose a model</value></data>
   <data name="SavedSettingsPageTitle" xml:space="preserve"><value>Saved settings · SlopFactory</value></data>
   <data name="SavedSettingsHeading" xml:space="preserve"><value>Saved settings</value></data>
   <data name="SavedSettingsDescription" xml:space="preserve"><value>Reuse a saved model, prompt, result count and destination.</value></data>

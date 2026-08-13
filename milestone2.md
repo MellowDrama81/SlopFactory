@@ -662,11 +662,26 @@ in parallel. Both milestones must be complete before the first public release.
       already does — no background polling was added. **Excludes** settings-schema/sources/
       improvement-state capture (still blocked on the typed-provider-settings-schema decision) and
       the separate, still-open dependency-restoration gap for a tab's own **model/source-file**
-      references (plan.md also calls for an inline restore option when one of *those* is merely
-      recycled, and requiring an explicit replacement selection before generating when one was
-      permanently deleted — today's `DraftModelUnavailable` fallback only shows a generic message and
-      silently switches to another model/clears the source field, with no inline restore action and
-      no hard block on generating with a to-be-chosen replacement).
+      references — see the next item, which now covers the **model** half of that gap directly).
+- [x] Add dependency-restoration handling for a tab's own **model** becoming recycled or permanently
+      deleted (the other half of the gap noted above; source-image is deliberately left as-is —
+      milestone2.md already documents that field as an intentionally silent, non-blocking secondary
+      field, unlike the model, which is mandatory). `LoadDraftIntoForm` became
+      `LoadDraftIntoFormAsync` (a trivial, fully-contained change — every one of its 9 call sites was
+      already inside an `async Task` method) so it can call `workspace.GetModelAsync(draft.ModelId)`
+      when the model isn't in the already-loaded active list, distinguishing three cases a plain
+      `_models.FirstOrDefault` miss couldn't: recycled (`GetModelAsync` returns it with
+      `State == Recycled` and its label intact) shows a specific **"model X was moved to the recycle
+      bin"** notice with an inline **Restore model** button (`RestoreModelAsync` then a shared
+      `RefreshActiveModelsAsync` helper, reused from `OnInitializedAsync` too); permanently deleted
+      (`RecordNotFoundException`) leaves `_form.ModelId` empty — a new placeholder `<option>` renders
+      so the select visibly shows nothing chosen — and disables **Generate** via
+      `string.IsNullOrEmpty(_form.ModelId)` until the user explicitly picks a replacement, exactly per
+      plan.md; a model merely excluded for being **Needs Review** keeps the pre-existing generic
+      `DraftModelUnavailable` message and auto-fallback, unchanged. `ConnectionModelTests` covers the
+      underlying domain sequence directly (recycle → `GetModelAsync` returns it with its label →
+      restore → active again; restoring into a label collision throws `NameConflictException`, the
+      same as every other restore-conflict class in this app).
 
 ## Cost, usage and notifications
 

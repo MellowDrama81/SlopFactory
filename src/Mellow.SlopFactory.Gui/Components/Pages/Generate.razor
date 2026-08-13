@@ -175,11 +175,23 @@ else
     <EditForm Model="_form" OnValidSubmit="GenerateAsync" class="stack-form">
         <label for="generate-model">@Strings["Model"]</label>
         <InputSelect id="generate-model" @bind-Value="_form.ModelId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
+            @if (string.IsNullOrEmpty(_form.ModelId))
+            {
+                <option value="">@Strings["ChooseReplacementModel"]</option>
+            }
             @foreach (var model in _models)
             {
                 <option value="@model.Id">@model.Label (@ModeLabel(model.Mode))</option>
             }
         </InputSelect>
+
+        @if (_recycledModel is not null)
+        {
+            <div class="notice error" role="alert">
+                @Strings["DraftModelRecycled", _recycledModel.Label]
+                <button type="button" class="secondary" disabled="@_busy" @onclick="RestoreDraftModelAsync">@Strings["RestoreModelAction"]</button>
+            </div>
+        }
 
         @if (SelectedConnection is not null && CredentialBlocked(SelectedConnection))
         {
@@ -232,7 +244,7 @@ else
         }
 
         <div class="actions">
-            <button type="submit" disabled="@(FormDisabled || (SelectedConnection is not null && CredentialBlocked(SelectedConnection)))">
+            <button type="submit" disabled="@(FormDisabled || string.IsNullOrEmpty(_form.ModelId) || (SelectedConnection is not null && CredentialBlocked(SelectedConnection)))">
                 @(ActiveJobStatus?.Phase switch
                 {
                     GenerationJobPhase.Queued => Strings["Queued"],
@@ -429,6 +441,7 @@ else
     private string _settingsTitle = string.Empty;
     private SavedGenerationSetting? _settingsConflict;
     private SavedGenerationSetting? _settingsRecycledConflict;
+    private Model? _recycledModel;
     private string _improvementModelId = string.Empty;
     private string _improvementGuidance = string.Empty;
     private IReadOnlyList<string>? _improvementCandidates;
@@ -456,9 +469,7 @@ else
         await LibraryState.InitializeAsync();
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
-        var activeModels = await workspace.GetActiveModelsAsync();
-        _hasNeedsReviewModels = activeModels.Any(model => model.NeedsReview);
-        _models = activeModels.Where(model => !model.NeedsReview).ToArray();
+        await RefreshActiveModelsAsync(workspace);
         _activeConnections = await workspace.GetActiveConnectionsAsync();
         _activeFolders = await workspace.GetActiveFoldersAsync();
         var activeFiles = await workspace.GetActiveFilesAsync();
@@ -470,7 +481,14 @@ else
             _drafts = [await workspace.CreateDraftAsync()];
         }
 
-        LoadDraftIntoForm(_drafts.OrderBy(draft => draft.TabOrder).First().Id);
+        await LoadDraftIntoFormAsync(_drafts.OrderBy(draft => draft.TabOrder).First().Id);
+    }
+
+    private async Task RefreshActiveModelsAsync(ILibraryWorkspace workspace)
+    {
+        var activeModels = await workspace.GetActiveModelsAsync();
+        _hasNeedsReviewModels = activeModels.Any(model => model.NeedsReview);
+        _models = activeModels.Where(model => !model.NeedsReview).ToArray();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -506,7 +524,7 @@ else
                 var draft = await workspace.CreateDraftAsync();
                 draft = await workspace.ReplaceDraftStateAsync(draft.Id, saved.Title, modelId, saved.Prompt, saved.SystemInstructions, sourceFileId, saved.ResultCount, saved.DestinationFolderId, null, null);
                 _drafts = [.. _drafts, draft];
-                LoadDraftIntoForm(draft.Id);
+                await LoadDraftIntoFormAsync(draft.Id);
                 _loadedSettingsId = saved.Id;
                 _loadedTitle = saved.Title;
                 _loadedRevision = saved.Revision;
@@ -535,7 +553,7 @@ else
                 var draft = await workspace.CreateDraftAsync();
                 draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, modelId, history.Prompt, history.SystemInstructions, sourceFileId, history.ResultCount, history.DestinationFolderId, null, null);
                 _drafts = [.. _drafts, draft];
-                LoadDraftIntoForm(draft.Id);
+                await LoadDraftIntoFormAsync(draft.Id);
                 if (model is null && history.ModelId is not null && _models.Count > 0)
                 {
                     _message = Strings["SavedSettingsModelUnavailable", history.ModelLabel];
@@ -549,15 +567,56 @@ else
         }
     }
 
-    private void LoadDraftIntoForm(string draftId)
+    private async Task LoadDraftIntoFormAsync(string draftId)
     {
         var draft = _drafts.FirstOrDefault(candidate => candidate.Id == draftId);
         if (draft is null) return;
         _activeDraftId = draftId;
+        _recycledModel = null;
         var model = draft.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == draft.ModelId) : null;
+        string resolvedModelId;
+        string? unavailableMessage = null;
+
+        if (model is not null || draft.ModelId is null)
+        {
+            resolvedModelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : string.Empty);
+        }
+        else
+        {
+            resolvedModelId = _models.Count > 0 ? _models[0].Id : string.Empty;
+            var workspace = LibraryState.Workspace;
+            Model? current = null;
+            if (workspace is not null)
+            {
+                try
+                {
+                    current = await workspace.GetModelAsync(draft.ModelId);
+                }
+                catch (RecordNotFoundException)
+                {
+                    current = null;
+                }
+            }
+
+            if (current is null)
+            {
+                resolvedModelId = string.Empty;
+                unavailableMessage = Strings["DraftModelDeleted"];
+            }
+            else if (current.State == LibraryRecordState.Recycled)
+            {
+                _recycledModel = current;
+                unavailableMessage = Strings["DraftModelRecycled", current.Label];
+            }
+            else
+            {
+                unavailableMessage = Strings["DraftModelUnavailable"];
+            }
+        }
+
         _form = new GenerateForm
         {
-            ModelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : string.Empty),
+            ModelId = resolvedModelId,
             Prompt = draft.Prompt,
             SystemInstructions = draft.SystemInstructions ?? string.Empty,
             SourceFileId = draft.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == draft.SourceFileId) ? draft.SourceFileId : string.Empty,
@@ -578,16 +637,30 @@ else
         _settingsRecycledConflict = null;
         _saveStatus = SaveStatus.Idle;
         _saveError = null;
-        if (model is null && draft.ModelId is not null && _models.Count > 0)
+        _message = unavailableMessage;
+        _isError = false;
+    }
+
+    private async Task RestoreDraftModelAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _recycledModel is null) return;
+        _busy = true;
+        try
         {
-            _message = Strings["DraftModelUnavailable"];
-            _isError = false;
-        }
-        else
-        {
+            await workspace.RestoreModelAsync(_recycledModel.Id);
+            await RefreshActiveModelsAsync(workspace);
+            _form.ModelId = _recycledModel.Id;
+            _recycledModel = null;
             _message = null;
             _isError = false;
         }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _busy = false; }
     }
 
     private async Task SwitchToDraftAsync(string draftId)
@@ -595,7 +668,7 @@ else
         if (draftId == _activeDraftId) return;
         _closingDraftId = null;
         await FlushPendingAutosaveAsync();
-        LoadDraftIntoForm(draftId);
+        await LoadDraftIntoFormAsync(draftId);
     }
 
     private async Task AddDraftAsync()
@@ -605,7 +678,7 @@ else
         await FlushPendingAutosaveAsync();
         var draft = await workspace.CreateDraftAsync();
         _drafts = [.. _drafts, draft];
-        LoadDraftIntoForm(draft.Id);
+        await LoadDraftIntoFormAsync(draft.Id);
     }
 
     private Task DuplicateActiveDraftAsync() => _activeDraftId is null ? Task.CompletedTask : DuplicateDraftAsync(_activeDraftId);
@@ -618,7 +691,7 @@ else
         var duplicate = await workspace.DuplicateDraftAsync(draftId);
         _drafts = [.. _drafts, duplicate];
         _switcherOpen = false;
-        LoadDraftIntoForm(duplicate.Id);
+        await LoadDraftIntoFormAsync(duplicate.Id);
     }
 
     private async Task SelectFromSwitcherAsync(string draftId)
@@ -733,11 +806,11 @@ else
         {
             var fresh = await workspace.CreateDraftAsync();
             _drafts = [fresh];
-            LoadDraftIntoForm(fresh.Id);
+            await LoadDraftIntoFormAsync(fresh.Id);
         }
         else if (_activeDraftId == draftId)
         {
-            LoadDraftIntoForm(_drafts.OrderBy(draft => draft.TabOrder).First().Id);
+            await LoadDraftIntoFormAsync(_drafts.OrderBy(draft => draft.TabOrder).First().Id);
         }
     }
 
