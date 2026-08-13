@@ -1071,14 +1071,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Connection testing displays and validates each enabled modality's resolved endpoint independently without issuing paid generation requests.
 - APIs with non-OpenAI request or response formats require a dedicated provider adapter rather than arbitrary protocol mapping in the generic adapter.
 - Changing a connection label does not affect its dependent models.
-- Updating a connection API key stages the candidate in a temporary secure-storage entry and tests it before replacing the active secure-storage value.
-- A successful test promotes the candidate. If testing fails, **Keep Existing Key** is the default; **Save New Key as Unverified** remains available after an explicit warning, and no candidate plaintext is retained in application storage.
-- Candidate credentials use a separate indexed secure-storage namespace. Cancellation or a completed failed edit deletes the candidate immediately, while a cleanup failure remains indexed for sanitized retry without exposing its value.
-- Startup reconciliation removes orphaned candidate entries which are not referenced by an active credential-update operation.
-- Active credentials use revisioned secure-storage entries selected by a non-secret committed pointer. Promotion writes and verifies the new entry first, atomically commits that pointer, and only then removes superseded active and candidate entries.
-- Crash reconciliation trusts only the committed revision pointer and cleans up other revisions; it never chooses a credential by timestamp or other guesswork.
-- If the committed credential pointer is missing or corrupt while secure-storage revisions still exist, SlopFactory preserves every revision, marks the connection **Credential State Requires Repair**, and blocks authenticated operations rather than guessing.
-- Re-entering a key writes and commits a new active revision; only after that succeeds are the ambiguous older revisions removed.
 - If pending remote jobs exist, API-key replacement previews their count and warns that a credential for another provider account may be unable to poll, download or clean them up.
 - Replacement remains available, but every existing provider job ID is preserved; jobs inaccessible with the new credential are retained for explicit recovery and are never discarded automatically.
 - Changing a connection base URL warns the user, retests the connection, refreshes model discovery and marks dependent models as **Needs Review** until they are validated.
@@ -1327,16 +1319,12 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 - Deleting a record or file moves it to the recycle bin.
 - The recycle bin covers durable user-managed library aggregates and managed files, including folders, files with owned metadata, user links, connections, models, saved generation settings and submitted generation-history records.
-- When connections, models, saved generation settings and generation-history records are implemented, their recycle entries and dependency-aware restore previews must extend the existing unified category, search, sort, selection, confirmation and independent batch-operation workflows.
-- Generation-tab drafts are transient working state and do not enter the recycle bin when the user confirms **Discard and Close**.
 - Device preferences, diagnostic logs, credential-index entries, queues, temporary files and regenerable preview caches are operational state rather than recyclable library records.
 - Regenerable preview-cache entries can be removed when a file is recycled.
 - Secure-storage credentials are removed before their database records are finalized.
 - Failed secure-storage cleanup is retried rather than silently leaving an orphaned credential.
 - Recycled items are never permanently deleted automatically based on age.
-- Recycling a connection retains its API key so the connection can be restored.
 - Recycling a connection also retains the minimum remote-cleanup tasks associated with it and permits explicit cleanup retries using the retained credential.
-- Permanently deleting a connection removes its API key from OS secure storage.
 - If pending or failed remote cleanup still depends on that connection, permanent-deletion cascade preview lists every affected task and offers **Retry All Cleanup**, **Stop Tracking and Delete Connection**, and **Cancel**.
 - **Retry All Cleanup** performs explicit bounded cleanup attempts; the connection remains in the recycle bin if any required task is still unresolved.
 - **Stop Tracking and Delete Connection** warns that remote assets may remain, removes all affected retry identifiers and then proceeds with normal credential and record deletion.
@@ -1345,13 +1333,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - When such records exist, deletion offers **Keep Connection** or **Delete Connection Anyway** after any remote-cleanup decisions are resolved.
 - **Delete Connection Anyway** warns that reconciliation may become impossible, removes the credential normally, preserves the independent history records and marks their recovery credentials unavailable.
 - Recreating a similarly labelled connection later does not automatically relink or send those historical identifiers.
-- Recycling a connection also recycles all models which depend on it and all saved generation settings which depend on those models.
-- The user is warned about these dependent removals before recycling a connection.
-- Recycling a model also recycles all saved generation settings which depend on it.
-- Restoring a connection restores the models and saved generation settings which were recycled with it.
-- Permanently deleting a connection or model permanently deletes the dependent models and saved generation settings which were recycled with it.
-- Files generated with a recycled or permanently deleted model remain in the library.
-- Generated files do not retain an active database reference to a recycled or permanently deleted model, but retain a plain-text snapshot of the original provider and model ID as provenance.
 - When restoring a file whose linked file remains recycled, the user is prompted to restore the linked file.
 
 ## Generation Lifecycle
@@ -1788,27 +1769,10 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Saved generation settings contain a title, the selected generation model, raw prompt, optional system instructions, improved prompt, model settings, result count, selected source files, prompt-improvement enabled state and selected improvement model.
 - **Save** and **Save As** review the selected sources and provide a checked **Include Sources** option. Clearing it saves the other reusable form state without source references.
 - Included sources are stable library-file references only; saving settings never duplicates their managed bytes.
-- Opening saved generation settings always creates a new generation tab rather than replacing or merging into an existing tab.
-- The new tab contains an editable working-copy snapshot and retains the stable ID and version of the saved settings from which it was opened.
 - If the saved system-instruction channel snapshot differs from the current adapter mapping, the working copy shows both and requires confirmation before submission without modifying the saved record.
 - Accepting the current mapping updates only the autosaved tab working copy; the named saved setting changes only through explicit **Save** or **Save As** and the normal revision-conflict workflow.
-- Multiple tabs can be opened independently from the same saved settings.
 - The improved prompt which was present when the settings were saved is loaded into the working copy and is not regenerated automatically.
 - The user can retry prompt improvement in the working copy without changing or losing the improved prompt stored in the saved settings.
-- Changes to the working copy do not alter the saved settings automatically.
-- Later changes to the saved settings do not silently rewrite an already open tab.
-- **Save** explicitly updates the saved settings, while **Save As** creates a separate saved setting and preserves the original.
-- Each saved-generation-settings record has an opaque revision which changes on every successful update.
-- **Save** compares the tab's loaded revision with the current record revision.
-- If they differ, the application offers **Review Changes**, **Overwrite**, **Save As**, and **Cancel** rather than silently applying last-write-wins behavior.
-- **Review Changes** displays field-level differences, including prompts, models, settings, source roles, destination and result count, without modifying either version.
-- **Overwrite** requires confirmation and replaces the saved record with the tab's complete current working copy.
-- **Save As** creates a new stable settings record and updates the tab's source reference to that new record.
-- **Cancel** leaves both the tab and saved record unchanged.
-- Saved generation settings can be deleted.
-- Recycling or permanently deleting saved settings does not discard or rewrite working copies already open in generation tabs.
-- When a tab's source saved settings are recycled, **Save** offers to restore and update the original or to use **Save As**.
-- When the source saved settings were permanently deleted, the tab clears its updatable source state and only **Save As** is available.
 - Such a tab can continue generating when all of its actual model, source-file, destination and connection dependencies remain valid.
 - A referenced model or source file which is in the recycle bin is shown as unavailable and the user is offered the option to restore it.
 - If a referenced model or source file has been permanently deleted, the user must select a replacement before generation.
@@ -1856,11 +1820,3 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 22. The user can view/edit links between files.
 
 23. The user can generate a file. The user opens a new generation page. They then select a model. This determines what file type will be generated. The user can enter a prompt and add select files from the library to be sent to the AI model. A text model can be used to improve/expand the prompt. Model settings can be configured (or left blank to use default values). Allow the user to enter the number of results to generate. The user then clicks a button to send the request to the AI model. The results are added to the library, marked as generation results, and the generation settings are associated with it as metadata and the source files are linked.
-
-24. The generation settings can be saved with a title for future use.
-
-25. The user can view a list of saved generation settings.
-
-26. The user can open a new generation page, populated with saved settings.
-
-27. The user can delete saved generation settings.
