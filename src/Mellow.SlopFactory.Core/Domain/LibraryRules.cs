@@ -96,6 +96,9 @@ public static class LibraryRules
         }
     }
 
+    public static int EstimateTokenCount(string? text) =>
+        string.IsNullOrEmpty(text) ? 0 : Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
+
     public const int MaximumAdditionalConnectionHeaders = 10;
     public const int MaximumConnectionHeaderValueScalars = 500;
 

@@ -404,8 +404,22 @@ in parallel. Both milestones must be complete before the first public release.
       Duplicate use of the same file across slots is rejected (`LibraryRules.ValidateSourceFileIds`)
       both client- and server-side. Capability-based compatibility validation remains out of scope,
       since this app has no per-model input-capability schema to validate against yet.
-- [ ] Add debounced background prompt/context validation with **Estimating**/**Stale**/**Partial
-      Validation** states and the exact-vs-approximate submission-gating rule.
+- [x] Add debounced background prompt/context validation with **Estimating**/**Stale**/**Partial
+      Validation** states and the exact-vs-approximate submission-gating rule. Scoped down to what's
+      honestly buildable: `LibraryRules.EstimateTokenCount` applies a generic, disclosed ~4-characters-
+      per-token heuristic (not attributed to any specific provider's real tokenizer) to the combined
+      system-instructions/prompt text, shown live on `/generate` (Text mode only) as
+      "~N tokens (rough estimate, not exact...)". No exact tokenizer, no per-model context-window
+      enforcement, and no submission-gating rule exist, since neither prerequisite is honestly
+      buildable today: this app bundles no real tokenizer/vocab data (a genuine separate undertaking,
+      not a slice) and no API it calls returns a model's actual context-window size — hardcoding one
+      would mean asserting unverifiable provider-specific facts, the same concern that already ruled
+      out fabricating pricing data for the Cost-unknown notice. There is also no debounced/cancellable
+      background computation or **Estimating**/**Stale** transitional state: that machinery exists in
+      plan.md for an expensive real tokenizer computation this app doesn't have, and building fake
+      transitional states around instant arithmetic would be theater, not honesty. The estimate
+      updates live per keystroke (`@bind:event="oninput"` added to the prompt/system-instructions
+      fields, which previously only committed on blur) and never blocks or disables **Generate**.
 - [ ] Add provider-facing transport filenames/aliases (generic and custom modes) per Provider File
       Transfer, including filename-reference reliability metadata and cross-adapter alias
       validation for shared prompt-improvement/generation sources.

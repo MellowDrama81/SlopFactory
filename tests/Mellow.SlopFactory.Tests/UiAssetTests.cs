@@ -568,7 +568,7 @@ public sealed class UiAssetTests
                      "Model", "Prompt", "ResultCount", "Generate", "Generating", "GenerationCompleted", "GenerationFailed",
                      "OpenGeneratedFile", "ConnectionUnavailableForModel", "ModeText", "ModeImage", "SaveSettingsHeading",
                      "SaveSettingsDescription", "SettingsTitle", "SaveSettingsAction", "SavedSettingsSaved", "SavedSettingsModelUnavailable",
-                     "SavedSettingsHeading", "SystemInstructions", "TokenUsage", "SourceImageSlot1", "SourceImageSlot2", "SourceImageSlot3",
+                     "SavedSettingsHeading", "SystemInstructions", "TokenUsage", "EstimatedTokenCount", "SourceImageSlot1", "SourceImageSlot2", "SourceImageSlot3",
                      "NoSourceImage", "SourceImageSlotUsed", "DuplicateSourceSelectionError",
                      "CancelGeneration", "GenerationCancelledByUser", "PromptImprovementHeading", "PromptImprovementDescription",
                      "ImprovementModel", "NoImprovementModel", "ImprovementGuidance", "ImprovePromptAction", "ImprovingPrompt",

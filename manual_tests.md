@@ -249,6 +249,16 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** all 3 source slots are Text-mode-only, independently optional, reject a duplicate file selected across slots before submission, are unaffected by a temporary mode switch, and round-trip correctly through autosave, saved settings, and Use Again.
 
+## MT-19 — Approximate prompt/context token estimate
+
+1. On `/generate`, select a Text-mode model. Confirm a "~N tokens (rough estimate, not exact...)" line appears below the Prompt field, and that it does **not** appear when a non-Text-mode model is selected.
+2. Type continuously in the Prompt field without clicking away. Confirm the estimate updates live, character by character, rather than only after you click or tab out of the field.
+3. Type in System Instructions (for a model that supports it). Confirm the estimate reflects the combined length of both fields, not just the prompt.
+4. Clear both fields. Confirm the estimate reads 0.
+5. Confirm the estimate never disables or blocks the **Generate** button, however long the text — it's informational only, with no enforced limit.
+
+**Pass:** the estimate is Text-mode-only, updates live while typing in both the prompt and system-instructions fields, reflects their combined length, and never blocks submission.
+
 ## Reporting
 
 For each test case, record:

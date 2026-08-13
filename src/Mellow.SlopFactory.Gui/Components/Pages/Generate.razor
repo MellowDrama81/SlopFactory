@@ -207,7 +207,7 @@ else
             @if (SelectedModel?.SupportsSystemInstructions == true)
             {
                 <label for="generate-system-instructions">@Strings["SystemInstructions"]</label>
-                <textarea id="generate-system-instructions" rows="3" maxlength="1048576" @bind="_form.SystemInstructions" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
+                <textarea id="generate-system-instructions" rows="3" maxlength="1048576" @bind="_form.SystemInstructions" @bind:event="oninput" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
             }
             else
             {
@@ -271,7 +271,11 @@ else
         }
 
         <label for="generate-prompt">@Strings["Prompt"]</label>
-        <textarea id="generate-prompt" rows="8" maxlength="1048576" @bind="_form.Prompt" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
+        <textarea id="generate-prompt" rows="8" maxlength="1048576" @bind="_form.Prompt" @bind:event="oninput" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
+        @if (SelectedModelMode == GenerationMode.Text)
+        {
+            <p class="muted">@Strings["EstimatedTokenCount", EstimatedTokenCount]</p>
+        }
 
         <label for="generate-count">@Strings["ResultCount"]</label>
         <InputNumber id="generate-count" @bind-Value="_form.ResultCount" @bind-Value:after="ScheduleAutosave" min="1" max="4" disabled="@FormDisabled" />
@@ -955,6 +959,8 @@ else
 
     private Model? SelectedModel => _models.FirstOrDefault(candidate => candidate.Id == _form.ModelId);
     private GenerationMode? SelectedModelMode => SelectedModel?.Mode;
+
+    private int EstimatedTokenCount => LibraryRules.EstimateTokenCount(_form.SystemInstructions) + LibraryRules.EstimateTokenCount(_form.Prompt);
 
     private bool HasDuplicateSourceSelection
     {
