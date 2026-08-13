@@ -736,6 +736,7 @@
   <data name="SystemInstructions" xml:space="preserve"><value>System instructions (optional)</value></data>
   <data name="ShowSystemInstructions" xml:space="preserve"><value>Show system instructions</value></data>
   <data name="TokenUsage" xml:space="preserve"><value>{0} prompt tokens · {1} completion tokens</value></data>
+  <data name="CostUnknownNotice" xml:space="preserve"><value>Cost unknown — SlopFactory does not estimate provider cost. Check your provider's pricing before submitting.</value></data>
   <data name="SourceImage" xml:space="preserve"><value>Source image (optional)</value></data>
   <data name="NoSourceImage" xml:space="preserve"><value>None</value></data>
   <data name="SourceImageUsed" xml:space="preserve"><value>Source image</value></data>

@@ -460,6 +460,14 @@ in parallel. Both milestones must be complete before the first public release.
       metered-network transfer warnings and the device-wide transfer-option setting.
 - [ ] Add idempotency-key generation and scoped reuse for adapters with documented idempotency
       support.
+
+  **This whole async-job group was explicitly reviewed and confirmed deferred this session** (a
+  decision, not an oversight): neither the OpenAI nor the generic OpenAI-compatible adapter exposes
+  submit-then-poll job semantics — both are synchronous request/response — so there is no remote job
+  to poll, persist, pause monitoring on, or reconcile, and no idempotent-retry contract beyond the
+  one already implemented (model listing, below). Building any of this now would be speculative
+  infrastructure with nothing real to exercise it. Revisit once a genuinely asynchronous provider is
+  actually integrated (Milestone 3+).
 - [x] Add bounded automatic retry with `Retry-After`/rate-limit honoring and exponential backoff
       with jitter, scoped to the one operation the plan explicitly documents as idempotent and
       safe to retry without provider-confirmed idempotency support: model listing.
@@ -719,8 +727,15 @@ in parallel. Both milestones must be complete before the first public release.
       response (`usage.prompt_tokens`/`usage.completion_tokens`) and persist it on `GenerationRecord`
       (schema v13), shown on the `/generate` result panel and in `/generation-history`. There is no
       cost estimation, no image/other-modality usage capture, and no cost-summary view yet.
-- [ ] Add pre-generation cost estimation (provider estimate API or versioned bundled pricing),
-      **Cost unknown** acknowledgement, and confirmation thresholds keyed by currency/credit unit.
+- [x] Add a persistent, non-blocking **Cost unknown** notice on `/generate`'s submit action and the
+      **Improve Prompt** panel, decided explicitly rather than left as an oversight: no adapter
+      exposes a provider cost-estimate API, and this project will not fabricate per-token/per-image
+      pricing data to seed a bundled-pricing file. **Excludes** the full estimate/acknowledgement
+      machinery plan.md describes (per-model/connection/pricing-revision acknowledgement tracking,
+      **Always Confirm Unknown-Cost Requests**, confirmation thresholds, overrun highlighting,
+      pricing-revision **Unreliable** marking) — none of it has real data to estimate from, so
+      building it now would only be scaffolding around a permanently-`null` value. Revisit if either
+      an adapter gains a real estimate API or real, currently-accurate pricing data is supplied.
 - [ ] Add a local cost-summary view aggregating provider-reported actual cost, filterable by date,
       provider, connection, model and operation type.
 - [x] Add OS generation-completion/failure notifications, disabled by default, toggled from

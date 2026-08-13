@@ -243,6 +243,8 @@ else
             <p class="muted">@Strings["QueuePosition", queuedStatus.QueuePosition ?? 0]</p>
         }
 
+        <p class="muted">@Strings["CostUnknownNotice"]</p>
+
         <div class="actions">
             <button type="submit" disabled="@(FormDisabled || string.IsNullOrEmpty(_form.ModelId) || (SelectedConnection is not null && CredentialBlocked(SelectedConnection)))">
                 @(ActiveJobStatus?.Phase switch
@@ -275,6 +277,8 @@ else
 
             <label for="improvement-guidance">@Strings["ImprovementGuidance"]</label>
             <textarea id="improvement-guidance" rows="2" maxlength="1048576" @bind="_improvementGuidance" @bind:after="ScheduleAutosave" disabled="@(FormDisabled || _improving)"></textarea>
+
+            <p class="muted">@Strings["CostUnknownNotice"]</p>
 
             <div class="actions">
                 <button type="button" class="secondary" disabled="@(FormDisabled || _improving || string.IsNullOrEmpty(_improvementModelId) || string.IsNullOrWhiteSpace(_form.Prompt))" @onclick="ImprovePromptAsync">@(_improving ? Strings["ImprovingPrompt"] : Strings["ImprovePromptAction"])</button>
