@@ -361,9 +361,28 @@ in parallel. Both milestones must be complete before the first public release.
       process actually exits, and Android in particular can kill the process without invoking any
       lifecycle callback at all under memory pressure — a fully reliable exit-time flush is not
       buildable within those platform constraints, only a best-effort one, which is a materially
-      different (and not yet made) guarantee.
-- [ ] Add emergency draft snapshot staging and reconciliation for an unavailable/read-only library,
-      per Session Recovery.
+      different guarantee; that best-effort flush is what the Session Recovery item below adds.
+- [x] Add emergency draft snapshot staging and reconciliation for an unavailable/read-only library,
+      per Session Recovery. Scoped down from plan.md's fuller spec once research confirmed
+      `GenerationDraft` has no `Revision` field and autosave already persists full draft state on
+      every successful save — so "the last successfully persisted revision" is simply whatever is
+      currently in SQLite; there is no separate content/version snapshot to reconcile. What actually
+      ships: (1) `AppLibraryState.FlushForSuspensionAsync()`, a best-effort flush wired to
+      `App.xaml.cs`'s `window.Stopped`/`window.Destroying` handlers, reusing the existing `Closing`
+      event (and thus `Generate.razor`'s existing autosave-flush subscriber) with no new event
+      plumbing — this is the best-effort exit-time flush the prior bullet deferred; (2) a device-local
+      dirty-draft marker (`AppLibraryState.DirtyDraftIds`, one comma-joined `IAppPreferenceStore` key
+      per library, holding only draft IDs, never content) set via `MarkDraftDirty` on every keystroke
+      (idempotent — only writes to the preference store on the clean-to-dirty transition) and cleared
+      via `ClearDirtyDraft` once the corresponding autosave actually commits; each mark returns a
+      same-process edit token, and clearing only takes effect if no newer token was issued while that
+      save's I/O was in flight, so a save that was already stale by the time it completed can never
+      wipe the marker for an edit it didn't actually persist; (3) a `MainLayout.razor` notice, matching
+      the existing per-service-notice pattern, shown whenever a marker survives into a freshly
+      (re)loaded library — including the literal next-launch case, via `InitializeAsync` — with a
+      Dismiss action that clears every marker for the current library and is treated as accepting
+      SQLite's current state (no separate "discard" action exists, matching the simplification already
+      applied to Cost-unknown/exact-tokenizer scoping this milestone).
 
 ## Generation inputs
 

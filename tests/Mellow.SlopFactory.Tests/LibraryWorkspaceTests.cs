@@ -3197,6 +3197,165 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task MarkDraftDirtyThenClearDraftDirtyWithTheSameTokenRoundTripsThroughDirtyDraftIds()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(root);
+
+        var token = state.MarkDraftDirty("draft-1");
+        Assert.Equal(["draft-1"], state.DirtyDraftIds);
+
+        state.ClearDirtyDraft("draft-1", token);
+
+        Assert.Empty(state.DirtyDraftIds);
+    }
+
+    [Fact]
+    public async Task MarkDraftDirtyIsIdempotentInDirtyDraftIdsButStillAdvancesTheEditToken()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(root);
+
+        var firstToken = state.MarkDraftDirty("draft-1");
+        var secondToken = state.MarkDraftDirty("draft-1");
+
+        Assert.Equal(["draft-1"], state.DirtyDraftIds);
+        Assert.NotEqual(firstToken, secondToken);
+    }
+
+    [Fact]
+    public async Task ClearDirtyDraftIsANoOpWhenANewerEditTokenWasIssuedSinceTheCapturedToken()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(root);
+        var staleToken = state.MarkDraftDirty("draft-1");
+        state.MarkDraftDirty("draft-1");
+
+        state.ClearDirtyDraft("draft-1", staleToken);
+
+        Assert.Equal(["draft-1"], state.DirtyDraftIds);
+    }
+
+    [Fact]
+    public async Task DirtyDraftIdsAreVisibleAfterInitializeAsyncOnAFreshInstanceSharingTheSamePreferenceStoreAndLibrary()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        var preferences = new TestPreferenceStore();
+        await using (var first = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), preferences))
+        {
+            await first.SwitchAsync(root);
+            first.MarkDraftDirty("draft-1");
+        }
+
+        await using var relaunched = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), preferences);
+        await relaunched.InitializeAsync();
+
+        Assert.Equal(["draft-1"], relaunched.DirtyDraftIds);
+    }
+
+    [Fact]
+    public async Task DismissDirtyDraftsClearsAllMarkersForTheCurrentLibrary()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        var preferences = new TestPreferenceStore();
+        await using var state = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), preferences);
+        await state.SwitchAsync(root);
+        state.MarkDraftDirty("draft-1");
+        state.MarkDraftDirty("draft-2");
+
+        state.DismissDirtyDrafts();
+
+        Assert.Empty(state.DirtyDraftIds);
+        await using var relaunched = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), preferences);
+        await relaunched.InitializeAsync();
+        Assert.Empty(relaunched.DirtyDraftIds);
+    }
+
+    [Fact]
+    public async Task SwitchingToADifferentLibraryLoadsThatLibrarysOwnDirtyDraftIds()
+    {
+        using var temporary = new TemporaryDirectory();
+        var firstRoot = temporary.Child("first-library");
+        var secondRoot = temporary.Child("second-library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var first = await factory.CreateAsync(firstRoot)) { }
+        await using (var second = await factory.CreateAsync(secondRoot)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(firstRoot, secondRoot), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(firstRoot);
+        state.MarkDraftDirty("draft-in-first");
+
+        await state.SwitchAsync(secondRoot);
+
+        Assert.Empty(state.DirtyDraftIds);
+
+        await state.SwitchAsync(firstRoot);
+
+        Assert.Equal(["draft-in-first"], state.DirtyDraftIds);
+    }
+
+    [Fact]
+    public async Task FlushForSuspensionAsyncRaisesClosing()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var created = await factory.CreateAsync(root)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(root), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(root);
+        var invocationCount = 0;
+        state.Closing += () => { invocationCount++; return Task.CompletedTask; };
+
+        await state.FlushForSuspensionAsync();
+
+        Assert.Equal(1, invocationCount);
+    }
+
+    [Fact]
+    public async Task FlushForSuspensionAsyncSkipsWithoutBlockingWhenAnotherOperationAlreadyHoldsTheStateLock()
+    {
+        using var temporary = new TemporaryDirectory();
+        var firstRoot = temporary.Child("first-library");
+        var secondRoot = temporary.Child("second-library");
+        var factory = new LibraryWorkspaceFactory();
+        await using (var first = await factory.CreateAsync(firstRoot)) { }
+        await using (var second = await factory.CreateAsync(secondRoot)) { }
+        await using var state = new AppLibraryState(factory, new TestLocations(firstRoot, secondRoot), new TestRecentLibraries(), new TestAvailabilityProbe(isAvailable: false), new TestPreferenceStore());
+        await state.SwitchAsync(firstRoot);
+        var release = new TaskCompletionSource();
+        var closingEntered = new TaskCompletionSource();
+        state.Closing += async () => { closingEntered.SetResult(); await release.Task; };
+
+        var switchTask = state.SwitchAsync(secondRoot);
+        await closingEntered.Task;
+        var invocationCount = 0;
+        state.Closing += () => { invocationCount++; return Task.CompletedTask; };
+
+        await state.FlushForSuspensionAsync();
+        Assert.Equal(0, invocationCount);
+
+        release.SetResult();
+        await switchTask;
+    }
+
+    [Fact]
     public void DeferringAnIntegrityScanRecommendationDismissesItWithoutStartingAScan()
     {
         var recommendation = new IntegrityScanRecommendationService();

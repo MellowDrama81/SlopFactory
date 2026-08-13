@@ -110,6 +110,19 @@ public sealed class UiAssetTests
     }
 
     [Fact]
+    public void SessionRecoveryNoticeAppearsForDirtyDraftsAndCanBeDismissed()
+    {
+        var layout = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Layout", "MainLayout.razor");
+        var strings = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Resources", "UiStrings.resx");
+
+        Assert.Contains("LibraryState.Changed += OnPendingChanged", layout, StringComparison.Ordinal);
+        Assert.Contains("LibraryState.DirtyDraftIds.Count > 0", layout, StringComparison.Ordinal);
+        Assert.Contains("DirtyDraftsDetected", layout, StringComparison.Ordinal);
+        Assert.Contains("LibraryState.DismissDirtyDrafts", layout, StringComparison.Ordinal);
+        Assert.Contains("name=\"DirtyDraftsDetected\"", strings, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AndroidManifestAndStorageGuidanceExcludeBackupAndBroadPermissions()
     {
         var manifest = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Platforms", "Android", "AndroidManifest.xml");

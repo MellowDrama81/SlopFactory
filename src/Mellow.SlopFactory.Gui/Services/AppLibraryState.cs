@@ -47,6 +47,79 @@ public sealed class AppLibraryState : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Best-effort flush ahead of a platform suspension (e.g. Android's process may be killed
+    /// without warning). Reuses <see cref="Closing"/> so existing subscribers like Generate's
+    /// autosave flush run unchanged. Only proceeds if no other library operation currently holds
+    /// the state lock, since those operations already raise <see cref="Closing"/> themselves;
+    /// skipping avoids racing a real switch/close that may dispose the workspace mid-flush.
+    /// </summary>
+    public async Task FlushForSuspensionAsync()
+    {
+        if (!await _gate.WaitAsync(0).ConfigureAwait(false)) return;
+        try { await RaiseClosingAsync().ConfigureAwait(false); }
+        finally { _gate.Release(); }
+    }
+
+    private const string DirtyDraftsPreferenceKeyPrefix = "slopfactory.library.dirtydrafts.";
+    private readonly Dictionary<string, int> _draftEditTokens = new();
+
+    /// <summary>
+    /// Draft IDs with device-local markers indicating in-memory edits may not have been persisted,
+    /// either because a save is still pending/failed or because the process ended before autosave
+    /// ran. Never contains draft content, only IDs. Reloaded whenever the active library changes.
+    /// </summary>
+    public IReadOnlyCollection<string> DirtyDraftIds { get; private set; } = [];
+
+    /// <summary>
+    /// Records that <paramref name="draftId"/> has an in-memory edit not yet confirmed persisted,
+    /// and returns a token identifying this specific edit. Pass the returned token to
+    /// <see cref="ClearDirtyDraft"/> once the corresponding save completes; the clear is skipped if
+    /// a newer edit has arrived since, so a save in flight can never wipe the marker for an edit it
+    /// didn't actually persist.
+    /// </summary>
+    public int MarkDraftDirty(string draftId)
+    {
+        var token = _draftEditTokens[draftId] = _draftEditTokens.GetValueOrDefault(draftId) + 1;
+        if (Workspace is not null && !DirtyDraftIds.Contains(draftId))
+        {
+            DirtyDraftIds = [.. DirtyDraftIds, draftId];
+            PersistDirtyDraftIds();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+        return token;
+    }
+
+    public void ClearDirtyDraft(string draftId, int expectedToken)
+    {
+        if (Workspace is null || !DirtyDraftIds.Contains(draftId) || _draftEditTokens.GetValueOrDefault(draftId) != expectedToken) return;
+        DirtyDraftIds = DirtyDraftIds.Where(id => id != draftId).ToArray();
+        PersistDirtyDraftIds();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void DismissDirtyDrafts()
+    {
+        if (DirtyDraftIds.Count == 0) return;
+        DirtyDraftIds = [];
+        PersistDirtyDraftIds();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void PersistDirtyDraftIds()
+    {
+        if (Workspace is null) return;
+        _preferences.WriteString(DirtyDraftsPreferenceKeyPrefix + Workspace.Descriptor.LibraryId, string.Join(',', DirtyDraftIds));
+    }
+
+    private void LoadDirtyDraftIds()
+    {
+        DirtyDraftIds = Workspace is null
+            ? []
+            : _preferences.ReadString(DirtyDraftsPreferenceKeyPrefix + Workspace.Descriptor.LibraryId, string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries);
+    }
+
     public async Task InitializeAsync()
     {
         if (IsInitialized) return;
@@ -76,6 +149,7 @@ public sealed class AppLibraryState : IAsyncDisposable
                 Workspace = File.Exists(Path.Combine(path, "slopfactory-library.json")) ? await _factory.OpenAsync(path).ConfigureAwait(false) : await _factory.CreateAsync(path).ConfigureAwait(false);
                 ActivePath = Path.GetFullPath(path);
                 _recentLibraries.RecordOpened(Workspace.Descriptor);
+                LoadDirtyDraftIds();
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
             {
@@ -129,6 +203,7 @@ public sealed class AppLibraryState : IAsyncDisposable
             BrowserSession = new LibraryBrowserSession();
             _preferences.WriteString("active_library_path", fullPath);
             _recentLibraries.RecordOpened(replacement.Descriptor);
+            LoadDirtyDraftIds();
             if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
@@ -176,6 +251,7 @@ public sealed class AppLibraryState : IAsyncDisposable
             BrowserSession = new LibraryBrowserSession();
             _preferences.WriteString("active_library_path", fullPath);
             _recentLibraries.RecordOpened(replacement.Descriptor);
+            LoadDirtyDraftIds();
             if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
         }
         finally { _gate.Release(); Changed?.Invoke(this, EventArgs.Empty); }
@@ -209,6 +285,7 @@ public sealed class AppLibraryState : IAsyncDisposable
             BrowserSession = new LibraryBrowserSession();
             _preferences.WriteString("active_library_path", fullPath);
             _recentLibraries.RecordOpened(replacement.Descriptor);
+            LoadDirtyDraftIds();
             if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
         }
         finally

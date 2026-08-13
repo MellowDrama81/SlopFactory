@@ -898,6 +898,7 @@ else
 
     private void ScheduleAutosave()
     {
+        if (_activeDraftId is not null) LibraryState.MarkDraftDirty(_activeDraftId);
         _autosaveCts?.Cancel();
         var cts = new CancellationTokenSource();
         _autosaveCts = cts;
@@ -926,6 +927,7 @@ else
         var workspace = LibraryState.Workspace;
         if (workspace is null || _activeDraftId is null) return;
         var draftId = _activeDraftId;
+        var editToken = LibraryState.MarkDraftDirty(draftId);
         try
         {
             _saveStatus = SaveStatus.Saving;
@@ -939,6 +941,7 @@ else
             _drafts = _drafts.Select(existing => existing.Id == updated.Id ? updated : existing).ToArray();
             _saveError = null;
             _saveStatus = SaveStatus.Saved;
+            LibraryState.ClearDirtyDraft(draftId, editToken);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {

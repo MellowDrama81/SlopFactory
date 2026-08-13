@@ -6,6 +6,7 @@
 @inject IThemePreferenceService Theme
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject CredentialReconciliationService CredentialReconciliation
+@inject AppLibraryState LibraryState
 @inject GenerationNotificationCoordinator NotificationCoordinator
 @inject INotificationService Notifications
 @inject NavigationManager Navigation
@@ -68,6 +69,14 @@
                 <button class="ghost" @onclick="ScanRecommendation.Defer">@Strings["Defer"]</button>
             </div>
         }
+        @if (LibraryState.DirtyDraftIds.Count > 0)
+        {
+            <div class="notice session-recovery-notice" role="alert">
+                @Strings["DirtyDraftsDetected", LibraryState.DirtyDraftIds.Count]
+                <a href="/generate">@Strings["NavGenerate"]</a>
+                <button class="ghost" @onclick="LibraryState.DismissDirtyDrafts">@Strings["Dismiss"]</button>
+            </div>
+        }
         @Body
     </main>
 </div>
@@ -82,6 +91,7 @@
         Queue.Start();
         Theme.Changed += OnPendingChanged;
         ScanRecommendation.Changed += OnPendingChanged;
+        LibraryState.Changed += OnPendingChanged;
         CredentialReconciliation.Start();
         NotificationCoordinator.Start();
         NotificationCoordinator.NotifyRequested += OnNotifyRequested;
@@ -104,6 +114,7 @@
         Queue.Changed -= OnPendingChanged;
         Theme.Changed -= OnPendingChanged;
         ScanRecommendation.Changed -= OnPendingChanged;
+        LibraryState.Changed -= OnPendingChanged;
         NotificationCoordinator.NotifyRequested -= OnNotifyRequested;
         Notifications.Tapped -= OnNotificationTapped;
     }

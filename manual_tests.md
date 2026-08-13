@@ -269,6 +269,17 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** each connection's concurrency limit is independently configurable, defaults to 1 (matching prior behavior), takes effect immediately when raised without needing a job to finish first, and never preempts an already-running job when lowered.
 
+## MT-21 — Session Recovery: dirty-draft marker and suspend-time flush
+
+1. Open `/generate`, start typing in the Prompt field, and — within roughly 800 ms of the last keystroke, before autosave has a chance to complete — force-close the app process entirely (Task Manager "End task" on Windows; on Android, use "Force stop" from app settings or swipe-kill it from Recents, ideally under a low-memory condition if reproducible).
+2. Relaunch the app and open the same library. Confirm a notice appears near the top of the shell (above the page content) saying some draft tab(s) may have unsaved edits from a previous session, with a link to Generate and a **Dismiss** action.
+3. Open `/generate` and confirm the affected tab shows the last version SlopFactory actually managed to save (not necessarily your very last keystrokes) — there is no separate "recovered" content to reconcile, since the marker only ever tracked *whether* unsaved edits might exist, never the edits themselves.
+4. Click **Dismiss**. Confirm the notice disappears and does not reappear on a subsequent relaunch of the same library.
+5. Repeat step 1, but this time let autosave actually complete (wait a couple of seconds after your last keystroke) before force-closing. Confirm no notice appears on relaunch, since the marker clears once a save actually commits.
+6. With a draft mid-edit, switch to a *different* library, then switch back. Confirm no stale notice appears for the first library's already-flushed edits (the library-switch flush already covered by MT-... coverage of the `Closing` event should have already saved them).
+
+**Pass:** the notice only appears when a real unsaved-edit risk existed (an autosave that never got the chance to run or commit before the process ended), never appears after a normal graceful close/switch, and Dismiss durably clears it for that library.
+
 ## Reporting
 
 For each test case, record:
