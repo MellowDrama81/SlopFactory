@@ -401,22 +401,73 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
-    public async Task EnqueueingTwiceForTheSameDraftWhileAJobIsActiveIsIdempotent()
+    public async Task EnqueueingTwiceForTheSameDraftWhileAJobIsActiveStartsASecondIndependentJob()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        queue.SetConnectionCap(connection.Id, 2);
+
+        var firstId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        var secondId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1-again", workspace.Descriptor.GeneratedFolderId), connection.Id);
+
+        Assert.NotEqual(firstId, secondId);
+        Assert.Equal(2, queue.RunningCount + queue.QueuedCount);
+        Assert.Equal([firstId, secondId], queue.GetActiveJobIdsForDraft("draft-1"));
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1") && adapter.InvokedPrompts.Contains("prompt1-again"));
+        adapter.Complete("prompt1", new TextGenerationResult(["result"], null, null));
+        adapter.Complete("prompt1-again", new TextGenerationResult(["result-again"], null, null));
+        await WaitUntilAsync(() => queue.GetRecentOutcomesForDraft("draft-1").Count == 2);
+        Assert.Empty(queue.GetActiveJobIdsForDraft("draft-1"));
+    }
+
+    [Fact]
+    public async Task CancellingOneConcurrentRunOnADraftDoesNotAffectItsOtherActiveRun()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        queue.SetConnectionCap(connection.Id, 2);
+
+        var firstId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        var secondId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1") && adapter.InvokedPrompts.Contains("prompt2"));
+
+        queue.Cancel(firstId);
+        await WaitUntilAsync(() => queue.GetRecentOutcomesForDraft("draft-1").Count == 1);
+
+        Assert.Equal([secondId], queue.GetActiveJobIdsForDraft("draft-1"));
+        adapter.Complete("prompt2", new TextGenerationResult(["result2"], null, null));
+        await WaitUntilAsync(() => queue.GetRecentOutcomesForDraft("draft-1").Count == 2);
+        var outcomes = queue.GetRecentOutcomesForDraft("draft-1");
+        Assert.Contains(outcomes, outcome => outcome.JobId == firstId && outcome.Record is null && !outcome.CancelledBeforeSubmission);
+        Assert.Contains(outcomes, outcome => outcome.JobId == secondId && outcome.Record is not null);
+    }
+
+    [Fact]
+    public async Task RecentOutcomesForADraftAreCappedAtTenNewestFirst()
     {
         using var temporary = new TemporaryDirectory();
         var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
-        var firstId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
-        var secondId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1-again", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        for (var i = 0; i < 11; i++)
+        {
+            var prompt = $"prompt{i}";
+            queue.Enqueue(Snapshot("draft-1", model.Id, prompt, workspace.Descriptor.GeneratedFolderId), connection.Id);
+            await WaitUntilAsync(() => adapter.InvokedPrompts.Contains(prompt));
+            adapter.Complete(prompt, new TextGenerationResult([$"result{i}"], null, null));
+            await WaitUntilAsync(() => queue.GetRecentOutcomesForDraft("draft-1").Any(outcome => outcome.Record?.Prompt == prompt));
+        }
 
-        Assert.Equal(firstId, secondId);
-        Assert.Equal(1, queue.RunningCount + queue.QueuedCount);
-
-        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
-        adapter.Complete("prompt1", new TextGenerationResult(["result"], null, null));
-        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+        var outcomes = queue.GetRecentOutcomesForDraft("draft-1");
+        Assert.Equal(10, outcomes.Count);
+        Assert.Equal("prompt10", outcomes[0].Record!.Prompt);
+        Assert.DoesNotContain(outcomes, outcome => outcome.Record?.Prompt == "prompt0");
     }
 
     [Fact]

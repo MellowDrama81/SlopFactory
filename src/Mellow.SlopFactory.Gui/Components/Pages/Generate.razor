@@ -76,7 +76,7 @@ else
                         <button type="button" class="tab-move" title="@Strings["MoveTabLeft"]" aria-label="@Strings["MoveTabLeft"]" disabled="@IsFirstDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, -1)">‹</button>
                         <button type="button" class="tab-select" @onclick="() => SwitchToDraftAsync(draft.Id)">@DraftDisplayTitle(draft)</button>
                         <button type="button" class="tab-move" title="@Strings["MoveTabRight"]" aria-label="@Strings["MoveTabRight"]" disabled="@IsLastDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, 1)">›</button>
-                        <button type="button" class="tab-close" title="@Strings["CloseTab"]" aria-label="@Strings["CloseTab"]" disabled="@(Queue.GetActiveJobIdForDraft(draft.Id) is not null)" @onclick="() => BeginCloseDraft(draft.Id)">×</button>
+                        <button type="button" class="tab-close" title="@Strings["CloseTab"]" aria-label="@Strings["CloseTab"]" disabled="@(Queue.GetActiveJobIdsForDraft(draft.Id).Count > 0)" @onclick="() => BeginCloseDraft(draft.Id)">×</button>
                     }
                 </div>
             }
@@ -137,7 +137,7 @@ else
                         <button type="button" class="tab-move" title="@Strings["MoveTabRight"]" aria-label="@Strings["MoveTabRight"]" disabled="@IsLastDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, 1)">›</button>
                         <button type="button" class="secondary" @onclick="() => BeginSwitcherRename(draft)">@Strings["RenameTabAction"]</button>
                         <button type="button" class="secondary" @onclick="() => DuplicateDraftAsync(draft.Id)">@Strings["DuplicateTab"]</button>
-                        <button type="button" class="tab-close" title="@Strings["CloseTab"]" aria-label="@Strings["CloseTab"]" disabled="@(Queue.GetActiveJobIdForDraft(draft.Id) is not null)" @onclick="() => BeginCloseDraft(draft.Id)">×</button>
+                        <button type="button" class="tab-close" title="@Strings["CloseTab"]" aria-label="@Strings["CloseTab"]" disabled="@(Queue.GetActiveJobIdsForDraft(draft.Id).Count > 0)" @onclick="() => BeginCloseDraft(draft.Id)">×</button>
                     }
                 </li>
             </Virtualize>
@@ -288,26 +288,12 @@ else
             }
         </InputSelect>
 
-        @if (ActiveJobStatus is { Phase: GenerationJobPhase.Queued } queuedStatus)
-        {
-            <p class="muted">@Strings["QueuePosition", queuedStatus.QueuePosition ?? 0]</p>
-        }
-
         <p class="muted">@Strings["CostUnknownNotice"]</p>
 
         <div class="actions">
             <button type="submit" disabled="@(FormDisabled || string.IsNullOrEmpty(_form.ModelId) || (SelectedConnection is not null && CredentialBlocked(SelectedConnection)) || HasDuplicateSourceSelection)">
-                @(ActiveJobStatus?.Phase switch
-                {
-                    GenerationJobPhase.Queued => Strings["Queued"],
-                    GenerationJobPhase.Running => Strings["Generating"],
-                    _ => Strings["Generate"]
-                })
+                @Strings["Generate"]
             </button>
-            @if (ActiveJobId is not null)
-            {
-                <button type="button" class="secondary" @onclick="CancelGeneration">@Strings["CancelGeneration"]</button>
-            }
         </div>
     </EditForm>
 
@@ -411,56 +397,80 @@ else
         }
     </section>
 
-    @if (LastOutcome is { } outcome)
+    @if (ActiveJobIds.Count > 0 || RecentOutcomes.Count > 0)
     {
-        @if (outcome.CancelledBeforeSubmission)
+        <h2>@Strings["RunsHeading"]</h2>
+
+        @foreach (var jobId in ActiveJobIds)
         {
-            <p class="muted">@Strings["GenerationCancelledBeforeSubmission"]</p>
-        }
-        else if (outcome.Record is null && outcome.LocalErrorMessage is null)
-        {
-            <p class="muted">@Strings["GenerationCancelledByUser"]</p>
-        }
-        else if (outcome.LocalErrorMessage is not null)
-        {
-            <p class="error">@outcome.LocalErrorMessage</p>
-        }
-        else if (outcome.Record is { } record)
-        {
-            <section class="panel">
-                <h2>@GenerationStatusLabel(record.Status)</h2>
-                @if (record.Status == GenerationStatus.PartiallyCompleted)
-                {
-                    <p class="muted">@Strings["GenerationPartiallyCompletedDetail", record.ResultFileIds.Count, record.ResultCount]</p>
-                }
-                @if (record.ErrorMessage is not null)
-                {
-                    <p class="error">@record.ErrorMessage</p>
-                }
-                @if (record.PromptTokens is not null || record.CompletionTokens is not null)
-                {
-                    <p class="muted">@Strings["TokenUsage", record.PromptTokens?.ToString() ?? Strings["Unknown"], record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
-                }
-                @if (record.SourceFileId is not null)
-                {
-                    <p class="muted">@Strings["SourceImageSlotUsed", 1] <a href="@($"/file/{record.SourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
-                }
-                @if (record.SecondarySourceFileId is not null)
-                {
-                    <p class="muted">@Strings["SourceImageSlotUsed", 2] <a href="@($"/file/{record.SecondarySourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
-                }
-                @if (record.TertiarySourceFileId is not null)
-                {
-                    <p class="muted">@Strings["SourceImageSlotUsed", 3] <a href="@($"/file/{record.TertiarySourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
-                }
-                @if (record.ResultFileIds.Count > 0)
-                {
-                    <ul class="metadata-list">
-                        @foreach (var fileId in record.ResultFileIds)
+            var runStatus = Queue.GetJobStatus(jobId);
+            @if (runStatus is not null)
+            {
+                <section class="panel run-card" @key="jobId">
+                    <p>
+                        @(runStatus.Phase switch
                         {
-                            <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
-                        }
-                    </ul>
+                            GenerationJobPhase.Queued => Strings["QueuePosition", runStatus.QueuePosition ?? 0],
+                            GenerationJobPhase.Running => Strings["Generating"],
+                            _ => Strings["Generate"]
+                        })
+                    </p>
+                    <button type="button" class="secondary" @onclick="() => Queue.Cancel(jobId)">@Strings["CancelGeneration"]</button>
+                </section>
+            }
+        }
+
+        @foreach (var outcome in RecentOutcomes)
+        {
+            <section class="panel run-card" @key="outcome.JobId">
+                @if (outcome.CancelledBeforeSubmission)
+                {
+                    <p class="muted">@Strings["GenerationCancelledBeforeSubmission"]</p>
+                }
+                else if (outcome.Record is null && outcome.LocalErrorMessage is null)
+                {
+                    <p class="muted">@Strings["GenerationCancelledByUser"]</p>
+                }
+                else if (outcome.LocalErrorMessage is not null)
+                {
+                    <p class="error">@outcome.LocalErrorMessage</p>
+                }
+                else if (outcome.Record is { } record)
+                {
+                    <h2>@GenerationStatusLabel(record.Status)</h2>
+                    @if (record.Status == GenerationStatus.PartiallyCompleted)
+                    {
+                        <p class="muted">@Strings["GenerationPartiallyCompletedDetail", record.ResultFileIds.Count, record.ResultCount]</p>
+                    }
+                    @if (record.ErrorMessage is not null)
+                    {
+                        <p class="error">@record.ErrorMessage</p>
+                    }
+                    @if (record.PromptTokens is not null || record.CompletionTokens is not null)
+                    {
+                        <p class="muted">@Strings["TokenUsage", record.PromptTokens?.ToString() ?? Strings["Unknown"], record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
+                    }
+                    @if (record.SourceFileId is not null)
+                    {
+                        <p class="muted">@Strings["SourceImageSlotUsed", 1] <a href="@($"/file/{record.SourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
+                    }
+                    @if (record.SecondarySourceFileId is not null)
+                    {
+                        <p class="muted">@Strings["SourceImageSlotUsed", 2] <a href="@($"/file/{record.SecondarySourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
+                    }
+                    @if (record.TertiarySourceFileId is not null)
+                    {
+                        <p class="muted">@Strings["SourceImageSlotUsed", 3] <a href="@($"/file/{record.TertiarySourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
+                    }
+                    @if (record.ResultFileIds.Count > 0)
+                    {
+                        <ul class="metadata-list">
+                            @foreach (var fileId in record.ResultFileIds)
+                            {
+                                <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
+                            }
+                        </ul>
+                    }
                 }
             </section>
         }
@@ -518,10 +528,9 @@ else
     private const string PromptImprovementTemplateVersion = "v1";
 
     private GenerationDraft? ActiveDraft => _drafts.FirstOrDefault(draft => draft.Id == _activeDraftId);
-    private string? ActiveJobId => _activeDraftId is null ? null : Queue.GetActiveJobIdForDraft(_activeDraftId);
-    private GenerationJobStatusSnapshot? ActiveJobStatus => ActiveJobId is { } jobId ? Queue.GetJobStatus(jobId) : null;
-    private GenerationJobOutcome? LastOutcome => _activeDraftId is null ? null : Queue.GetLastOutcomeForDraft(_activeDraftId);
-    private bool FormDisabled => _busy || ActiveJobId is not null;
+    private IReadOnlyList<string> ActiveJobIds => _activeDraftId is null ? [] : Queue.GetActiveJobIdsForDraft(_activeDraftId);
+    private IReadOnlyList<GenerationJobOutcome> RecentOutcomes => _activeDraftId is null ? [] : Queue.GetRecentOutcomesForDraft(_activeDraftId);
+    private bool FormDisabled => _busy;
     private static bool CredentialBlocked(Connection connection) => !connection.HasCredential || connection.CredentialRequiresRepair;
 
     protected override async Task OnInitializedAsync()
@@ -799,9 +808,10 @@ else
 
     private string? DraftRunStatusLabel(string draftId)
     {
-        var jobId = Queue.GetActiveJobIdForDraft(draftId);
-        if (jobId is null) return null;
-        var status = Queue.GetJobStatus(jobId);
+        var activeJobIds = Queue.GetActiveJobIdsForDraft(draftId);
+        if (activeJobIds.Count == 0) return null;
+        if (activeJobIds.Count > 1) return Strings["ActiveRunsCount", activeJobIds.Count].Value;
+        var status = Queue.GetJobStatus(activeJobIds[0]);
         if (status is null) return null;
         return status.Phase switch
         {
@@ -1188,39 +1198,39 @@ else
 
     private void GenerateAsync()
     {
-        var workspace = LibraryState.Workspace;
-        if (workspace is null || _activeDraftId is null) return;
-        var model = _models.FirstOrDefault(candidate => candidate.Id == _form.ModelId);
-        if (model is null) return;
-        var connection = _activeConnections.FirstOrDefault(candidate => candidate.Id == model.ConnectionId);
-        if (connection is null)
+        _busy = true;
+        try
         {
-            _message = Strings["ConnectionUnavailableForModel"];
-            _isError = true;
-            return;
+            var workspace = LibraryState.Workspace;
+            if (workspace is null || _activeDraftId is null) return;
+            var model = _models.FirstOrDefault(candidate => candidate.Id == _form.ModelId);
+            if (model is null) return;
+            var connection = _activeConnections.FirstOrDefault(candidate => candidate.Id == model.ConnectionId);
+            if (connection is null)
+            {
+                _message = Strings["ConnectionUnavailableForModel"];
+                _isError = true;
+                return;
+            }
+            if (CredentialBlocked(connection))
+            {
+                _message = connection.CredentialRequiresRepair ? Strings["CredentialRequiresRepairBanner"] : Strings["GenerationBlockedCredentialsRequired"];
+                _isError = true;
+                return;
+            }
+
+            if (HasDuplicateSourceSelection) return;
+
+            var systemInstructions = model.SupportsSystemInstructions && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
+            var sourceFileId = string.IsNullOrEmpty(_form.SourceFileId) ? null : _form.SourceFileId;
+            var secondarySourceFileId = string.IsNullOrEmpty(_form.SecondarySourceFileId) ? null : _form.SecondarySourceFileId;
+            var tertiarySourceFileId = string.IsNullOrEmpty(_form.TertiarySourceFileId) ? null : _form.TertiarySourceFileId;
+            var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, CurrentGenerationSettings(), secondarySourceFileId, tertiarySourceFileId);
+            Queue.Enqueue(snapshot, model.ConnectionId);
+            _message = null;
+            _isError = false;
         }
-        if (CredentialBlocked(connection))
-        {
-            _message = connection.CredentialRequiresRepair ? Strings["CredentialRequiresRepairBanner"] : Strings["GenerationBlockedCredentialsRequired"];
-            _isError = true;
-            return;
-        }
-
-        if (HasDuplicateSourceSelection) return;
-
-        var systemInstructions = model.SupportsSystemInstructions && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
-        var sourceFileId = string.IsNullOrEmpty(_form.SourceFileId) ? null : _form.SourceFileId;
-        var secondarySourceFileId = string.IsNullOrEmpty(_form.SecondarySourceFileId) ? null : _form.SecondarySourceFileId;
-        var tertiarySourceFileId = string.IsNullOrEmpty(_form.TertiarySourceFileId) ? null : _form.TertiarySourceFileId;
-        var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, CurrentGenerationSettings(), secondarySourceFileId, tertiarySourceFileId);
-        Queue.Enqueue(snapshot, model.ConnectionId);
-        _message = null;
-        _isError = false;
-    }
-
-    private void CancelGeneration()
-    {
-        if (ActiveJobId is { } jobId) Queue.Cancel(jobId);
+        finally { _busy = false; }
     }
 
     private async Task ImprovePromptAsync()

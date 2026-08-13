@@ -519,7 +519,25 @@ in parallel. Both milestones must be complete before the first public release.
       Only waiting jobs on the *same* connection can be reordered relative to each other (matching
       the per-connection FIFO model); there is no cross-connection priority and no reordering of a
       job that has already started.
-- [ ] Add multiple concurrent run cards from the same generation tab.
+- [x] Add multiple concurrent run cards from the same generation tab. `GenerationQueueService` no
+      longer gates `Enqueue` on a draft already having an active job (the previous `Dictionary<string,
+      string>` mapping one job per draft became a `Dictionary<string, List<string>>`, and the terminal
+      outcome became a `Dictionary<string, List<GenerationJobOutcome>>` capped at the 10 most recent per
+      draft, newest first, per plan.md's "ten most recent terminal run cards"). The old singular
+      `GetActiveJobIdForDraft`/`GetLastOutcomeForDraft` accessors are kept as convenience wrappers
+      (oldest active / newest terminal) so every pre-existing single-job test scenario kept passing
+      unchanged; `GetActiveJobIdsForDraft`/`GetRecentOutcomesForDraft` are the new multi-run accessors.
+      `Generate.razor`'s **Generate** button is no longer disabled while a draft has an active or
+      queued run — only while the click itself is being accepted (`_busy`), per plan.md's "the action
+      becomes available again even when that run is queued or active" — so the same tab can submit
+      another run immediately. Each active/queued job and each of the last 10 terminal outcomes now
+      renders as its own **Runs** card with its own status and, for active jobs, its own **Cancel**
+      button, so cancelling one run never touches another submitted from the same tab. The tab strip's
+      close-button-disabled check and the compact-switcher run-status label were both generalized from
+      "is there an active job" to "how many," the latter showing a plain active-run count once more
+      than one run is active (falling back to the existing single-job Queued/Generating label
+      otherwise). There is no **View All Runs from This Tab** history-filter link yet — that item
+      remains open below, tracked as part of the broader generation-history/tab-association work.
 - [x] Add OS battery-driven temporary cap reduction, scoped to energy-saver mode (device thermal
       status has no simple cross-platform MAUI API, so that half remains open below).
       `GenerationQueueService` gains `EffectiveDeviceCap` (the configured `DeviceCap` clamped to 1

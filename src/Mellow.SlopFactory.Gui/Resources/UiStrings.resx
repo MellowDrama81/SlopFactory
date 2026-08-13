@@ -769,8 +769,9 @@
   <data name="NoFilteredGenerationHistory" xml:space="preserve"><value>No generations match the current filters.</value></data>
   <data name="CancelGeneration" xml:space="preserve"><value>Cancel</value></data>
   <data name="GenerationCancelledByUser" xml:space="preserve"><value>Generation cancelled. The provider may still process or charge for a request that was already sent.</value></data>
-  <data name="Queued" xml:space="preserve"><value>Queued</value></data>
   <data name="QueuePosition" xml:space="preserve"><value>Position {0} in queue</value></data>
+  <data name="RunsHeading" xml:space="preserve"><value>Runs</value></data>
+  <data name="ActiveRunsCount" xml:space="preserve"><value>{0} active runs</value></data>
   <data name="GenerationCancelledBeforeSubmission" xml:space="preserve"><value>Cancelled before any request was sent. No provider charge was incurred.</value></data>
   <data name="GenerationQueueActivity" xml:space="preserve"><value>{0} queued, {1} running</value></data>
   <data name="EnergySaverCapActive" xml:space="preserve"><value>Energy Saver is limiting submissions to {0} at a time.</value></data>

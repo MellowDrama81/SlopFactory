@@ -276,9 +276,21 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 3. Open `/generate` and confirm the affected tab shows the last version SlopFactory actually managed to save (not necessarily your very last keystrokes) — there is no separate "recovered" content to reconcile, since the marker only ever tracked *whether* unsaved edits might exist, never the edits themselves.
 4. Click **Dismiss**. Confirm the notice disappears and does not reappear on a subsequent relaunch of the same library.
 5. Repeat step 1, but this time let autosave actually complete (wait a couple of seconds after your last keystroke) before force-closing. Confirm no notice appears on relaunch, since the marker clears once a save actually commits.
-6. With a draft mid-edit, switch to a *different* library, then switch back. Confirm no stale notice appears for the first library's already-flushed edits (the library-switch flush already covered by MT-... coverage of the `Closing` event should have already saved them).
+6. With a draft mid-edit, switch to a *different* library, then switch back. Confirm no stale notice appears for the first library's already-flushed edits (the existing library-switch flush, which fires the `Closing` event before the switch completes, should have already saved them).
 
 **Pass:** the notice only appears when a real unsaved-edit risk existed (an autosave that never got the chance to run or commit before the process ended), never appears after a normal graceful close/switch, and Dismiss durably clears it for that library.
+
+## MT-22 — Multiple concurrent run cards from the same generation tab
+
+1. On a single generation tab, click **Generate** to submit a run, then — while it's still **Queued** or **Generating** — edit the prompt and click **Generate** again. Confirm the button was never disabled while the first run was active, and a second **Runs** card now appears alongside the first.
+2. Confirm each run card shows its own independent status (**Queued**/position, or **Generating**) and, while active, its own **Cancel** button.
+3. Cancel one of the two active runs. Confirm only that run's card updates to a cancelled/terminal state — the other keeps running untouched.
+4. Let both runs finish. Confirm both terminal outcomes remain visible as separate cards (results, token usage, errors as applicable) rather than one overwriting the other.
+5. Submit more than 10 runs from the same tab over time (they can be sequential). Confirm only the 10 most recent terminal run cards remain visible on the page, while all of them (including the older, no-longer-shown ones) are still present in full in `/generation-history`.
+6. Try to close a tab while it has an active run (queued or running). Confirm the tab's close (`×`) button stays disabled until every one of its runs reaches a terminal state, even when only one of several concurrent runs is still active.
+7. Confirm the compact Android tab switcher's per-tab status label shows a plain active-run count once more than one run is active on that tab, and falls back to the existing Queued/Generating label when only one is active.
+
+**Pass:** the same tab can submit another run while earlier ones remain active without the form ever locking up, each run has independent status/cancellation, cancelling one never affects another, and the tab stays un-closable for as long as any of its runs remain active.
 
 ## Reporting
 

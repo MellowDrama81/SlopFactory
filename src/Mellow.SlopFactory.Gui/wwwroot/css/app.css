@@ -108,6 +108,7 @@ textarea { min-height: 7rem; resize: vertical; }
 .text-editor { margin-top: 1rem; }
 .text-editor textarea { min-height: 24rem; font-family: ui-monospace, "Cascadia Code", monospace; }
 .panel h2 { margin-top: 0; }
+.run-card { margin-bottom: 1rem; }
 .tab-strip { display: flex; flex-wrap: nowrap; overflow-x: auto; align-items: stretch; gap: .4rem; margin-bottom: 1rem; }
 .tab { display: flex; align-items: center; gap: .2rem; flex: none; border: 1px solid #343b48; border-radius: .6rem; background: #20252e; }
 .tab.active { border-color: #e7b15b; background: #2a303b; }

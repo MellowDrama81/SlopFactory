@@ -69,8 +69,9 @@ public sealed class GenerationQueueService
     private readonly Dictionary<string, LinkedList<QueuedJob>> _queues = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _runningPerConnection = new(StringComparer.Ordinal);
     private readonly Dictionary<string, QueuedJob> _jobsById = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _activeJobIdByDraft = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, GenerationJobOutcome> _lastOutcomeByDraft = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<string>> _activeJobIdsByDraft = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<GenerationJobOutcome>> _recentOutcomesByDraft = new(StringComparer.Ordinal);
+    private const int MaxRecentOutcomesPerDraft = 10;
     private readonly List<string> _connectionOrder = new();
     private int _cursor;
     private int _runningTotal;
@@ -166,7 +167,6 @@ public sealed class GenerationQueueService
         var workspace = _libraries.Workspace ?? throw new InvalidOperationException("No library is open.");
         lock (_gate)
         {
-            if (_activeJobIdByDraft.TryGetValue(snapshot.DraftId, out var existingJobId)) return existingJobId;
             var job = new QueuedJob
             {
                 JobId = LibraryRules.NewId(),
@@ -184,11 +184,37 @@ public sealed class GenerationQueueService
             }
             queue.AddLast(job);
             _jobsById[job.JobId] = job;
-            _activeJobIdByDraft[job.DraftId] = job.JobId;
+            AddActiveJobId(job.DraftId, job.JobId);
             RaiseChanged();
             Pump();
             return job.JobId;
         }
+    }
+
+    private void AddActiveJobId(string draftId, string jobId)
+    {
+        if (!_activeJobIdsByDraft.TryGetValue(draftId, out var list))
+        {
+            list = [];
+            _activeJobIdsByDraft[draftId] = list;
+        }
+        list.Add(jobId);
+    }
+
+    private void RemoveActiveJobId(string draftId, string jobId)
+    {
+        if (_activeJobIdsByDraft.TryGetValue(draftId, out var list) && list.Remove(jobId) && list.Count == 0) _activeJobIdsByDraft.Remove(draftId);
+    }
+
+    private void RecordOutcome(string draftId, GenerationJobOutcome outcome)
+    {
+        if (!_recentOutcomesByDraft.TryGetValue(draftId, out var list))
+        {
+            list = [];
+            _recentOutcomesByDraft[draftId] = list;
+        }
+        list.Insert(0, outcome);
+        if (list.Count > MaxRecentOutcomesPerDraft) list.RemoveAt(list.Count - 1);
     }
 
     public void Cancel(string jobId)
@@ -202,8 +228,8 @@ public sealed class GenerationQueueService
             {
                 _queues[job.ConnectionId].Remove(job);
                 _jobsById.Remove(jobId);
-                if (_activeJobIdByDraft.TryGetValue(job.DraftId, out var activeId) && activeId == jobId) _activeJobIdByDraft.Remove(job.DraftId);
-                _lastOutcomeByDraft[job.DraftId] = new GenerationJobOutcome(jobId, job.DraftId, null, null, CancelledBeforeSubmission: true, DateTimeOffset.UtcNow);
+                RemoveActiveJobId(job.DraftId, jobId);
+                RecordOutcome(job.DraftId, new GenerationJobOutcome(jobId, job.DraftId, null, null, CancelledBeforeSubmission: true, DateTimeOffset.UtcNow));
                 changed = true;
             }
             else
@@ -224,14 +250,33 @@ public sealed class GenerationQueueService
         }
     }
 
+    /// <summary>The first (oldest-submitted) active job for a draft, or null if none — a convenience
+    /// accessor for the common single-run case. Use <see cref="GetActiveJobIdsForDraft"/> for every
+    /// concurrently active job on the draft.</summary>
     public string? GetActiveJobIdForDraft(string draftId)
     {
-        lock (_gate) return _activeJobIdByDraft.TryGetValue(draftId, out var jobId) ? jobId : null;
+        lock (_gate) return _activeJobIdsByDraft.TryGetValue(draftId, out var list) && list.Count > 0 ? list[0] : null;
     }
 
+    /// <summary>Every queued or running job currently submitted from this draft, oldest first.</summary>
+    public IReadOnlyList<string> GetActiveJobIdsForDraft(string draftId)
+    {
+        lock (_gate) return _activeJobIdsByDraft.TryGetValue(draftId, out var list) ? list.ToArray() : [];
+    }
+
+    /// <summary>The most recently completed/cancelled job's outcome for a draft, or null if none — a
+    /// convenience accessor for the common single-run case. Use
+    /// <see cref="GetRecentOutcomesForDraft"/> for the full retained history.</summary>
     public GenerationJobOutcome? GetLastOutcomeForDraft(string draftId)
     {
-        lock (_gate) return _lastOutcomeByDraft.TryGetValue(draftId, out var outcome) ? outcome : null;
+        lock (_gate) return _recentOutcomesByDraft.TryGetValue(draftId, out var list) && list.Count > 0 ? list[0] : null;
+    }
+
+    /// <summary>Up to the 10 most recent terminal (completed/failed/cancelled) outcomes for a draft,
+    /// newest first. Older terminal runs remain fully retained in generation history.</summary>
+    public IReadOnlyList<GenerationJobOutcome> GetRecentOutcomesForDraft(string draftId)
+    {
+        lock (_gate) return _recentOutcomesByDraft.TryGetValue(draftId, out var list) ? list.ToArray() : [];
     }
 
     public IReadOnlyList<GenerationQueueEntry> GetSnapshot()
@@ -291,7 +336,7 @@ public sealed class GenerationQueueService
                 {
                     _queues[job.ConnectionId].Remove(job);
                     _jobsById.Remove(job.JobId);
-                    if (_activeJobIdByDraft.TryGetValue(job.DraftId, out var activeId) && activeId == job.JobId) _activeJobIdByDraft.Remove(job.DraftId);
+                    RemoveActiveJobId(job.DraftId, job.JobId);
                 }
                 else if (job.Cancellation is { } cancellation)
                 {
@@ -344,8 +389,8 @@ public sealed class GenerationQueueService
         lock (_gate)
         {
             _jobsById.Remove(job.JobId);
-            if (_activeJobIdByDraft.TryGetValue(job.DraftId, out var activeId) && activeId == job.JobId) _activeJobIdByDraft.Remove(job.DraftId);
-            _lastOutcomeByDraft[job.DraftId] = outcome;
+            RemoveActiveJobId(job.DraftId, job.JobId);
+            RecordOutcome(job.DraftId, outcome);
             _runningPerConnection[job.ConnectionId] = _runningPerConnection.GetValueOrDefault(job.ConnectionId) - 1;
             _runningTotal--;
         }
