@@ -108,6 +108,30 @@ public sealed class GenerationQueueService
     /// <summary>Whether the OS-reported energy-saver constraint is currently in effect.</summary>
     public bool EnergySaverCapActive => _energy.IsEnergySaverOn;
 
+    private const string ConnectionCapPreferenceKeyPrefix = "slopfactory.queue.connectioncap.";
+    private static int DefaultConnectionCap => 1;
+    public static int MinConnectionCap => 1;
+    public static int MaxConnectionCap => OperatingSystem.IsAndroid() ? 4 : 8;
+
+    /// <summary>
+    /// The configured concurrency limit for a specific connection — a device-local user preference
+    /// about that connection's known rate limits, not an app-asserted provider fact, mirroring
+    /// <see cref="DeviceCap"/> exactly but scoped per connection instead of device-wide.
+    /// </summary>
+    public int GetConnectionCap(string connectionId)
+    {
+        var stored = _preferences.ReadString(ConnectionCapPreferenceKeyPrefix + connectionId, DefaultConnectionCap.ToString(CultureInfo.InvariantCulture));
+        return int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? Math.Clamp(value, MinConnectionCap, MaxConnectionCap) : DefaultConnectionCap;
+    }
+
+    public void SetConnectionCap(string connectionId, int value)
+    {
+        var clamped = Math.Clamp(value, MinConnectionCap, MaxConnectionCap);
+        _preferences.WriteString(ConnectionCapPreferenceKeyPrefix + connectionId, clamped.ToString(CultureInfo.InvariantCulture));
+        RaiseChanged();
+        Pump();
+    }
+
     public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy)
     {
         _libraries = libraries;
@@ -293,11 +317,12 @@ public sealed class GenerationQueueService
                     var index = (_cursor + i) % count;
                     var connectionId = _connectionOrder[index];
                     if (!_queues.TryGetValue(connectionId, out var queue) || queue.Count == 0) continue;
-                    if (_runningPerConnection.TryGetValue(connectionId, out var running) && running > 0) continue;
+                    _runningPerConnection.TryGetValue(connectionId, out var running);
+                    if (running >= GetConnectionCap(connectionId)) continue;
                     started = queue.First!.Value;
                     queue.RemoveFirst();
                     started.Phase = GenerationJobPhase.Running;
-                    _runningPerConnection[connectionId] = 1;
+                    _runningPerConnection[connectionId] = running + 1;
                     _runningTotal++;
                     _cursor = (index + 1) % count;
                     break;
@@ -321,7 +346,7 @@ public sealed class GenerationQueueService
             _jobsById.Remove(job.JobId);
             if (_activeJobIdByDraft.TryGetValue(job.DraftId, out var activeId) && activeId == job.JobId) _activeJobIdByDraft.Remove(job.DraftId);
             _lastOutcomeByDraft[job.DraftId] = outcome;
-            _runningPerConnection[job.ConnectionId] = 0;
+            _runningPerConnection[job.ConnectionId] = _runningPerConnection.GetValueOrDefault(job.ConnectionId) - 1;
             _runningTotal--;
         }
         cancellation.Dispose();

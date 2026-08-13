@@ -461,8 +461,23 @@ in parallel. Both milestones must be complete before the first public release.
       per-connection concurrency, an adjustable device-cap settings UI, a dedicated **Queue** page
       with reordering, multiple concurrent run cards from the same tab, and OS
       thermal/battery-driven cap reduction all remain open, tracked below.
-- [ ] Add adjustable per-connection submission concurrency once an adapter declares a safe range
-      above one.
+- [x] Add adjustable per-connection submission concurrency. Reframed from "once an adapter declares
+      a safe range above one": a per-connection concurrency limit is a user preference about their
+      own account/rate limits, not an app-asserted provider fact, so it doesn't need an adapter to
+      declare anything — exactly like the already-shipped device-wide cap just below, which is also
+      a user-configured, device-local number rather than a provider claim. `GenerationQueueService`
+      gains `GetConnectionCap`/`SetConnectionCap(connectionId, value)`, mirroring `DeviceCap`/
+      `SetDeviceCap` exactly (same `IAppPreferenceStore` read-through/clamp/persist/`Pump()`-re-entry
+      shape, keyed per connection id instead of one fixed key; same 1–8/1–4 Windows/Android bounds).
+      The pump loop's per-connection concurrency-1 enforcement (`_runningPerConnection`, previously
+      hardcoded to a boolean "any job running" check with set-to-`1`/set-to-`0` bookkeeping) now
+      increments/decrements against the connection's configured cap. Not a `Connection` schema
+      column: like the device cap, this lives in `IAppPreferenceStore` (device-local), not the synced
+      library data, since it's "how hard should *this device* hit this connection," not a fact that
+      should travel with the connection across devices sharing a library. `ConnectionEdit.razor`
+      exposes it in the existing "Advanced connection settings" section (only once a connection is
+      saved, since it's keyed by a real connection id) as its own small save action, independent of
+      the connection's own create/update form.
 - [x] Add an adjustable device-wide submission cap settings UI (1–8 on Windows, 1–4 on Android).
       `GenerationQueueService.DeviceCap` is now an instance property backed by `IAppPreferenceStore`
       (falling back to the prior hardcoded default — 3 on Windows, 2 on Android — when unset or

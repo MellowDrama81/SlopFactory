@@ -3,6 +3,7 @@
 @inject AppLibraryState LibraryState
 @inject ISecureCredentialStore Credentials
 @inject IProviderAdapterResolver AdapterResolver
+@inject GenerationQueueService Queue
 @inject NavigationManager Navigation
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
@@ -70,6 +71,16 @@ else
             <textarea id="connection-additional-headers" rows="4" maxlength="4096" @bind="_form.AdditionalHeadersText" placeholder="X-Organization: org_123"></textarea>
             <p class="muted">@Strings["AdditionalHeadersHelp"]</p>
 
+            @if (!IsNew)
+            {
+                <label for="connection-max-concurrency">@Strings["ConnectionMaxConcurrency"]</label>
+                <div class="inline-form">
+                    <InputNumber id="connection-max-concurrency" @bind-Value="_connectionCapValue" min="@GenerationQueueService.MinConnectionCap" max="@GenerationQueueService.MaxConnectionCap" />
+                    <button type="button" class="secondary" @onclick="SaveConnectionCap">@Strings["SaveConnectionMaxConcurrency"]</button>
+                </div>
+                <p class="muted">@Strings["ConnectionMaxConcurrencyHelp", GenerationQueueService.MinConnectionCap, GenerationQueueService.MaxConnectionCap]</p>
+            }
+
             @if (_form.ProviderType == ProviderType.GenericOpenAiCompatible)
             {
                 <h3>@Strings["ModalitySettingsHeading"]</h3>
@@ -126,6 +137,15 @@ else
     [Parameter] public string Id { get; set; } = string.Empty;
     private bool IsNew => string.IsNullOrEmpty(Id);
     private bool IsInsecureHttpBaseUrl => Uri.TryCreate(_form.BaseUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttp;
+    private int _connectionCapValue;
+
+    private void SaveConnectionCap()
+    {
+        Queue.SetConnectionCap(Id, _connectionCapValue);
+        _connectionCapValue = Queue.GetConnectionCap(Id);
+        _message = Strings["ConnectionMaxConcurrencySaved"];
+        _isError = false;
+    }
 
     private ConnectionForm _form = new();
     private bool _busy;
@@ -174,6 +194,7 @@ else
                 _hasStoredCredential = existing.HasCredential;
                 _credentialRequiresRepair = existing.CredentialRequiresRepair;
                 _credentialRevisionId = existing.CredentialRevisionId;
+                _connectionCapValue = Queue.GetConnectionCap(Id);
             }
             catch (SlopFactoryException exception)
             {

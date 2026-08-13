@@ -800,6 +800,10 @@
   <data name="ModelNotCurrentlyListed" xml:space="preserve"><value>Not currently listed</value></data>
   <data name="ConnectionTimeoutSeconds" xml:space="preserve"><value>Request timeout (seconds)</value></data>
   <data name="ConnectionTimeoutHelp" xml:space="preserve"><value>Leave blank to use the default of {0} seconds. Must be between {1} and {2} seconds.</value></data>
+  <data name="ConnectionMaxConcurrency" xml:space="preserve"><value>Max concurrent submissions for this connection</value></data>
+  <data name="ConnectionMaxConcurrencyHelp" xml:space="preserve"><value>How many requests this connection can have in flight at once, bounded by the device-wide cap. Must be between {0} and {1}. Based on your own knowledge of this provider's rate limits — SlopFactory does not know what's safe for any specific provider.</value></data>
+  <data name="SaveConnectionMaxConcurrency" xml:space="preserve"><value>Save limit</value></data>
+  <data name="ConnectionMaxConcurrencySaved" xml:space="preserve"><value>Connection concurrency limit saved.</value></data>
   <data name="AdditionalHeaders" xml:space="preserve"><value>Additional headers</value></data>
   <data name="AdditionalHeadersHelp" xml:space="preserve"><value>One per line, in the form "Name: Value". For gateway or routing headers only — never for credentials; Authorization, Proxy-Authorization, Cookie and the credential header above cannot be set here.</value></data>
   <data name="ModalitySettingsHeading" xml:space="preserve"><value>Per-modality settings</value></data>

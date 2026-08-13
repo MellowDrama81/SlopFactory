@@ -259,6 +259,16 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** the estimate is Text-mode-only, updates live while typing in both the prompt and system-instructions fields, reflects their combined length, and never blocks submission.
 
+## MT-20 — Adjustable per-connection submission concurrency
+
+1. Open an existing connection's edit page and expand **Advanced connection settings**. Confirm a "Max concurrent submissions for this connection" field appears, defaulting to 1, with a **Save limit** button separate from the connection's own **Save** button.
+2. Create 3+ drafts using models on the same connection, and submit all of them in quick succession. Confirm only one runs at a time (the default) while the rest show **Queued**.
+3. While those jobs are still queued, go raise that connection's concurrency limit to 3 (or the device-wide cap, whichever is lower) and click **Save limit**. Confirm additional queued jobs for that connection start running immediately, without waiting for the first one to finish.
+4. Confirm jobs on a *different* connection are unaffected by this change — their own concurrency stays at whatever they're individually configured for.
+5. Lower the limit back down while jobs are running. Confirm already-running jobs are not cancelled — the lower limit only affects how many *new* jobs start next.
+
+**Pass:** each connection's concurrency limit is independently configurable, defaults to 1 (matching prior behavior), takes effect immediately when raised without needing a job to finish first, and never preempts an already-running job when lowered.
+
 ## Reporting
 
 For each test case, record:

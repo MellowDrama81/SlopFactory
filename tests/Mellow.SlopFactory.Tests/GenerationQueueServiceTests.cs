@@ -175,6 +175,58 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task SetConnectionCapClampsToThePlatformValidRange()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, _, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+
+        queue.SetConnectionCap(connection.Id, GenerationQueueService.MinConnectionCap - 10);
+        Assert.Equal(GenerationQueueService.MinConnectionCap, queue.GetConnectionCap(connection.Id));
+
+        queue.SetConnectionCap(connection.Id, GenerationQueueService.MaxConnectionCap + 10);
+        Assert.Equal(GenerationQueueService.MaxConnectionCap, queue.GetConnectionCap(connection.Id));
+    }
+
+    [Fact]
+    public async Task SetConnectionCapPersistsAcrossServiceInstancesSharingTheSamePreferenceStore()
+    {
+        using var temporary = new TemporaryDirectory();
+        var preferences = new FakeAppPreferenceStore();
+        var (libraries, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), preferences);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        queue.SetConnectionCap(connection.Id, 3);
+
+        var secondQueue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, new FakeDeviceEnergyStateProvider());
+
+        Assert.Equal(3, secondQueue.GetConnectionCap(connection.Id));
+    }
+
+    [Fact]
+    public async Task RaisingTheConnectionCapLetsMultipleJobsOnTheSameConnectionRunConcurrently()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        for (var i = 0; i < 3; i++)
+        {
+            queue.Enqueue(Snapshot($"draft-{i}", model.Id, $"prompt{i}", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        }
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Count == 1);
+        Assert.Equal(1, queue.RunningCount);
+        Assert.Equal(2, queue.QueuedCount);
+
+        queue.SetConnectionCap(connection.Id, 3);
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Count == 3);
+        Assert.Equal(0, queue.QueuedCount);
+        Assert.Equal(3, queue.RunningCount);
+    }
+
+    [Fact]
     public async Task EnergySaverCapActiveReflectsTheProviderState()
     {
         using var temporary = new TemporaryDirectory();

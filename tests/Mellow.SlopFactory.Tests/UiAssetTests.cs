@@ -487,7 +487,8 @@ public sealed class UiAssetTests
                      "InsecureHttpBaseUrlWarning", "ConnectionTimeoutSeconds", "ConnectionTimeoutHelp", "AdditionalHeaders",
                      "AdditionalHeadersHelp", "ModalitySettingsHeading", "ModalitySettingsDescription", "ModelsModality",
                      "TextGenerationModality", "ImageGenerationModality", "ResolvedEndpoint", "ProviderTypeLockedWhileModelsExist",
-                     "CredentialRequiresRepairBanner", "KeepExistingKey", "SaveNewKeyAsUnverified", "SaveNewKeyAsUnverifiedWarning"
+                     "CredentialRequiresRepairBanner", "KeepExistingKey", "SaveNewKeyAsUnverified", "SaveNewKeyAsUnverifiedWarning",
+                     "ConnectionMaxConcurrency", "ConnectionMaxConcurrencyHelp", "SaveConnectionMaxConcurrency", "ConnectionMaxConcurrencySaved"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
