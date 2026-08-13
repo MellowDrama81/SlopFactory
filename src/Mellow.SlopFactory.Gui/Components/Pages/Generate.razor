@@ -323,6 +323,17 @@ else
                 </div>
             </div>
         }
+        else if (_settingsRecycledConflict is not null)
+        {
+            <div class="notice error" role="dialog" aria-label="@Strings["SavedSettingsRecycledTitle"]">
+                <p>@Strings["SavedSettingsRecycledMessage"]</p>
+                <div class="actions">
+                    <button type="button" class="danger" disabled="@_busy" @onclick="RestoreAndUpdateSavedSettingAsync">@Strings["RestoreAndSaveSettings"]</button>
+                    <button type="button" class="secondary" disabled="@(_busy || string.IsNullOrWhiteSpace(_settingsTitle))" @onclick="SaveAsNewAsync">@Strings["SaveSettingsAsAction"]</button>
+                    <button type="button" class="secondary" disabled="@_busy" @onclick="() => _settingsRecycledConflict = null">@Strings["Cancel"]</button>
+                </div>
+            </div>
+        }
         else
         {
             <div class="inline-form">
@@ -417,6 +428,7 @@ else
     private int _loadedRevision;
     private string _settingsTitle = string.Empty;
     private SavedGenerationSetting? _settingsConflict;
+    private SavedGenerationSetting? _settingsRecycledConflict;
     private string _improvementModelId = string.Empty;
     private string _improvementGuidance = string.Empty;
     private IReadOnlyList<string>? _improvementCandidates;
@@ -563,6 +575,7 @@ else
         _loadedRevision = 0;
         _settingsTitle = string.Empty;
         _settingsConflict = null;
+        _settingsRecycledConflict = null;
         _saveStatus = SaveStatus.Idle;
         _saveError = null;
         if (model is null && draft.ModelId is not null && _models.Count > 0)
@@ -856,6 +869,31 @@ else
         _busy = true;
         try
         {
+            SavedGenerationSetting? current;
+            try
+            {
+                current = await workspace.GetSavedSettingAsync(_loadedSettingsId);
+            }
+            catch (RecordNotFoundException)
+            {
+                current = null;
+            }
+
+            if (current is null)
+            {
+                _loadedSettingsId = null;
+                _loadedTitle = null;
+                _loadedRevision = 0;
+                _message = Strings["SavedSettingsSourceDeleted"];
+                _isError = true;
+                return;
+            }
+            if (current.State != LibraryRecordState.Active)
+            {
+                _settingsRecycledConflict = current;
+                return;
+            }
+
             var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
             var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _loadedRevision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
             ApplySavedSettingsResult(saved);
@@ -863,6 +901,32 @@ else
         catch (SavedSettingRevisionConflictException exception)
         {
             _settingsConflict = exception.Current;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+            _isError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RestoreAndUpdateSavedSettingAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _settingsRecycledConflict is null || _loadedSettingsId is null) return;
+        _busy = true;
+        try
+        {
+            await workspace.RestoreSavedSettingAsync(_loadedSettingsId);
+            var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsRecycledConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            ApplySavedSettingsResult(saved);
+            _settingsRecycledConflict = null;
+        }
+        catch (SavedSettingRevisionConflictException exception)
+        {
+            _settingsConflict = exception.Current;
+            _settingsRecycledConflict = null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
@@ -883,6 +947,7 @@ else
             var saved = await workspace.CreateSavedSettingAsync(_settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
             ApplySavedSettingsResult(saved);
             _settingsConflict = null;
+            _settingsRecycledConflict = null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {

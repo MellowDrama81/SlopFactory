@@ -105,6 +105,64 @@ public sealed class SavedGenerationSettingTests
     }
 
     [Fact]
+    public async Task ARecycledSavedSettingCanBeRestoredAndImmediatelyUpdatedWithNewFieldsInOneFlow()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId);
+
+        await workspace.RecycleSavedSettingAsync(saved.Id);
+        var recycled = await workspace.GetSavedSettingAsync(saved.Id);
+        Assert.Equal(LibraryRecordState.Recycled, recycled.State);
+
+        await workspace.RestoreSavedSettingAsync(saved.Id);
+        var updated = await workspace.UpdateSavedSettingAsync(saved.Id, recycled.Revision, "My Preset", model.Id, "A new prompt after restore", 4, workspace.Descriptor.GeneratedFolderId);
+
+        Assert.Equal(LibraryRecordState.Active, (await workspace.GetSavedSettingAsync(saved.Id)).State);
+        Assert.Equal("A new prompt after restore", updated.Prompt);
+        Assert.Equal(4, updated.ResultCount);
+        Assert.Equal(recycled.Revision + 1, updated.Revision);
+    }
+
+    [Fact]
+    public async Task RestoringARecycledSavedSettingWhoseTitleNowCollidesWithAnActiveOneThrowsANameConflict()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId);
+        await workspace.RecycleSavedSettingAsync(saved.Id);
+        await workspace.CreateSavedSettingAsync("My Preset", model.Id, "A different prompt", 1, workspace.Descriptor.GeneratedFolderId);
+
+        await Assert.ThrowsAsync<NameConflictException>(() => workspace.RestoreSavedSettingAsync(saved.Id));
+    }
+
+    [Fact]
+    public async Task GetSavedSettingThrowsRecordNotFoundAfterPermanentDeletionSoASourceTabCanDetectItWasDeletedRatherThanJustRecycled()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId);
+
+        await workspace.RecycleSavedSettingAsync(saved.Id);
+        await workspace.PermanentlyDeleteSavedSettingAsync(saved.Id);
+
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.GetSavedSettingAsync(saved.Id));
+        await Assert.ThrowsAsync<RecordNotFoundException>(() => workspace.RestoreSavedSettingAsync(saved.Id));
+    }
+
+    [Fact]
     public async Task RecyclingAModelCascadesToItsSavedSettingsAndRestoreReversesIt()
     {
         using var temporary = new TemporaryDirectory();

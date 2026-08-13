@@ -180,6 +180,19 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** Android shows only the compact control (never the full strip); Windows/tablet keep the scrollable strip plus a working **Manage tabs** entry point to the same list; the list's search filters live; rename/duplicate/reorder/close all work directly from the list without requiring a switch to that tab first; an active job's tab still can't be closed from the list; selecting a tab from the list switches to it and closes the list; the list stays responsive with many tabs open.
 
+## MT-14 — Saved-settings source recycled/deleted while a tab is open
+
+1. Use a saved generation setting into a tab (**Use** from `/saved-settings`). In a second tab or browser context, recycle that same saved setting from `/saved-settings`.
+2. Back in the first tab, change the prompt and click **Save**. Confirm a panel appears explaining the saved settings were recycled, offering **Restore and save**, **Save As**, and **Cancel** — not the generic error message.
+3. Click **Restore and save**. Confirm the saved setting becomes active again on `/saved-settings` with your tab's current values (prompt, model, etc.), and the tab now shows it saved successfully.
+4. Repeat steps 1–2, but this time click **Cancel** on the recycled-settings panel. Confirm the tab is unaffected and you can keep editing.
+5. Repeat steps 1–2, but this time click **Save As** instead. Confirm a new, separate saved setting is created with your tab's values, the original recycled one is untouched, and the tab's source reference now points to the new one.
+6. Use a saved generation setting into a tab, then permanently delete that saved setting (recycle it, then permanently delete from `/recycle-bin` or `/saved-settings`). Back in the tab, click **Save**. Confirm a message explains the saved settings were permanently deleted, and that only **Save As** remains available afterward (the **Save** button itself should now be disabled/hidden, matching how a tab with no loaded settings normally behaves).
+7. From that same tab, click **Save As** with a new title. Confirm it creates a new saved setting successfully and the tab now behaves as a normal saved tab going forward.
+8. Reproduce the recycled-settings panel again (step 1–2), but first create a second active saved setting reusing the recycled one's exact title before clicking **Restore and save**. Confirm the restore fails with a name-conflict message rather than silently succeeding or corrupting either record.
+
+**Pass:** a recycled source saved setting offers Restore-and-save/Save-As/Cancel instead of a generic error; Restore and save both un-recycles the original and applies the tab's current changes in one action; a permanently deleted source clears the tab's save-in-place link so only Save As remains; a title conflict at restore time is reported clearly rather than failing silently.
+
 ## Reporting
 
 For each test case, record:

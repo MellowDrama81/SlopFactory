@@ -649,8 +649,24 @@ in parallel. Both milestones must be complete before the first public release.
       settings-schema/sources/improvement-state capture and the recycled/missing-model-or-source
       dependency-restoration handling, both of which remain open below since neither exists yet for
       this diff to draw on.
-- [ ] Add saved generation settings support for settings-schema/sources/improvement-state capture and
-      dependency-restoration handling matching the recycled/missing-model-or-source rules.
+- [x] Add dependency-restoration handling for a tab's **source saved settings** (the record it was
+      loaded from) becoming recycled or permanently deleted out from under it. `SaveInPlaceAsync` now
+      looks the source up (`GetSavedSettingAsync`, catching `RecordNotFoundException`) before
+      attempting the update: if it's gone, the tab clears its `_loadedSettingsId`/`_loadedTitle`/
+      `_loadedRevision` link (only **Save As** is offered afterward, exactly per plan.md, since the
+      normal Save button is already hidden whenever no settings are loaded) and shows a message
+      explaining why; if it's merely recycled, a new conflict-style panel (mirroring the existing
+      revision-conflict panel's shape) offers **Restore and save** (`RestoreSavedSettingAsync` then
+      `UpdateSavedSettingAsync` with the tab's current values, in one action), **Save As**, or
+      **Cancel**. This check runs lazily at Save time, the same way revision-conflict detection
+      already does — no background polling was added. **Excludes** settings-schema/sources/
+      improvement-state capture (still blocked on the typed-provider-settings-schema decision) and
+      the separate, still-open dependency-restoration gap for a tab's own **model/source-file**
+      references (plan.md also calls for an inline restore option when one of *those* is merely
+      recycled, and requiring an explicit replacement selection before generating when one was
+      permanently deleted — today's `DraftModelUnavailable` fallback only shows a generic message and
+      silently switches to another model/clears the source field, with no inline restore action and
+      no hard block on generating with a to-be-chosen replacement).
 
 ## Cost, usage and notifications
 
