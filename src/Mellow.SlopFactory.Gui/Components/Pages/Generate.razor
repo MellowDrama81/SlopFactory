@@ -10,6 +10,7 @@
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
 @using Mellow.SlopFactory.Infrastructure.Providers
+@using Microsoft.AspNetCore.Components.Web.Virtualization
 
 <PageTitle>@Strings["GeneratePageTitle"]</PageTitle>
 
@@ -37,42 +38,112 @@ else if (_models.Count == 0)
 }
 else
 {
-    <div class="tab-strip">
-        @foreach (var draft in _drafts.OrderBy(candidate => candidate.TabOrder))
-        {
-            <div class="tab @(draft.Id == _activeDraftId ? "active" : "")">
-                @if (_closingDraftId == draft.Id && _closeSaveIntentActive)
-                {
-                    <span class="tab-close-confirm" role="dialog" aria-label="@Strings["CloseTab"]">
-                        <input maxlength="100" placeholder="@Strings["SettingsTitle"]" @bind="_closeSaveTitle" />
-                        @if (_closeError is not null)
-                        {
-                            <span class="error">@_closeError</span>
-                        }
-                        <button type="button" class="secondary" disabled="@string.IsNullOrWhiteSpace(_closeSaveTitle)" @onclick="() => SaveAsSettingsAndCloseDraftAsync(draft.Id)">@Strings["SaveAndCloseTab"]</button>
-                        <button type="button" class="secondary" @onclick="() => _closeSaveIntentActive = false">@Strings["BackToCloseOptions"]</button>
-                    </span>
-                }
-                else if (_closingDraftId == draft.Id)
-                {
-                    <span class="tab-close-confirm" role="dialog" aria-label="@Strings["CloseTab"]">
-                        @Strings["CloseTabConfirmMessage"]
-                        <button type="button" class="danger" @onclick="() => ConfirmCloseDraftAsync(draft.Id)">@Strings["ConfirmCloseTab"]</button>
-                        <button type="button" class="secondary" @onclick="BeginSaveAndCloseDraft">@Strings["SaveSettingsAndCloseTab"]</button>
-                        <button type="button" class="secondary" @onclick="() => _closingDraftId = null">@Strings["CancelCloseTab"]</button>
-                    </span>
-                }
-                else
-                {
-                    <button type="button" class="tab-move" title="@Strings["MoveTabLeft"]" aria-label="@Strings["MoveTabLeft"]" disabled="@IsFirstDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, -1)">‹</button>
-                    <button type="button" class="tab-select" @onclick="() => SwitchToDraftAsync(draft.Id)">@DraftDisplayTitle(draft)</button>
-                    <button type="button" class="tab-move" title="@Strings["MoveTabRight"]" aria-label="@Strings["MoveTabRight"]" disabled="@IsLastDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, 1)">›</button>
-                    <button type="button" class="tab-close" title="@Strings["CloseTab"]" aria-label="@Strings["CloseTab"]" disabled="@(Queue.GetActiveJobIdForDraft(draft.Id) is not null)" @onclick="() => BeginCloseDraft(draft.Id)">×</button>
-                }
+    @if (OperatingSystem.IsAndroid())
+    {
+        <button type="button" class="tab-switcher-compact" @onclick="() => _switcherOpen = true">
+            @Strings["TabSwitcherCompactLabel", DraftDisplayTitle(ActiveDraft), ActiveDraftPosition, _drafts.Count]
+        </button>
+    }
+    else
+    {
+        <div class="tab-strip">
+            @foreach (var draft in _drafts.OrderBy(candidate => candidate.TabOrder))
+            {
+                <div class="tab @(draft.Id == _activeDraftId ? "active" : "")">
+                    @if (_closingDraftId == draft.Id && _closeSaveIntentActive)
+                    {
+                        <span class="tab-close-confirm" role="dialog" aria-label="@Strings["CloseTab"]">
+                            <input maxlength="100" placeholder="@Strings["SettingsTitle"]" @bind="_closeSaveTitle" />
+                            @if (_closeError is not null)
+                            {
+                                <span class="error">@_closeError</span>
+                            }
+                            <button type="button" class="secondary" disabled="@string.IsNullOrWhiteSpace(_closeSaveTitle)" @onclick="() => SaveAsSettingsAndCloseDraftAsync(draft.Id)">@Strings["SaveAndCloseTab"]</button>
+                            <button type="button" class="secondary" @onclick="() => _closeSaveIntentActive = false">@Strings["BackToCloseOptions"]</button>
+                        </span>
+                    }
+                    else if (_closingDraftId == draft.Id)
+                    {
+                        <span class="tab-close-confirm" role="dialog" aria-label="@Strings["CloseTab"]">
+                            @Strings["CloseTabConfirmMessage"]
+                            <button type="button" class="danger" @onclick="() => ConfirmCloseDraftAsync(draft.Id)">@Strings["ConfirmCloseTab"]</button>
+                            <button type="button" class="secondary" @onclick="BeginSaveAndCloseDraft">@Strings["SaveSettingsAndCloseTab"]</button>
+                            <button type="button" class="secondary" @onclick="() => _closingDraftId = null">@Strings["CancelCloseTab"]</button>
+                        </span>
+                    }
+                    else
+                    {
+                        <button type="button" class="tab-move" title="@Strings["MoveTabLeft"]" aria-label="@Strings["MoveTabLeft"]" disabled="@IsFirstDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, -1)">‹</button>
+                        <button type="button" class="tab-select" @onclick="() => SwitchToDraftAsync(draft.Id)">@DraftDisplayTitle(draft)</button>
+                        <button type="button" class="tab-move" title="@Strings["MoveTabRight"]" aria-label="@Strings["MoveTabRight"]" disabled="@IsLastDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, 1)">›</button>
+                        <button type="button" class="tab-close" title="@Strings["CloseTab"]" aria-label="@Strings["CloseTab"]" disabled="@(Queue.GetActiveJobIdForDraft(draft.Id) is not null)" @onclick="() => BeginCloseDraft(draft.Id)">×</button>
+                    }
+                </div>
+            }
+            <button type="button" class="tab-add" title="@Strings["AddDraftTab"]" aria-label="@Strings["AddDraftTab"]" @onclick="AddDraftAsync">+</button>
+        </div>
+        <button type="button" class="secondary" @onclick="() => _switcherOpen = true">@Strings["ManageTabs"]</button>
+    }
+
+    @if (_switcherOpen)
+    {
+        <div class="tab-switcher" role="dialog" aria-label="@Strings["ManageTabs"]">
+            <div class="inline-form">
+                <input type="search" aria-label="@Strings["SearchTabs"]" placeholder="@Strings["SearchTabs"]" @bind="_switcherFilter" @bind:event="oninput" />
+                <button type="button" class="secondary" @onclick="AddDraftAsync">@Strings["AddDraftTab"]</button>
+                <button type="button" class="secondary" @onclick="() => _switcherOpen = false">@Strings["CloseTabSwitcher"]</button>
             </div>
-        }
-        <button type="button" class="tab-add" title="@Strings["AddDraftTab"]" aria-label="@Strings["AddDraftTab"]" @onclick="AddDraftAsync">+</button>
-    </div>
+            <ul>
+            <Virtualize Items="FilteredSwitcherDrafts()" Context="draft">
+                <li class="@(draft.Id == _activeDraftId ? "active" : "")">
+                    @if (_switcherRenamingDraftId == draft.Id)
+                    {
+                        <input maxlength="100" @bind="_switcherRenameTitle" />
+                        <button type="button" class="secondary" disabled="@string.IsNullOrWhiteSpace(_switcherRenameTitle)" @onclick="() => CommitSwitcherRenameAsync(draft.Id)">@Strings["Save"]</button>
+                        <button type="button" class="secondary" @onclick="() => _switcherRenamingDraftId = null">@Strings["Cancel"]</button>
+                    }
+                    else if (_closingDraftId == draft.Id && _closeSaveIntentActive)
+                    {
+                        <span class="tab-close-confirm" role="dialog" aria-label="@Strings["CloseTab"]">
+                            <input maxlength="100" placeholder="@Strings["SettingsTitle"]" @bind="_closeSaveTitle" />
+                            @if (_closeError is not null)
+                            {
+                                <span class="error">@_closeError</span>
+                            }
+                            <button type="button" class="secondary" disabled="@string.IsNullOrWhiteSpace(_closeSaveTitle)" @onclick="() => SaveAsSettingsAndCloseDraftAsync(draft.Id)">@Strings["SaveAndCloseTab"]</button>
+                            <button type="button" class="secondary" @onclick="() => _closeSaveIntentActive = false">@Strings["BackToCloseOptions"]</button>
+                        </span>
+                    }
+                    else if (_closingDraftId == draft.Id)
+                    {
+                        <span class="tab-close-confirm" role="dialog" aria-label="@Strings["CloseTab"]">
+                            @Strings["CloseTabConfirmMessage"]
+                            <button type="button" class="danger" @onclick="() => ConfirmCloseDraftAsync(draft.Id)">@Strings["ConfirmCloseTab"]</button>
+                            <button type="button" class="secondary" @onclick="BeginSaveAndCloseDraft">@Strings["SaveSettingsAndCloseTab"]</button>
+                            <button type="button" class="secondary" @onclick="() => _closingDraftId = null">@Strings["CancelCloseTab"]</button>
+                        </span>
+                    }
+                    else
+                    {
+                        <button type="button" class="tab-move" title="@Strings["MoveTabLeft"]" aria-label="@Strings["MoveTabLeft"]" disabled="@IsFirstDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, -1)">‹</button>
+                        <button type="button" class="tab-select" @onclick="() => SelectFromSwitcherAsync(draft.Id)">
+                            @DraftDisplayTitle(draft)
+                            @{ var status = DraftRunStatusLabel(draft.Id); }
+                            @if (status is not null)
+                            {
+                                <span class="tab-status">@status</span>
+                            }
+                        </button>
+                        <button type="button" class="tab-move" title="@Strings["MoveTabRight"]" aria-label="@Strings["MoveTabRight"]" disabled="@IsLastDraft(draft)" @onclick="() => MoveDraftAsync(draft.Id, 1)">›</button>
+                        <button type="button" class="secondary" @onclick="() => BeginSwitcherRename(draft)">@Strings["RenameTabAction"]</button>
+                        <button type="button" class="secondary" @onclick="() => DuplicateDraftAsync(draft.Id)">@Strings["DuplicateTab"]</button>
+                        <button type="button" class="tab-close" title="@Strings["CloseTab"]" aria-label="@Strings["CloseTab"]" disabled="@(Queue.GetActiveJobIdForDraft(draft.Id) is not null)" @onclick="() => BeginCloseDraft(draft.Id)">×</button>
+                    }
+                </li>
+            </Virtualize>
+            </ul>
+        </div>
+    }
 
     <div class="inline-form">
         <label for="tab-title">@Strings["TabTitle"]</label>
@@ -329,6 +400,10 @@ else
     private bool _closeSaveIntentActive;
     private string _closeSaveTitle = string.Empty;
     private string? _closeError;
+    private bool _switcherOpen;
+    private string _switcherFilter = string.Empty;
+    private string? _switcherRenamingDraftId;
+    private string _switcherRenameTitle = string.Empty;
     private CancellationTokenSource? _autosaveCts;
     private SaveStatus _saveStatus = SaveStatus.Idle;
     private string? _saveError;
@@ -520,14 +595,61 @@ else
         LoadDraftIntoForm(draft.Id);
     }
 
-    private async Task DuplicateActiveDraftAsync()
+    private Task DuplicateActiveDraftAsync() => _activeDraftId is null ? Task.CompletedTask : DuplicateDraftAsync(_activeDraftId);
+
+    private async Task DuplicateDraftAsync(string draftId)
     {
         var workspace = LibraryState.Workspace;
-        if (workspace is null || _activeDraftId is null) return;
-        await FlushPendingAutosaveAsync();
-        var duplicate = await workspace.DuplicateDraftAsync(_activeDraftId);
+        if (workspace is null) return;
+        if (draftId == _activeDraftId) await FlushPendingAutosaveAsync();
+        var duplicate = await workspace.DuplicateDraftAsync(draftId);
         _drafts = [.. _drafts, duplicate];
+        _switcherOpen = false;
         LoadDraftIntoForm(duplicate.Id);
+    }
+
+    private async Task SelectFromSwitcherAsync(string draftId)
+    {
+        await SwitchToDraftAsync(draftId);
+        _switcherOpen = false;
+    }
+
+    private void BeginSwitcherRename(GenerationDraft draft)
+    {
+        _switcherRenamingDraftId = draft.Id;
+        _switcherRenameTitle = draft.CustomTitle ?? string.Empty;
+    }
+
+    private async Task CommitSwitcherRenameAsync(string draftId)
+    {
+        var workspace = LibraryState.Workspace;
+        var draft = _drafts.FirstOrDefault(candidate => candidate.Id == draftId);
+        if (workspace is null || draft is null || string.IsNullOrWhiteSpace(_switcherRenameTitle)) return;
+        var updated = await workspace.ReplaceDraftStateAsync(draftId, _switcherRenameTitle, draft.ModelId, draft.Prompt, draft.SystemInstructions, draft.SourceFileId, draft.ResultCount, draft.DestinationFolderId, draft.ImprovementModelId, draft.ImprovementGuidance);
+        _drafts = _drafts.Select(candidate => candidate.Id == draftId ? updated : candidate).ToArray();
+        if (draftId == _activeDraftId) _tabTitleInput = updated.CustomTitle ?? string.Empty;
+        _switcherRenamingDraftId = null;
+    }
+
+    private int ActiveDraftPosition => _drafts.OrderBy(draft => draft.TabOrder).ToList().FindIndex(draft => draft.Id == _activeDraftId) + 1;
+
+    private List<GenerationDraft> FilteredSwitcherDrafts() =>
+        _drafts.OrderBy(draft => draft.TabOrder)
+            .Where(draft => string.IsNullOrWhiteSpace(_switcherFilter) || DraftDisplayTitle(draft).Contains(_switcherFilter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    private string? DraftRunStatusLabel(string draftId)
+    {
+        var jobId = Queue.GetActiveJobIdForDraft(draftId);
+        if (jobId is null) return null;
+        var status = Queue.GetJobStatus(jobId);
+        if (status is null) return null;
+        return status.Phase switch
+        {
+            GenerationJobPhase.Queued => Strings["QueuePosition", status.QueuePosition ?? 0].Value,
+            GenerationJobPhase.Running => Strings["Generating"].Value,
+            _ => null
+        };
     }
 
     private bool IsFirstDraft(GenerationDraft draft) => _drafts.OrderBy(candidate => candidate.TabOrder).First().Id == draft.Id;

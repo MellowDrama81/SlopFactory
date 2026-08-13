@@ -108,8 +108,8 @@ textarea { min-height: 7rem; resize: vertical; }
 .text-editor { margin-top: 1rem; }
 .text-editor textarea { min-height: 24rem; font-family: ui-monospace, "Cascadia Code", monospace; }
 .panel h2 { margin-top: 0; }
-.tab-strip { display: flex; flex-wrap: wrap; align-items: stretch; gap: .4rem; margin-bottom: 1rem; }
-.tab { display: flex; align-items: center; gap: .2rem; border: 1px solid #343b48; border-radius: .6rem; background: #20252e; }
+.tab-strip { display: flex; flex-wrap: nowrap; overflow-x: auto; align-items: stretch; gap: .4rem; margin-bottom: 1rem; }
+.tab { display: flex; align-items: center; gap: .2rem; flex: none; border: 1px solid #343b48; border-radius: .6rem; background: #20252e; }
 .tab.active { border-color: #e7b15b; background: #2a303b; }
 .tab-move { background: transparent; color: #9ea5b3; font-weight: 900; padding: .55rem .2rem; }
 .tab-move:disabled { opacity: .35; cursor: not-allowed; }
@@ -118,6 +118,12 @@ textarea { min-height: 7rem; resize: vertical; }
 .tab-close:disabled { opacity: .35; cursor: not-allowed; }
 .tab-add { background: #2a303b; }
 .tab-close-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .4rem .6rem; }
+.tab-switcher-compact { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 1rem; background: #20252e; border: 1px solid #343b48; border-radius: .6rem; padding: .55rem .7rem; color: inherit; font-weight: 700; }
+.tab-switcher { border: 1px solid #343b48; border-radius: .6rem; background: #20252e; padding: .6rem; margin-bottom: 1rem; }
+.tab-switcher ul { list-style: none; margin: .6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; max-height: 50vh; overflow-y: auto; }
+.tab-switcher li { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem; border: 1px solid #343b48; border-radius: .6rem; background: #262c36; padding: .2rem; }
+.tab-switcher li.active { border-color: #e7b15b; background: #2a303b; }
+.tab-status { color: #9ea5b3; font-size: .85em; margin-left: .3rem; }
 .save-status { display: flex; align-items: center; gap: .6rem; margin: 0 0 1rem; }
 dl { display: grid; grid-template-columns: auto 1fr; gap: .5rem 1rem; }
 dt { color: #9ea5b3; }

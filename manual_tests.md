@@ -165,6 +165,21 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** Review Changes shows exactly the fields that differ between the two versions, with human-readable values, and never modifies either version; Overwrite/Save As/Cancel remain fully usable regardless of whether Review Changes was opened; a conflict with no actual field differences is handled gracefully.
 
+## MT-13 — Android compact tab-switcher and searchable tab management
+
+1. On Android, open **Generate**. Confirm the full tab strip is gone, replaced by a single compact control showing the active tab's title and its position out of the total count (e.g. "Draft 1 (1 of 3)").
+2. Tap the compact control. Confirm a searchable list opens showing every open tab, each with move/select/rename/duplicate/close controls, and a text field to filter by title.
+3. Type part of a tab's title into the search field. Confirm the list filters live (no submit button needed) to only matching tabs.
+4. On Windows, open **Generate** with enough tabs open that the strip would previously have wrapped onto a second row. Confirm the strip now scrolls horizontally in place instead of wrapping, and confirm a **Manage tabs** button next to it opens the same searchable list used on Android.
+5. From the list (either platform), rename a tab that is **not** the currently active one. Confirm its title updates in the list and in the strip/compact control without switching you away from your current tab.
+6. From the list, duplicate a tab that is **not** the active one. Confirm a new duplicate tab appears and you are switched to it (and, on Android, the switcher closes since you've now navigated to a tab).
+7. From the list, use the move controls to reorder tabs without first switching to any of them. Confirm the new order is reflected both in the list and in the strip/compact control, and survives an app restart.
+8. Start a generation on one tab, then open the switcher. Confirm that tab shows a running/queued status indicator in the list, and its close button stays disabled there too (matching the strip's existing behavior).
+9. Tap/click a tab's title from within the list. Confirm it switches to that tab and closes the switcher.
+10. Open the switcher with a large number of tabs open (20+, using duplicate repeatedly). Confirm the list remains smooth to scroll and does not need every tab rendered at once (no visible lag opening the switcher regardless of tab count).
+
+**Pass:** Android shows only the compact control (never the full strip); Windows/tablet keep the scrollable strip plus a working **Manage tabs** entry point to the same list; the list's search filters live; rename/duplicate/reorder/close all work directly from the list without requiring a switch to that tab first; an active job's tab still can't be closed from the list; selecting a tab from the list switches to it and closes the list; the list stays responsive with many tabs open.
+
 ## Reporting
 
 For each test case, record:

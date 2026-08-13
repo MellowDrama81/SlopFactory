@@ -287,8 +287,22 @@ in parallel. Both milestones must be complete before the first public release.
       (cancel). There is no settings-title-uniqueness pre-check before showing the confirm panel and
       no undo after **Discard without saving** — both match the already-established instant-discard
       behavior for that path.
-- [ ] Add the Android compact tab-switcher and virtualization for a large number of drafts (the
-      current tab strip is the same plain, unvirtualized markup on both platforms).
+- [x] Add the Android compact tab-switcher and a searchable tab-management list shared by both
+      platforms. Android now shows a single compact control ("Title (N of M)") instead of the tab
+      strip; Windows/tablet keep the existing strip (now actually horizontally scrollable —
+      `flex-wrap: nowrap; overflow-x: auto` — rather than wrapping onto new rows) plus a **Manage
+      tabs** button. Both open the same `role="dialog"` panel (reusing the existing dialog
+      focus-restoration convention) with a live client-side title filter and, per tab, run-status
+      (Queued/Generating, via `GenerationQueueService`), move/select/rename/duplicate/close — the
+      first switcher-only rename/duplicate flow that operates on a non-active draft directly
+      (`CommitSwitcherRenameAsync`/`DuplicateDraftAsync(draftId)`, generalized from the old
+      active-tab-only methods) rather than requiring a switch first. **Scope note**: "inactive tabs
+      unload their rendered interface" from plan.md was already true — there's exactly one `_form`
+      field, rebuilt fresh on every switch, so no code was needed for it. The switcher list uses
+      Blazor's `<Virtualize>` (a first-time introduction in this project); the Windows/tablet strip
+      itself is deliberately **not** virtualized — `Virtualize` fits a single-axis scrolling list, not
+      a wrapping/horizontal flex strip, so virtualizing only the switcher list (the one plan.md
+      actually calls "searchable") was chosen over a poor-fit implementation on the strip too.
 - [x] Add the library-switch unsaved-edit gate, and the in-app navigate-away gate that was the other
       real (non-OS-driven) way a pending debounced autosave could previously be lost silently.
       `AppLibraryState` gained a `Closing` event (`event Func<Task>?`, awaited across every

@@ -213,7 +213,47 @@ Two gates flush a pending debounced autosave instead of silently losing it. Firs
 
 Closing a tab offers a three-way choice rather than only the original instant-discard confirm: **Discard without saving** (unchanged — a permanent `DeleteDraftAsync`, no recycle-bin entry), **Save settings first** (reveals an inline title field; confirming calls the existing `CreateSavedSettingAsync` with the draft's current model/prompt/system-instructions/source-file/result-count/destination-folder and only then deletes the draft, so a duplicate-title `NameConflictException` or other `SlopFactoryException` is shown inline and the tab stays open for the user to retry with a different title rather than losing the draft), and **Keep tab open** (cancel). No new domain/workspace method was needed for this — it composes `CreateSavedSettingAsync` and `DeleteDraftAsync`, both already used and tested elsewhere, from the GUI layer.
 
-The Android compact tab-switcher, true OS-driven application-exit flushing, and emergency draft-snapshot staging/reconciliation for an unavailable library all remain open, tracked in [milestone2.md](../../milestone2.md).
+True OS-driven application-exit flushing and emergency draft-snapshot staging/reconciliation for an unavailable library both remain open, tracked in [milestone2.md](../../milestone2.md).
+
+### Android compact tab-switcher and the searchable tab-management list
+
+`Generate.razor` branches on `OperatingSystem.IsAndroid()` (the same single convention
+`LibrarySettings.razor` already established) right where the tab strip used to unconditionally
+render: Android shows a single `.tab-switcher-compact` button ("Title (N of M)", via
+`ActiveDraftPosition`); Windows/tablet keep the existing strip plus a new **Manage tabs** button next
+to it. The strip's own CSS also changed from `flex-wrap: wrap` (grew onto new rows) to `flex-wrap:
+nowrap; overflow-x: auto`, since plan.md specifically calls it a "visible **scrollable**" strip.
+
+Both platforms open the same `_switcherOpen`-gated panel, a `role="dialog"` reusing the exact idiom
+the saved-settings conflict panel and recycle-bin confirmations already use — `ui.js`'s existing
+`MutationObserver`-based focus-restoration on dialog appear/disappear applies automatically, no new
+JS needed. Its list is rendered with Blazor's `<Virtualize>` (`Microsoft.AspNetCore.Components.Web.Virtualization`)
+— a first-time introduction in this project (grepped: no prior use anywhere) — filtered by a plain
+`_switcherFilter` string field against `DraftDisplayTitle`, since there was no existing live
+client-side list-filter precedent to reuse (`Home.razor`'s search is a submitted structured
+workspace query over persisted data, not an in-memory filter over an already-loaded collection).
+Virtualization was deliberately scoped to the switcher's list only, not the Windows/tablet strip
+itself: `Virtualize` fits a single-axis vertical scroll container with roughly uniform item height,
+which the wrapping/horizontal flex strip is a poor match for.
+
+The switcher's per-row actions needed two previously active-tab-only operations generalized to an
+arbitrary `draftId`: `DuplicateActiveDraftAsync()` became a thin `_activeDraftId is null` guard around
+a new `DuplicateDraftAsync(string draftId)` (workspace's own `DuplicateDraftAsync` already took an
+explicit ID; only the GUI wrapper was active-tab-locked), and a new switcher-only rename flow
+(`BeginSwitcherRename`/`CommitSwitcherRenameAsync`) reads the target `GenerationDraft` straight out of
+`_drafts` (never `_form`, since the target isn't necessarily the active tab) and calls
+`ReplaceDraftStateAsync` with every field unchanged except the new title. Move (`MoveDraftAsync`) and
+close (`BeginCloseDraft`/`ConfirmCloseDraftAsync`/the existing three-way close-confirm sub-forms)
+already took an explicit `draftId` and needed no change — they're reused verbatim inside the switcher
+rows, so a tab with an active job stays un-closable there exactly like it does in the strip. Per-row
+run status comes from a new `DraftRunStatusLabel(draftId)` helper reading
+`Queue.GetActiveJobIdForDraft`/`Queue.GetJobStatus`, the same API `/queue` already reads.
+
+plan.md's "inactive tabs can unload their rendered interface... while their lightweight drafts...
+remain persisted" needed no code at all: there is exactly one `_form` field and one `EditForm` on the
+whole page, rebuilt fresh by `LoadDraftIntoForm` on every switch — an inactive tab's rendered
+form/media-preview state was never created in the first place, confirmed by reading the file in full
+before starting this slice.
 
 ## Generation queue and concurrency
 

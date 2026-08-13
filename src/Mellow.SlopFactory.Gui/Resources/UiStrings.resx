@@ -666,6 +666,11 @@
   <data name="SaveAndCloseTab" xml:space="preserve"><value>Save and close</value></data>
   <data name="BackToCloseOptions" xml:space="preserve"><value>Back</value></data>
   <data name="AddDraftTab" xml:space="preserve"><value>New tab</value></data>
+  <data name="TabSwitcherCompactLabel" xml:space="preserve"><value>{0} ({1} of {2})</value></data>
+  <data name="ManageTabs" xml:space="preserve"><value>Manage tabs</value></data>
+  <data name="SearchTabs" xml:space="preserve"><value>Search tabs</value></data>
+  <data name="CloseTabSwitcher" xml:space="preserve"><value>Close</value></data>
+  <data name="RenameTabAction" xml:space="preserve"><value>Rename</value></data>
   <data name="DraftSaving" xml:space="preserve"><value>Saving draft…</value></data>
   <data name="DraftSaved" xml:space="preserve"><value>Draft saved</value></data>
   <data name="DraftNotSaved" xml:space="preserve"><value>Draft not saved</value></data>

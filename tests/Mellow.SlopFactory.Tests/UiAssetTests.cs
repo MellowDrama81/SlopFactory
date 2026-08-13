@@ -579,7 +579,8 @@ public sealed class UiAssetTests
                      "SaveSettingsAsAction", "SavedSettingsConflictTitle", "SavedSettingsConflictMessage", "OverwriteSavedSettings",
                      "ReviewChangesSummary", "ReviewChangesNoDifferences", "ReviewChangesYourVersionColumn", "ReviewChangesSavedVersionColumn",
                      "ReviewChangesModelField", "ReviewChangesPromptField", "ReviewChangesSystemInstructionsField", "ReviewChangesSourceFileField",
-                     "ReviewChangesDestinationField", "ReviewChangesResultCountField", "ReviewChangesNoValue", "UnknownFile"
+                     "ReviewChangesDestinationField", "ReviewChangesResultCountField", "ReviewChangesNoValue", "UnknownFile",
+                     "TabSwitcherCompactLabel", "ManageTabs", "SearchTabs", "CloseTabSwitcher", "RenameTabAction"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);
@@ -592,6 +593,22 @@ public sealed class UiAssetTests
         }
 
         AssertNoRawVisibleMarkupText(generate);
+    }
+
+    [Fact]
+    public void GenerateOffersAnAndroidCompactTabSwitcherWithASearchableManagementList()
+    {
+        var generate = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "Generate.razor");
+        var css = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "wwwroot", "css", "app.css");
+
+        Assert.Contains("OperatingSystem.IsAndroid()", generate, StringComparison.Ordinal);
+        Assert.Contains("<Virtualize", generate, StringComparison.Ordinal);
+        Assert.Contains("_switcherFilter", generate, StringComparison.Ordinal);
+        Assert.Contains("DuplicateDraftAsync(draft.Id)", generate, StringComparison.Ordinal);
+        Assert.Contains("BeginSwitcherRename(draft)", generate, StringComparison.Ordinal);
+        Assert.Contains("MoveDraftAsync(draft.Id,", generate, StringComparison.Ordinal);
+        Assert.Contains("BeginCloseDraft(draft.Id)", generate, StringComparison.Ordinal);
+        Assert.Contains(".tab-strip { display: flex; flex-wrap: nowrap; overflow-x: auto;", css, StringComparison.Ordinal);
     }
 
     [Fact]
