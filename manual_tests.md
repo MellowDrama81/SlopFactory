@@ -204,7 +204,7 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 7. Recycle a model whose owning connection is also currently recycled. From the affected tab, click **Restore model**. Confirm it fails with a message explaining the connection must be restored first, rather than silently succeeding or leaving the tab in a broken state.
 8. Recycle a model, then create a new active model reusing its exact label before clicking **Restore model** from the affected tab. Confirm the restore fails with a name-conflict message rather than silently succeeding or corrupting either model.
 9. Mark a tab's model **Needs Review** (via a provider-model-ID or mode change on `/models`) rather than recycling or deleting it. Confirm the tab still shows the existing generic "model unavailable, choose another" message and auto-falls-back to another model as before — this case should be unaffected by this change.
-10. On a tab whose source image was separately recycled or permanently deleted (not the model), confirm the source-image field still just silently reverts to "None" with no restore button or blocking notice — this remains intentionally unchanged.
+10. On a tab with one of its 3 source slots (Source 1/2/3) filled, separately recycle or permanently delete that source file (not the model). Confirm that slot alone silently reverts to "None" with no restore button or blocking notice, and the other two slots are unaffected — this remains intentionally unchanged.
 
 **Pass:** a recycled model shows a specific message naming it with a working inline Restore action; a permanently deleted model blocks Generate until an explicit replacement is chosen, with the dropdown visibly showing no selection rather than a silent substitution; restoring into a recycled-connection or label-conflict state fails with a clear message; the Needs-Review case and the source-image field are both unaffected by this change.
 
@@ -217,7 +217,7 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 5. Recycle the same record again, then permanently delete it from the bin (or via **Empty Recycle Bin**). Confirm the record is gone, but its result files are still present and active (check the destination folder or `/file/{id}` directly) — permanently deleting a generation record must never delete its files.
 6. From `/generation-history/{id}` (a still-active record), click **Recycle** directly from the detail page. Confirm the same recycle behavior as step 2, and confirm the confirmation panel explains that the record's files are not affected.
 7. On an active generation record with a result file, permanently delete just that result file (via `/file/{id}` or the recycle bin, not the generation record). Return to `/generation-history/{id}`. Confirm the result list shows a "permanently deleted" entry with the file's former name and type instead of a broken link, and the record itself is untouched (still active, other results still linkable).
-8. Do the same for a record's source image: permanently delete the source file directly. Return to the record's detail page. Confirm it now shows a "permanently deleted" message with the source file's former name and type instead of silently showing nothing.
+8. Do the same for a record with all 3 source slots filled: permanently delete one of the source files directly (e.g. the Source 2 file). Return to the record's detail page. Confirm the deleted slot shows a "permanently deleted" message with its former name and type (labelled with its slot number) instead of silently showing nothing, while the other two slots still show working links.
 9. Confirm a recycled generation record's detail page (reached via the bin's "view details" link) still displays correctly — prompt, status, result/tombstone list — even though it's not on the active `/generation-history` list.
 
 **Pass:** generation records can be recycled, restored, and permanently deleted through both the list, detail page, and unified recycle bin; recycling or permanently deleting a record never touches its source or result files; a permanently deleted source or result file leaves a readable "permanently deleted" tombstone (former name and type) in generation history instead of a broken link or silent disappearance; a recycled record's detail page remains viewable via the bin.
@@ -235,6 +235,19 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 9. Switch the model to an Image-mode model with the settings section still expanded and values entered, then switch back to a Text-mode model. Confirm the previously entered values are still present (not silently cleared by the mode switch).
 
 **Pass:** the five typed settings are Text-mode-only, each starts blank/Use Provider Default, an explicit value can be set and later reset to blank, out-of-range values are rejected before submission, and the settings round-trip correctly through autosave, saved settings, and Use Again.
+
+## MT-18 — Multi-source input slots (Source 1/2/3)
+
+1. On `/generate`, select a Text-mode model. Confirm three source fields appear — Source 1, Source 2, Source 3 — each independently optional and offering the same list of active image files.
+2. Fill all 3 slots with 3 different images and submit a generation. Confirm it completes normally and, if the result panel/history detail shows sources, all 3 appear as separate links in slot order.
+3. Select the same file in two different slots (e.g. Source 1 and Source 3). Confirm an inline error appears and the **Generate** button is disabled until the duplicate is resolved.
+4. Fill only Source 2, leaving Source 1 and Source 3 blank, and submit. Confirm generation completes normally (a non-contiguous single slot works, not just Source 1 alone).
+5. Fill all 3 slots, then switch to an Image-mode model and back to a Text-mode model. Confirm all 3 selections are still present (not silently cleared by the mode switch).
+6. Autosave: fill Source 2 and Source 3, wait for autosave, then reload the page/tab. Confirm both selections persist.
+7. Save the current selections via **Save As**, load a different draft, then reopen the saved setting via **Use**. Confirm all 3 slots reload exactly as saved.
+8. Open a past generation from `/generation-history` via **Use Again** where more than one slot was used. Confirm all of them load into the form.
+
+**Pass:** all 3 source slots are Text-mode-only, independently optional, reject a duplicate file selected across slots before submission, are unaffected by a temporary mode switch, and round-trip correctly through autosave, saved settings, and Use Again.
 
 ## Reporting
 

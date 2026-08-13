@@ -318,21 +318,35 @@ public sealed class GenerationRecordTests
         using var temporary = new TemporaryDirectory();
         var root = temporary.Child("library");
         var sourcePath = temporary.Child("source.png");
+        var secondarySourcePath = temporary.Child("secondary.png");
+        var tertiarySourcePath = temporary.Child("tertiary.png");
         await File.WriteAllBytesAsync(sourcePath, PngSignatureBytes);
+        await File.WriteAllBytesAsync(secondarySourcePath, [.. PngSignatureBytes, 1]);
+        await File.WriteAllBytesAsync(tertiarySourcePath, [.. PngSignatureBytes, 2]);
         var factory = new LibraryWorkspaceFactory();
         await using var workspace = await factory.CreateAsync(root);
         var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
         var imported = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var secondaryImported = Assert.Single(await workspace.ImportAsync([secondarySourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var tertiaryImported = Assert.Single(await workspace.ImportAsync([tertiarySourcePath], workspace.Descriptor.RootFolderId)).File!;
 
-        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, ["A red circle."], null, sourceFileId: imported.Id);
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, ["A red circle."], null, sourceFileId: imported.Id, secondarySourceFileId: secondaryImported.Id, tertiarySourceFileId: tertiaryImported.Id);
 
         Assert.Equal(imported.Id, record.SourceFileId);
+        Assert.Equal(secondaryImported.Id, record.SecondarySourceFileId);
+        Assert.Equal(tertiaryImported.Id, record.TertiarySourceFileId);
         var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
         Assert.Equal(imported.Id, reloaded.SourceFileId);
+        Assert.Equal(secondaryImported.Id, reloaded.SecondarySourceFileId);
+        Assert.Equal(tertiaryImported.Id, reloaded.TertiarySourceFileId);
 
         await workspace.RecycleFileAsync(imported.Id);
         await workspace.PermanentlyDeleteFileAsync(imported.Id);
+        await workspace.RecycleFileAsync(secondaryImported.Id);
+        await workspace.PermanentlyDeleteFileAsync(secondaryImported.Id);
+        await workspace.RecycleFileAsync(tertiaryImported.Id);
+        await workspace.PermanentlyDeleteFileAsync(tertiaryImported.Id);
 
         var afterDeletion = await workspace.GetGenerationRecordAsync(record.Id);
         Assert.Null(afterDeletion.SourceFileId);
@@ -340,6 +354,35 @@ public sealed class GenerationRecordTests
         Assert.Equal(imported.DisplayName, afterDeletion.SourceFileTombstone!.DisplayName);
         Assert.Equal(imported.MediaType, afterDeletion.SourceFileTombstone.MediaType);
         Assert.Equal(imported.ContentHash, afterDeletion.SourceFileTombstone.ContentHash);
+
+        Assert.Null(afterDeletion.SecondarySourceFileId);
+        Assert.NotNull(afterDeletion.SecondarySourceFileTombstone);
+        Assert.Equal(secondaryImported.DisplayName, afterDeletion.SecondarySourceFileTombstone!.DisplayName);
+        Assert.Equal(secondaryImported.MediaType, afterDeletion.SecondarySourceFileTombstone.MediaType);
+        Assert.Equal(secondaryImported.ContentHash, afterDeletion.SecondarySourceFileTombstone.ContentHash);
+
+        Assert.Null(afterDeletion.TertiarySourceFileId);
+        Assert.NotNull(afterDeletion.TertiarySourceFileTombstone);
+        Assert.Equal(tertiaryImported.DisplayName, afterDeletion.TertiarySourceFileTombstone!.DisplayName);
+        Assert.Equal(tertiaryImported.MediaType, afterDeletion.TertiarySourceFileTombstone.MediaType);
+        Assert.Equal(tertiaryImported.ContentHash, afterDeletion.TertiarySourceFileTombstone.ContentHash);
+    }
+
+    [Fact]
+    public async Task RecordingATextGenerationRejectsTheSameSourceFileSelectedInMoreThanOneSlot()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, PngSignatureBytes);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var imported = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() =>
+            workspace.RecordTextGenerationResultAsync(model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, ["A red circle."], null, sourceFileId: imported.Id, tertiarySourceFileId: imported.Id));
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Linq;
 using Mellow.SlopFactory.Domain;
 
 namespace Mellow.SlopFactory.Infrastructure.Providers;
@@ -127,8 +128,9 @@ internal static class OpenAiCompatibleProtocol
         }
     }
 
-    public static string BuildChatCompletionRequestBody(string providerModelId, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null)
+    public static string BuildChatCompletionRequestBody(string providerModelId, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null)
     {
+        TextGenerationSourceImage?[] sourceImages = [sourceImage, secondarySourceImage, tertiarySourceImage];
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
@@ -150,7 +152,7 @@ internal static class OpenAiCompatibleProtocol
             }
             writer.WriteStartObject();
             writer.WriteString("role", "user");
-            if (sourceImage is null)
+            if (sourceImages.All(image => image is null))
             {
                 writer.WriteString("content", prompt);
             }
@@ -161,12 +163,16 @@ internal static class OpenAiCompatibleProtocol
                 writer.WriteString("type", "text");
                 writer.WriteString("text", prompt);
                 writer.WriteEndObject();
-                writer.WriteStartObject();
-                writer.WriteString("type", "image_url");
-                writer.WriteStartObject("image_url");
-                writer.WriteString("url", $"data:{sourceImage.MediaType};base64,{Convert.ToBase64String(sourceImage.Bytes)}");
-                writer.WriteEndObject();
-                writer.WriteEndObject();
+                foreach (var image in sourceImages)
+                {
+                    if (image is null) continue;
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "image_url");
+                    writer.WriteStartObject("image_url");
+                    writer.WriteString("url", $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}");
+                    writer.WriteEndObject();
+                    writer.WriteEndObject();
+                }
                 writer.WriteEndArray();
             }
             writer.WriteEndObject();

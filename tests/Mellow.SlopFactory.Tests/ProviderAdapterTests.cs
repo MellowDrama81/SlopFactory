@@ -168,6 +168,48 @@ public sealed class ProviderAdapterTests
     }
 
     [Fact]
+    public async Task OpenAiAdapterSendsUpToThreeOrderedImagePartsWhenMultipleSourceSlotsAreSupplied()
+    {
+        var primaryBytes = new byte[] { 1 };
+        var secondaryBytes = new byte[] { 2 };
+        var tertiaryBytes = new byte[] { 3 };
+        string? capturedBody = null;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"choices":[{"message":{"content":"Result"}}]}""", Encoding.UTF8, "application/json")
+            };
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel();
+
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe these images", 1, null,
+            new TextGenerationSourceImage("image/png", primaryBytes), null,
+            new TextGenerationSourceImage("image/png", secondaryBytes), new TextGenerationSourceImage("image/png", tertiaryBytes));
+
+        using (var document = System.Text.Json.JsonDocument.Parse(capturedBody!))
+        {
+            var contentParts = document.RootElement.GetProperty("messages")[0].GetProperty("content");
+            Assert.Equal(4, contentParts.GetArrayLength());
+            Assert.Equal("text", contentParts[0].GetProperty("type").GetString());
+            Assert.Equal($"data:image/png;base64,{Convert.ToBase64String(primaryBytes)}", contentParts[1].GetProperty("image_url").GetProperty("url").GetString());
+            Assert.Equal($"data:image/png;base64,{Convert.ToBase64String(secondaryBytes)}", contentParts[2].GetProperty("image_url").GetProperty("url").GetString());
+            Assert.Equal($"data:image/png;base64,{Convert.ToBase64String(tertiaryBytes)}", contentParts[3].GetProperty("image_url").GetProperty("url").GetString());
+        }
+
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this image", 1, null, null, null, new TextGenerationSourceImage("image/png", secondaryBytes));
+        using (var document = System.Text.Json.JsonDocument.Parse(capturedBody!))
+        {
+            var contentParts = document.RootElement.GetProperty("messages")[0].GetProperty("content");
+            Assert.Equal(2, contentParts.GetArrayLength());
+            Assert.Equal($"data:image/png;base64,{Convert.ToBase64String(secondaryBytes)}", contentParts[1].GetProperty("image_url").GetProperty("url").GetString());
+        }
+    }
+
+    [Fact]
     public async Task OpenAiAdapterIncludesASystemMessageOnlyWhenSystemInstructionsAreSupplied()
     {
         string? capturedBody = null;

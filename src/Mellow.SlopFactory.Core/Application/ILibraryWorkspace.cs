@@ -121,7 +121,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken = default);
     Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
-    Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, string? promptImprovementRecordId = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default);
+    Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, string? promptImprovementRecordId = null, GenerationSettings? settings = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, CancellationToken cancellationToken = default);
     Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default);
     Task RecycleGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
     Task RestoreGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
@@ -133,8 +133,8 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<SavedGenerationSetting>> GetActiveSavedSettingsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SavedGenerationSetting>> GetRecycledSavedSettingsAsync(CancellationToken cancellationToken = default);
     Task<SavedGenerationSetting> GetSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
-    Task<SavedGenerationSetting> CreateSavedSettingAsync(string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default);
-    Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, int expectedRevision, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default);
+    Task<SavedGenerationSetting> CreateSavedSettingAsync(string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, GenerationSettings? settings = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, CancellationToken cancellationToken = default);
+    Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, int expectedRevision, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, GenerationSettings? settings = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, CancellationToken cancellationToken = default);
     Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
     Task RestoreSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default);
@@ -142,7 +142,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<GenerationDraft>> GetDraftsAsync(CancellationToken cancellationToken = default);
     Task<GenerationDraft> GetDraftAsync(string draftId, CancellationToken cancellationToken = default);
     Task<GenerationDraft> CreateDraftAsync(CancellationToken cancellationToken = default);
-    Task<GenerationDraft> ReplaceDraftStateAsync(string draftId, string? customTitle, string? modelId, string prompt, string? systemInstructions, string? sourceFileId, int resultCount, string destinationFolderId, string? improvementModelId, string? improvementGuidance, GenerationSettings? settings = null, CancellationToken cancellationToken = default);
+    Task<GenerationDraft> ReplaceDraftStateAsync(string draftId, string? customTitle, string? modelId, string prompt, string? systemInstructions, string? sourceFileId, int resultCount, string destinationFolderId, string? improvementModelId, string? improvementGuidance, GenerationSettings? settings = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, CancellationToken cancellationToken = default);
     Task<GenerationDraft> DuplicateDraftAsync(string draftId, CancellationToken cancellationToken = default);
     Task DeleteDraftAsync(string draftId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GenerationDraft>> ReorderDraftsAsync(IReadOnlyList<string> orderedDraftIds, CancellationToken cancellationToken = default);

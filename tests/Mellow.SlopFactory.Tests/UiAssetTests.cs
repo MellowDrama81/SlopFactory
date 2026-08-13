@@ -568,7 +568,8 @@ public sealed class UiAssetTests
                      "Model", "Prompt", "ResultCount", "Generate", "Generating", "GenerationCompleted", "GenerationFailed",
                      "OpenGeneratedFile", "ConnectionUnavailableForModel", "ModeText", "ModeImage", "SaveSettingsHeading",
                      "SaveSettingsDescription", "SettingsTitle", "SaveSettingsAction", "SavedSettingsSaved", "SavedSettingsModelUnavailable",
-                     "SavedSettingsHeading", "SystemInstructions", "TokenUsage", "SourceImage", "NoSourceImage", "SourceImageUsed",
+                     "SavedSettingsHeading", "SystemInstructions", "TokenUsage", "SourceImageSlot1", "SourceImageSlot2", "SourceImageSlot3",
+                     "NoSourceImage", "SourceImageSlotUsed", "DuplicateSourceSelectionError",
                      "CancelGeneration", "GenerationCancelledByUser", "PromptImprovementHeading", "PromptImprovementDescription",
                      "ImprovementModel", "NoImprovementModel", "ImprovementGuidance", "ImprovePromptAction", "ImprovingPrompt",
                      "NoImprovementCandidates", "UseThisCandidate", "GenerationBlockedCredentialsRequired", "AddApiKey",
@@ -581,6 +582,7 @@ public sealed class UiAssetTests
                      "SaveSettingsAsAction", "SavedSettingsConflictTitle", "SavedSettingsConflictMessage", "OverwriteSavedSettings",
                      "ReviewChangesSummary", "ReviewChangesNoDifferences", "ReviewChangesYourVersionColumn", "ReviewChangesSavedVersionColumn",
                      "ReviewChangesModelField", "ReviewChangesPromptField", "ReviewChangesSystemInstructionsField", "ReviewChangesSourceFileField",
+                     "ReviewChangesSecondarySourceFileField", "ReviewChangesTertiarySourceFileField",
                      "ReviewChangesDestinationField", "ReviewChangesResultCountField", "ReviewChangesNoValue", "UnknownFile",
                      "TabSwitcherCompactLabel", "ManageTabs", "SearchTabs", "CloseTabSwitcher", "RenameTabAction",
                      "SavedSettingsRecycledTitle", "SavedSettingsRecycledMessage", "RestoreAndSaveSettings", "SavedSettingsSourceDeleted",
@@ -658,9 +660,9 @@ public sealed class UiAssetTests
                  {
                      "GenerationHistoryDetailPageTitle", "GenerationHistoryDetailHeading", "BackToGenerationHistory",
                      "GenerationRecordSummary", "GenerationCompleted", "GenerationFailed", "GenerationPartiallyCompleted",
-                     "GenerationPartiallyCompletedDetail", "ShowSystemInstructions", "TokenUsage", "SourceImageUsed",
+                     "GenerationPartiallyCompletedDetail", "ShowSystemInstructions", "TokenUsage", "SourceImageSlotUsed",
                      "OpenGeneratedFile", "PromptImprovementUsed", "UseAgain", "Recycle", "ConfirmRecycleGenerationRecord",
-                     "RecycleGenerationRecordWarning", "Cancel", "SourceFilePermanentlyDeleted", "ResultFilePermanentlyDeleted"
+                     "RecycleGenerationRecordWarning", "Cancel", "SourceFilePermanentlyDeletedSlot", "ResultFilePermanentlyDeleted"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

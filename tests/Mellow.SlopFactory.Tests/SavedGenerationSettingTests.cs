@@ -102,6 +102,52 @@ public sealed class SavedGenerationSettingTests
         Assert.Equal(GenerationSettings.Empty, cleared.Settings);
     }
 
+    [Fact]
+    public async Task SavedSettingPersistsAndClearsSecondaryAndTertiarySourceFileIds()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var secondarySourcePath = temporary.Child("secondary.png");
+        var tertiarySourcePath = temporary.Child("tertiary.png");
+        await File.WriteAllBytesAsync(secondarySourcePath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0, 1]);
+        await File.WriteAllBytesAsync(tertiarySourcePath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0, 2]);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var secondarySource = Assert.Single(await workspace.ImportAsync([secondarySourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var tertiarySource = Assert.Single(await workspace.ImportAsync([tertiarySourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Describe these images", 1, workspace.Descriptor.GeneratedFolderId, secondarySourceFileId: secondarySource.Id, tertiarySourceFileId: tertiarySource.Id);
+        Assert.Equal(secondarySource.Id, saved.SecondarySourceFileId);
+        Assert.Equal(tertiarySource.Id, saved.TertiarySourceFileId);
+
+        var reloaded = await workspace.GetSavedSettingAsync(saved.Id);
+        Assert.Equal(secondarySource.Id, reloaded.SecondarySourceFileId);
+        Assert.Equal(tertiarySource.Id, reloaded.TertiarySourceFileId);
+
+        var cleared = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, saved.Prompt, saved.ResultCount, saved.DestinationFolderId);
+        Assert.Null(cleared.SecondarySourceFileId);
+        Assert.Null(cleared.TertiarySourceFileId);
+    }
+
+    [Fact]
+    public async Task CreateSavedSettingRejectsTheSameSourceFileSelectedInMoreThanOneSlot()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0]);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var imported = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() =>
+            workspace.CreateSavedSettingAsync("My Preset", model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, sourceFileId: imported.Id, secondarySourceFileId: imported.Id));
+    }
+
     [Theory]
     [InlineData(-0.1, null, null, null, null)]
     [InlineData(null, 1.1, null, null, null)]

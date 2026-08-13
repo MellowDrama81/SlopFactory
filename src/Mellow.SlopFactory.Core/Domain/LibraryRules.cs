@@ -8,7 +8,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 27;
+    public const int SchemaVersion = 28;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -78,6 +78,22 @@ public static class LibraryRules
             throw new LibraryValidationException($"Presence penalty must be between {MinPresencePenalty} and {MaxPresencePenalty}, or left blank to use the provider default.");
         }
         return settings;
+    }
+
+    public static void ValidateSourceFileIds(string? primary, string? secondary, string? tertiary)
+    {
+        Span<string?> ids = [primary, secondary, tertiary];
+        for (var i = 0; i < ids.Length; i++)
+        {
+            if (ids[i] is null) continue;
+            for (var j = i + 1; j < ids.Length; j++)
+            {
+                if (string.Equals(ids[i], ids[j], StringComparison.Ordinal))
+                {
+                    throw new LibraryValidationException("The same source file cannot be selected in more than one source slot.");
+                }
+            }
+        }
     }
 
     public const int MaximumAdditionalConnectionHeaders = 10;

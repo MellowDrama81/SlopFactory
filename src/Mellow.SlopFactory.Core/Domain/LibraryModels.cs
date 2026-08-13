@@ -728,7 +728,11 @@ public sealed record GenerationRecord(
     DateTimeOffset? RecycledAt = null,
     FileIdentitySnapshot? SourceFileTombstone = null,
     IReadOnlyList<FileIdentitySnapshot> TombstonedResults = default!,
-    GenerationSettings Settings = default!)
+    GenerationSettings Settings = default!,
+    string? SecondarySourceFileId = null,
+    FileIdentitySnapshot? SecondarySourceFileTombstone = null,
+    string? TertiarySourceFileId = null,
+    FileIdentitySnapshot? TertiarySourceFileTombstone = null)
 {
     public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
@@ -778,7 +782,9 @@ public sealed record SavedGenerationSetting(
     string? SourceFileId = null,
     bool NeedsReview = false,
     int Revision = 1,
-    GenerationSettings Settings = default!)
+    GenerationSettings Settings = default!,
+    string? SecondarySourceFileId = null,
+    string? TertiarySourceFileId = null)
 {
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
 }
@@ -797,7 +803,9 @@ public sealed record GenerationDraft(
     string? ImprovementGuidance,
     DateTimeOffset CreatedAt,
     DateTimeOffset ModifiedAt,
-    GenerationSettings Settings = default!)
+    GenerationSettings Settings = default!,
+    string? SecondarySourceFileId = null,
+    string? TertiarySourceFileId = null)
 {
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
 }

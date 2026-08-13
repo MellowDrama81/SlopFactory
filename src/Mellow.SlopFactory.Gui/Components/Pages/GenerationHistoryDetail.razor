@@ -53,16 +53,25 @@ else if (_record is not null)
         {
             <p class="muted">@Strings["PromptImprovementUsed"]</p>
         }
-        @if (_record.SourceFileId is null && _record.SourceFileTombstone is { } sourceTombstone)
+        @{ var sourceSlots = SourceSlots(); }
+        @if (sourceSlots.Count > 0)
         {
-            <p class="muted">@Strings["SourceFilePermanentlyDeleted", sourceTombstone.DisplayName, sourceTombstone.MediaType]</p>
+            <ul class="metadata-list">
+                @foreach (var slot in sourceSlots)
+                {
+                    @if (slot.FileId is not null)
+                    {
+                        <li><a href="@($"/file/{slot.FileId}")">@Strings["SourceImageSlotUsed", slot.Position]</a></li>
+                    }
+                    else if (slot.Tombstone is { } tombstone)
+                    {
+                        <li>@Strings["SourceFilePermanentlyDeletedSlot", slot.Position, tombstone.DisplayName, tombstone.MediaType]</li>
+                    }
+                }
+            </ul>
         }
         <div class="actions">
             <a class="button" href="@($"/generate/history/{_record.Id}")">@Strings["UseAgain"]</a>
-            @if (_record.SourceFileId is not null)
-            {
-                <a class="ghost" href="@($"/file/{_record.SourceFileId}")">@Strings["SourceImageUsed"]</a>
-            }
             @if (_record.State == LibraryRecordState.Active)
             {
                 @if (_recycleConfirm)
@@ -146,4 +155,18 @@ else if (_record is not null)
         GenerationStatus.PartiallyCompleted => Strings["GenerationPartiallyCompleted"],
         _ => status.ToString()
     };
+
+    private sealed record SourceSlotView(int Position, string? FileId, FileIdentitySnapshot? Tombstone);
+
+    private IReadOnlyList<SourceSlotView> SourceSlots()
+    {
+        if (_record is null) return [];
+        SourceSlotView[] slots =
+        [
+            new(1, _record.SourceFileId, _record.SourceFileId is null ? _record.SourceFileTombstone : null),
+            new(2, _record.SecondarySourceFileId, _record.SecondarySourceFileId is null ? _record.SecondarySourceFileTombstone : null),
+            new(3, _record.TertiarySourceFileId, _record.TertiarySourceFileId is null ? _record.TertiarySourceFileTombstone : null)
+        ];
+        return slots.Where(slot => slot.FileId is not null || slot.Tombstone is not null).ToList();
+    }
 }

@@ -260,10 +260,11 @@ in parallel. Both milestones must be complete before the first public release.
       model, prompt, system instructions, source image, result count, destination folder, and
       prompt-improvement model/guidance) persisted in the library database (schema v22,
       `generation_drafts` table, `ILibraryWorkspace.GetDraftsAsync`/`CreateDraftAsync`/
-      `ReplaceDraftStateAsync`/`DuplicateDraftAsync`/`DeleteDraftAsync`). There are no source
-      roles/order (a draft still has a single optional source image, matching the current
-      single-source generation form) and no Session Recovery emergency-snapshot staging; those
-      remain separate unchecked items below. `GenerationDraft` deliberately snapshots no
+      `ReplaceDraftStateAsync`/`DuplicateDraftAsync`/`DeleteDraftAsync`). A draft now has 3 fixed,
+      generically-labeled source slots (schema v28: `secondary_source_file_id`/`tertiary_source_file_id`
+      alongside the original `source_file_id`) rather than named roles or a reorderable list — see the
+      multi-source input slots item below. No Session Recovery emergency-snapshot staging exists yet;
+      that remains a separate unchecked item below. `GenerationDraft` deliberately snapshots no
       `ModelLabel` (unlike `SavedGenerationSetting`) since a draft is ephemeral working state, not a
       permanent artifact — so when a draft's stored model becomes unavailable (recycled, permanently
       deleted, or newly marked **Needs Review**), `LoadDraftIntoForm` falls back to the first active
@@ -378,11 +379,20 @@ in parallel. Both milestones must be complete before the first public release.
       verified `ReadImageFileAsync` pipeline and sent as an OpenAI-shaped `image_url` data-URI
       content part alongside the prompt (OpenAI and generic adapters). The reference is persisted on
       `GenerationRecord`/`SavedGenerationSetting` (schema v14, `ON DELETE SET NULL`) and carried
-      through **Save settings**/**Use Again**. There are no named input slots, multiple sources,
-      role/order persistence, or capability-based validation yet, and image-mode generation accepts
-      no source input at all — those remain open below.
-- [ ] Add the source-file picker with named input slots, capability-based compatibility/validation,
-      and role/order persistence.
+      through **Save settings**/**Use Again**. Image-mode generation still accepts no source input
+      at all — that remains open below.
+- [x] Add the source-file picker with named input slots, capability-based compatibility/validation,
+      and role/order persistence. Scoped down to a modest v1: 3 fixed, generic, ordinally-labeled
+      slots ("Source 1/2/3", Text-mode only), not per-model-configured named roles (mask, reference
+      image, first/last frame, etc. — this app has no capability schema or non-image source types
+      those roles would apply to). Each slot is an independently additive field alongside the
+      original (schema v28: `secondary_source_file_id`/`tertiary_source_file_id` on
+      `generation_drafts`/`saved_generation_settings`, plus matching tombstone columns on
+      `generation_records`), not a normalized/reorderable list — reordering isn't meaningful since
+      each slot is a fixed, independently-chosen dropdown rather than an ordered general-source list.
+      Duplicate use of the same file across slots is rejected (`LibraryRules.ValidateSourceFileIds`)
+      both client- and server-side. Capability-based compatibility validation remains out of scope,
+      since this app has no per-model input-capability schema to validate against yet.
 - [ ] Add debounced background prompt/context validation with **Estimating**/**Stale**/**Partial
       Validation** states and the exact-vs-approximate submission-gating rule.
 - [ ] Add provider-facing transport filenames/aliases (generic and custom modes) per Provider File

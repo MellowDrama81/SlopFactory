@@ -688,7 +688,7 @@
   <data name="ConfirmRecycleGenerationRecord" xml:space="preserve"><value>Confirm recycle generation record</value></data>
   <data name="RecycleGenerationRecordWarning" xml:space="preserve"><value>Recycling this generation record does not recycle its source or result files.</value></data>
   <data name="GenerationRecordKind" xml:space="preserve"><value>Generation record</value></data>
-  <data name="SourceFilePermanentlyDeleted" xml:space="preserve"><value>Source image: {0} ({1}) — permanently deleted</value></data>
+  <data name="SourceFilePermanentlyDeletedSlot" xml:space="preserve"><value>Source {0}: {1} ({2}) — permanently deleted</value></data>
   <data name="ResultFilePermanentlyDeleted" xml:space="preserve"><value>{0} ({1}) — permanently deleted</value></data>
   <data name="NavSavedSettings" xml:space="preserve"><value>Saved settings</value></data>
   <data name="NewGeneration" xml:space="preserve"><value>New generation</value></data>
@@ -708,7 +708,9 @@
   <data name="ReviewChangesModelField" xml:space="preserve"><value>Model</value></data>
   <data name="ReviewChangesPromptField" xml:space="preserve"><value>Prompt</value></data>
   <data name="ReviewChangesSystemInstructionsField" xml:space="preserve"><value>System instructions</value></data>
-  <data name="ReviewChangesSourceFileField" xml:space="preserve"><value>Source image</value></data>
+  <data name="ReviewChangesSourceFileField" xml:space="preserve"><value>Source 1</value></data>
+  <data name="ReviewChangesSecondarySourceFileField" xml:space="preserve"><value>Source 2</value></data>
+  <data name="ReviewChangesTertiarySourceFileField" xml:space="preserve"><value>Source 3</value></data>
   <data name="ReviewChangesDestinationField" xml:space="preserve"><value>Destination folder</value></data>
   <data name="ReviewChangesResultCountField" xml:space="preserve"><value>Result count</value></data>
   <data name="ReviewChangesTemperatureField" xml:space="preserve"><value>Temperature</value></data>
@@ -742,9 +744,12 @@
   <data name="ShowSystemInstructions" xml:space="preserve"><value>Show system instructions</value></data>
   <data name="TokenUsage" xml:space="preserve"><value>{0} prompt tokens · {1} completion tokens</value></data>
   <data name="CostUnknownNotice" xml:space="preserve"><value>Cost unknown — SlopFactory does not estimate provider cost. Check your provider's pricing before submitting.</value></data>
-  <data name="SourceImage" xml:space="preserve"><value>Source image (optional)</value></data>
+  <data name="SourceImageSlot1" xml:space="preserve"><value>Source 1 (optional)</value></data>
+  <data name="SourceImageSlot2" xml:space="preserve"><value>Source 2 (optional)</value></data>
+  <data name="SourceImageSlot3" xml:space="preserve"><value>Source 3 (optional)</value></data>
   <data name="NoSourceImage" xml:space="preserve"><value>None</value></data>
-  <data name="SourceImageUsed" xml:space="preserve"><value>Source image</value></data>
+  <data name="SourceImageSlotUsed" xml:space="preserve"><value>Source {0}</value></data>
+  <data name="DuplicateSourceSelectionError" xml:space="preserve"><value>The same file cannot be selected in more than one source slot.</value></data>
   <data name="GenerationSettingsHeading" xml:space="preserve"><value>Generation settings</value></data>
   <data name="Temperature" xml:space="preserve"><value>Temperature</value></data>
   <data name="TemperatureHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be between {0} and {1}.</value></data>
