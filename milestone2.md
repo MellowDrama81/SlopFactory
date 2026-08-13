@@ -97,6 +97,17 @@ in parallel. Both milestones must be complete before the first public release.
 - [ ] Add unresolved-cleanup/reconciliation gating before base URL, provider type, credential
       header or auth-structure changes take effect (`Retry Cleanup`, `Stop Tracking and Apply
       Changes`, `Attempt Reconciliation`, `Abandon Recovery and Apply Changes`).
+
+  **Confirmed deferred this session, same rationale as the async-job group below**: this gate
+  exists to protect two things that don't exist in this app yet — unresolved remote-asset cleanup
+  tasks and **Submission Outcome Unknown** records — both of which require an asynchronous,
+  submit-then-poll provider. Neither the OpenAI nor the generic OpenAI-compatible adapter is
+  asynchronous (both are synchronous request/response, confirmed by grep: no "unresolved cleanup",
+  "pending remote job" or "Submission Outcome Unknown" concept exists anywhere in `src/`), so there
+  is nothing this gate could ever actually intercept today. Building it now would mean either dead
+  code guarding a condition that can never be true, or fabricating a fake pending-job concept just
+  to have something to gate — neither is worth doing. Revisit once a genuinely asynchronous
+  provider is integrated (Milestone 3+), alongside the async-job group.
 - [x] Add connection-label-change independence from dependent models (already true by construction —
       `Model` stores only a `ConnectionId` foreign key, never a cached connection label, so renaming
       a connection needs no propagation; covered by the existing
