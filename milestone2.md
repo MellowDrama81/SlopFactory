@@ -443,6 +443,21 @@ in parallel. Both milestones must be complete before the first public release.
       Transfer, including filename-reference reliability metadata and cross-adapter alias
       validation for shared prompt-improvement/generation sources.
 
+  **Confirmed deferred this session**: neither `OpenAiProviderAdapter` nor
+  `GenericOpenAiCompatibleProviderAdapter` ever transmits a filename to a provider at all — both
+  adapters send every request as a single JSON body (`StringContent`, confirmed by reading
+  `OpenAiCompatibleProtocol.cs`/`OpenAiProviderAdapter.cs`/`GenericOpenAiCompatibleProviderAdapter.cs`),
+  never multipart form-data, and a source image is embedded as an inline
+  `data:{mediaType};base64,...` URI directly inside that JSON — there is no separate filename field
+  anywhere on the wire, and `GenerateImageAsync` doesn't accept a source image at all today. Provider
+  File Transfer's alias/reliability-metadata model exists to protect against a provider misusing or
+  disclosure-leaking a transmitted filename, and to let SlopFactory reference sources safely in
+  prompts when filename fidelity is unreliable — none of that applies when no filename is ever sent
+  in the first place. Building alias settings now would mean UI/validation/schema for a concept with
+  no effect on any actual request, the same "don't fabricate a control that does nothing real" concern
+  already applied elsewhere this milestone. Revisit once an adapter using multipart or asset-upload
+  transport (where a real filename is actually transmitted) is integrated.
+
 ## Generation submission, queues and lifecycle
 
 - [x] Add a minimal synchronous generation submission path: `IProviderAdapter.GenerateTextAsync` and
