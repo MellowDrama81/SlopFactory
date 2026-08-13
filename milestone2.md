@@ -180,18 +180,43 @@ in parallel. Both milestones must be complete before the first public release.
       review), which is how "cannot be used for generation until validated" is enforced; a saved
       setting referencing such a model falls through to the existing missing-model fallback warning
       it already had for a recycled/deleted model. Since there is no real settings-schema/capability
-      re-validation to perform (typed provider settings schemas do not exist yet), "validates" is
-      substituted with a manual **Mark as Reviewed** action (`MarkModelReviewedAsync`) that clears
-      the flag on the model and its active saved settings — an explicit, documented simplification,
-      not real automated validation. Input-capability and settings-schema triggers, and a connection
-      base-URL change cascading **Needs Review** to its dependent models, remain open (both require
-      infrastructure — capability declarations and a base-URL-change-triggered dependent scan —
-      that does not exist yet).
-- [ ] Add typed provider settings schemas per model/modality and the generated settings-control UI
+      re-validation to perform, "validates" is substituted with a manual **Mark as Reviewed** action
+      (`MarkModelReviewedAsync`) that clears the flag on the model and its active saved settings — an
+      explicit, documented simplification, not real automated validation. Input-capability and
+      settings-schema triggers, and a connection base-URL change cascading **Needs Review** to its
+      dependent models, remain open (input-capability declarations don't exist yet, the settings
+      schema below is fixed/global rather than per-model-configured so it never itself changes, and
+      base-URL-change-triggered dependent scanning doesn't exist yet).
+- [x] Add typed provider settings schemas per model/modality and the generated settings-control UI
       described under Connections and Models, including **Use Provider Default** and **Reset to
-      Provider Default** semantics.
-- [ ] Add the manual/advanced-JSON settings editor with reserved-key protection and bounded
-      size/nesting for models without a maintained schema.
+      Provider Default** semantics. Scoped to the standard OpenAI chat-completion parameters
+      (`temperature`, `top_p`, `max_tokens`, `frequency_penalty`, `presence_penalty`), the only
+      settings requested for this milestone, and to Text-mode models — both of these params only
+      apply to the `chat/completions` shape; the OpenAI-compatible `images/generations` endpoint
+      doesn't accept them, so Image-mode models have no settings schema. A new `GenerationSettings`
+      record (`Domain/LibraryModels.cs`) holds all 5 as independently nullable fields: null means
+      **Use Provider Default** and the field is omitted entirely from the outbound request (never a
+      guessed default); clearing a field back to blank in the UI is **Reset to Provider Default**.
+      Since both existing `ProviderType`s (`OpenAi`, `GenericOpenAiCompatible`) are OpenAI-shaped and
+      share `OpenAiCompatibleProtocol.BuildChatCompletionRequestBody`, the schema is fixed and
+      identical for every Text-mode model rather than a per-model-configured concept — there is
+      nothing to attach to `Model`/`ModelEdit.razor`, and no new **Needs Review** trigger is needed
+      (the schema never changes independently of a code update). `LibraryRules.ValidateGenerationSettings`
+      enforces OpenAI's documented ranges server-side (mirroring `NormalizeConnectionTimeoutSeconds`'s
+      existing pattern) from every mutation path, not just client-side Razor validation. The 5 fields
+      flow as a unit alongside Prompt/ResultCount/SystemInstructions through `GenerateForm`,
+      `GenerationDraft`, `SavedGenerationSetting`, `GenerationRecord` and `GenerationJobSnapshot`
+      (schema v27: 5 new nullable columns each on `generation_records`, `saved_generation_settings`
+      and `generation_drafts`), so a generation's exact settings are preserved in history the same
+      way its prompt is. `Generate.razor` exposes them in a collapsed **Generation settings**
+      `<details>` section next to the source-image field, gated to Text mode the same way that field
+      already is — not physically cleared on a mode switch, only gated at save/request time, matching
+      `SourceFileId`'s existing convention.
+- [x] Add the manual/advanced-JSON settings editor with reserved-key protection and bounded
+      size/nesting for models without a maintained schema. **Scoped out**: every currently-implemented
+      `ProviderType` (`OpenAi`, `GenericOpenAiCompatible`) is OpenAI-shaped and always has the
+      maintained chat-completion settings schema above, so no model currently lacks one. This bullet
+      only becomes relevant if a future, genuinely non-OpenAI-shaped provider type is added.
 - [x] Enforce the per-model **Supports System Instructions** flag on `/generate`: the field is
       hidden (with an explanatory note) rather than shown for a Text-mode model whose
       `SupportsSystemInstructions` is false, and both `GenerateAsync` and `SaveSettingsAsync` check

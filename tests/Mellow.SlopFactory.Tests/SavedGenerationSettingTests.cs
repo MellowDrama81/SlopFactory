@@ -82,6 +82,46 @@ public sealed class SavedGenerationSettingTests
     }
 
     [Fact]
+    public async Task SavedSettingPersistsAndClearsGenerationSettings()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var settings = new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5);
+
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId, settings: settings);
+        Assert.Equal(settings, saved.Settings);
+
+        var reloaded = await workspace.GetSavedSettingAsync(saved.Id);
+        Assert.Equal(settings, reloaded.Settings);
+
+        var cleared = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, saved.Prompt, saved.ResultCount, saved.DestinationFolderId);
+        Assert.Equal(GenerationSettings.Empty, cleared.Settings);
+    }
+
+    [Theory]
+    [InlineData(-0.1, null, null, null, null)]
+    [InlineData(null, 1.1, null, null, null)]
+    [InlineData(null, null, 0, null, null)]
+    [InlineData(null, null, null, -2.1, null)]
+    [InlineData(null, null, null, null, 2.1)]
+    public async Task CreateSavedSettingRejectsOutOfRangeGenerationSettings(double? temperature, double? topP, int? maxTokens, double? frequencyPenalty, double? presencePenalty)
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var settings = new GenerationSettings(temperature, topP, maxTokens, frequencyPenalty, presencePenalty);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId, settings: settings));
+    }
+
+    [Fact]
     public async Task RecycleRestoreAndPermanentlyDeleteASavedSettingDirectly()
     {
         using var temporary = new TemporaryDirectory();

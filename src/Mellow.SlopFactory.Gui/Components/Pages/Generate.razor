@@ -222,6 +222,29 @@ else
                     <option value="@file.Id">@file.DisplayName</option>
                 }
             </InputSelect>
+
+            <details>
+                <summary>@Strings["GenerationSettingsHeading"]</summary>
+                <label for="generate-temperature">@Strings["Temperature"]</label>
+                <InputNumber id="generate-temperature" @bind-Value="_form.Temperature" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
+                <p class="muted">@Strings["TemperatureHelp", LibraryRules.MinTemperature, LibraryRules.MaxTemperature]</p>
+
+                <label for="generate-top-p">@Strings["TopP"]</label>
+                <InputNumber id="generate-top-p" @bind-Value="_form.TopP" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
+                <p class="muted">@Strings["TopPHelp", LibraryRules.MinTopP, LibraryRules.MaxTopP]</p>
+
+                <label for="generate-max-tokens">@Strings["MaxTokens"]</label>
+                <InputNumber id="generate-max-tokens" @bind-Value="_form.MaxTokens" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled" />
+                <p class="muted">@Strings["MaxTokensHelp", LibraryRules.MinMaxTokens]</p>
+
+                <label for="generate-frequency-penalty">@Strings["FrequencyPenalty"]</label>
+                <InputNumber id="generate-frequency-penalty" @bind-Value="_form.FrequencyPenalty" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
+                <p class="muted">@Strings["FrequencyPenaltyHelp", LibraryRules.MinFrequencyPenalty, LibraryRules.MaxFrequencyPenalty]</p>
+
+                <label for="generate-presence-penalty">@Strings["PresencePenalty"]</label>
+                <InputNumber id="generate-presence-penalty" @bind-Value="_form.PresencePenalty" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
+                <p class="muted">@Strings["PresencePenaltyHelp", LibraryRules.MinPresencePenalty, LibraryRules.MaxPresencePenalty]</p>
+            </details>
         }
 
         <label for="generate-prompt">@Strings["Prompt"]</label>
@@ -526,7 +549,7 @@ else
                 var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
                 var sourceFileId = saved.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == saved.SourceFileId) ? saved.SourceFileId : null;
                 var draft = await workspace.CreateDraftAsync();
-                draft = await workspace.ReplaceDraftStateAsync(draft.Id, saved.Title, modelId, saved.Prompt, saved.SystemInstructions, sourceFileId, saved.ResultCount, saved.DestinationFolderId, null, null);
+                draft = await workspace.ReplaceDraftStateAsync(draft.Id, saved.Title, modelId, saved.Prompt, saved.SystemInstructions, sourceFileId, saved.ResultCount, saved.DestinationFolderId, null, null, saved.Settings);
                 _drafts = [.. _drafts, draft];
                 await LoadDraftIntoFormAsync(draft.Id);
                 _loadedSettingsId = saved.Id;
@@ -555,7 +578,7 @@ else
                 var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
                 var sourceFileId = history.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == history.SourceFileId) ? history.SourceFileId : null;
                 var draft = await workspace.CreateDraftAsync();
-                draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, modelId, history.Prompt, history.SystemInstructions, sourceFileId, history.ResultCount, history.DestinationFolderId, null, null);
+                draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, modelId, history.Prompt, history.SystemInstructions, sourceFileId, history.ResultCount, history.DestinationFolderId, null, null, history.Settings);
                 _drafts = [.. _drafts, draft];
                 await LoadDraftIntoFormAsync(draft.Id);
                 if (model is null && history.ModelId is not null && _models.Count > 0)
@@ -625,7 +648,12 @@ else
             SystemInstructions = draft.SystemInstructions ?? string.Empty,
             SourceFileId = draft.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == draft.SourceFileId) ? draft.SourceFileId : string.Empty,
             ResultCount = draft.ResultCount,
-            DestinationFolderId = draft.DestinationFolderId
+            DestinationFolderId = draft.DestinationFolderId,
+            Temperature = draft.Settings.Temperature,
+            TopP = draft.Settings.TopP,
+            MaxTokens = draft.Settings.MaxTokens,
+            FrequencyPenalty = draft.Settings.FrequencyPenalty,
+            PresencePenalty = draft.Settings.PresencePenalty
         };
         _improvementModelId = draft.ImprovementModelId is not null && _models.Any(candidate => candidate.Id == draft.ImprovementModelId) ? draft.ImprovementModelId : string.Empty;
         _improvementGuidance = draft.ImprovementGuidance ?? string.Empty;
@@ -715,7 +743,7 @@ else
         var workspace = LibraryState.Workspace;
         var draft = _drafts.FirstOrDefault(candidate => candidate.Id == draftId);
         if (workspace is null || draft is null || string.IsNullOrWhiteSpace(_switcherRenameTitle)) return;
-        var updated = await workspace.ReplaceDraftStateAsync(draftId, _switcherRenameTitle, draft.ModelId, draft.Prompt, draft.SystemInstructions, draft.SourceFileId, draft.ResultCount, draft.DestinationFolderId, draft.ImprovementModelId, draft.ImprovementGuidance);
+        var updated = await workspace.ReplaceDraftStateAsync(draftId, _switcherRenameTitle, draft.ModelId, draft.Prompt, draft.SystemInstructions, draft.SourceFileId, draft.ResultCount, draft.DestinationFolderId, draft.ImprovementModelId, draft.ImprovementGuidance, draft.Settings);
         _drafts = _drafts.Select(candidate => candidate.Id == draftId ? updated : candidate).ToArray();
         if (draftId == _activeDraftId) _tabTitleInput = updated.CustomTitle ?? string.Empty;
         _switcherRenamingDraftId = null;
@@ -780,7 +808,7 @@ else
         if (draft is null) return;
         try
         {
-            await workspace.CreateSavedSettingAsync(_closeSaveTitle, draft.ModelId, draft.Prompt, draft.ResultCount, draft.DestinationFolderId, draft.SystemInstructions, draft.SourceFileId);
+            await workspace.CreateSavedSettingAsync(_closeSaveTitle, draft.ModelId, draft.Prompt, draft.ResultCount, draft.DestinationFolderId, draft.SystemInstructions, draft.SourceFileId, draft.Settings);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
@@ -864,7 +892,7 @@ else
             var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
             var improvementModelId = string.IsNullOrEmpty(_improvementModelId) ? null : _improvementModelId;
             var improvementGuidance = string.IsNullOrWhiteSpace(_improvementGuidance) ? null : _improvementGuidance;
-            var updated = await workspace.ReplaceDraftStateAsync(draftId, _tabTitleInput, string.IsNullOrEmpty(_form.ModelId) ? null : _form.ModelId, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, improvementModelId, improvementGuidance);
+            var updated = await workspace.ReplaceDraftStateAsync(draftId, _tabTitleInput, string.IsNullOrEmpty(_form.ModelId) ? null : _form.ModelId, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, improvementModelId, improvementGuidance, CurrentGenerationSettings());
             _drafts = _drafts.Select(existing => existing.Id == updated.Id ? updated : existing).ToArray();
             _saveError = null;
             _saveStatus = SaveStatus.Saved;
@@ -923,10 +951,14 @@ else
     private string ResolveSourceFileName(string? fileId) =>
         fileId is null ? Strings["ReviewChangesNoValue"] : _activeImageFiles.FirstOrDefault(file => file.Id == fileId)?.DisplayName ?? Strings["UnknownFile"];
 
+    private string ResolveSettingValue(double? value) => value?.ToString() ?? Strings["UseProviderDefault"];
+    private string ResolveSettingValue(int? value) => value?.ToString() ?? Strings["UseProviderDefault"];
+
     private IReadOnlyList<(string Field, string Mine, string Theirs)> BuildConflictDiffRows()
     {
         if (_settingsConflict is not { } conflict) return [];
         var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
+        var settings = CurrentGenerationSettings();
         (string Field, string Mine, string Theirs)[] rows =
         [
             (Strings["ReviewChangesModelField"], SelectedModel?.Label ?? Strings["Unavailable"], conflict.ModelLabel),
@@ -934,7 +966,12 @@ else
             (Strings["ReviewChangesSystemInstructionsField"], systemInstructions ?? Strings["ReviewChangesNoValue"], conflict.SystemInstructions ?? Strings["ReviewChangesNoValue"]),
             (Strings["ReviewChangesSourceFileField"], ResolveSourceFileName(sourceFileId), ResolveSourceFileName(conflict.SourceFileId)),
             (Strings["ReviewChangesDestinationField"], FolderPath(_form.DestinationFolderId), FolderPath(conflict.DestinationFolderId)),
-            (Strings["ReviewChangesResultCountField"], _form.ResultCount.ToString(), conflict.ResultCount.ToString())
+            (Strings["ReviewChangesResultCountField"], _form.ResultCount.ToString(), conflict.ResultCount.ToString()),
+            (Strings["ReviewChangesTemperatureField"], ResolveSettingValue(settings.Temperature), ResolveSettingValue(conflict.Settings.Temperature)),
+            (Strings["ReviewChangesTopPField"], ResolveSettingValue(settings.TopP), ResolveSettingValue(conflict.Settings.TopP)),
+            (Strings["ReviewChangesMaxTokensField"], ResolveSettingValue(settings.MaxTokens), ResolveSettingValue(conflict.Settings.MaxTokens)),
+            (Strings["ReviewChangesFrequencyPenaltyField"], ResolveSettingValue(settings.FrequencyPenalty), ResolveSettingValue(conflict.Settings.FrequencyPenalty)),
+            (Strings["ReviewChangesPresencePenaltyField"], ResolveSettingValue(settings.PresencePenalty), ResolveSettingValue(conflict.Settings.PresencePenalty))
         ];
         return rows.Where(row => !string.Equals(row.Mine, row.Theirs, StringComparison.Ordinal)).ToList();
     }
@@ -972,7 +1009,7 @@ else
             }
 
             var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
-            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _loadedRevision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _loadedRevision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId, CurrentGenerationSettings());
             ApplySavedSettingsResult(saved);
         }
         catch (SavedSettingRevisionConflictException exception)
@@ -996,7 +1033,7 @@ else
         {
             await workspace.RestoreSavedSettingAsync(_loadedSettingsId);
             var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
-            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsRecycledConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsRecycledConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId, CurrentGenerationSettings());
             ApplySavedSettingsResult(saved);
             _settingsRecycledConflict = null;
         }
@@ -1021,7 +1058,7 @@ else
         try
         {
             var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
-            var saved = await workspace.CreateSavedSettingAsync(_settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            var saved = await workspace.CreateSavedSettingAsync(_settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId, CurrentGenerationSettings());
             ApplySavedSettingsResult(saved);
             _settingsConflict = null;
             _settingsRecycledConflict = null;
@@ -1042,7 +1079,7 @@ else
         try
         {
             var (systemInstructions, sourceFileId) = CurrentSavedSettingFields();
-            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId);
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId, CurrentGenerationSettings());
             ApplySavedSettingsResult(saved);
             _settingsConflict = null;
         }
@@ -1066,6 +1103,10 @@ else
         var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
         return (systemInstructions, sourceFileId);
     }
+
+    private GenerationSettings CurrentGenerationSettings() => SelectedModelMode == GenerationMode.Text
+        ? new GenerationSettings(_form.Temperature, _form.TopP, _form.MaxTokens, _form.FrequencyPenalty, _form.PresencePenalty)
+        : GenerationSettings.Empty;
 
     private void ApplySavedSettingsResult(SavedGenerationSetting saved)
     {
@@ -1098,7 +1139,7 @@ else
 
         var systemInstructions = model.SupportsSystemInstructions && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
         var sourceFileId = string.IsNullOrEmpty(_form.SourceFileId) ? null : _form.SourceFileId;
-        var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId);
+        var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, CurrentGenerationSettings());
         Queue.Enqueue(snapshot, model.ConnectionId);
         _message = null;
         _isError = false;
@@ -1192,5 +1233,10 @@ else
         public string SourceFileId { get; set; } = string.Empty;
         public int ResultCount { get; set; } = 1;
         public string DestinationFolderId { get; set; } = string.Empty;
+        public double? Temperature { get; set; }
+        public double? TopP { get; set; }
+        public int? MaxTokens { get; set; }
+        public double? FrequencyPenalty { get; set; }
+        public double? PresencePenalty { get; set; }
     }
 }

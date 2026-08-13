@@ -127,7 +127,7 @@ internal static class OpenAiCompatibleProtocol
         }
     }
 
-    public static string BuildChatCompletionRequestBody(string providerModelId, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null)
+    public static string BuildChatCompletionRequestBody(string providerModelId, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -135,6 +135,11 @@ internal static class OpenAiCompatibleProtocol
             writer.WriteStartObject();
             writer.WriteString("model", providerModelId);
             writer.WriteNumber("n", resultCount);
+            if (settings?.Temperature is { } temperature) writer.WriteNumber("temperature", temperature);
+            if (settings?.TopP is { } topP) writer.WriteNumber("top_p", topP);
+            if (settings?.MaxTokens is { } maxTokens) writer.WriteNumber("max_tokens", maxTokens);
+            if (settings?.FrequencyPenalty is { } frequencyPenalty) writer.WriteNumber("frequency_penalty", frequencyPenalty);
+            if (settings?.PresencePenalty is { } presencePenalty) writer.WriteNumber("presence_penalty", presencePenalty);
             writer.WriteStartArray("messages");
             if (!string.IsNullOrWhiteSpace(systemInstructions))
             {

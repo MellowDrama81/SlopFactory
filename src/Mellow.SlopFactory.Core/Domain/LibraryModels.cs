@@ -727,9 +727,11 @@ public sealed record GenerationRecord(
     LibraryRecordState State = LibraryRecordState.Active,
     DateTimeOffset? RecycledAt = null,
     FileIdentitySnapshot? SourceFileTombstone = null,
-    IReadOnlyList<FileIdentitySnapshot> TombstonedResults = default!)
+    IReadOnlyList<FileIdentitySnapshot> TombstonedResults = default!,
+    GenerationSettings Settings = default!)
 {
     public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
+    public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
 }
 
 public sealed record PromptImprovementRecord(
@@ -749,6 +751,16 @@ public sealed record PromptImprovementRecord(
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt);
 
+public sealed record GenerationSettings(
+    double? Temperature = null,
+    double? TopP = null,
+    int? MaxTokens = null,
+    double? FrequencyPenalty = null,
+    double? PresencePenalty = null)
+{
+    public static readonly GenerationSettings Empty = new();
+}
+
 public sealed record SavedGenerationSetting(
     string Id,
     string Title,
@@ -765,7 +777,11 @@ public sealed record SavedGenerationSetting(
     DateTimeOffset? RecycledAt,
     string? SourceFileId = null,
     bool NeedsReview = false,
-    int Revision = 1);
+    int Revision = 1,
+    GenerationSettings Settings = default!)
+{
+    public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
+}
 
 public sealed record GenerationDraft(
     string Id,
@@ -780,4 +796,8 @@ public sealed record GenerationDraft(
     string? ImprovementModelId,
     string? ImprovementGuidance,
     DateTimeOffset CreatedAt,
-    DateTimeOffset ModifiedAt);
+    DateTimeOffset ModifiedAt,
+    GenerationSettings Settings = default!)
+{
+    public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
+}

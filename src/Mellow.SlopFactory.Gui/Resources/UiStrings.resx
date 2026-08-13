@@ -711,6 +711,11 @@
   <data name="ReviewChangesSourceFileField" xml:space="preserve"><value>Source image</value></data>
   <data name="ReviewChangesDestinationField" xml:space="preserve"><value>Destination folder</value></data>
   <data name="ReviewChangesResultCountField" xml:space="preserve"><value>Result count</value></data>
+  <data name="ReviewChangesTemperatureField" xml:space="preserve"><value>Temperature</value></data>
+  <data name="ReviewChangesTopPField" xml:space="preserve"><value>Top P</value></data>
+  <data name="ReviewChangesMaxTokensField" xml:space="preserve"><value>Max tokens</value></data>
+  <data name="ReviewChangesFrequencyPenaltyField" xml:space="preserve"><value>Frequency penalty</value></data>
+  <data name="ReviewChangesPresencePenaltyField" xml:space="preserve"><value>Presence penalty</value></data>
   <data name="ReviewChangesNoValue" xml:space="preserve"><value>None</value></data>
   <data name="UnknownFile" xml:space="preserve"><value>Unknown file</value></data>
   <data name="SavedSettingsModelUnavailable" xml:space="preserve"><value>The model saved with these settings ({0}) is unavailable. Choose another model.</value></data>
@@ -740,6 +745,18 @@
   <data name="SourceImage" xml:space="preserve"><value>Source image (optional)</value></data>
   <data name="NoSourceImage" xml:space="preserve"><value>None</value></data>
   <data name="SourceImageUsed" xml:space="preserve"><value>Source image</value></data>
+  <data name="GenerationSettingsHeading" xml:space="preserve"><value>Generation settings</value></data>
+  <data name="Temperature" xml:space="preserve"><value>Temperature</value></data>
+  <data name="TemperatureHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be between {0} and {1}.</value></data>
+  <data name="TopP" xml:space="preserve"><value>Top P</value></data>
+  <data name="TopPHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be between {0} and {1}.</value></data>
+  <data name="MaxTokens" xml:space="preserve"><value>Max tokens</value></data>
+  <data name="MaxTokensHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be at least {0}.</value></data>
+  <data name="FrequencyPenalty" xml:space="preserve"><value>Frequency penalty</value></data>
+  <data name="FrequencyPenaltyHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be between {0} and {1}.</value></data>
+  <data name="PresencePenalty" xml:space="preserve"><value>Presence penalty</value></data>
+  <data name="PresencePenaltyHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be between {0} and {1}.</value></data>
+  <data name="UseProviderDefault" xml:space="preserve"><value>Use provider default</value></data>
   <data name="FilterByStatus" xml:space="preserve"><value>Status</value></data>
   <data name="FilterByMode" xml:space="preserve"><value>Type</value></data>
   <data name="FilterByModel" xml:space="preserve"><value>Model</value></data>

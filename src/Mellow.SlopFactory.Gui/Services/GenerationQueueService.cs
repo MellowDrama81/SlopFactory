@@ -21,7 +21,8 @@ public sealed record GenerationJobSnapshot(
     string? SourceFileId,
     int ResultCount,
     string DestinationFolderId,
-    string? AcceptedImprovementRecordId);
+    string? AcceptedImprovementRecordId,
+    GenerationSettings? Settings = null);
 
 public sealed record GenerationJobStatusSnapshot(string JobId, string DraftId, GenerationJobPhase Phase, int? QueuePosition);
 
@@ -371,14 +372,14 @@ public sealed class GenerationQueueService
                 string? errorMessage = null;
                 try
                 {
-                    result = await adapter.GenerateTextAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, snapshot.SystemInstructions, sourceImage, cancellationToken).ConfigureAwait(false);
+                    result = await adapter.GenerateTextAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, snapshot.SystemInstructions, sourceImage, snapshot.Settings, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
                 {
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceFileId, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceFileId, snapshot.AcceptedImprovementRecordId, snapshot.Settings, cancellationToken).ConfigureAwait(false);
             }
 
             return new GenerationJobOutcome(job.JobId, job.DraftId, record, null, false, DateTimeOffset.UtcNow);

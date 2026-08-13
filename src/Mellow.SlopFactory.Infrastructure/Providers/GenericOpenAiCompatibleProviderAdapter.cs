@@ -58,7 +58,7 @@ internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseModelList(body);
     }
 
-    public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, CancellationToken cancellationToken = default)
+    public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default)
     {
         var modalitySettings = connection.GenericModalitySettings ?? GenericConnectionModalitySettings.Default;
         if (!modalitySettings.TextGenerationEnabled)
@@ -69,7 +69,7 @@ internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
         using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, modalitySettings.TextGenerationPathOverride ?? "chat/completions"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = new StringContent(OpenAiCompatibleProtocol.BuildChatCompletionRequestBody(model.ProviderModelId, prompt, resultCount, systemInstructions, sourceImage), Encoding.UTF8, "application/json");
+        request.Content = new StringContent(OpenAiCompatibleProtocol.BuildChatCompletionRequestBody(model.ProviderModelId, prompt, resultCount, systemInstructions, sourceImage, settings), Encoding.UTF8, "application/json");
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseChatCompletionResult(body);

@@ -222,6 +222,20 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** generation records can be recycled, restored, and permanently deleted through both the list, detail page, and unified recycle bin; recycling or permanently deleting a record never touches its source or result files; a permanently deleted source or result file leaves a readable "permanently deleted" tombstone (former name and type) in generation history instead of a broken link or silent disappearance; a recycled record's detail page remains viewable via the bin.
 
+## MT-17 — Typed generation settings (Use/Reset Provider Default)
+
+1. On `/generate`, select a Text-mode model. Confirm a collapsed **Generation settings** section appears (near the source-image field), and that it does **not** appear when a non-Text-mode model is selected.
+2. Expand it. Confirm five fields: Temperature, Top P, Max tokens, Frequency penalty, Presence penalty — each blank by default with a "leave blank to use the provider default" help note stating its valid range.
+3. Set a value in each field (e.g. Temperature 0.7, Top P 0.9, Max tokens 500, Frequency penalty 0.5, Presence penalty -0.5) and submit a generation. Confirm it completes normally.
+4. Enter an out-of-range value in one field (e.g. Temperature 3). Confirm submission is rejected with a clear validation message rather than silently sent to the provider.
+5. Clear a previously-set field back to blank (**Reset to Provider Default**). Confirm autosave persists the change — reload the page/tab and confirm the field is still blank, not reverted to its old value.
+6. Save the current settings (with some fields set, some blank) via **Save As**, then load a different draft, then reopen the saved setting via **Use**. Confirm all five fields reload exactly as saved, including which ones are blank.
+7. Open a past generation from `/generation-history` via **Use Again**. Confirm the settings used for that generation load into the form.
+8. Open `/generation-history/{id}` for a generation submitted with explicit settings. If the detail page surfaces settings, confirm the explicit values are shown (not fabricated defaults) — otherwise treat this as informational, since detail-page display of settings is not required by this slice.
+9. Switch the model to an Image-mode model with the settings section still expanded and values entered, then switch back to a Text-mode model. Confirm the previously entered values are still present (not silently cleared by the mode switch).
+
+**Pass:** the five typed settings are Text-mode-only, each starts blank/Use Provider Default, an explicit value can be set and later reset to blank, out-of-range values are rejected before submission, and the settings round-trip correctly through autosave, saved settings, and Use Again.
+
 ## Reporting
 
 For each test case, record:

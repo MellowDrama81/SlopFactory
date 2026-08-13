@@ -584,7 +584,11 @@ public sealed class UiAssetTests
                      "ReviewChangesDestinationField", "ReviewChangesResultCountField", "ReviewChangesNoValue", "UnknownFile",
                      "TabSwitcherCompactLabel", "ManageTabs", "SearchTabs", "CloseTabSwitcher", "RenameTabAction",
                      "SavedSettingsRecycledTitle", "SavedSettingsRecycledMessage", "RestoreAndSaveSettings", "SavedSettingsSourceDeleted",
-                     "DraftModelRecycled", "RestoreModelAction", "DraftModelDeleted", "ChooseReplacementModel", "CostUnknownNotice"
+                     "DraftModelRecycled", "RestoreModelAction", "DraftModelDeleted", "ChooseReplacementModel", "CostUnknownNotice",
+                     "GenerationSettingsHeading", "Temperature", "TemperatureHelp", "TopP", "TopPHelp", "MaxTokens", "MaxTokensHelp",
+                     "FrequencyPenalty", "FrequencyPenaltyHelp", "PresencePenalty", "PresencePenaltyHelp",
+                     "ReviewChangesTemperatureField", "ReviewChangesTopPField", "ReviewChangesMaxTokensField",
+                     "ReviewChangesFrequencyPenaltyField", "ReviewChangesPresencePenaltyField", "UseProviderDefault"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

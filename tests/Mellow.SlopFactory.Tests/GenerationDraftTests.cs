@@ -46,7 +46,8 @@ public sealed class GenerationDraftTests
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
         var draft = await workspace.CreateDraftAsync();
 
-        var updated = await workspace.ReplaceDraftStateAsync(draft.Id, "My Tab", model.Id, "Write a haiku", "Respond in French.", null, 3, workspace.Descriptor.GeneratedFolderId, model.Id, "Be concise.");
+        var settings = new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5);
+        var updated = await workspace.ReplaceDraftStateAsync(draft.Id, "My Tab", model.Id, "Write a haiku", "Respond in French.", null, 3, workspace.Descriptor.GeneratedFolderId, model.Id, "Be concise.", settings);
 
         Assert.Equal("My Tab", updated.CustomTitle);
         Assert.Equal(model.Id, updated.ModelId);
@@ -55,15 +56,18 @@ public sealed class GenerationDraftTests
         Assert.Equal(3, updated.ResultCount);
         Assert.Equal(model.Id, updated.ImprovementModelId);
         Assert.Equal("Be concise.", updated.ImprovementGuidance);
+        Assert.Equal(settings, updated.Settings);
 
         var reloaded = await workspace.GetDraftAsync(draft.Id);
         Assert.Equal("My Tab", reloaded.CustomTitle);
+        Assert.Equal(settings, reloaded.Settings);
 
         var resetToAutomaticTitle = await workspace.ReplaceDraftStateAsync(draft.Id, null, model.Id, "Write a haiku", null, null, 3, workspace.Descriptor.GeneratedFolderId, null, null);
         Assert.Null(resetToAutomaticTitle.CustomTitle);
         Assert.Null(resetToAutomaticTitle.SystemInstructions);
         Assert.Null(resetToAutomaticTitle.ImprovementModelId);
         Assert.Null(resetToAutomaticTitle.ImprovementGuidance);
+        Assert.Equal(GenerationSettings.Empty, resetToAutomaticTitle.Settings);
     }
 
     [Fact]
@@ -76,7 +80,8 @@ public sealed class GenerationDraftTests
         var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
         var draft = await workspace.CreateDraftAsync();
-        draft = await workspace.ReplaceDraftStateAsync(draft.Id, "Original", model.Id, "Write a haiku", null, null, 2, workspace.Descriptor.GeneratedFolderId, null, null);
+        var settings = new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5);
+        draft = await workspace.ReplaceDraftStateAsync(draft.Id, "Original", model.Id, "Write a haiku", null, null, 2, workspace.Descriptor.GeneratedFolderId, null, null, settings);
         var trailing = await workspace.CreateDraftAsync();
 
         var duplicate = await workspace.DuplicateDraftAsync(draft.Id);
@@ -86,6 +91,7 @@ public sealed class GenerationDraftTests
         Assert.Equal("Write a haiku", duplicate.Prompt);
         Assert.Equal(2, duplicate.ResultCount);
         Assert.Equal(draft.TabOrder + 1, duplicate.TabOrder);
+        Assert.Equal(settings, duplicate.Settings);
 
         var reloadedTrailing = await workspace.GetDraftAsync(trailing.Id);
         Assert.Equal(trailing.TabOrder + 1, reloadedTrailing.TabOrder);
@@ -170,5 +176,27 @@ public sealed class GenerationDraftTests
         await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, oversized, null, null, 1, workspace.Descriptor.GeneratedFolderId, null, null));
         await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", oversized, null, 1, workspace.Descriptor.GeneratedFolderId, null, null));
         await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null, oversized));
+    }
+
+    [Theory]
+    [InlineData(-0.1, null, null, null, null)]
+    [InlineData(2.1, null, null, null, null)]
+    [InlineData(null, -0.1, null, null, null)]
+    [InlineData(null, 1.1, null, null, null)]
+    [InlineData(null, null, 0, null, null)]
+    [InlineData(null, null, null, -2.1, null)]
+    [InlineData(null, null, null, 2.1, null)]
+    [InlineData(null, null, null, null, -2.1)]
+    [InlineData(null, null, null, null, 2.1)]
+    public async Task ReplaceDraftStateRejectsOutOfRangeGenerationSettings(double? temperature, double? topP, int? maxTokens, double? frequencyPenalty, double? presencePenalty)
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var draft = await workspace.CreateDraftAsync();
+        var settings = new GenerationSettings(temperature, topP, maxTokens, frequencyPenalty, presencePenalty);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null, null, settings));
     }
 }

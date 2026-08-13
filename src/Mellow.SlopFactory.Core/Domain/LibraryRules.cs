@@ -8,7 +8,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 26;
+    public const int SchemaVersion = 27;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -43,6 +43,41 @@ public static class LibraryRules
             throw new LibraryValidationException($"Connection timeout must be between {MinimumConnectionTimeoutSeconds} and {MaximumConnectionTimeoutSeconds} seconds, or left blank to use the default of {DefaultConnectionTimeoutSeconds} seconds.");
         }
         return value;
+    }
+
+    public const double MinTemperature = 0.0;
+    public const double MaxTemperature = 2.0;
+    public const double MinTopP = 0.0;
+    public const double MaxTopP = 1.0;
+    public const int MinMaxTokens = 1;
+    public const double MinFrequencyPenalty = -2.0;
+    public const double MaxFrequencyPenalty = 2.0;
+    public const double MinPresencePenalty = -2.0;
+    public const double MaxPresencePenalty = 2.0;
+
+    public static GenerationSettings ValidateGenerationSettings(GenerationSettings settings)
+    {
+        if (settings.Temperature is { } temperature && (temperature < MinTemperature || temperature > MaxTemperature))
+        {
+            throw new LibraryValidationException($"Temperature must be between {MinTemperature} and {MaxTemperature}, or left blank to use the provider default.");
+        }
+        if (settings.TopP is { } topP && (topP < MinTopP || topP > MaxTopP))
+        {
+            throw new LibraryValidationException($"Top P must be between {MinTopP} and {MaxTopP}, or left blank to use the provider default.");
+        }
+        if (settings.MaxTokens is { } maxTokens && maxTokens < MinMaxTokens)
+        {
+            throw new LibraryValidationException($"Max tokens must be at least {MinMaxTokens}, or left blank to use the provider default.");
+        }
+        if (settings.FrequencyPenalty is { } frequencyPenalty && (frequencyPenalty < MinFrequencyPenalty || frequencyPenalty > MaxFrequencyPenalty))
+        {
+            throw new LibraryValidationException($"Frequency penalty must be between {MinFrequencyPenalty} and {MaxFrequencyPenalty}, or left blank to use the provider default.");
+        }
+        if (settings.PresencePenalty is { } presencePenalty && (presencePenalty < MinPresencePenalty || presencePenalty > MaxPresencePenalty))
+        {
+            throw new LibraryValidationException($"Presence penalty must be between {MinPresencePenalty} and {MaxPresencePenalty}, or left blank to use the provider default.");
+        }
+        return settings;
     }
 
     public const int MaximumAdditionalConnectionHeaders = 10;

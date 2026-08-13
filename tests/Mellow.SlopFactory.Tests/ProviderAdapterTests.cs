@@ -203,6 +203,45 @@ public sealed class ProviderAdapterTests
     }
 
     [Fact]
+    public async Task OpenAiAdapterWritesOnlyExplicitlySetGenerationSettingsAndOmitsProviderDefaults()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"choices":[{"message":{"content":"Result"}}]}""", Encoding.UTF8, "application/json")
+            };
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel();
+
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Write a haiku", 1, settings: new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5));
+        using (var document = System.Text.Json.JsonDocument.Parse(capturedBody!))
+        {
+            var root = document.RootElement;
+            Assert.Equal(0.7, root.GetProperty("temperature").GetDouble());
+            Assert.Equal(0.9, root.GetProperty("top_p").GetDouble());
+            Assert.Equal(500, root.GetProperty("max_tokens").GetInt32());
+            Assert.Equal(0.5, root.GetProperty("frequency_penalty").GetDouble());
+            Assert.Equal(-0.5, root.GetProperty("presence_penalty").GetDouble());
+        }
+
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Write a haiku", 1);
+        using (var document = System.Text.Json.JsonDocument.Parse(capturedBody!))
+        {
+            var root = document.RootElement;
+            Assert.False(root.TryGetProperty("temperature", out _));
+            Assert.False(root.TryGetProperty("top_p", out _));
+            Assert.False(root.TryGetProperty("max_tokens", out _));
+            Assert.False(root.TryGetProperty("frequency_penalty", out _));
+            Assert.False(root.TryGetProperty("presence_penalty", out _));
+        }
+    }
+
+    [Fact]
     public async Task OpenAiAdapterGenerateTextThrowsSanitizedExceptionOnProviderError()
     {
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent("{}") });
