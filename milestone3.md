@@ -271,12 +271,21 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       shortfall causes (safety-blocked candidates, invalid Unicode) are already surfaced through
       `SafetyBlockedCount` and the aggregate comparison, so duplicating that as per-child entries
       would be redundant, not clearer.
-- [ ] Add **Retry Failed/Missing Results Only** as an action on the generation-history detail page,
-      now that real per-position failure data exists to act on (`GenerationRecord.Results`) — this
-      is genuinely a separate, still-open piece: submitting a new run for just the failed positions
-      (as a fresh, independent `GenerationRecord` per plan.md's immutable-snapshot rule, since a
-      submitted request can never be edited in place) needs its own GUI wiring and queue-submission
-      path, not just the underlying status data this item already delivers.
+- [x] Add **Retry Failed/Missing Results Only** on `GenerationHistoryDetail.razor`, shown only when
+      the record has at least one `Failed` result entry and is still Active. Reconstructs a
+      `GenerationJobSnapshot` directly from the immutable `GenerationRecord` (prompt, system
+      instructions, source slots, settings, destination folder) with `ResultCount` set to exactly
+      the failed/missing count, and submits it through the existing `GenerationQueueService.Enqueue`
+      as a genuinely new, independent run — the original record is never edited in place, matching
+      plan.md's immutable-snapshot rule. Uses a synthetic `"retry-{recordId}"` draft ID rather than a
+      real `GenerationDraft`, since a history record doesn't know which draft (if any still exists)
+      originally submitted it. Reports a clear message instead of proceeding when the original
+      model or connection is no longer active. **Run Entire Request Again** (the other named
+      recovery action) is not added — `UseAgain` already covers that exact case by opening the
+      generate form pre-filled from this record. This button's own snapshot-reconstruction logic has
+      no dedicated test (consistent with this codebase's established no-bUnit convention for Razor
+      code-behind — see the `ConnectionEdit.razor` gate above), but the `GenerationQueueService
+      .Enqueue` path it calls into is already covered by dozens of existing tests.
 - [x] Add `GenerationStatus.Cancelled` and `GenerationStatus.CancelledWithResults` and use them for
       the exact gap identified above: `ExecuteVideoGenerationAsync` now wraps the whole submit+poll
       body in a try/catch keyed on `submitted.Count > 0` — if nothing was ever submitted,

@@ -2,6 +2,8 @@
 @implements IDisposable
 @inject AppLibraryState LibraryState
 @inject GenerationNotificationCoordinator NotificationCoordinator
+@inject GenerationQueueService Queue
+@inject NavigationManager Navigation
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -98,6 +100,10 @@ else if (_record is not null)
         }
         <div class="actions">
             <a class="button" href="@($"/generate/history/{_record.Id}")">@Strings["UseAgain"]</a>
+            @if (_record.State == LibraryRecordState.Active && _record.Results.Any(entry => entry.Status == GenerationResultStatus.Failed))
+            {
+                <button type="button" class="secondary" disabled="@_busy" @onclick="RetryFailedResultsOnlyAsync">@Strings["RetryFailedResultsOnly", _record.Results.Count(entry => entry.Status == GenerationResultStatus.Failed)]</button>
+            }
             @if (_record.State == LibraryRecordState.Active)
             {
                 @if (_recycleConfirm)
@@ -166,6 +172,63 @@ else if (_record is not null)
             await workspace.RecycleGenerationRecordAsync(Id);
             _recycleConfirm = false;
             _record = await workspace.GetGenerationRecordAsync(Id);
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    /// <summary>
+    /// Submits a new, independent run covering only the positions that failed or were never
+    /// attempted — the original request's immutable snapshot is never edited in place, matching
+    /// plan.md's rule that a submitted request can only be replaced by a new run with its own
+    /// history ID. Uses a synthetic draft ID scoped to this record rather than a real
+    /// <c>GenerationDraft</c>, since a history record does not know which draft originally
+    /// submitted it (or whether that draft still exists) and this retry never needs one.
+    /// </summary>
+    private async Task RetryFailedResultsOnlyAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _record is null || _record.ModelId is null) return;
+        _busy = true;
+        try
+        {
+            var failedCount = _record.Results.Count(entry => entry.Status == GenerationResultStatus.Failed);
+            if (failedCount == 0) return;
+
+            var models = await workspace.GetActiveModelsAsync();
+            var model = models.FirstOrDefault(candidate => candidate.Id == _record.ModelId);
+            if (model is null)
+            {
+                _message = Strings["RetryModelUnavailable"];
+                return;
+            }
+            var connections = await workspace.GetActiveConnectionsAsync();
+            var connection = connections.FirstOrDefault(candidate => candidate.Id == model.ConnectionId);
+            if (connection is null)
+            {
+                _message = Strings["RetryConnectionUnavailable"];
+                return;
+            }
+
+            var snapshot = new GenerationJobSnapshot(
+                DraftId: $"retry-{_record.Id}",
+                SubmittedTabTitle: Strings["RetryTabTitle", model.Label].Value,
+                Mode: model.Mode,
+                ModelId: model.Id,
+                Prompt: _record.Prompt,
+                SystemInstructions: _record.SystemInstructions,
+                SourceFileId: _record.SourceFileId,
+                ResultCount: failedCount,
+                DestinationFolderId: _record.DestinationFolderId,
+                AcceptedImprovementRecordId: null,
+                Settings: _record.Settings,
+                SecondarySourceFileId: _record.SecondarySourceFileId,
+                TertiarySourceFileId: _record.TertiarySourceFileId);
+            Queue.Enqueue(snapshot, connection.Id);
+            Navigation.NavigateTo("/queue");
         }
         catch (SlopFactoryException exception)
         {

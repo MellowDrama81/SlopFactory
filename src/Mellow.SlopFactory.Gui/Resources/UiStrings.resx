@@ -860,6 +860,10 @@
   <data name="ResultPositionLabel" xml:space="preserve"><value>Result {0}</value></data>
   <data name="ResultCommitted" xml:space="preserve"><value>Committed</value></data>
   <data name="ResultFailed" xml:space="preserve"><value>Failed</value></data>
+  <data name="RetryFailedResultsOnly" xml:space="preserve"><value>Retry failed/missing results only ({0})</value></data>
+  <data name="RetryModelUnavailable" xml:space="preserve"><value>The model used for this generation is no longer available, so the failed results cannot be retried automatically.</value></data>
+  <data name="RetryConnectionUnavailable" xml:space="preserve"><value>The connection used for this generation is no longer available, so the failed results cannot be retried automatically.</value></data>
+  <data name="RetryTabTitle" xml:space="preserve"><value>Retry · {0}</value></data>
   <data name="SafetyBlockedResultsDetail" xml:space="preserve"><value>{0} result(s) were blocked by the provider's content safety system and were not saved.</value></data>
   <data name="ViewDetails" xml:space="preserve"><value>View details</value></data>
   <data name="GenerationHistoryDetailPageTitle" xml:space="preserve"><value>Generation details · SlopFactory</value></data>
