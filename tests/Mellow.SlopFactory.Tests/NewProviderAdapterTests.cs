@@ -132,6 +132,45 @@ public sealed class NewProviderAdapterTests
     }
 
     [Fact]
+    public async Task OpenRouterAdapterPollingParsesTheProviderReportedCostWhenCompleted()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri!.ToString();
+            return path == "https://openrouter.ai/api/v1/videos/abc123"
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["https://openrouter.ai/api/v1/videos/abc123/content?index=0"],"usage":{"cost":0.25,"is_byok":false}}""")
+                : FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "video/mp4");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.Completed, result.Outcome);
+        Assert.NotNull(result.Cost);
+        Assert.Equal(0.25, result.Cost!.Amount);
+        Assert.Equal("USD", result.Cost.Currency);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterPollingReturnsNullCostWhenTheProviderDoesNotReportUsage()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri!.ToString();
+            return path == "https://openrouter.ai/api/v1/videos/abc123"
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["https://openrouter.ai/api/v1/videos/abc123/content?index=0"]}""")
+                : FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "video/mp4");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123");
+
+        Assert.Null(result.Cost);
+    }
+
+    [Fact]
     public async Task OpenRouterAdapterRetriesARateLimitedResultDownload()
     {
         byte[] video = [1, 2, 3];

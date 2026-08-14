@@ -719,6 +719,26 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task VideoGenerationSumsProviderReportedCostAcrossAllJobsInTheGroup()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-cost";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null, new AsyncGenerationCost(0.25, "USD")));
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null, new AsyncGenerationCost(0.30, "USD")));
+
+        queue.Enqueue(Snapshot("draft-video-cost", model.Id, "Two cats on skateboards", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video, resultCount: 2), connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video-cost") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-video-cost")!;
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(0.55, outcome.Record!.ActualCost!.Value, precision: 10);
+        Assert.Equal("USD", outcome.Record.ActualCostCurrency);
+    }
+
+    [Fact]
     public async Task VideoGenerationWithMultipleResultsIsPartiallyCompletedWhenOnlySomeJobsSucceed()
     {
         using var temporary = new TemporaryDirectory();

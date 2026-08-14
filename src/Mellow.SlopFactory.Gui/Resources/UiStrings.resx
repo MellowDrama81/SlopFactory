@@ -750,6 +750,7 @@
   <data name="SystemInstructions" xml:space="preserve"><value>System instructions (optional)</value></data>
   <data name="ShowSystemInstructions" xml:space="preserve"><value>Show system instructions</value></data>
   <data name="TokenUsage" xml:space="preserve"><value>{0} prompt tokens · {1} completion tokens</value></data>
+  <data name="ActualCost" xml:space="preserve"><value>Cost: {0} {1} (reported by the provider)</value></data>
   <data name="EstimatedTokenCount" xml:space="preserve"><value>~{0} tokens (rough estimate, not exact — SlopFactory has no provider tokenizer)</value></data>
   <data name="CostUnknownNotice" xml:space="preserve"><value>Cost unknown — SlopFactory does not estimate provider cost. Check your provider's pricing before submitting.</value></data>
   <data name="SourceImageSlot1" xml:space="preserve"><value>Source 1 (optional)</value></data>

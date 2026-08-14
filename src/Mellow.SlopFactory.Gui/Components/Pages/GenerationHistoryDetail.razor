@@ -53,6 +53,10 @@ else if (_record is not null)
         {
             <p class="muted">@Strings["TokenUsage", _record.PromptTokens?.ToString() ?? Strings["Unknown"], _record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
         }
+        @if (_record.ActualCost is not null)
+        {
+            <p class="muted">@Strings["ActualCost", _record.ActualCost.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), _record.ActualCostCurrency ?? Strings["Unknown"]]</p>
+        }
         @if (_record.PromptImprovementRecordId is not null)
         {
             <p class="muted">@Strings["PromptImprovementUsed"]</p>

@@ -448,7 +448,7 @@ public sealed class GenerationQueueService
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, audioFiles, errorMessage, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, audioFiles, errorMessage, snapshot.AcceptedImprovementRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             else if (snapshot.Mode == GenerationMode.Video)
             {
@@ -540,6 +540,8 @@ public sealed class GenerationQueueService
             }
         }
 
+        double? totalCost = null;
+        string? costCurrency = null;
         var pending = new List<(string ProviderJobId, string AsyncRecordId)>(submitted);
         while (pending.Count > 0)
         {
@@ -570,6 +572,14 @@ public sealed class GenerationQueueService
                 if (pollResult.Outcome == AsyncGenerationPollOutcome.Completed && pollResult.Files is { Count: > 0 })
                 {
                     files.AddRange(pollResult.Files);
+                    if (pollResult.Cost is { } cost)
+                    {
+                        // Only a run-level total is kept, matching plan.md's "SlopFactory never
+                        // divides a run total among output sidecars" rule — a per-child cost
+                        // breakdown isn't modeled since there's no per-child result identity yet.
+                        totalCost = (totalCost ?? 0) + cost.Amount;
+                        costCurrency ??= cost.Currency;
+                    }
                 }
                 else
                 {
@@ -579,7 +589,7 @@ public sealed class GenerationQueueService
             }
         }
 
-        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
+        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, cancellationToken).ConfigureAwait(false);
 
         foreach (var entry in submitted)
         {

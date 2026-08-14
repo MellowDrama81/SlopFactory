@@ -722,10 +722,15 @@ public sealed record AsyncGenerationSubmission(
     string ProviderJobId,
     DateTimeOffset? MonitoringDeadline = null);
 
+/// <summary>A provider-reported actual cost for one completed operation. Never estimated or
+/// computed locally — only ever the exact value a provider's own response included.</summary>
+public sealed record AsyncGenerationCost(double Amount, string Currency);
+
 public sealed record AsyncGenerationPollResult(
     AsyncGenerationPollOutcome Outcome,
     IReadOnlyList<byte[]>? Files,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    AsyncGenerationCost? Cost = null);
 
 public enum GenerationStatus
 {
@@ -764,7 +769,9 @@ public sealed record GenerationRecord(
     FileIdentitySnapshot? SecondarySourceFileTombstone = null,
     string? TertiarySourceFileId = null,
     FileIdentitySnapshot? TertiarySourceFileTombstone = null,
-    int SafetyBlockedCount = 0)
+    int SafetyBlockedCount = 0,
+    double? ActualCost = null,
+    string? ActualCostCurrency = null)
 {
     public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;

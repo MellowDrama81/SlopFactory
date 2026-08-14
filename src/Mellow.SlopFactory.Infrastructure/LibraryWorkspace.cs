@@ -2092,10 +2092,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     /// determines whether the resulting <see cref="GenerationRecord"/> is Audio or Video — nothing
     /// mode-specific happens in the commit path itself.
     /// </summary>
-    public Task<GenerationRecord> RecordMediaGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultFiles, string? errorMessage, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default)
+    public Task<GenerationRecord> RecordMediaGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultFiles, string? errorMessage, string? promptImprovementRecordId = null, double? actualCost = null, string? actualCostCurrency = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => RecordImageGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultFiles, errorMessage, promptImprovementRecordId, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => RecordImageGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultFiles, errorMessage, promptImprovementRecordId, cancellationToken, actualCost, actualCostCurrency), cancellationToken);
     }
 
     public Task<IReadOnlyList<PromptImprovementRecord>> GetPromptImprovementHistoryAsync(CancellationToken cancellationToken = default)
@@ -2308,7 +2308,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return committedCount < requestedCount ? GenerationStatus.PartiallyCompleted : GenerationStatus.Completed;
     }
 
-    private async Task<GenerationRecord> RecordImageGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId, CancellationToken cancellationToken)
+    private async Task<GenerationRecord> RecordImageGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId, CancellationToken cancellationToken, double? actualCost = null, string? actualCostCurrency = null)
     {
         var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
         var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
@@ -2373,7 +2373,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
 
         var status = DetermineGenerationStatus(resultFileIds.Count, resultCount);
-        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, null, promptImprovementRecordId, null, null, null, null, 0, cancellationToken).ConfigureAwait(false);
+        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, null, promptImprovementRecordId, null, null, null, null, 0, cancellationToken, actualCost, actualCostCurrency).ConfigureAwait(false);
     }
 
     private async Task<PromptImprovementRecord> RecordPromptImprovementAttemptCoreAsync(string modelId, string rawPrompt, string? guidance, string templateVersion, IReadOnlyList<string>? candidates, string? errorMessage, int? promptTokens, int? completionTokens, CancellationToken cancellationToken)

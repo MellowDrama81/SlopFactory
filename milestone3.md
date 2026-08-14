@@ -295,18 +295,35 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 
 ## Usage and cost handling
 
-- [ ] Add provider-reported actual-cost fields to `GenerationRecord` (which today only has
-      `PromptTokens`/`CompletionTokens`), scoped separately as `generation-run`, per-output (only
-      when a provider explicitly reports that scope) and `prompt-improvement` — a run total is
-      never divided among per-output records, and prompt-improvement cost is never added to the
-      generation-run total.
+- [x] Add provider-reported actual-cost fields to `GenerationRecord` (schema v31:
+      `actual_cost REAL NULL`, `actual_cost_currency TEXT NULL`), scoped at the `generation-run`
+      level only — no adapter implemented this pass reports a *per-output* cost breakdown, so
+      there's nothing to divide, and `prompt-improvement` cost tracking remains separately unbuilt
+      (`PromptImprovementRecord` has no cost field). `OpenRouterProviderAdapter.PollVideoGenerationAsync`
+      parses OpenRouter's confirmed `usage.cost` field from a completed video job into the new
+      `AsyncGenerationCost` type; `GenerationQueueService.ExecuteVideoGenerationAsync` sums cost
+      across every job in a multi-result group (never divides — matches the plan.md rule about
+      per-output values) and threads the total through `RecordMediaGenerationResultAsync`. **The
+      currency is an assumption, not a confirmed API field**: OpenRouter's response never states a
+      currency, "USD" is used because that's their known billing model — flagged in code and
+      worth confirming against a live account before relying on it. Cost is displayed on
+      `/generation-history/{id}`. **Not done this pass**: OpenRouter's image-generation response
+      also includes `usage.cost` per research, but capturing it would require changing
+      `GenerateImageAsync`'s return shape (today a bare `IReadOnlyList<byte[]>`) across all four
+      adapters and every call site — a much wider change than the additive, video-only path taken
+      here, deliberately deferred as separate follow-up work. Audio and DeepInfra/1min.AI cost
+      capture remain open for the same reason (no confirmed cost field for audio, and DeepInfra
+      wasn't researched for cost reporting at all).
 - [ ] Add actual-cost display against any known estimate, including overrun highlighting and a
-      pricing-revision **Unreliable** marking after repeated overruns, superseding today's
-      permanently-`null`-cost **Cost unknown** notice for adapters that now report real figures.
+      pricing-revision **Unreliable** marking after repeated overruns. Partially superseded: the
+      permanently-`null`-cost **Cost unknown** notice from Milestone 2 is no longer accurate for a
+      completed OpenRouter video generation (real cost is now shown), but the notice itself wasn't
+      updated to conditionally suppress for that case, and there's no "known estimate" to compare
+      against yet regardless.
 - [ ] Add the local cost-summary view aggregating provider-reported actual cost, filterable by
-      date, provider, connection, model and operation type (deferred from Milestone 2 pending real
-      adapter cost data — 1min.AI/OpenRouter/DeepInfra are the first candidates to actually supply
-      it).
+      date, provider, connection, model and operation type. OpenRouter video generation is now a
+      real, non-empty data source for this (previously every row would have been blank, per
+      Milestone 2's deferral reasoning) — building the aggregation/filter view itself is still open.
 - [ ] Add the usage/cost portions of the sidecar export spec that depend on this milestone's new
       data: the `Include Usage and Cost` opt-in category, run/per-output/prompt-improvement scope
       separation, and `reported-so-far`/incomplete-flag handling for a nonterminal multi-result run.

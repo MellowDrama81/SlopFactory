@@ -175,7 +175,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
                         if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty video result.");
                         files.Add(bytes);
                     }
-                    return new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, files, null);
+                    return new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, files, null, ParseCost(root));
                 case "failed":
                     var errorMessage = root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind == JsonValueKind.String ? errorElement.GetString() : null;
                     return new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Failed, null, errorMessage ?? "The provider reported the video generation job as failed.");
@@ -191,6 +191,20 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         {
             throw new ProviderAdapterException("The provider's video status response was not valid JSON.");
         }
+    }
+
+    /// <summary>
+    /// Extracts the provider-reported <c>usage.cost</c> field OpenRouter's video (and image)
+    /// responses include. The currency is not itself part of that response field — OpenRouter's
+    /// billing is USD-denominated, so "USD" is used, but this is an assumption based on their known
+    /// billing model rather than something the API response explicitly states; treat it as
+    /// provisional until confirmed against a live account.
+    /// </summary>
+    private static AsyncGenerationCost? ParseCost(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object) return null;
+        if (!usage.TryGetProperty("cost", out var costElement) || costElement.ValueKind != JsonValueKind.Number) return null;
+        return new AsyncGenerationCost(costElement.GetDouble(), "USD");
     }
 
     private static string BuildImageRequestBody(string providerModelId, string prompt, int resultCount)
