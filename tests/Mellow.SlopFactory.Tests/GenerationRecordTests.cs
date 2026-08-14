@@ -297,6 +297,100 @@ public sealed class GenerationRecordTests
         Assert.Equal(PngSignatureBytes.LongLength, file.ByteSize);
     }
 
+    private static readonly byte[] Mp3SignatureBytes = [0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21];
+    private static readonly byte[] Mp4SignatureBytes = [0, 0, 0, 0x18, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'i', (byte)'s', (byte)'o', (byte)'m', 0, 0, 0, 0];
+
+    [Fact]
+    public async Task RecordingASuccessfulAudioGenerationCommitsFilesWithDetectedMediaType()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Audio Model", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "Read this aloud", 1, workspace.Descriptor.GeneratedFolderId, [Mp3SignatureBytes], null);
+
+        Assert.Equal(GenerationStatus.Completed, record.Status);
+        Assert.Equal(GenerationMode.Audio, record.Mode);
+        var file = await workspace.GetFileAsync(Assert.Single(record.ResultFileIds));
+        Assert.Equal("audio/mpeg", file.MediaType);
+        Assert.EndsWith(".mp3", file.ManagedName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RecordingASuccessfulVideoGenerationCommitsFilesWithDetectedMediaType()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Video Model", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "A cat on a skateboard", 1, workspace.Descriptor.GeneratedFolderId, [Mp4SignatureBytes], null);
+
+        Assert.Equal(GenerationStatus.Completed, record.Status);
+        Assert.Equal(GenerationMode.Video, record.Mode);
+        var file = await workspace.GetFileAsync(Assert.Single(record.ResultFileIds));
+        Assert.Equal("video/mp4", file.MediaType);
+        Assert.EndsWith(".mp4", file.ManagedName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AudioGenerationResultWhoseBytesDoNotMatchTheExpectedMediaCategoryIsNotCommitted()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Audio Model", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+
+        // The bytes actually decode as a PNG image, not audio — simulating a provider response that
+        // cannot be validated as the expected media category.
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "Read this aloud", 1, workspace.Descriptor.GeneratedFolderId, [PngSignatureBytes], null);
+
+        Assert.Equal(GenerationStatus.Failed, record.Status);
+        Assert.Empty(record.ResultFileIds);
+        Assert.Empty(await workspace.GetActiveFilesAsync());
+    }
+
+    [Fact]
+    public async Task VideoGenerationResultWhoseBytesDoNotMatchTheExpectedMediaCategoryIsNotCommitted()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Video Model", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "A cat on a skateboard", 1, workspace.Descriptor.GeneratedFolderId, [Mp3SignatureBytes], null);
+
+        Assert.Equal(GenerationStatus.Failed, record.Status);
+        Assert.Empty(record.ResultFileIds);
+        Assert.Empty(await workspace.GetActiveFilesAsync());
+    }
+
+    [Fact]
+    public async Task AMixedBatchOfValidAndMismatchedAudioResultsCommitsOnlyTheValidOnesAsPartiallyCompleted()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Audio Model", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "Read this aloud", 2, workspace.Descriptor.GeneratedFolderId, [Mp3SignatureBytes, PngSignatureBytes], null);
+
+        Assert.Equal(GenerationStatus.PartiallyCompleted, record.Status);
+        var file = await workspace.GetFileAsync(Assert.Single(record.ResultFileIds));
+        Assert.Equal("audio/mpeg", file.MediaType);
+    }
+
     [Fact]
     public async Task CancelledImageGenerationCommitLeavesNoOrphanedStagingFileOrHistoryRecord()
     {

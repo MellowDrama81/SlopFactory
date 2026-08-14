@@ -2292,6 +2292,16 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, resultFileIds, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, model.TextFormat, settings, secondarySourceFileId, tertiarySourceFileId, safetyBlockedCount, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>The top-level media-type prefix a mode's results must match to be committed, or
+    /// null for a mode (Text) that does not commit raw bytes through this pipeline.</summary>
+    private static string? ExpectedMediaTypeCategory(GenerationMode mode) => mode switch
+    {
+        GenerationMode.Image => "image/",
+        GenerationMode.Audio => "audio/",
+        GenerationMode.Video => "video/",
+        _ => null
+    };
+
     private static GenerationStatus DetermineGenerationStatus(int committedCount, int requestedCount)
     {
         if (committedCount <= 0) return GenerationStatus.Failed;
@@ -2322,6 +2332,17 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                     }
                     var (mediaType, extension) = await MediaTypeDetector.DetectAsync(stagingPath, cancellationToken).ConfigureAwait(false);
+                    if (ExpectedMediaTypeCategory(model.Mode) is { } expectedCategory && !mediaType.StartsWith(expectedCategory, StringComparison.Ordinal))
+                    {
+                        // Bytes could not be validated as the expected media category (plan.md:
+                        // "the application validates ... expected media category ... When bytes
+                        // cannot be validated as the expected ... type, the result fails and no
+                        // successful media record is created automatically"). Skip only this result
+                        // rather than aborting the whole batch — the staged temporary file is
+                        // cleaned up by the existing finally block below since stagingPath is never
+                        // cleared to empty on this path.
+                        continue;
+                    }
                     var managedName = fileId + extension;
                     managedPath = _layout.ManagedFilePath(managedName);
                     var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));

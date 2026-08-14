@@ -234,9 +234,16 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 
 ## File-transfer variations and result validation
 
-- [ ] Add pre-commit result validation: response status, content type, expected media category,
-      non-zero size and provider-supplied checksum when available; bytes that cannot be validated
-      fail the result rather than creating a successful media record automatically.
+- [x] Add pre-commit expected-media-category validation: `LibraryWorkspace`'s shared media commit
+      path (`RecordImageGenerationResultCoreAsync`, now also used by `RecordMediaGenerationResultAsync`
+      for Audio/Video) compares `MediaTypeDetector.DetectAsync`'s result against the target model's
+      mode (`image/`/`audio/`/`video/` prefix) and skips committing — rather than silently creating a
+      mis-typed library file — any single result whose bytes don't match, while still committing the
+      rest of a multi-result batch normally (proven by
+      `AMixedBatchOfValidAndMismatchedAudioResultsCommitsOnlyTheValidOnesAsPartiallyCompleted`). Response
+      status and non-zero size were already enforced (each adapter already throws on a non-success
+      status or empty bytes). **Not done**: provider-supplied checksum validation — no adapter
+      implemented this pass reports one, so there's nothing to check yet.
 - [ ] Add the **Retain as Unverified Binary** path for a result whose bytes cannot be classified
       into the expected media type, storing it distinctly rather than silently discarding or
       mis-typing it.
