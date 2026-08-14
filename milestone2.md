@@ -974,10 +974,36 @@ in parallel. Both milestones must be complete before the first public release.
 
 ## Final Milestone 2 verification
 
-- [ ] Add automated coverage for every remaining Milestone 2 behavior above, including
-      cancellation, partial failure and cross-library isolation cases.
-- [ ] Run the full shared test suite, Windows MAUI build, and Android MAUI build with zero errors.
+- [x] Add automated coverage for every remaining Milestone 2 behavior above, including
+      cancellation, partial failure and cross-library isolation cases. A dedicated audit pass found
+      one genuine gap: mid-loop cancellation during a multi-result commit (cancelling *after* some
+      results already committed, not before the call starts or via a thrown exception) was untested
+      for both text and image generation — the two existing crash-injection tests only covered the
+      already-cancelled-before-the-call and exception-mid-loop edges. Two new tests
+      (`CancellingMidLoopDuringATextGenerationCommitLeavesTheEarlierResultFileIntactWithNoOrphanedHistoryRecord`/
+      the image-mode equivalent) use a small test-only `CancelAfterFirstItem<T>` wrapper that cancels
+      the token as the loop advances to the second result, and assert the same "earlier result stays
+      intact, no orphaned staging file, no history record" contract as the existing edge tests.
+      Queued/running-job cancellation, per-run cancellation isolation for concurrent runs on one
+      draft, cross-library queue/dirty-draft-marker isolation, and partial-completion status were all
+      independently re-confirmed already covered by existing tests with no gaps.
+- [x] Run the full shared test suite, Windows MAUI build, and Android MAUI build with zero errors.
 - [ ] Execute a Milestone-2 manual acceptance pass on supported Windows and Android devices and
       record it in `manual_tests.md`.
-- [ ] Update `plan.md` by removing only verified completed requirements and keep user/developer
-      documentation and `README.md` aligned with the finished behavior.
+- [x] Update `plan.md` by removing only verified completed requirements and keep user/developer
+      documentation and `README.md` aligned with the finished behavior. A dedicated audit pass
+      cross-referenced every plan.md bullet against this document's `[x]` bullets and, where needed,
+      the actual shipped code, removing 17 lines that were fully and verifiably satisfied with no
+      excluded sub-clause remaining (device-wide submission cap defaults/range; concurrent-run-card
+      submission, independent status/cancellation and the 10-recent-outcome cap; history filters and
+      recycle-bin integration; atomic UTF-8 text commit, the `.md`/`.txt` format choice and its
+      history record; the Cost-unknown notice). Several superficially-similar lines were deliberately
+      left in place after direct verification because they make a claim broader than what shipped —
+      e.g. **Cancelled Before Submission** as a *persisted history-record status* was never built (a
+      pre-submission cancellation creates no `GenerationRecord` at all, matching the pre-existing
+      "no history entry for work never actually submitted" contract), and the model/source-file
+      recycle-and-replace lines only actually apply to models today, not source files (a permanently
+      deleted source file reference silently clears via `ON DELETE SET NULL` rather than requiring an
+      explicit replacement). Interleaved still-open neighbors (tab-ID history association, run-card
+      collapse/expand UI, `.json` structured output, streaming display, partial-text retention on
+      cancellation) were left untouched line-by-line rather than removing whole blocks.

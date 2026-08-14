@@ -388,9 +388,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Decreasing concurrency never cancels active requests; no new request starts until active count falls below the new value.
 - Concurrency changes apply to scheduling state and never rewrite immutable submitted-request snapshots.
 - Provider adapters can define provider-specific concurrency limits.
-- A device-wide submission cap applies across every connection and open library in the running process.
-- The default cap is three active submissions on Windows and two on Android.
-- Advanced device settings allow values from one through eight on Windows and one through four on Android; lower per-connection and provider limits still apply.
 - Preparing, uploading, submitting and an active synchronous generation request consume a global submission slot.
 - An asynchronous job releases its submission slot after the provider durably accepts it; later status polling does not consume a submission slot.
 - File-import, preview and result-download worker pools remain separate and do not consume provider submission slots.
@@ -1344,18 +1341,11 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Clicking **Generate** snapshots the tab's current working state into a new immutable generation-history record.
 - Later edits in the tab do not change a request which was already submitted.
 - Re-running from the same tab creates another independent generation-history record from the then-current working state.
-- The same generation tab can submit another run while one or more earlier runs remain active.
-- Every submission from a tab has its own run card, status, cancellation action, result set and immutable history record.
 - Each submitted history record retains the stable originating tab ID and the tab title captured at submission time.
 - Submissions from the same tab use the normal queue, per-connection concurrency, provider limits and cost-confirmation rules; they do not bypass or replace earlier work.
-- The **Generate** action is disabled while a submission click is being accepted so an accidental double activation cannot create duplicate runs.
-- Once the submission is durably recorded, the action becomes available again even when that run is queued or active.
 - Active run cards remain visible in the generation page. Completed, failed and cancelled cards can collapse automatically and remain available to expand.
-- A generation tab shows all of its queued and active run cards plus its ten most recent terminal run cards.
-- Older terminal runs remain fully retained in generation history and are not deleted or summarized away.
 - **View All Runs from This Tab** opens generation history filtered by the stable originating tab ID.
 - The history association remains valid after the originating tab is renamed or closed; its captured submission-time title remains available for context.
-- Cancelling one run does not cancel other runs submitted from the same tab.
 - The generation page embeds status, progress, cancellation controls, errors and result previews for its submitted work while retaining the editable form.
 - Completed, failed and cancelled runs remain available through generation history even after their originating tab is closed.
 - The request definition becomes immutable when generation starts. It contains snapshots of the provider and model, the original and improved prompts, model settings, source-file links and requested result count.
@@ -1458,7 +1448,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 
 - Generation history is browsed separately from the file library.
 - The history list shows model label, output type, status, creation time, duration, result count and cost when known.
-- History can be filtered by status, date, provider, model and output type.
 - A history record displays its prompts, settings, sources, outputs, attempts, errors and usage.
 - System instructions are collapsed by default in history and saved-setting previews, which show only presence, character/UTF-8 byte counts and the resolved instruction channel.
 - **Show System Instructions** reveals the text only in the current view and clears when that view closes or the library leaves the active security context.
@@ -1472,7 +1461,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Replacement bytes are revalidated against the current model and role and are not selected when incompatible.
 - SlopFactory does not claim that **Use Again** reproduces the original request when its original source bytes are unavailable.
 - Missing or incompatible models and source files use the same restoration and replacement behavior as saved generation settings.
-- Terminal history records can be selected and moved to the recycle bin.
 - Every submitted prompt-improvement attempt creates a lightweight AI-operation history record.
 - An improvement record contains provider and model snapshots, status, timestamps, source roles, template version, guidance, token usage and cost when reported.
 - Normal cost estimates and confirmation thresholds apply before prompt improvement.
@@ -1584,14 +1572,9 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Generated filenames are sanitized and use the library's numeric-suffix conflict rule.
 - Renaming a generated file's display name does not alter its provenance.
 - Text is displayed incrementally when the provider supports streaming and is written to a temporary file until complete.
-- A successful text result is committed atomically using UTF-8 encoding.
-- Markdown (`.md`) is the default generated text format.
 - JSON (`.json`) is used when structured JSON output was explicitly requested and the returned content validates as JSON.
-- A configured text-model profile or generation setting can select plain text (`.txt`).
-- Selecting a text format does not rewrite the generated content.
 - Invalid declared structured output is retained as `.txt`, marked with a validation warning and recorded as an error in generation history.
 - Source-code extensions are not inferred automatically from generated content.
-- Generation history records the requested and actual text formats.
 - When a text generation is cancelled or interrupted after receiving content, the user can keep or discard the partial result.
 - A retained partial text result is marked **Incomplete** in system metadata, remains linked to its failed or cancelled generation record and is not presented as successful.
 - Text result files contain the generated assistant content rather than the provider's raw response envelope.
@@ -1619,7 +1602,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Otherwise, an adapter can use versioned bundled pricing metadata which exactly matches the provider, model, modality and applicable pricing dimensions.
 - Bundled pricing displays its effective date and is labelled as potentially outdated.
 - SlopFactory never scrapes provider pricing pages automatically.
-- If no reliable provider estimate or matching bundled pricing exists, the application shows **Cost unknown** rather than guessing.
 - Before the first billable submission for a model and connection pricing-capability revision marked **Cost unknown**, SlopFactory requires acknowledgement that no configured threshold can be enforced.
 - The acknowledgement stores only the relevant model, connection and pricing-capability revisions.
 - **Cost Unknown** remains prominent on every later submission, and device-wide **Always Confirm Unknown-Cost Requests** can require blocking confirmation each time.
@@ -1773,7 +1755,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Accepting the current mapping updates only the autosaved tab working copy; the named saved setting changes only through explicit **Save** or **Save As** and the normal revision-conflict workflow.
 - The improved prompt which was present when the settings were saved is loaded into the working copy and is not regenerated automatically.
 - The user can retry prompt improvement in the working copy without changing or losing the improved prompt stored in the saved settings.
-- Such a tab can continue generating when all of its actual model, source-file, destination and connection dependencies remain valid.
 - A referenced model or source file which is in the recycle bin is shown as unavailable and the user is offered the option to restore it.
 - If a referenced model or source file has been permanently deleted, the user must select a replacement before generation.
 

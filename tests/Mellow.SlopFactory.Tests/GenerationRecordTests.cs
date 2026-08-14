@@ -165,6 +165,29 @@ public sealed class GenerationRecordTests
     }
 
     [Fact]
+    public async Task CancellingMidLoopDuringATextGenerationCommitLeavesTheEarlierResultFileIntactWithNoOrphanedHistoryRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        using var cancellation = new CancellationTokenSource();
+        var texts = new CancelAfterFirstItem<string>(["First result", "Second result"], cancellation);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            workspace.RecordTextGenerationResultAsync(model.Id, "Write two haiku", 2, workspace.Descriptor.GeneratedFolderId, texts, null, cancellationToken: cancellation.Token));
+
+        var committed = Assert.Single(await workspace.GetActiveFilesAsync());
+        Assert.Equal(FileOrigin.Generated, committed.Origin);
+        var content = await workspace.ReadTextFileAsync(committed.Id);
+        Assert.Equal("First result", content.Content);
+        Assert.Empty(await workspace.GetGenerationHistoryAsync());
+        Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(root, ".staging")), path => path.EndsWith(".generating", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RecordingATextGenerationWithSystemInstructionsPersistsAndReloadsThem()
     {
         using var temporary = new TemporaryDirectory();
@@ -292,6 +315,46 @@ public sealed class GenerationRecordTests
         Assert.Empty(await workspace.GetActiveFilesAsync());
         Assert.Empty(await workspace.GetGenerationHistoryAsync());
         Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(root, ".staging")), path => path.EndsWith(".generating", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CancellingMidLoopDuringAnImageGenerationCommitLeavesTheEarlierResultFileIntactWithNoOrphanedHistoryRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Image Model", connection.Id, "gpt-image-1", GenerationMode.Image, false);
+        using var cancellation = new CancellationTokenSource();
+        var images = new CancelAfterFirstItem<byte[]>([PngSignatureBytes, PngSignatureBytes], cancellation);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            workspace.RecordImageGenerationResultAsync(model.Id, "Two watercolor foxes", 2, workspace.Descriptor.GeneratedFolderId, images, null, null, cancellation.Token));
+
+        var committed = Assert.Single(await workspace.GetActiveFilesAsync());
+        Assert.Equal(FileOrigin.Generated, committed.Origin);
+        Assert.Empty(await workspace.GetGenerationHistoryAsync());
+        Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(root, ".staging")), path => path.EndsWith(".generating", StringComparison.Ordinal));
+    }
+
+    private sealed class CancelAfterFirstItem<T>(IReadOnlyList<T> inner, CancellationTokenSource cancellation) : IReadOnlyList<T>
+    {
+        public T this[int index] => inner[index];
+        public int Count => inner.Count;
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            var index = 0;
+            foreach (var item in inner)
+            {
+                if (index == 1) cancellation.Cancel();
+                index++;
+                yield return item;
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     [Fact]
