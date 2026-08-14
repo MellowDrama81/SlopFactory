@@ -908,6 +908,15 @@ in parallel. Both milestones must be complete before the first public release.
       an adapter gains a real estimate API or real, currently-accurate pricing data is supplied.
 - [ ] Add a local cost-summary view aggregating provider-reported actual cost, filterable by date,
       provider, connection, model and operation type.
+
+  **Confirmed deferred this session, same rationale as the Cost-unknown notice above**: neither the
+  OpenAI nor the generic OpenAI-compatible chat-completions/images-generations API ever reports a
+  dollar cost anywhere in its response — only token counts, which `GenerationRecord` already captures
+  and displays. There is no `Cost`/`ActualCost` field anywhere in this app's schema, and computing one
+  locally would require exactly the fabricated per-token/per-image pricing data the Cost-unknown
+  decision already rejected. A summary view over provider-reported actual cost would have nothing real
+  to aggregate — every row would be blank. Revisit only alongside the Cost-unknown notice itself, if
+  an adapter ever gains a real cost-reporting or estimate API.
 - [x] Add OS generation-completion/failure notifications, disabled by default, toggled from
       `/library-settings`. `Plugin.LocalNotification` (the community-standard MAUI local-notification
       package) was evaluated and rejected: its own README states "Only support **iOS** and **Android**
