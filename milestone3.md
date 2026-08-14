@@ -136,7 +136,7 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `ConnectionEdit.razor`'s save/credential-decision flow is already only manually verified); the
       data it depends on (`GetAsyncRemoteJobsForConnectionAsync`, `DeleteAsyncRemoteJobAsync`,
       `AsyncRemoteJobPhase`) is fully covered by `AsyncRemoteJobTests.cs`.
-- [x] / [ ] Add cancellation handling for every defined stage — partially done for video. Cancelling
+- [ ] Add cancellation handling for every defined stage — partially done for video. Cancelling
       before any job is submitted reports no history record (matches Text/Image/Audio's existing
       "nothing sent yet" behavior); cancelling after at least one job reached the provider commits a
       real `Cancelled`/`CancelledWithResults` record instead of discarding already-resolved provider
