@@ -230,7 +230,19 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 ## Multi-result workflows
 
 - [ ] Add per-child result status within one multi-result generation (today a multi-result request
-      is one atomic commit with no individual result identity, retry or status).
+      is one atomic commit with no individual result identity, retry or status). **A concrete,
+      already-discovered case this would fix**: `ExecuteVideoGenerationAsync` only catches
+      `ProviderAdapterException`/`HttpRequestException` around each poll — if the caller cancels
+      after some jobs in a multi-job group already completed (bytes already downloaded, sitting in
+      the local `files` list) but before the whole group resolves, `OperationCanceledException`
+      propagates uncaught and those already-completed results are discarded entirely rather than
+      committed as a partial success. Fixing this honestly needs `GenerationStatus.CancelledWithResults`
+      threaded through the shared commit pipeline (`RecordImageGenerationResultCoreAsync`'s
+      `DetermineGenerationStatus` only knows Completed/Failed/PartiallyCompleted today) and
+      `GenerationQueueService`'s outcome reporting (today `ExecuteAsync`'s outer
+      `catch (OperationCanceledException)` unconditionally returns a null `Record`, discarding any
+      record a nested method might have already committed) — the same depth of cross-cutting work
+      as the per-child status item itself, not a shallow patch.
 - [ ] Add **Partially Completed** with **Retry Failed/Missing Results Only** as the default recovery
       action when an adapter can safely represent the unsuccessful result count independently, plus
       **Run Entire Request Again**.
