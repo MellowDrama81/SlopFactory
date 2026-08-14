@@ -170,7 +170,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
                         await ResultUrlValidator.ValidateHostAsync(resultUri, _resolveHost, cancellationToken).ConfigureAwait(false);
                         using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, resultUri);
                         OpenAiCompatibleProtocol.ApplyAuthorization(downloadRequest, connection, apiKey);
-                        var (downloadSucceeded, downloadStatus, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, downloadRequest, connection, cancellationToken).ConfigureAwait(false);
+                        var (downloadSucceeded, downloadStatus, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, downloadRequest, connection, cancellationToken, allowRetry: true).ConfigureAwait(false);
                         if (!downloadSucceeded) throw new ProviderAdapterException($"Downloading the completed video result failed: {OpenAiCompatibleProtocol.DescribeFailure(downloadStatus)}");
                         if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty video result.");
                         files.Add(bytes);

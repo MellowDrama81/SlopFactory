@@ -323,10 +323,16 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 - [ ] Add per-connection rate-limit state (last observed limit, remaining, reset time) rather than
       today's stateless retry-only handling, and adaptive throttling that backs off proactively
       once a connection's remaining quota is known to be low.
-- [ ] Extend bounded automatic retry with `Retry-After` honoring (currently scoped only to model
-      listing, via `allowRetry` in `OpenAiCompatibleProtocol.SendAsync`) to result downloads and
-      async-job status polling, without violating the rule that a generation-submission request
-      itself only auto-retries under a confirmed idempotency key.
+- [x] Extend bounded automatic retry with `Retry-After` honoring beyond model listing, to both
+      async-job status polling and result downloads. `OpenRouterProviderAdapter
+      .PollVideoGenerationAsync` already passed `allowRetry: true` for the status poll itself
+      (proven by `OpenRouterAdapterHonorsRateLimitRetryWhenPollingJobStatus`).
+      `OpenAiCompatibleProtocol.SendForBytesAsync` gained the same `allowRetry` parameter as
+      `SendAsync` (identical retry-loop/backoff logic), and the video content download now passes
+      `allowRetry: true` — a completed-result download has no side effect if repeated, unlike a
+      generation submission, so it's safe without an idempotency key (verified by
+      `OpenRouterAdapterRetriesARateLimitedResultDownload`). Audio *generation* deliberately keeps
+      `allowRetry: false` (its default) since that's a paid call, not a download.
 - [ ] Add rate-limited/delayed status display on `/generate` and `/queue` with cancellation
       available while waiting, and ensure Retry-After waits interact correctly with indivisible
       multi-request queue-group ordering.

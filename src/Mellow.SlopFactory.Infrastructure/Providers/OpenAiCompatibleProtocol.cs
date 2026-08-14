@@ -47,20 +47,32 @@ internal static class OpenAiCompatibleProtocol
     /// <summary>
     /// Like <see cref="SendAsync"/> but reads the response as raw bytes rather than a decoded string —
     /// required for binary responses (audio synthesis, video/image downloads) where
-    /// <see cref="HttpContent.ReadAsStringAsync()"/> would corrupt non-UTF-8 bytes. Never retried: every
-    /// caller today is either a generation submission (not safe to auto-retry without an idempotency
-    /// key, matching <see cref="SendAsync"/>'s own rule) or a one-shot authenticated result download.
+    /// <see cref="HttpContent.ReadAsStringAsync()"/> would corrupt non-UTF-8 bytes.
+    /// <paramref name="allowRetry"/> follows the exact same rule as <see cref="SendAsync"/>: only set
+    /// it for a request with no side effect if repeated (a result download, never a paid generation
+    /// call like audio synthesis, which stays retry-free without a confirmed idempotency key).
     /// </summary>
-    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, byte[] Bytes)> SendForBytesAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken)
+    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, byte[] Bytes)> SendForBytesAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken, bool allowRetry = false)
     {
         var timeoutSeconds = connection.TimeoutSeconds ?? LibraryRules.DefaultConnectionTimeoutSeconds;
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
         try
         {
-            using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
-            var bytes = await response.Content.ReadAsByteArrayAsync(linkedCts.Token).ConfigureAwait(false);
-            return (response.IsSuccessStatusCode, response.StatusCode, bytes);
+            var currentRequest = request;
+            for (var attempt = 0; ; attempt++)
+            {
+                using var response = await httpClient.SendAsync(currentRequest, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+
+                if (!allowRetry || response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxRetryAttempts)
+                {
+                    var bytes = await response.Content.ReadAsByteArrayAsync(linkedCts.Token).ConfigureAwait(false);
+                    return (response.IsSuccessStatusCode, response.StatusCode, bytes);
+                }
+
+                await Task.Delay(ComputeRetryDelay(response, attempt), linkedCts.Token).ConfigureAwait(false);
+                currentRequest = await CloneRequestAsync(request).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {

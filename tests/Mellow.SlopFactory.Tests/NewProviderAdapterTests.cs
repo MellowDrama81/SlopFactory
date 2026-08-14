@@ -131,6 +131,36 @@ public sealed class NewProviderAdapterTests
         Assert.Equal([firstVideo, secondVideo], result.Files!);
     }
 
+    [Fact]
+    public async Task OpenRouterAdapterRetriesARateLimitedResultDownload()
+    {
+        byte[] video = [1, 2, 3];
+        var downloadAttempts = 0;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri!.ToString();
+            if (path == "https://openrouter.ai/api/v1/videos/abc123")
+            {
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"id":"abc123","status":"completed","unsigned_urls":["https://openrouter.ai/api/v1/videos/abc123/content?index=0"]}""");
+            }
+            if (path == "https://openrouter.ai/api/v1/videos/abc123/content?index=0")
+            {
+                downloadAttempts++;
+                return downloadAttempts == 1 ? FakeHttpMessageHandler.RateLimited(TimeSpan.Zero) : FakeHttpMessageHandler.BinaryResponse(video, "video/mp4");
+            }
+            throw new InvalidOperationException($"Unexpected request to {path}.");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123");
+
+        Assert.Equal(2, downloadAttempts);
+        Assert.Equal(AsyncGenerationPollOutcome.Completed, result.Outcome);
+        Assert.Equal(video, Assert.Single(result.Files!));
+    }
+
     // A fixed, non-network host resolver so adapter tests never perform a real DNS lookup —
     // "never contact real providers" applies to name resolution too, not just HTTP calls.
     private static Task<IPAddress[]> PublicAddressResolver(string host, CancellationToken cancellationToken) =>
