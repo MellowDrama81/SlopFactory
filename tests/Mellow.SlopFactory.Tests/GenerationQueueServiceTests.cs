@@ -9,14 +9,14 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
         var adapter = new FakeProviderAdapter();
         preferences ??= new FakeAppPreferenceStore();
         energy ??= new FakeDeviceEnergyStateProvider();
-        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy);
+        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval);
         queue.Start();
         return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
@@ -31,8 +31,8 @@ public sealed class GenerationQueueServiceTests
         }
     }
 
-    private static GenerationJobSnapshot Snapshot(string draftId, string modelId, string prompt, string destinationFolderId) =>
-        new(draftId, "Tab", GenerationMode.Text, modelId, prompt, null, null, 1, destinationFolderId, null);
+    private static GenerationJobSnapshot Snapshot(string draftId, string modelId, string prompt, string destinationFolderId, GenerationMode mode = GenerationMode.Text) =>
+        new(draftId, "Tab", mode, modelId, prompt, null, null, 1, destinationFolderId, null);
 
     private static async Task<Connection> CreateReadyConnectionAsync(ILibraryWorkspace workspace, string label)
     {
@@ -607,6 +607,92 @@ public sealed class GenerationQueueServiceTests
         Assert.DoesNotContain("doomed", adapter.InvokedPrompts);
     }
 
+    [Fact]
+    public async Task AudioGenerationCommitsResultFilesThroughRecordMediaGenerationResult()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("TTS", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+        adapter.SetAudioResult("Read this aloud", [[0x49, 0x44, 0x33, 1, 2, 3]]);
+
+        queue.Enqueue(Snapshot("draft-audio", model.Id, "Read this aloud", workspace.Descriptor.GeneratedFolderId, GenerationMode.Audio), connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-audio") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-audio")!;
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.Completed, outcome.Record!.Status);
+        Assert.Single(outcome.Record.ResultFileIds);
+    }
+
+    [Fact]
+    public async Task AudioGenerationFailureIsCommittedAsALocalFailedGenerationRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("TTS", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+        // Deliberately not configuring an audio result for this prompt, so GenerateAudioAsync throws.
+
+        queue.Enqueue(Snapshot("draft-audio-fail", model.Id, "Unconfigured prompt", workspace.Descriptor.GeneratedFolderId, GenerationMode.Audio), connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-audio-fail") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-audio-fail")!;
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.Failed, outcome.Record!.Status);
+        Assert.Empty(outcome.Record.ResultFileIds);
+    }
+
+    [Fact]
+    public async Task VideoGenerationSubmitsPersistsAndPollsUntilCompletedThenCleansUpTheAsyncJobRegistryEntry()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-job-42";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Processing, null, null));
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Processing, null, null));
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [[1, 2, 3, 4]], null));
+
+        queue.Enqueue(Snapshot("draft-video", model.Id, "A cat on a skateboard", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+
+        // The async job becomes visible in the pending registry while polling is in progress.
+        await WaitUntilAsync(() => adapter.VideoPollCount >= 1);
+        var pendingDuringPoll = await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id);
+        Assert.Contains(pendingDuringPoll, job => job.ProviderJobId == "video-job-42");
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-video")!;
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.Completed, outcome.Record!.Status);
+        Assert.Single(outcome.Record.ResultFileIds);
+        Assert.Equal(3, adapter.VideoPollCount);
+
+        // The registry entry is removed once the generation has been committed.
+        Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+    }
+
+    [Fact]
+    public async Task VideoGenerationFailureCommitsAFailedRecordAndRemovesTheAsyncJobRegistryEntry()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-job-99";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Failed, null, "The prompt violated content policy."));
+
+        queue.Enqueue(Snapshot("draft-video-fail", model.Id, "A forbidden prompt", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video-fail") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-video-fail")!;
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.Failed, outcome.Record!.Status);
+        Assert.Equal("The prompt violated content policy.", outcome.Record.ErrorMessage);
+        Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+    }
+
     private sealed class FakeProviderAdapter : IProviderAdapter
     {
         private readonly object _gate = new();
@@ -623,9 +709,34 @@ public sealed class GenerationQueueServiceTests
         public Task<ConnectionTestResult> TestConnectionAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        private readonly Dictionary<string, IReadOnlyList<byte[]>> _audioResults = new(StringComparer.Ordinal);
+        public void SetAudioResult(string prompt, IReadOnlyList<byte[]> bytes) { lock (_gate) _audioResults[prompt] = bytes; }
+        public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default)
+        {
+            lock (_gate)
+            {
+                return _audioResults.TryGetValue(prompt, out var bytes) ? Task.FromResult(bytes) : throw new ProviderAdapterException($"No configured audio result for '{prompt}'.");
+            }
+        }
+
+        public string NextVideoJobId = "video-job-1";
+        private readonly Queue<AsyncGenerationPollResult> _videoPollResults = new();
+        public int VideoPollCount { get; private set; }
+        public void EnqueueVideoPollResult(AsyncGenerationPollResult result) { lock (_gate) _videoPollResults.Enqueue(result); }
+
+        public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AsyncGenerationSubmission(NextVideoJobId));
+
+        public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default)
+        {
+            lock (_gate)
+            {
+                VideoPollCount++;
+                if (_videoPollResults.Count == 0) throw new InvalidOperationException("The test did not configure enough queued video poll results.");
+                return Task.FromResult(_videoPollResults.Dequeue());
+            }
+        }
 
         public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null, CancellationToken cancellationToken = default)
         {

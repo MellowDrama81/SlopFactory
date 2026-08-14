@@ -64,11 +64,25 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `Completed`, `Partially Completed`, `Completed Before Cancellation`, `Cancelled Before
       Submission`, `Cancelled`, `Cancelled with Results` and `Failed`, plus the `Paused` hold-reason
       variants (Connection Lost, restart-confirmation-required, metered-network, dependency
-      recycled).
-- [ ] Add a persisted async-job record (provider job ID, connection ID, library ID, submitted/last
-      polled timestamps, adapter-declared max monitoring lifetime) distinct from the immutable
-      request snapshot, and resume polling for incomplete jobs on library open and app foreground
-      per the minimal device-wide pending-job registry described under Session Recovery.
+      recycled). Deliberately not attempted yet: `GenerationJobPhase`/`GenerationStatus` still only
+      cover Queued/Running and Completed/Failed/PartiallyCompleted — video generation today reaches
+      a real terminal outcome (see below) without needing the fuller state vocabulary, and adding
+      unreachable states before something produces them would be exactly the speculative
+      infrastructure this project avoids.
+- [x] Add a persisted async-job record (schema v30 `async_remote_jobs` table,
+      `AsyncRemoteJobRecord`/`AsyncRemoteJobPhase`: provider job ID, connection ID, draft ID,
+      submitted/last-polled timestamps, adapter-declared monitoring deadline) distinct from the
+      immutable request snapshot, with full `ILibraryWorkspace` CRUD
+      (`CreateAsyncRemoteJobAsync`/`GetPendingAsyncRemoteJobsAsync`/
+      `GetAsyncRemoteJobsForConnectionAsync`/`UpdateAsyncRemoteJobPhaseAsync`/
+      `DeleteAsyncRemoteJobAsync`). `GenerationQueueService.ExecuteVideoGenerationAsync` creates a
+      row on submit, updates its phase on every poll, and removes it after the generation commits.
+      **Resuming polling on library open and app foreground is not implemented** — the registry is
+      populated and queryable (proven by
+      `VideoGenerationSubmitsPersistsAndPollsUntilCompletedThenCleansUpTheAsyncJobRegistryEntry`
+      asserting the row exists mid-poll), but nothing reads it back on startup yet; an in-flight
+      video job would be abandoned in memory if the app closes mid-poll, leaving an orphaned
+      registry row. That startup-resume wiring remains open.
 - [ ] Add **Monitoring Paused**: when an async job exceeds its adapter-defined maximum monitoring
       lifetime while the provider still reports it running, stop automatic polling and expose
       **Check Now**/**Resume Monitoring** rather than treating it as failed or cancelled.
@@ -166,18 +180,36 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 
 ## Audio and video generation
 
-- [ ] Add `GenerationMode.Audio` and `GenerationMode.Video` (today's `GenerationMode` only has
-      `Text`/`Image`), including model configuration, drafts, saved settings and generation-history
-      support for both new modes.
+- [x] Add `GenerationMode.Audio` and `GenerationMode.Video`, model configuration
+      (`ModelEdit.razor` mode dropdown), and mode-aware labels/filters across `Generate.razor`,
+      `GenerationHistory.razor` and `SavedSettings.razor` (all previously Text/Image-only switches
+      already had a `mode.ToString()` fallback, so nothing crashed — this adds proper localized
+      `ModeAudio`/`ModeVideo` strings and dropdown options in place of that fallback). Drafts and
+      saved settings needed no changes: they already store a plain `ModelId` and don't branch on
+      mode themselves.
 - [ ] Replace the current 3 generic source-file slots (`SourceFileId`/`SecondarySourceFileId`/
       `TertiarySourceFileId`) with a named input-slot capability model — reference image, mask,
       first frame, last frame, source audio, source video — each with its own required media
-      type(s), count and ordering, as `plan.md` defines under Generation Inputs.
-- [ ] Add audio and video result commit pipelines mirroring the existing atomic
-      stage-hash-move-then-link pattern (`RecordTextGenerationResultCoreAsync`/
-      `RecordImageGenerationResultCoreAsync`), detecting media type/extension from provider bytes
-      rather than a declared format, and covering the failed-attempt (no orphaned files/history)
-      path with the same crash-injection technique used for text/image.
+      type(s), count and ordering, as `plan.md` defines under Generation Inputs. Audio and video
+      generation ship this pass with no source inputs at all (matching image generation's existing
+      behavior), since neither `OpenRouterProviderAdapter.GenerateAudioAsync`/
+      `SubmitVideoGenerationAsync` accept one yet.
+- [x] Add audio and video result commit: rather than two more near-duplicate methods alongside
+      `RecordImageGenerationResultCoreAsync`, `LibraryWorkspace.RecordMediaGenerationResultAsync`
+      reuses that exact same core method — the atomic stage-hash-detect-move-commit pipeline never
+      had any image-specific behavior baked in, since the target `Model`'s own `Mode` already
+      determines whether the resulting `GenerationRecord` is Audio/Video/Image. Wired into
+      `GenerationQueueService.ExecuteAsync`: `GenerationMode.Audio` calls `GenerateAudioAsync`
+      synchronously exactly like image generation; `GenerationMode.Video` submits, persists the
+      async-job record, polls on a configurable interval (`_videoPollInterval`, defaulting to 5s)
+      and commits once terminal. 4 new queue-level tests cover audio success/failure and video
+      success (asserting the pending-registry row exists mid-poll and is removed after commit) and
+      failure. **Known limitation, called out in code and tests**: a video job holds its queue
+      submission slot for the entire poll duration rather than releasing it after durable provider
+      acceptance as `plan.md` describes (`An asynchronous job releases its submission slot after the
+      provider durably accepts it`) — fixing this needs the scheduler to separate "holding a
+      submission slot" from "still being monitored," which is a real queue-architecture change, not
+      attempted this pass to avoid rushing a concurrency change unverified.
 - [ ] Add audio/video preview support (waveform data, video posters) in the regenerable preview
       cache, and the corresponding file-viewer behavior.
 - [ ] Add per-slot source-input token/byte/dimension/duration accounting using each adapter's

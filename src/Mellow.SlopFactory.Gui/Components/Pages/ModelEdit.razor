@@ -53,6 +53,8 @@ else
         <InputSelect id="model-mode" @bind-Value="_form.Mode">
             <option value="@GenerationMode.Text">@Strings["ModeText"]</option>
             <option value="@GenerationMode.Image">@Strings["ModeImage"]</option>
+            <option value="@GenerationMode.Audio">@Strings["ModeAudio"]</option>
+            <option value="@GenerationMode.Video">@Strings["ModeVideo"]</option>
         </InputSelect>
 
         <label for="model-provider-id">@Strings["ProviderModelId"]</label>

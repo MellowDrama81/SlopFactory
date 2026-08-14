@@ -133,13 +133,17 @@ public sealed class GenerationQueueService
         Pump();
     }
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy)
+    private static readonly TimeSpan DefaultVideoPollInterval = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _videoPollInterval;
+
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
         _credentials = credentials;
         _preferences = preferences;
         _energy = energy;
+        _videoPollInterval = videoPollInterval ?? DefaultVideoPollInterval;
     }
 
     public event EventHandler? Changed;
@@ -431,6 +435,25 @@ public sealed class GenerationQueueService
 
                 record = await job.Workspace.RecordImageGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, images, errorMessage, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
             }
+            else if (snapshot.Mode == GenerationMode.Audio)
+            {
+                IReadOnlyList<byte[]>? audioFiles = null;
+                string? errorMessage = null;
+                try
+                {
+                    audioFiles = await adapter.GenerateAudioAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+                {
+                    errorMessage = exception.Message;
+                }
+
+                record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, audioFiles, errorMessage, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
+            }
+            else if (snapshot.Mode == GenerationMode.Video)
+            {
+                record = await ExecuteVideoGenerationAsync(job, connection, model, apiKey, adapter, cancellationToken).ConfigureAwait(false);
+            }
             else
             {
                 TextGenerationSourceImage? sourceImage = null;
@@ -476,6 +499,69 @@ public sealed class GenerationQueueService
         {
             return LocalFailureOutcome(job, exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Submits an asynchronous video generation job, persists it in the device-wide pending-job
+    /// registry so it is at least visible/inspectable if the process exits mid-poll, and polls until
+    /// a terminal outcome before committing the result exactly like a synchronous generation.
+    /// Known limitation, not yet addressed: this holds the job's queue submission slot for the
+    /// entire poll duration rather than releasing it after durable provider acceptance as plan.md
+    /// describes, and polling does not resume automatically after an application restart — both
+    /// require further queue-scheduler work tracked in milestone3.md.
+    /// </summary>
+    private async Task<GenerationRecord> ExecuteVideoGenerationAsync(QueuedJob job, Connection connection, Model model, string? apiKey, IProviderAdapter adapter, CancellationToken cancellationToken)
+    {
+        var snapshot = job.Snapshot;
+        string? errorMessage = null;
+        IReadOnlyList<byte[]>? files = null;
+        string? pendingAsyncJobId = null;
+        try
+        {
+            var submission = await adapter.SubmitVideoGenerationAsync(connection, model, apiKey, snapshot.Prompt, cancellationToken).ConfigureAwait(false);
+            var asyncJob = await job.Workspace.CreateAsyncRemoteJobAsync(job.DraftId, connection.ProviderType, connection.Id, submission.ProviderJobId, null, submission.MonitoringDeadline, cancellationToken).ConfigureAwait(false);
+            pendingAsyncJobId = asyncJob.Id;
+
+            AsyncGenerationPollResult pollResult;
+            while (true)
+            {
+                await Task.Delay(_videoPollInterval, cancellationToken).ConfigureAwait(false);
+                pollResult = await adapter.PollVideoGenerationAsync(connection, apiKey, submission.ProviderJobId, cancellationToken).ConfigureAwait(false);
+                var phase = pollResult.Outcome switch
+                {
+                    AsyncGenerationPollOutcome.Processing => AsyncRemoteJobPhase.Processing,
+                    AsyncGenerationPollOutcome.Completed => AsyncRemoteJobPhase.Completed,
+                    _ => AsyncRemoteJobPhase.Failed
+                };
+                await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(pendingAsyncJobId, phase, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                if (pollResult.Outcome != AsyncGenerationPollOutcome.Processing) break;
+            }
+
+            if (pollResult.Outcome == AsyncGenerationPollOutcome.Completed) files = pollResult.Files;
+            else errorMessage = pollResult.ErrorMessage ?? "The provider reported the video generation job as failed.";
+        }
+        catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+        {
+            errorMessage = exception.Message;
+        }
+
+        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, files, errorMessage, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
+
+        if (pendingAsyncJobId is not null)
+        {
+            try
+            {
+                await job.Workspace.DeleteAsyncRemoteJobAsync(pendingAsyncJobId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
+            {
+                // The generation already committed successfully above; failing to remove its now-stale
+                // pending-job registry row is a harmless leftover, not a reason to report a completed
+                // generation as failed.
+            }
+        }
+
+        return record;
     }
 
     private static GenerationJobOutcome LocalFailureOutcome(QueuedJob job, string message) =>

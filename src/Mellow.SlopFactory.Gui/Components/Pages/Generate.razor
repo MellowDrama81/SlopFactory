@@ -1004,6 +1004,8 @@ else
     {
         GenerationMode.Text => Strings["ModeText"],
         GenerationMode.Image => Strings["ModeImage"],
+        GenerationMode.Audio => Strings["ModeAudio"],
+        GenerationMode.Video => Strings["ModeVideo"],
         _ => mode.ToString()
     };
 
@@ -1269,7 +1271,13 @@ else
         {
             var adapter = AdapterResolver.Resolve(connection.ProviderType);
             var apiKey = connection is { HasCredential: true, CredentialRevisionId: { } revisionId } ? await Credentials.GetActiveAsync(workspace.Descriptor.LibraryId, connection.Id, revisionId) : null;
-            var outputModeLabel = SelectedModelMode == GenerationMode.Image ? "image" : "text";
+            var outputModeLabel = SelectedModelMode switch
+            {
+                GenerationMode.Image => "image",
+                GenerationMode.Audio => "audio",
+                GenerationMode.Video => "video",
+                _ => "text"
+            };
             var template = string.Format(PromptImprovementTemplate, outputModeLabel);
             if (guidance is not null)
             {

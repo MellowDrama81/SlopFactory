@@ -589,6 +589,8 @@
   <data name="ProviderGenericOpenAiCompatible" xml:space="preserve"><value>Generic OpenAI-compatible</value></data>
   <data name="ProviderOpenRouter" xml:space="preserve"><value>OpenRouter</value></data>
   <data name="ProviderDeepInfra" xml:space="preserve"><value>DeepInfra</value></data>
+  <data name="ModeAudio" xml:space="preserve"><value>Audio</value></data>
+  <data name="ModeVideo" xml:space="preserve"><value>Video</value></data>
   <data name="ConnectionsPageTitle" xml:space="preserve"><value>Connections · SlopFactory</value></data>
   <data name="ConnectionsEyebrow" xml:space="preserve"><value>AI providers</value></data>
   <data name="ConnectionsHeading" xml:space="preserve"><value>Connections</value></data>
