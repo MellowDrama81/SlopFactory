@@ -2186,6 +2186,36 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.ReorderDraftsAsync(orderedDraftIds, cancellationToken), cancellationToken);
     }
 
+    public Task<AsyncRemoteJobRecord> CreateAsyncRemoteJobAsync(string draftId, ProviderType providerType, string connectionId, string providerJobId, string? idempotencyKey, DateTimeOffset? monitoringDeadline, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.CreateAsyncRemoteJobAsync(draftId, providerType, connectionId, providerJobId, idempotencyKey, monitoringDeadline, cancellationToken), cancellationToken);
+    }
+
+    public Task<IReadOnlyList<AsyncRemoteJobRecord>> GetPendingAsyncRemoteJobsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetPendingAsyncRemoteJobsAsync(cancellationToken);
+    }
+
+    public Task<IReadOnlyList<AsyncRemoteJobRecord>> GetAsyncRemoteJobsForConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetAsyncRemoteJobsForConnectionAsync(connectionId, cancellationToken);
+    }
+
+    public Task<AsyncRemoteJobRecord> UpdateAsyncRemoteJobPhaseAsync(string asyncJobId, AsyncRemoteJobPhase phase, DateTimeOffset? lastPolledAt = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.UpdateAsyncRemoteJobPhaseAsync(asyncJobId, phase, lastPolledAt, cancellationToken), cancellationToken);
+    }
+
+    public Task DeleteAsyncRemoteJobAsync(string asyncJobId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.DeleteAsyncRemoteJobAsync(asyncJobId, cancellationToken), cancellationToken);
+    }
+
     private async Task<GenerationRecord> RecordTextGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, CancellationToken cancellationToken)
     {
         var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);

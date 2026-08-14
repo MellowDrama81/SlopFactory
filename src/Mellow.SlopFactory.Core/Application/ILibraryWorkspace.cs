@@ -146,6 +146,12 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<GenerationDraft> DuplicateDraftAsync(string draftId, CancellationToken cancellationToken = default);
     Task DeleteDraftAsync(string draftId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GenerationDraft>> ReorderDraftsAsync(IReadOnlyList<string> orderedDraftIds, CancellationToken cancellationToken = default);
+
+    Task<AsyncRemoteJobRecord> CreateAsyncRemoteJobAsync(string draftId, ProviderType providerType, string connectionId, string providerJobId, string? idempotencyKey, DateTimeOffset? monitoringDeadline, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AsyncRemoteJobRecord>> GetPendingAsyncRemoteJobsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AsyncRemoteJobRecord>> GetAsyncRemoteJobsForConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task<AsyncRemoteJobRecord> UpdateAsyncRemoteJobPhaseAsync(string asyncJobId, AsyncRemoteJobPhase phase, DateTimeOffset? lastPolledAt = null, CancellationToken cancellationToken = default);
+    Task DeleteAsyncRemoteJobAsync(string asyncJobId, CancellationToken cancellationToken = default);
 }
 
 public interface ILibraryWorkspaceFactory

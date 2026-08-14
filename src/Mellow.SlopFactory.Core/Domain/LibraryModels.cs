@@ -582,13 +582,18 @@ public enum ImportOutcome
 public enum ProviderType
 {
     OpenAi = 0,
-    GenericOpenAiCompatible = 1
+    GenericOpenAiCompatible = 1,
+    OneMinAi = 2,
+    OpenRouter = 3,
+    DeepInfra = 4
 }
 
 public enum GenerationMode
 {
     Text = 0,
-    Image = 1
+    Image = 1,
+    Audio = 2,
+    Video = 3
 }
 
 public enum ConnectionTestStatus
@@ -766,6 +771,41 @@ public sealed record GenerationSettings(
 {
     public static readonly GenerationSettings Empty = new();
 }
+
+/// <summary>
+/// The lifecycle of a provider job tracked by the device-wide pending-job registry. This is
+/// separate from a draft's local queue scheduling (queued/running before submission) and from a
+/// terminal <see cref="GenerationStatus"/> (recorded only once a <see cref="GenerationRecord"/>
+/// exists): it exists to let SlopFactory resume polling a submit-then-poll provider job across an
+/// application restart, before any local outcome — success, failure or history record — exists yet.
+/// </summary>
+public enum AsyncRemoteJobPhase
+{
+    Submitted = 0,
+    Processing = 1,
+    MonitoringPaused = 2,
+    Completed = 3,
+    Failed = 4,
+    Cancelled = 5
+}
+
+/// <summary>
+/// A minimal device-local record of an in-flight asynchronous provider job, keyed by the draft that
+/// submitted it rather than by generation-history ID, because no <see cref="GenerationRecord"/>
+/// exists until the job reaches a terminal outcome. Never contains prompts, source content or
+/// credentials, per the pending-job registry rules in plan.md.
+/// </summary>
+public sealed record AsyncRemoteJobRecord(
+    string Id,
+    string DraftId,
+    ProviderType ProviderType,
+    string ConnectionId,
+    string ProviderJobId,
+    AsyncRemoteJobPhase Phase,
+    string? IdempotencyKey,
+    DateTimeOffset SubmittedAt,
+    DateTimeOffset? LastPolledAt,
+    DateTimeOffset? MonitoringDeadline);
 
 public sealed record SavedGenerationSetting(
     string Id,
