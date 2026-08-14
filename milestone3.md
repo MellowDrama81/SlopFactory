@@ -223,11 +223,19 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 - [ ] Add **Partially Completed** with **Retry Failed/Missing Results Only** as the default recovery
       action when an adapter can safely represent the unsuccessful result count independently, plus
       **Run Entire Request Again**.
-- [ ] Add indivisible multi-request queue groups: a multi-result generation requiring several
-      separate provider submissions occupies one queue position, its children execute consecutively
-      before the next queued generation begins, and reordering/cancellation act on the whole group
-      (cancelling prevents remaining unsent children while retaining already-completed results and
-      their per-child statuses).
+- [x] Add indivisible multi-request queue groups for video: `ExecuteVideoGenerationAsync` now
+      submits `resultCount` independent provider jobs up front (one call per result — no adapter
+      implemented this pass accepts an `n` parameter for video), persists each in the async-job
+      registry, and polls all of them as one group before committing a single `GenerationRecord`
+      with whichever results actually completed (`PartiallyCompleted` when some fail, matching
+      every other mode's existing shortfall semantics). A submission failure partway through stops
+      further submissions without abandoning jobs already accepted by the provider. Verified by
+      `VideoGenerationWithMultipleResultsSubmitsOneIndependentJobPerResultAndCommitsAllOfThem` and
+      `...IsPartiallyCompletedWhenOnlySomeJobsSucceed`. **Reordering/cancellation acting on the
+      whole group** is not implemented — today's `GenerationQueueService.Cancel` only knows about
+      one job per queue entry, not a multi-job group; a mid-group cancellation currently only stops
+      the specific poll loop iteration via the shared `CancellationToken`, it doesn't yet have
+      distinct "which children already completed" reporting back to the queue/GUI layer.
 - [ ] Extend the existing content-filter partial-shortfall handling (`GenerationRecord
       .SafetyBlockedCount`) to have real per-child identity once the item above lands, rather than
       only an aggregate blocked count.

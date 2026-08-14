@@ -502,62 +502,95 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>
-    /// Submits an asynchronous video generation job, persists it in the device-wide pending-job
-    /// registry so it is at least visible/inspectable if the process exits mid-poll, and polls until
-    /// a terminal outcome before committing the result exactly like a synchronous generation.
-    /// Known limitation, not yet addressed: this holds the job's queue submission slot for the
-    /// entire poll duration rather than releasing it after durable provider acceptance as plan.md
-    /// describes, and polling does not resume automatically after an application restart — both
-    /// require further queue-scheduler work tracked in milestone3.md.
+    /// Runs a video generation to completion. A request for more than one result submits that many
+    /// independent provider jobs up front — <see cref="IProviderAdapter.SubmitVideoGenerationAsync"/>
+    /// never accepts more than one result per call — and polls all of them as one indivisible group,
+    /// matching plan.md's "a generation which requires multiple separate provider submissions
+    /// occupies one queue position as an indivisible group" rule; the final record reflects whichever
+    /// jobs actually completed (partial success is possible, matching every other multi-result mode).
+    /// Each job is persisted in the device-wide pending-job registry so it is at least
+    /// visible/inspectable if the process exits mid-poll.
+    /// Known limitations, not yet addressed: this holds the whole group's queue submission slot for
+    /// the entire poll duration rather than releasing it after durable provider acceptance as
+    /// plan.md describes, and polling does not resume automatically after an application restart —
+    /// both require further queue-scheduler work tracked in milestone3.md.
     /// </summary>
     private async Task<GenerationRecord> ExecuteVideoGenerationAsync(QueuedJob job, Connection connection, Model model, string? apiKey, IProviderAdapter adapter, CancellationToken cancellationToken)
     {
         var snapshot = job.Snapshot;
+        var resultCount = Math.Max(1, snapshot.ResultCount);
+        var submitted = new List<(string ProviderJobId, string AsyncRecordId)>();
+        var files = new List<byte[]>();
         string? errorMessage = null;
-        IReadOnlyList<byte[]>? files = null;
-        string? pendingAsyncJobId = null;
-        try
-        {
-            var submission = await adapter.SubmitVideoGenerationAsync(connection, model, apiKey, snapshot.Prompt, cancellationToken).ConfigureAwait(false);
-            var asyncJob = await job.Workspace.CreateAsyncRemoteJobAsync(job.DraftId, connection.ProviderType, connection.Id, submission.ProviderJobId, null, submission.MonitoringDeadline, cancellationToken).ConfigureAwait(false);
-            pendingAsyncJobId = asyncJob.Id;
 
-            AsyncGenerationPollResult pollResult;
-            while (true)
-            {
-                await Task.Delay(_videoPollInterval, cancellationToken).ConfigureAwait(false);
-                pollResult = await adapter.PollVideoGenerationAsync(connection, apiKey, submission.ProviderJobId, cancellationToken).ConfigureAwait(false);
-                var phase = pollResult.Outcome switch
-                {
-                    AsyncGenerationPollOutcome.Processing => AsyncRemoteJobPhase.Processing,
-                    AsyncGenerationPollOutcome.Completed => AsyncRemoteJobPhase.Completed,
-                    _ => AsyncRemoteJobPhase.Failed
-                };
-                await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(pendingAsyncJobId, phase, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-                if (pollResult.Outcome != AsyncGenerationPollOutcome.Processing) break;
-            }
-
-            if (pollResult.Outcome == AsyncGenerationPollOutcome.Completed) files = pollResult.Files;
-            else errorMessage = pollResult.ErrorMessage ?? "The provider reported the video generation job as failed.";
-        }
-        catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
-        {
-            errorMessage = exception.Message;
-        }
-
-        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, files, errorMessage, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
-
-        if (pendingAsyncJobId is not null)
+        for (var index = 0; index < resultCount; index++)
         {
             try
             {
-                await job.Workspace.DeleteAsyncRemoteJobAsync(pendingAsyncJobId, cancellationToken).ConfigureAwait(false);
+                var submission = await adapter.SubmitVideoGenerationAsync(connection, model, apiKey, snapshot.Prompt, cancellationToken).ConfigureAwait(false);
+                var asyncJob = await job.Workspace.CreateAsyncRemoteJobAsync(job.DraftId, connection.ProviderType, connection.Id, submission.ProviderJobId, null, submission.MonitoringDeadline, cancellationToken).ConfigureAwait(false);
+                submitted.Add((submission.ProviderJobId, asyncJob.Id));
+            }
+            catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+            {
+                // A submission failure stops further submissions but never abandons jobs the
+                // provider already accepted — those are still polled to completion below.
+                errorMessage ??= exception.Message;
+                break;
+            }
+        }
+
+        var pending = new List<(string ProviderJobId, string AsyncRecordId)>(submitted);
+        while (pending.Count > 0)
+        {
+            await Task.Delay(_videoPollInterval, cancellationToken).ConfigureAwait(false);
+            foreach (var entry in pending.ToArray())
+            {
+                AsyncGenerationPollResult pollResult;
+                try
+                {
+                    pollResult = await adapter.PollVideoGenerationAsync(connection, apiKey, entry.ProviderJobId, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+                {
+                    errorMessage ??= exception.Message;
+                    await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, AsyncRemoteJobPhase.Failed, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                    pending.Remove(entry);
+                    continue;
+                }
+
+                if (pollResult.Outcome == AsyncGenerationPollOutcome.Processing)
+                {
+                    await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, AsyncRemoteJobPhase.Processing, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                var phase = pollResult.Outcome == AsyncGenerationPollOutcome.Completed ? AsyncRemoteJobPhase.Completed : AsyncRemoteJobPhase.Failed;
+                await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, phase, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                if (pollResult.Outcome == AsyncGenerationPollOutcome.Completed && pollResult.Files is { Count: > 0 })
+                {
+                    files.AddRange(pollResult.Files);
+                }
+                else
+                {
+                    errorMessage ??= pollResult.ErrorMessage ?? "The provider reported a video generation job as failed.";
+                }
+                pending.Remove(entry);
+            }
+        }
+
+        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
+
+        foreach (var entry in submitted)
+        {
+            try
+            {
+                await job.Workspace.DeleteAsyncRemoteJobAsync(entry.AsyncRecordId, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
             {
-                // The generation already committed successfully above; failing to remove its now-stale
-                // pending-job registry row is a harmless leftover, not a reason to report a completed
-                // generation as failed.
+                // The generation already committed above; failing to remove a now-stale pending-job
+                // registry row is a harmless leftover, not a reason to report the generation as failed.
             }
         }
 

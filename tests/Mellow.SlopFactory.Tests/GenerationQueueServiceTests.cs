@@ -31,8 +31,8 @@ public sealed class GenerationQueueServiceTests
         }
     }
 
-    private static GenerationJobSnapshot Snapshot(string draftId, string modelId, string prompt, string destinationFolderId, GenerationMode mode = GenerationMode.Text) =>
-        new(draftId, "Tab", mode, modelId, prompt, null, null, 1, destinationFolderId, null);
+    private static GenerationJobSnapshot Snapshot(string draftId, string modelId, string prompt, string destinationFolderId, GenerationMode mode = GenerationMode.Text, int resultCount = 1) =>
+        new(draftId, "Tab", mode, modelId, prompt, null, null, resultCount, destinationFolderId, null);
 
     private static async Task<Connection> CreateReadyConnectionAsync(ILibraryWorkspace workspace, string label)
     {
@@ -694,6 +694,52 @@ public sealed class GenerationQueueServiceTests
         Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
     }
 
+    private static readonly byte[] Mp4SignatureBytes = [0, 0, 0, 0x18, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'i', (byte)'s', (byte)'o', (byte)'m', 0, 0, 0, 0];
+
+    [Fact]
+    public async Task VideoGenerationWithMultipleResultsSubmitsOneIndependentJobPerResultAndCommitsAllOfThem()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-multi";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null));
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null));
+
+        queue.Enqueue(Snapshot("draft-video-multi", model.Id, "Two cats on skateboards", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video, resultCount: 2), connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video-multi") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-video-multi")!;
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.Completed, outcome.Record!.Status);
+        Assert.Equal(2, outcome.Record.ResultFileIds.Count);
+        Assert.Equal(2, adapter.SubmittedVideoJobIds.Distinct(StringComparer.Ordinal).Count());
+        Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+    }
+
+    [Fact]
+    public async Task VideoGenerationWithMultipleResultsIsPartiallyCompletedWhenOnlySomeJobsSucceed()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-partial";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null));
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Failed, null, "Moderation rejected this variation."));
+
+        queue.Enqueue(Snapshot("draft-video-partial", model.Id, "Two cats on skateboards", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video, resultCount: 2), connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video-partial") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-video-partial")!;
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.PartiallyCompleted, outcome.Record!.Status);
+        Assert.Single(outcome.Record.ResultFileIds);
+        Assert.Null(outcome.Record.ErrorMessage);
+        Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+    }
+
     private sealed class FakeProviderAdapter : IProviderAdapter
     {
         private readonly object _gate = new();
@@ -722,12 +768,21 @@ public sealed class GenerationQueueServiceTests
         }
 
         public string NextVideoJobId = "video-job-1";
+        private int _videoJobCounter;
+        public List<string> SubmittedVideoJobIds { get; } = [];
         private readonly Queue<AsyncGenerationPollResult> _videoPollResults = new();
         public int VideoPollCount { get; private set; }
         public void EnqueueVideoPollResult(AsyncGenerationPollResult result) { lock (_gate) _videoPollResults.Enqueue(result); }
 
-        public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new AsyncGenerationSubmission(NextVideoJobId));
+        public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default)
+        {
+            lock (_gate)
+            {
+                var jobId = _videoJobCounter++ == 0 ? NextVideoJobId : $"{NextVideoJobId}-{_videoJobCounter}";
+                SubmittedVideoJobIds.Add(jobId);
+                return Task.FromResult(new AsyncGenerationSubmission(jobId));
+            }
+        }
 
         public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default)
         {
