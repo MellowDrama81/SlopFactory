@@ -250,8 +250,20 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       provider durably accepts it`) — fixing this needs the scheduler to separate "holding a
       submission slot" from "still being monitored," which is a real queue-architecture change, not
       attempted this pass to avoid rushing a concurrency change unverified.
-- [ ] Add audio/video preview support (waveform data, video posters) in the regenerable preview
-      cache, and the corresponding file-viewer behavior.
+- [ ] Add audio waveform thumbnails to the regenerable preview cache. **Correction to this item's
+      original scope**: video posters and full audio/video file-viewer playback were already
+      implemented before this milestone (`PreviewCacheService.GetVideoPosterAsync`/
+      `ExtractVideoPosterAsync` — platform-native `MediaMetadataRetriever` on Android,
+      `StorageFile.GetThumbnailAsync` on Windows — and `FileDetails.razor`'s native `<video>`/
+      `<audio>` elements with streaming range-request playback), confirmed via `git log` predating
+      this session; claiming otherwise here initially was a documentation error from not checking
+      the codebase first. Only a static waveform thumbnail for the list/grid view is genuinely
+      missing. It's a materially harder problem than the video poster case: extracting a poster
+      frame uses a simple, already-available high-level platform API, but rendering a waveform
+      needs raw PCM samples, which requires actually decoding the compressed audio (MP3/AAC/OGG/etc.)
+      first — there is no equivalently simple "get me a waveform" platform API to lean on, and doing
+      this without a new dependency (matching this project's established zero-new-package
+      preference) would mean writing or invoking a real audio decoder, not a bounded follow-on.
 - [ ] Add per-slot source-input token/byte/dimension/duration accounting using each adapter's
       documented formula where one exists, and documented count/byte/dimension/duration limits
       otherwise.
