@@ -42,6 +42,13 @@ else
                         {
                             <span class="notice error">@Strings["InsecureConnectionBadge"]</span>
                         }
+                        @if (UnresolvedAsyncJobCount(connection.Id) is > 0 and var unresolvedCount)
+                        {
+                            <div class="notice" role="status">
+                                @Strings["UnresolvedAsyncJobsNotice", unresolvedCount]
+                                <button type="button" class="ghost" disabled="@_busy" @onclick="() => DiscardUnresolvedAsyncJobsAsync(connection.Id)">@Strings["DiscardUnresolvedAsyncJobs"]</button>
+                            </div>
+                        }
                         <a class="ghost" href="@($"/connections/{connection.Id}")">@Strings["Edit"]</a>
                         @if (_recycleCandidate == connection.Id)
                         {
@@ -67,6 +74,7 @@ else
 @code {
     private IReadOnlyList<Connection> _activeConnections = [];
     private IReadOnlyList<Model> _activeModels = [];
+    private ILookup<string, AsyncRemoteJobRecord> _unresolvedAsyncJobsByConnection = Array.Empty<AsyncRemoteJobRecord>().ToLookup(job => job.ConnectionId);
     private bool _busy;
     private string? _message;
     private string? _recycleCandidate;
@@ -83,6 +91,34 @@ else
         if (workspace is null) return;
         _activeConnections = await workspace.GetActiveConnectionsAsync();
         _activeModels = await workspace.GetActiveModelsAsync();
+        // Pending (Submitted/Processing/MonitoringPaused) async jobs — e.g. a video generation
+        // whose poll loop never finished because the app closed mid-poll — are otherwise only
+        // visible through ConnectionEdit.razor's reconciliation gate, which a user only ever sees
+        // if they happen to edit that connection's auth settings. Surfacing them here gives real
+        // visibility and a cleanup path instead of a silently orphaned registry row.
+        _unresolvedAsyncJobsByConnection = (await workspace.GetPendingAsyncRemoteJobsAsync()).ToLookup(job => job.ConnectionId);
+    }
+
+    private int UnresolvedAsyncJobCount(string connectionId) => _unresolvedAsyncJobsByConnection[connectionId].Count();
+
+    private async Task DiscardUnresolvedAsyncJobsAsync(string connectionId)
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _busy = true;
+        try
+        {
+            foreach (var job in _unresolvedAsyncJobsByConnection[connectionId].ToArray())
+            {
+                await workspace.DeleteAsyncRemoteJobAsync(job.Id);
+            }
+            await ReloadAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
     }
 
     private int DependentModelCount(string connectionId) => _activeModels.Count(model => model.ConnectionId == connectionId);

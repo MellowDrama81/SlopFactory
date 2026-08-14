@@ -864,6 +864,8 @@
   <data name="RetryModelUnavailable" xml:space="preserve"><value>The model used for this generation is no longer available, so the failed results cannot be retried automatically.</value></data>
   <data name="RetryConnectionUnavailable" xml:space="preserve"><value>The connection used for this generation is no longer available, so the failed results cannot be retried automatically.</value></data>
   <data name="RetryTabTitle" xml:space="preserve"><value>Retry · {0}</value></data>
+  <data name="UnresolvedAsyncJobsNotice" xml:space="preserve"><value>{0} video generation(s) submitted through this connection are no longer being monitored (likely left over from a closed application session).</value></data>
+  <data name="DiscardUnresolvedAsyncJobs" xml:space="preserve"><value>Discard tracking</value></data>
   <data name="SafetyBlockedResultsDetail" xml:space="preserve"><value>{0} result(s) were blocked by the provider's content safety system and were not saved.</value></data>
   <data name="ViewDetails" xml:space="preserve"><value>View details</value></data>
   <data name="GenerationHistoryDetailPageTitle" xml:space="preserve"><value>Generation details · SlopFactory</value></data>

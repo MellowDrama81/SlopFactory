@@ -98,7 +98,14 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `VideoGenerationSubmitsPersistsAndPollsUntilCompletedThenCleansUpTheAsyncJobRegistryEntry`
       asserting the row exists mid-poll), but nothing reads it back on startup yet; an in-flight
       video job would be abandoned in memory if the app closes mid-poll, leaving an orphaned
-      registry row. That startup-resume wiring remains open.
+      registry row. Real resumption needs an immutable submission snapshot to exist before an async
+      job resolves — today `GenerationRecord` is only created *after* the whole job completes, so
+      there is nothing yet to resume a truly abandoned job into after a restart. That deeper
+      redesign remains open, but the orphaned-row *visibility* gap it would otherwise leave silent
+      is now covered: `Connections.razor` surfaces each connection's unresolved
+      (Submitted/Processing/MonitoringPaused) async-job count with a **Discard tracking** action,
+      so an abandoned row is never invisible outside `ConnectionEdit.razor`'s reconciliation gate —
+      a user only reaches that gate by coincidentally editing the connection's auth settings.
 - [ ] Add **Monitoring Paused**: when an async job exceeds its adapter-defined maximum monitoring
       lifetime while the provider still reports it running, stop automatic polling and expose
       **Check Now**/**Resume Monitoring** rather than treating it as failed or cancelled.
