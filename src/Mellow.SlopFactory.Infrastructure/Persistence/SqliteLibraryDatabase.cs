@@ -246,7 +246,8 @@ internal sealed class SqliteLibraryDatabase
                 tertiary_source_file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,
                 tertiary_tombstone_display_name TEXT NULL,
                 tertiary_tombstone_media_type TEXT NULL,
-                tertiary_tombstone_content_hash TEXT NULL
+                tertiary_tombstone_content_hash TEXT NULL,
+                safety_blocked_count INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX ix_generation_records_created ON generation_records(created_at);
 
@@ -557,6 +558,10 @@ internal sealed class SqliteLibraryDatabase
             await AddColumnIfMissingAsync(connection, transaction, "generation_records", "tertiary_tombstone_display_name", "TEXT NULL", cancellationToken).ConfigureAwait(false);
             await AddColumnIfMissingAsync(connection, transaction, "generation_records", "tertiary_tombstone_media_type", "TEXT NULL", cancellationToken).ConfigureAwait(false);
             await AddColumnIfMissingAsync(connection, transaction, "generation_records", "tertiary_tombstone_content_hash", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 29)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "safety_blocked_count", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -2620,7 +2625,7 @@ internal sealed class SqliteLibraryDatabase
         Parse(reader.GetString(11)), Parse(reader.GetString(12)), ReadGenerationSettings(reader, 13),
         reader.IsDBNull(18) ? null : reader.GetString(18), reader.IsDBNull(19) ? null : reader.GetString(19));
 
-    private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,state,recycled_at,tombstone_source_display_name,tombstone_source_media_type,tombstone_source_content_hash,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,secondary_source_file_id,secondary_tombstone_display_name,secondary_tombstone_media_type,secondary_tombstone_content_hash,tertiary_source_file_id,tertiary_tombstone_display_name,tertiary_tombstone_media_type,tertiary_tombstone_content_hash FROM generation_records";
+    private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,state,recycled_at,tombstone_source_display_name,tombstone_source_media_type,tombstone_source_content_hash,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,secondary_source_file_id,secondary_tombstone_display_name,secondary_tombstone_media_type,secondary_tombstone_content_hash,tertiary_source_file_id,tertiary_tombstone_display_name,tertiary_tombstone_media_type,tertiary_tombstone_content_hash,safety_blocked_count FROM generation_records";
 
     public async Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken)
     {
@@ -2712,7 +2717,7 @@ internal sealed class SqliteLibraryDatabase
         if (deleted == 0) throw new RecordNotFoundException("Generation record not found.");
     }
 
-    public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, TextResultFormat? textFormat, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, CancellationToken cancellationToken)
+    public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, TextResultFormat? textFormat, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, CancellationToken cancellationToken)
     {
         LibraryRules.ValidateGenerationTextLength(prompt, "Prompt");
         if (systemInstructions is not null) LibraryRules.ValidateGenerationTextLength(systemInstructions, "System instructions");
@@ -2723,7 +2728,7 @@ internal sealed class SqliteLibraryDatabase
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await ExecuteNonQueryAsync(connection,
-            "INSERT INTO generation_records(id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,secondary_source_file_id,tertiary_source_file_id) VALUES($id,$model,$label,$providerModel,$provider,$mode,$prompt,$sysInstr,$count,$status,$error,$folder,$created,$completed,$promptTokens,$completionTokens,$source,$improvement,$textFormat,$settingsTemperature,$settingsTopP,$settingsMaxTokens,$settingsFrequencyPenalty,$settingsPresencePenalty,$secondarySource,$tertiarySource);",
+            "INSERT INTO generation_records(id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,secondary_source_file_id,tertiary_source_file_id,safety_blocked_count) VALUES($id,$model,$label,$providerModel,$provider,$mode,$prompt,$sysInstr,$count,$status,$error,$folder,$created,$completed,$promptTokens,$completionTokens,$source,$improvement,$textFormat,$settingsTemperature,$settingsTopP,$settingsMaxTokens,$settingsFrequencyPenalty,$settingsPresencePenalty,$secondarySource,$tertiarySource,$safetyBlocked);",
             cancellationToken, transaction,
             [("$id", id), ("$model", model.Id), ("$label", model.Label), ("$providerModel", model.ProviderModelId), ("$provider", (int)providerType),
             ("$mode", (int)model.Mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions), ("$count", resultCount), ("$status", (int)status),
@@ -2733,6 +2738,7 @@ internal sealed class SqliteLibraryDatabase
             ("$improvement", promptImprovementRecordId is null ? DBNull.Value : promptImprovementRecordId),
             ("$textFormat", textFormat is null ? DBNull.Value : (int)textFormat.Value),
             ("$secondarySource", secondarySourceFileId is null ? DBNull.Value : secondarySourceFileId), ("$tertiarySource", tertiarySourceFileId is null ? DBNull.Value : tertiarySourceFileId),
+            ("$safetyBlocked", safetyBlockedCount),
             .. GenerationSettingsParameters(normalizedSettings)]).ConfigureAwait(false);
 
         var position = 0;
@@ -2744,7 +2750,7 @@ internal sealed class SqliteLibraryDatabase
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new GenerationRecord(id, model.Id, model.Label, model.ProviderModelId, providerType, model.Mode, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, now, now, resultFileIds, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, textFormat, Settings: normalizedSettings, SecondarySourceFileId: secondarySourceFileId, TertiarySourceFileId: tertiarySourceFileId);
+        return new GenerationRecord(id, model.Id, model.Label, model.ProviderModelId, providerType, model.Mode, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, now, now, resultFileIds, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, textFormat, Settings: normalizedSettings, SecondarySourceFileId: secondarySourceFileId, TertiarySourceFileId: tertiarySourceFileId, SafetyBlockedCount: safetyBlockedCount);
     }
 
     private const string PromptImprovementRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,raw_prompt,guidance,template_version,status,error_message,candidates_json,prompt_tokens,completion_tokens,created_at,completed_at FROM prompt_improvement_records";
@@ -2830,7 +2836,8 @@ internal sealed class SqliteLibraryDatabase
             (LibraryRecordState)reader.GetInt32(19), reader.IsDBNull(20) ? null : Parse(reader.GetString(20)), sourceTombstone,
             Settings: ReadGenerationSettings(reader, 24),
             SecondarySourceFileId: secondarySourceFileId, SecondarySourceFileTombstone: secondarySourceTombstone,
-            TertiarySourceFileId: tertiarySourceFileId, TertiarySourceFileTombstone: tertiarySourceTombstone);
+            TertiarySourceFileId: tertiarySourceFileId, TertiarySourceFileTombstone: tertiarySourceTombstone,
+            SafetyBlockedCount: reader.GetInt32(37));
     }
 
     private async Task SetFileStateAndLinksAsync(string fileId, LibraryRecordState state, CancellationToken cancellationToken)

@@ -41,6 +41,10 @@ else if (_record is not null)
         {
             <p class="muted">@Strings["GenerationPartiallyCompletedDetail", _record.ResultFileIds.Count, _record.ResultCount]</p>
         }
+        @if (_record.SafetyBlockedCount > 0)
+        {
+            <p class="muted">@Strings["SafetyBlockedResultsDetail", _record.SafetyBlockedCount]</p>
+        }
         @if (_record.ErrorMessage is not null)
         {
             <p class="error">@_record.ErrorMessage</p>

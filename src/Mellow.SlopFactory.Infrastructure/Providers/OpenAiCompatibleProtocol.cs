@@ -194,15 +194,25 @@ internal static class OpenAiCompatibleProtocol
             }
 
             var results = new List<string>();
+            var safetyBlockedCount = 0;
             foreach (var choice in choices.EnumerateArray())
             {
-                if (choice.ValueKind != JsonValueKind.Object || !choice.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object) continue;
+                if (choice.ValueKind != JsonValueKind.Object) continue;
+                var isSafetyBlocked = choice.TryGetProperty("finish_reason", out var finishReasonElement)
+                    && finishReasonElement.ValueKind == JsonValueKind.String
+                    && finishReasonElement.GetString() == "content_filter";
+                if (isSafetyBlocked)
+                {
+                    safetyBlockedCount++;
+                    continue;
+                }
+                if (!choice.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object) continue;
                 if (!message.TryGetProperty("content", out var contentElement) || contentElement.ValueKind != JsonValueKind.String) continue;
                 var text = contentElement.GetString();
                 if (!string.IsNullOrEmpty(text)) results.Add(text);
             }
 
-            if (results.Count == 0) throw new ProviderAdapterException("The provider returned no usable text results.");
+            if (results.Count == 0 && safetyBlockedCount == 0) throw new ProviderAdapterException("The provider returned no usable text results.");
 
             int? promptTokens = null;
             int? completionTokens = null;
@@ -212,7 +222,7 @@ internal static class OpenAiCompatibleProtocol
                 if (usage.TryGetProperty("completion_tokens", out var completionTokensElement) && completionTokensElement.ValueKind == JsonValueKind.Number) completionTokens = completionTokensElement.GetInt32();
             }
 
-            return new TextGenerationResult(results, promptTokens, completionTokens);
+            return new TextGenerationResult(results, promptTokens, completionTokens, safetyBlockedCount);
         }
         catch (JsonException)
         {

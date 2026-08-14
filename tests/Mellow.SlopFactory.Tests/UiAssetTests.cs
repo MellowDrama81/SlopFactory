@@ -588,7 +588,7 @@ public sealed class UiAssetTests
                      "ImprovementModel", "NoImprovementModel", "ImprovementGuidance", "ImprovePromptAction", "ImprovingPrompt",
                      "NoImprovementCandidates", "UseThisCandidate", "GenerationBlockedCredentialsRequired", "AddApiKey",
                      "ConnectionUnverifiedWarning", "ModelDoesNotSupportSystemInstructions", "AllModelsNeedReview", "ModelsHeading",
-                     "GenerationPartiallyCompleted", "GenerationPartiallyCompletedDetail", "TabTitle", "UntitledDraftTitle",
+                     "GenerationPartiallyCompleted", "GenerationPartiallyCompletedDetail", "SafetyBlockedResultsDetail", "TabTitle", "UntitledDraftTitle",
                      "ResetTabTitle", "DuplicateTab", "MoveTabLeft", "MoveTabRight", "CloseTab", "ConfirmCloseTab", "CancelCloseTab",
                      "CloseTabConfirmMessage", "AddDraftTab", "DraftSaving", "DraftSaved", "DraftNotSaved", "RetrySaveAction",
                      "SaveSettingsAndCloseTab", "SaveAndCloseTab", "BackToCloseOptions", "QueuePosition",
@@ -675,7 +675,7 @@ public sealed class UiAssetTests
                  {
                      "GenerationHistoryDetailPageTitle", "GenerationHistoryDetailHeading", "BackToGenerationHistory",
                      "GenerationRecordSummary", "GenerationCompleted", "GenerationFailed", "GenerationPartiallyCompleted",
-                     "GenerationPartiallyCompletedDetail", "ShowSystemInstructions", "TokenUsage", "SourceImageSlotUsed",
+                     "GenerationPartiallyCompletedDetail", "SafetyBlockedResultsDetail", "ShowSystemInstructions", "TokenUsage", "SourceImageSlotUsed",
                      "OpenGeneratedFile", "PromptImprovementUsed", "UseAgain", "Recycle", "ConfirmRecycleGenerationRecord",
                      "RecycleGenerationRecordWarning", "Cancel", "SourceFilePermanentlyDeletedSlot", "ResultFilePermanentlyDeleted"
                  })

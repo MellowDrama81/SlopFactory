@@ -117,6 +117,41 @@ public sealed class ProviderAdapterTests
         Assert.Equal(["First candidate", "Second candidate"], result.Texts);
         Assert.Null(result.PromptTokens);
         Assert.Null(result.CompletionTokens);
+        Assert.Equal(0, result.SafetyBlockedCount);
+    }
+
+    [Fact]
+    public async Task OpenAiAdapterCountsAContentFilterBlockedChoiceSeparatelyFromSuccessfulOnes()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"choices":[{"message":{"content":"Allowed candidate"}},{"finish_reason":"content_filter","message":{"content":""}}]}""", Encoding.UTF8, "application/json")
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel();
+
+        var result = await adapter.GenerateTextAsync(connection, model, "secret-key", "Write a haiku", 2);
+
+        Assert.Equal(["Allowed candidate"], result.Texts);
+        Assert.Equal(1, result.SafetyBlockedCount);
+    }
+
+    [Fact]
+    public async Task OpenAiAdapterReturnsNoTextsWithASafetyBlockedCountWhenEveryChoiceIsContentFiltered()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"choices":[{"finish_reason":"content_filter","message":{"content":""}}]}""", Encoding.UTF8, "application/json")
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel();
+
+        var result = await adapter.GenerateTextAsync(connection, model, "secret-key", "Write a haiku", 1);
+
+        Assert.Empty(result.Texts);
+        Assert.Equal(1, result.SafetyBlockedCount);
     }
 
     [Fact]

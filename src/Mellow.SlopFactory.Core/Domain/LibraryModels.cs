@@ -690,7 +690,8 @@ public sealed record ConnectionTestResult(
 public sealed record TextGenerationResult(
     IReadOnlyList<string> Texts,
     int? PromptTokens,
-    int? CompletionTokens);
+    int? CompletionTokens,
+    int SafetyBlockedCount = 0);
 
 public sealed record TextGenerationSourceImage(
     string MediaType,
@@ -732,7 +733,8 @@ public sealed record GenerationRecord(
     string? SecondarySourceFileId = null,
     FileIdentitySnapshot? SecondarySourceFileTombstone = null,
     string? TertiarySourceFileId = null,
-    FileIdentitySnapshot? TertiarySourceFileTombstone = null)
+    FileIdentitySnapshot? TertiarySourceFileTombstone = null,
+    int SafetyBlockedCount = 0)
 {
     public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;

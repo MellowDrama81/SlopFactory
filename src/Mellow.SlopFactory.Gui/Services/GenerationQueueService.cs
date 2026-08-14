@@ -463,7 +463,7 @@ public sealed class GenerationQueueService
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceFileId, snapshot.AcceptedImprovementRecordId, snapshot.Settings, snapshot.SecondarySourceFileId, snapshot.TertiarySourceFileId, cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceFileId, snapshot.AcceptedImprovementRecordId, snapshot.Settings, snapshot.SecondarySourceFileId, snapshot.TertiarySourceFileId, result?.SafetyBlockedCount ?? 0, cancellationToken).ConfigureAwait(false);
             }
 
             return new GenerationJobOutcome(job.JobId, job.DraftId, record, null, false, DateTimeOffset.UtcNow);

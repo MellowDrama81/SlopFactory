@@ -425,4 +425,42 @@ public sealed class GenerationRecordTests
         Assert.Equal(GenerationStatus.PartiallyCompleted, imageRecord.Status);
         Assert.Single(imageRecord.ResultFileIds);
     }
+
+    [Fact]
+    public async Task SafetyBlockedCountPersistsAndClearsToZeroWhenNotSupplied()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Write two haiku", 2, workspace.Descriptor.GeneratedFolderId, ["Only one came back"], null, safetyBlockedCount: 1);
+
+        Assert.Equal(1, record.SafetyBlockedCount);
+        var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
+        Assert.Equal(1, reloaded.SafetyBlockedCount);
+
+        var withoutBlocking = await workspace.RecordTextGenerationResultAsync(model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId, ["Result"], null);
+        Assert.Equal(0, withoutBlocking.SafetyBlockedCount);
+    }
+
+    [Fact]
+    public async Task EveryChoiceSafetyBlockedProducesAFailedRecordWithNoCommittedFiles()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId, [], null, safetyBlockedCount: 1);
+
+        Assert.Equal(GenerationStatus.Failed, record.Status);
+        Assert.Empty(record.ResultFileIds);
+        Assert.Equal(1, record.SafetyBlockedCount);
+        Assert.Null(record.ErrorMessage);
+    }
 }

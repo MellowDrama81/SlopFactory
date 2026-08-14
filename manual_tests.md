@@ -292,6 +292,17 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** the same tab can submit another run while earlier ones remain active without the form ever locking up, each run has independent status/cancellation, cancelling one never affects another, and the tab stays un-closable for as long as any of its runs remain active.
 
+## MT-23 — Provider content-filter detection on text generation
+
+1. Against a real OpenAI (or generic OpenAI-compatible) connection, submit a Text-mode generation with a result count of 2+ and a prompt designed to trigger the provider's own content moderation for at least one candidate while remaining otherwise generatable (exact wording will vary by provider policy and may need adjustment) — this cannot be reliably reproduced through the fake test provider, since it requires an actual `finish_reason: "content_filter"` response from a real endpoint.
+2. Confirm the run still completes (not stuck, not a hard failure) and shows **Partially Completed** if at least one candidate was allowed through, with both the existing "N of M requested results were committed" line and a new "N result(s) were blocked by the provider's content safety system and were not saved" line.
+3. Open the same record from `/generation-history/{Id}`. Confirm the same safety-blocked note appears there too.
+4. If every candidate in the request is blocked, confirm the run shows **Failed** with the safety-blocked note still present (not a generic/unsanitized provider error) and no result files were saved.
+5. Submit an ordinary, unfiltered generation. Confirm no safety-blocked note appears anywhere.
+6. Repeat with an Image-mode generation. Confirm there is no equivalent safety-blocked note or behavior change for image results — this slice intentionally covers only text generation, since no equivalent provider signal exists for images/generations today.
+
+**Pass:** a content-filtered text candidate is reported with a sanitized, specific note (not a silent shortfall or a generic error) on both `/generate` and its history detail page, other candidates in the same request are unaffected, and image-mode generation behaves exactly as before.
+
 ## Reporting
 
 For each test case, record:

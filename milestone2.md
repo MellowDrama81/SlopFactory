@@ -471,6 +471,17 @@ in parallel. Both milestones must be complete before the first public release.
 - [ ] Add the generation-history record model (immutable request snapshot, normalized status
       timeline, per-child-request tracking for multi-result generations without a native count
       parameter).
+
+  **Confirmed mostly already satisfied, remainder deferred this session**: `GenerationRecord` (schema
+  v10, extended since) already is an immutable request snapshot with a real status
+  (`Completed`/`Failed`/`PartiallyCompleted`, computed by `LibraryWorkspace.DetermineGenerationStatus`)
+  — there is no further "normalized status timeline" to add on top of a fully synchronous
+  submit-and-commit flow with no intermediate states to timeline. The "per-child-request tracking for
+  multi-result generations without a native count parameter" clause is inapplicable outright: both
+  `BuildChatCompletionRequestBody` and `BuildImageGenerationRequestBody` (`OpenAiCompatibleProtocol.cs`)
+  send the requested result count as the provider's own native `n` parameter in a single request —
+  neither adapter ever needs to loop child requests to satisfy a result count, so there is no
+  per-child state to track. Revisit only if a future adapter's provider lacks a native count parameter.
 - [x] Add per-connection FIFO queues, a device-wide submission cap with fair round-robin slot
       allocation, scoped to what's real and buildable without fabricating provider behavior: neither
       the OpenAI nor the generic OpenAI-compatible adapter exposes an actual asynchronous
@@ -635,6 +646,20 @@ in parallel. Both milestones must be complete before the first public release.
       test and a `fromVersion < 25` migration test reproducing the old (pre-fix) schema shape.
 - [ ] Add result download, validation (status/content-type/media-category/checksum), atomic
       managed-file commit, and the unverified-binary/unrecognized-content-type retention paths.
+
+  **Confirmed deferred this session, same rationale as provider-facing transport filenames**:
+  `BuildImageGenerationRequestBody` hardcodes `response_format: "b64_json"` (confirmed by reading
+  `OpenAiCompatibleProtocol.cs`), so image results only ever arrive as inline base64 bytes already
+  embedded in the same JSON response as the rest of the completion — there is no result URL for
+  either adapter to ever return, and the response parser only reads the `b64_json` field (a `url`
+  -shaped entry would be silently skipped, never fetched). Provider Result URLs' entire threat model
+  (HTTPS enforcement, SSRF-safe redirect/DNS-rebinding revalidation, streaming size limits, TLS
+  validation) exists to protect a network fetch that never happens today. Atomic managed-file commit
+  and provider-declared-format distrust are already real and already shipped — the existing image
+  commit path stages the decoded bytes and calls `MediaTypeDetector.DetectAsync` on them rather than
+  trusting the provider's stated format, exactly the same distrust principle this item asks for, just
+  applied to already-inline bytes instead of a downloaded stream. Revisit once an adapter returns
+  results by URL rather than inline bytes.
 - [x] Add text-result formatting: `.md` remains the default, and a per-model **Text result
       format** setting (schema v21: `models.text_format`, `TextResultFormat.Markdown`/`PlainText`)
       lets a Text-mode model commit its results as `.txt`/`text/plain` instead. `GenerationRecord`
@@ -658,9 +683,27 @@ in parallel. Both milestones must be complete before the first public release.
       own — the whole request is still one atomic commit), and no transport-archive extraction
       rules (no provider adapter documents or produces an archive-packaged multi-result response);
       both remain open.
-- [ ] Add provider safety-response handling: blocked-bytes discard, **Provider Safety Warning**
-      concealment/reveal, **Provider Blocked After Delivery**, and the shared classification-event
-      model described under Provider Safety Responses.
+- [x] Add provider safety-response handling, scoped to the one part of the spec a real, currently
+      wired-up adapter signal can honestly support: `OpenAiCompatibleProtocol.ParseChatCompletionResult`
+      now reads each chat-completion choice's `finish_reason`, and a choice with `"content_filter"` is
+      no longer silently dropped as a shortfall — it's counted separately (`TextGenerationResult
+      .SafetyBlockedCount`) and threaded through `RecordTextGenerationResultAsync` to a new
+      `GenerationRecord.SafetyBlockedCount` column (schema v29). Other independently successful
+      choices in the same request still commit normally, and the existing `PartiallyCompleted`/`Failed`
+      status logic (comparing committed count against requested count) needed no change — a partly
+      content-filtered response now surfaces as "N of M requested results were committed" *plus* a new
+      sanitized "N result(s) were blocked by the provider's content safety system" note (`/generate`
+      run cards and `/generation-history/{Id}`), rather than a silent, unexplained shortfall. Everything
+      else in Provider Safety Responses — concealment/reveal session state, per-file persistent
+      override preferences, external-open re-authorization, cross-duplicate shared classification
+      events, and **Provider Blocked After Delivery** late reclassification — was confirmed **not**
+      buildable honestly right now: the "permitted but sensitive, delivered anyway" signal this
+      machinery exists to protect against doesn't appear anywhere in the plain OpenAI chat-completions
+      or images/generations APIs (`finish_reason` values are only `stop`/`length`/`content_filter`/
+      `tool_calls`/`function_call`; there is no per-image content-filter field for images/generations
+      at all), and late reclassification requires the already-deferred async-job/polling
+      infrastructure. Image-mode generation has no equivalent signal to key off at all and is
+      unaffected by this slice.
 
 ## Generation history
 

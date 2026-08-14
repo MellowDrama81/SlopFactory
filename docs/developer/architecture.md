@@ -187,6 +187,38 @@ All four `IProviderAdapter` HTTP calls (`TestConnectionAsync` delegates to `List
 
 `GenerationStatus` gained a third value, `PartiallyCompleted`, requiring no schema change since `generation_records.status`/`prompt_improvement_records.status` were always plain `INTEGER` columns with no `CHECK` constraint restricting their values. `LibraryWorkspace.DetermineGenerationStatus(committedCount, requestedCount)` is the single shared decision point used by both `RecordTextGenerationResultCoreAsync` and `RecordImageGenerationResultCoreAsync`: zero committed results is `Failed` (unchanged), all requested results committed is `Completed` (unchanged), and anything in between — a provider returning fewer candidates than the request's `resultCount` without the adapter call throwing — is now `PartiallyCompleted` rather than silently reading as a full `Completed`. `Generate.razor`'s `GenerationStatusLabel` and `GenerationHistory.razor`'s `StatusLabel` both switch on the new value, and both pages show an additional "N of M requested results were committed" line specifically for that status. This does not add **per-child** status — an individual candidate within one multi-result request still has no independent identity, retry, or status; the whole request remains one atomic database write — and does not add transport-archive extraction, since no provider adapter currently documents or produces an archive-packaged multi-result response.
 
+## Provider content-filter detection (safety-blocked results)
+
+Provider Safety Responses' full spec (concealment/reveal session state, per-file persistent override
+preferences, external-open re-authorization, cross-duplicate shared classification events, and
+**Provider Blocked After Delivery** late reclassification) all require either an async-job/polling
+adapter (already deferred) or a "permitted but flagged, delivered anyway" signal that the plain OpenAI
+chat-completions and images/generations APIs simply don't have — `finish_reason` is only ever
+`stop`/`length`/`content_filter`/`tool_calls`/`function_call`, and images/generations has no per-image
+content-filter field at all. The one part of the spec that maps to something real: a chat-completion
+choice can come back with `finish_reason: "content_filter"` and empty content when OpenAI's own
+moderation blocks that specific candidate, and previously `ParseChatCompletionResult` silently dropped
+it — the choice just contributed to a smaller `Texts` list with no record of why, which existing
+`PartiallyCompleted`/`Failed` status logic already tolerated as an ordinary shortfall but with no
+sanitized explanation available anywhere.
+
+`ParseChatCompletionResult` now checks each choice's `finish_reason` first: a `"content_filter"` choice
+is counted into a new `safetyBlockedCount` instead of attempting to read its (empty) `content`, and
+`TextGenerationResult` gained a `SafetyBlockedCount` field (default `0`, so every existing call site
+across the fake-adapter test suite compiles unchanged). If every choice is blocked, `Texts` is empty
+but the method no longer throws `ProviderAdapterException("no usable text results")` — that guard now
+only fires when *both* `Texts` is empty and `SafetyBlockedCount` is zero, since an all-blocked response
+is meaningfully different from a malformed one. `GenerationRecord` gained a matching
+`SafetyBlockedCount` column (schema v29, `generation_records.safety_blocked_count INTEGER NOT NULL
+DEFAULT 0`), threaded through `GenerationQueueService.ExecuteAsync` →
+`RecordTextGenerationResultAsync`/`RecordTextGenerationResultCoreAsync` →
+`SqliteLibraryDatabase.CreateGenerationRecordAsync` unchanged in shape otherwise — image-mode
+generation always passes `0`, since no equivalent provider signal exists for it. `Generate.razor`'s
+run cards and `GenerationHistoryDetail.razor` both show a new "N result(s) were blocked by the
+provider's content safety system and were not saved" note whenever `SafetyBlockedCount > 0`, alongside
+(not instead of) the existing partial-completion detail line, since both can be true of the same
+record (some choices filtered, some others also simply missing).
+
 ## Generation text length bound
 
 `LibraryRules.ValidateGenerationTextLength(value, fieldName)` (1 MiB, `MaximumGenerationTextUtf8Bytes`) closes a gap that existed since the very first generation slice: nothing previously validated the length of a prompt, system-instructions value, or prompt-improvement raw-prompt/guidance before persisting it, even though `Generate.razor`'s textareas already declared `maxlength="1048576"` as a client-side backstop matching this exact bound. It is called from `SqliteLibraryDatabase.CreateGenerationRecordAsync` (prompt, system instructions), `CreateSavedSettingAsync`/`UpdateSavedSettingAsync` (prompt, system instructions), and `CreatePromptImprovementRecordAsync` (raw prompt, guidance) — the domain layer, not the GUI, so the bound holds regardless of caller. An "improved prompt" the user accepts becomes the ordinary `Prompt` field once accepted, so it is covered by the same check rather than needing a separate one. There is no CRLF/CR normalization and no interactive atomic oversized-edit rejection (the GUI's `maxlength` attribute is the only thing preventing an over-length edit in the browser; a bypass would surface as a save-time `LibraryValidationException`, not a live prevented keystroke).
