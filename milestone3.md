@@ -230,19 +230,30 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 ## Multi-result workflows
 
 - [ ] Add per-child result status within one multi-result generation (today a multi-result request
-      is one atomic commit with no individual result identity, retry or status). **A concrete,
-      already-discovered case this would fix**: `ExecuteVideoGenerationAsync` only catches
-      `ProviderAdapterException`/`HttpRequestException` around each poll — if the caller cancels
-      after some jobs in a multi-job group already completed (bytes already downloaded, sitting in
-      the local `files` list) but before the whole group resolves, `OperationCanceledException`
-      propagates uncaught and those already-completed results are discarded entirely rather than
-      committed as a partial success. Fixing this honestly needs `GenerationStatus.CancelledWithResults`
-      threaded through the shared commit pipeline (`RecordImageGenerationResultCoreAsync`'s
-      `DetermineGenerationStatus` only knows Completed/Failed/PartiallyCompleted today) and
-      `GenerationQueueService`'s outcome reporting (today `ExecuteAsync`'s outer
-      `catch (OperationCanceledException)` unconditionally returns a null `Record`, discarding any
-      record a nested method might have already committed) — the same depth of cross-cutting work
-      as the per-child status item itself, not a shallow patch.
+      is one atomic commit with no individual result identity, retry or status). The concrete
+      cancellation-discards-partial-results case originally noted here as a driver for this item
+      has since been fixed directly (see `GenerationStatus.Cancelled`/`CancelledWithResults` below)
+      without needing full per-child identity — that fix only required knowing *whether anything
+      completed*, not each child's individual status/retry, so the harder part of this item (a real
+      `GenerationResultEntry`-per-position model with independent retry) remains open on its own
+      merits, not because of the cancellation bug anymore.
+- [x] Add `GenerationStatus.Cancelled` and `GenerationStatus.CancelledWithResults` and use them for
+      the exact gap identified above: `ExecuteVideoGenerationAsync` now wraps the whole submit+poll
+      body in a try/catch keyed on `submitted.Count > 0` — if nothing was ever submitted,
+      cancellation propagates exactly as before (correctly reported as no history record, matching
+      Text/Image/Audio's synchronous "nothing sent yet" case); once at least one job actually
+      reached the provider, cancellation instead commits a real history record with whatever
+      results had already completed, using `CancellationToken.None` for that commit specifically
+      (it's a bounded, local-only step with no further network calls, so it shouldn't be aborted by
+      the same token that just fired) rather than silently discarding real, already-resolved
+      provider work. `DetermineGenerationStatus` gained a `wasCancelled` parameter (default `false`,
+      so `RecordTextGenerationResultCoreAsync`'s call site is unaffected) alongside a matching
+      `RecordMediaGenerationResultAsync(..., wasCancelled: ...)` parameter. Status labels added
+      across `GenerationHistory.razor`, `GenerationHistoryDetail.razor`, `Generate.razor` and
+      `MainLayout.razor` (all previously fell back to a raw enum-name string via each switch's
+      existing `_ => status.ToString()` arm — no crash, just unlocalized). 2 new queue-level tests
+      cover both the zero-results-completed and some-results-completed cancellation paths, run
+      three times each to confirm the timing-sensitive scenario isn't flaky.
 - [ ] Add **Partially Completed** with **Retry Failed/Missing Results Only** as the default recovery
       action when an adapter can safely represent the unsuccessful result count independently, plus
       **Run Entire Request Again**.

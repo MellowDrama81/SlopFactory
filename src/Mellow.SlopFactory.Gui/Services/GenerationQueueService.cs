@@ -510,6 +510,12 @@ public sealed class GenerationQueueService
     /// jobs actually completed (partial success is possible, matching every other multi-result mode).
     /// Each job is persisted in the device-wide pending-job registry so it is at least
     /// visible/inspectable if the process exits mid-poll.
+    /// If cancellation fires after at least one job actually reached the provider, the generation
+    /// still commits a real history record (<see cref="GenerationStatus.Cancelled"/> or
+    /// <see cref="GenerationStatus.CancelledWithResults"/>) instead of silently discarding
+    /// already-completed results — unlike Text/Image/Audio's synchronous cancellation (nothing sent
+    /// yet, so reporting no record at all is correct there), this is real, already-resolved provider
+    /// work and reporting it as "Cancelled Before Submission" would be false.
     /// Known limitations, not yet addressed: this holds the whole group's queue submission slot for
     /// the entire poll duration rather than releasing it after durable provider acceptance as
     /// plan.md describes, and polling does not resume automatically after an application restart —
@@ -522,74 +528,96 @@ public sealed class GenerationQueueService
         var submitted = new List<(string ProviderJobId, string AsyncRecordId)>();
         var files = new List<byte[]>();
         string? errorMessage = null;
-
-        for (var index = 0; index < resultCount; index++)
-        {
-            try
-            {
-                var submission = await adapter.SubmitVideoGenerationAsync(connection, model, apiKey, snapshot.Prompt, cancellationToken).ConfigureAwait(false);
-                var asyncJob = await job.Workspace.CreateAsyncRemoteJobAsync(job.DraftId, connection.ProviderType, connection.Id, submission.ProviderJobId, null, submission.MonitoringDeadline, cancellationToken).ConfigureAwait(false);
-                submitted.Add((submission.ProviderJobId, asyncJob.Id));
-            }
-            catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
-            {
-                // A submission failure stops further submissions but never abandons jobs the
-                // provider already accepted — those are still polled to completion below.
-                errorMessage ??= exception.Message;
-                break;
-            }
-        }
-
         double? totalCost = null;
         string? costCurrency = null;
-        var pending = new List<(string ProviderJobId, string AsyncRecordId)>(submitted);
-        while (pending.Count > 0)
+
+        try
         {
-            await Task.Delay(_videoPollInterval, cancellationToken).ConfigureAwait(false);
-            foreach (var entry in pending.ToArray())
+            for (var index = 0; index < resultCount; index++)
             {
-                AsyncGenerationPollResult pollResult;
                 try
                 {
-                    pollResult = await adapter.PollVideoGenerationAsync(connection, apiKey, entry.ProviderJobId, cancellationToken).ConfigureAwait(false);
+                    var submission = await adapter.SubmitVideoGenerationAsync(connection, model, apiKey, snapshot.Prompt, cancellationToken).ConfigureAwait(false);
+                    var asyncJob = await job.Workspace.CreateAsyncRemoteJobAsync(job.DraftId, connection.ProviderType, connection.Id, submission.ProviderJobId, null, submission.MonitoringDeadline, cancellationToken).ConfigureAwait(false);
+                    submitted.Add((submission.ProviderJobId, asyncJob.Id));
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
                 {
+                    // A submission failure stops further submissions but never abandons jobs the
+                    // provider already accepted — those are still polled to completion below.
                     errorMessage ??= exception.Message;
-                    await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, AsyncRemoteJobPhase.Failed, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-                    pending.Remove(entry);
-                    continue;
+                    break;
                 }
+            }
 
-                if (pollResult.Outcome == AsyncGenerationPollOutcome.Processing)
+            var pending = new List<(string ProviderJobId, string AsyncRecordId)>(submitted);
+            while (pending.Count > 0)
+            {
+                await Task.Delay(_videoPollInterval, cancellationToken).ConfigureAwait(false);
+                foreach (var entry in pending.ToArray())
                 {
-                    await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, AsyncRemoteJobPhase.Processing, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-                    continue;
-                }
-
-                var phase = pollResult.Outcome == AsyncGenerationPollOutcome.Completed ? AsyncRemoteJobPhase.Completed : AsyncRemoteJobPhase.Failed;
-                await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, phase, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-                if (pollResult.Outcome == AsyncGenerationPollOutcome.Completed && pollResult.Files is { Count: > 0 })
-                {
-                    files.AddRange(pollResult.Files);
-                    if (pollResult.Cost is { } cost)
+                    AsyncGenerationPollResult pollResult;
+                    try
                     {
-                        // Only a run-level total is kept, matching plan.md's "SlopFactory never
-                        // divides a run total among output sidecars" rule — a per-child cost
-                        // breakdown isn't modeled since there's no per-child result identity yet.
-                        totalCost = (totalCost ?? 0) + cost.Amount;
-                        costCurrency ??= cost.Currency;
+                        pollResult = await adapter.PollVideoGenerationAsync(connection, apiKey, entry.ProviderJobId, cancellationToken).ConfigureAwait(false);
                     }
+                    catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+                    {
+                        errorMessage ??= exception.Message;
+                        await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, AsyncRemoteJobPhase.Failed, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                        pending.Remove(entry);
+                        continue;
+                    }
+
+                    if (pollResult.Outcome == AsyncGenerationPollOutcome.Processing)
+                    {
+                        await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, AsyncRemoteJobPhase.Processing, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    var phase = pollResult.Outcome == AsyncGenerationPollOutcome.Completed ? AsyncRemoteJobPhase.Completed : AsyncRemoteJobPhase.Failed;
+                    await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, phase, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                    if (pollResult.Outcome == AsyncGenerationPollOutcome.Completed && pollResult.Files is { Count: > 0 })
+                    {
+                        files.AddRange(pollResult.Files);
+                        if (pollResult.Cost is { } cost)
+                        {
+                            // Only a run-level total is kept, matching plan.md's "SlopFactory never
+                            // divides a run total among output sidecars" rule — a per-child cost
+                            // breakdown isn't modeled since there's no per-child result identity yet.
+                            totalCost = (totalCost ?? 0) + cost.Amount;
+                            costCurrency ??= cost.Currency;
+                        }
+                    }
+                    else
+                    {
+                        errorMessage ??= pollResult.ErrorMessage ?? "The provider reported a video generation job as failed.";
+                    }
+                    pending.Remove(entry);
                 }
-                else
-                {
-                    errorMessage ??= pollResult.ErrorMessage ?? "The provider reported a video generation job as failed.";
-                }
-                pending.Remove(entry);
             }
         }
+        catch (OperationCanceledException) when (submitted.Count > 0)
+        {
+            // At least one job actually reached the provider — commit what's known so far using
+            // CancellationToken.None for the commit itself (no further network calls happen here,
+            // so there is nothing left to usefully cancel) rather than letting the cancellation
+            // that already fired abort this bounded, local-only step too.
+            var cancelledRecord = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, wasCancelled: true, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            foreach (var entry in submitted)
+            {
+                try
+                {
+                    await job.Workspace.DeleteAsyncRemoteJobAsync(entry.AsyncRecordId, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
+                {
+                }
+            }
+            return cancelledRecord;
+        }
 
-        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, cancellationToken).ConfigureAwait(false);
+        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         foreach (var entry in submitted)
         {

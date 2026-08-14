@@ -28,6 +28,8 @@ else
                     <option value="@GenerationStatus.Completed">@Strings["GenerationCompleted"]</option>
                     <option value="@GenerationStatus.Failed">@Strings["GenerationFailed"]</option>
                     <option value="@GenerationStatus.PartiallyCompleted">@Strings["GenerationPartiallyCompleted"]</option>
+                    <option value="@GenerationStatus.Cancelled">@Strings["GenerationCancelled"]</option>
+                    <option value="@GenerationStatus.CancelledWithResults">@Strings["GenerationCancelledWithResults"]</option>
                 </select>
             </label>
             <label for="history-mode-filter">@Strings["FilterByMode"]
@@ -209,6 +211,8 @@ else
         GenerationStatus.Completed => Strings["GenerationCompleted"],
         GenerationStatus.Failed => Strings["GenerationFailed"],
         GenerationStatus.PartiallyCompleted => Strings["GenerationPartiallyCompleted"],
+        GenerationStatus.Cancelled => Strings["GenerationCancelled"],
+        GenerationStatus.CancelledWithResults => Strings["GenerationCancelledWithResults"],
         _ => status.ToString()
     };
 }

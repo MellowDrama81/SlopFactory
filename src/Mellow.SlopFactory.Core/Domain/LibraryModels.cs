@@ -736,7 +736,14 @@ public enum GenerationStatus
 {
     Completed = 0,
     Failed = 1,
-    PartiallyCompleted = 2
+    PartiallyCompleted = 2,
+    /// <summary>Cancelled after at least one child provider job was actually submitted, but none
+    /// completed before cancellation — distinct from a request cancelled before anything was ever
+    /// sent, which creates no history record at all.</summary>
+    Cancelled = 3,
+    /// <summary>Cancelled after at least one child provider job was submitted, with one or more
+    /// already completed and committed before cancellation took effect.</summary>
+    CancelledWithResults = 4
 }
 
 public sealed record GenerationRecord(

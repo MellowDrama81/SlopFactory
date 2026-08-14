@@ -106,6 +106,8 @@
         GenerationStatus.Completed => Strings["GenerationCompleted"],
         GenerationStatus.Failed => Strings["GenerationFailed"],
         GenerationStatus.PartiallyCompleted => Strings["GenerationPartiallyCompleted"],
+        GenerationStatus.Cancelled => Strings["GenerationCancelled"],
+        GenerationStatus.CancelledWithResults => Strings["GenerationCancelledWithResults"],
         _ => status.ToString()
     };
     public void Dispose()

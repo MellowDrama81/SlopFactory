@@ -687,6 +687,8 @@
   <data name="ConnectionUnavailableForModel" xml:space="preserve"><value>The connection for this model is unavailable.</value></data>
   <data name="GenerationCompleted" xml:space="preserve"><value>Generation completed</value></data>
   <data name="GenerationFailed" xml:space="preserve"><value>Generation failed</value></data>
+  <data name="GenerationCancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="GenerationCancelledWithResults" xml:space="preserve"><value>Cancelled — partial results kept</value></data>
   <data name="OpenGeneratedFile" xml:space="preserve"><value>Open generated file</value></data>
   <data name="GenerationHistoryPageTitle" xml:space="preserve"><value>Generation history · SlopFactory</value></data>
   <data name="GenerationHistoryHeading" xml:space="preserve"><value>Generation history</value></data>

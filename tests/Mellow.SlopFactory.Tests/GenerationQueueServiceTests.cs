@@ -694,6 +694,53 @@ public sealed class GenerationQueueServiceTests
         Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
     }
 
+    [Fact]
+    public async Task VideoGenerationCancelledAfterSubmissionButBeforeAnyPollCommitsACancelledRecordWithNoResults()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromSeconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-cancel-early";
+
+        var jobId = queue.Enqueue(Snapshot("draft-video-cancel-early", model.Id, "A cat", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+        await WaitUntilAsync(() => adapter.SubmittedVideoJobIds.Count >= 1);
+        queue.Cancel(jobId);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video-cancel-early") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-video-cancel-early")!;
+
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.Cancelled, outcome.Record!.Status);
+        Assert.Empty(outcome.Record.ResultFileIds);
+        Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+    }
+
+    [Fact]
+    public async Task VideoGenerationCancelledAfterSomeJobsCompleteCommitsACancelledWithResultsRecordKeepingWhatFinished()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(300));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-cancel-partial";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null));
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Processing, null, null));
+
+        var jobId = queue.Enqueue(Snapshot("draft-video-cancel-partial", model.Id, "Two cats on skateboards", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video, resultCount: 2), connection.Id);
+        await WaitUntilAsync(() => adapter.VideoPollCount >= 2);
+        queue.Cancel(jobId);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video-cancel-partial") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-video-cancel-partial")!;
+
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.CancelledWithResults, outcome.Record!.Status);
+        Assert.Single(outcome.Record.ResultFileIds);
+        Assert.Null(outcome.Record.ErrorMessage);
+        Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+    }
+
     private static readonly byte[] Mp4SignatureBytes = [0, 0, 0, 0x18, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'i', (byte)'s', (byte)'o', (byte)'m', 0, 0, 0, 0];
 
     [Fact]
