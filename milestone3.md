@@ -251,14 +251,32 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 
 ## Multi-result workflows
 
-- [ ] Add per-child result status within one multi-result generation (today a multi-result request
-      is one atomic commit with no individual result identity, retry or status). The concrete
-      cancellation-discards-partial-results case originally noted here as a driver for this item
-      has since been fixed directly (see `GenerationStatus.Cancelled`/`CancelledWithResults` below)
-      without needing full per-child identity — that fix only required knowing *whether anything
-      completed*, not each child's individual status/retry, so the harder part of this item (a real
-      `GenerationResultEntry`-per-position model with independent retry) remains open on its own
-      merits, not because of the cancellation bug anymore.
+- [x] Add per-child result status within one multi-result generation. Schema v32 adds
+      `status`/`result_error_message` columns to `generation_results` (existing rows default to
+      `status=0`/Committed, correct since every pre-existing row already represented a committed
+      file). New `GenerationResultStatus` enum and `GenerationResultEntry(Position, Status, FileId,
+      ErrorMessage)` record, exposed as `GenerationRecord.Results` alongside the existing
+      `ResultFileIds` (kept unchanged for backward compatibility — every existing consumer of it is
+      untouched). `LibraryWorkspace`'s shared media commit path now builds one entry per requested
+      position: a real attempt (committed, or failed the media-category check) gets its actual
+      per-attempt outcome; any position the provider never attempted at all consumes an optional
+      `childErrorMessages` list (new parameter on `RecordMediaGenerationResultAsync`, defaulting to
+      `null`/no behavior change for Image/Audio's single-call case) so a multi-job video group's
+      real per-job failure reasons — not one generic message — reach the history record. Verified by
+      5 new tests including one round-tripping through `GetGenerationRecordAsync` and one proving a
+      video job's specific moderation-rejection message survives to its own result entry rather than
+      collapsing into a shared string. Minimal GUI display added to
+      `GenerationHistoryDetail.razor` (a per-position list, shown only when at least one position
+      failed). **Text generation deliberately still only synthesizes `Committed` entries** — its
+      shortfall causes (safety-blocked candidates, invalid Unicode) are already surfaced through
+      `SafetyBlockedCount` and the aggregate comparison, so duplicating that as per-child entries
+      would be redundant, not clearer.
+- [ ] Add **Retry Failed/Missing Results Only** as an action on the generation-history detail page,
+      now that real per-position failure data exists to act on (`GenerationRecord.Results`) — this
+      is genuinely a separate, still-open piece: submitting a new run for just the failed positions
+      (as a fresh, independent `GenerationRecord` per plan.md's immutable-snapshot rule, since a
+      submitted request can never be edited in place) needs its own GUI wiring and queue-submission
+      path, not just the underlying status data this item already delivers.
 - [x] Add `GenerationStatus.Cancelled` and `GenerationStatus.CancelledWithResults` and use them for
       the exact gap identified above: `ExecuteVideoGenerationAsync` now wraps the whole submit+poll
       body in a try/catch keyed on `submitted.Count > 0` — if nothing was ever submitted,
@@ -276,9 +294,6 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       existing `_ => status.ToString()` arm — no crash, just unlocalized). 2 new queue-level tests
       cover both the zero-results-completed and some-results-completed cancellation paths, run
       three times each to confirm the timing-sensitive scenario isn't flaky.
-- [ ] Add **Partially Completed** with **Retry Failed/Missing Results Only** as the default recovery
-      action when an adapter can safely represent the unsuccessful result count independently, plus
-      **Run Entire Request Again**.
 - [x] Add indivisible multi-request queue groups for video: `ExecuteVideoGenerationAsync` now
       submits `resultCount` independent provider jobs up front (one call per result — no adapter
       implemented this pass accepts an `n` parameter for video), persists each in the async-job
@@ -293,8 +308,9 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       the specific poll loop iteration via the shared `CancellationToken`, it doesn't yet have
       distinct "which children already completed" reporting back to the queue/GUI layer.
 - [ ] Extend the existing content-filter partial-shortfall handling (`GenerationRecord
-      .SafetyBlockedCount`) to have real per-child identity once the item above lands, rather than
-      only an aggregate blocked count.
+      .SafetyBlockedCount`) to have real per-child identity now that `GenerationResultEntry` exists,
+      rather than only an aggregate blocked count. Deliberately not done in the same pass as
+      per-child status itself — see that item's note on why Text keeps the aggregate signal for now.
 
 ## File-transfer variations and result validation
 

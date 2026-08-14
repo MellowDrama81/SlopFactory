@@ -856,6 +856,10 @@
   <data name="TextResultFormatPlainText" xml:space="preserve"><value>Plain text (.txt)</value></data>
   <data name="GenerationPartiallyCompleted" xml:space="preserve"><value>Partially completed</value></data>
   <data name="GenerationPartiallyCompletedDetail" xml:space="preserve"><value>{0} of {1} requested results were committed.</value></data>
+  <data name="PerResultStatusHeading" xml:space="preserve"><value>Per-result status</value></data>
+  <data name="ResultPositionLabel" xml:space="preserve"><value>Result {0}</value></data>
+  <data name="ResultCommitted" xml:space="preserve"><value>Committed</value></data>
+  <data name="ResultFailed" xml:space="preserve"><value>Failed</value></data>
   <data name="SafetyBlockedResultsDetail" xml:space="preserve"><value>{0} result(s) were blocked by the provider's content safety system and were not saved.</value></data>
   <data name="ViewDetails" xml:space="preserve"><value>View details</value></data>
   <data name="GenerationHistoryDetailPageTitle" xml:space="preserve"><value>Generation details · SlopFactory</value></data>

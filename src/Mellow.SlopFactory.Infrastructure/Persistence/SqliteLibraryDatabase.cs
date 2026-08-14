@@ -279,7 +279,9 @@ internal sealed class SqliteLibraryDatabase
                 position INTEGER NOT NULL,
                 tombstone_display_name TEXT NULL,
                 tombstone_media_type TEXT NULL,
-                tombstone_content_hash TEXT NULL
+                tombstone_content_hash TEXT NULL,
+                status INTEGER NOT NULL DEFAULT 0,
+                result_error_message TEXT NULL
             );
             CREATE INDEX ix_generation_results_generation ON generation_results(generation_id);
 
@@ -594,6 +596,13 @@ internal sealed class SqliteLibraryDatabase
         {
             await AddColumnIfMissingAsync(connection, transaction, "generation_records", "actual_cost", "REAL NULL", cancellationToken).ConfigureAwait(false);
             await AddColumnIfMissingAsync(connection, transaction, "generation_records", "actual_cost_currency", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 32)
+        {
+            // Every existing row represents an already-committed file, so DEFAULT 0 (Committed) is
+            // correct for pre-existing data without a data migration pass.
+            await AddColumnIfMissingAsync(connection, transaction, "generation_results", "status", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "generation_results", "result_error_message", "TEXT NULL", cancellationToken).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -2741,8 +2750,8 @@ internal sealed class SqliteLibraryDatabase
         var results = new List<GenerationRecord>(records.Count);
         foreach (var record in records)
         {
-            var (fileIds, tombstones) = await GetGenerationResultsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false);
-            results.Add(record with { ResultFileIds = fileIds, TombstonedResults = tombstones });
+            var (fileIds, tombstones, entries) = await GetGenerationResultsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false);
+            results.Add(record with { ResultFileIds = fileIds, TombstonedResults = tombstones, Results = entries });
         }
         return results;
     }
@@ -2759,8 +2768,8 @@ internal sealed class SqliteLibraryDatabase
             if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Generation record not found.");
             record = ReadGenerationRecord(reader);
         }
-        var (fileIds, tombstones) = await GetGenerationResultsAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
-        return record with { ResultFileIds = fileIds, TombstonedResults = tombstones };
+        var (fileIds, tombstones, entries) = await GetGenerationResultsAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
+        return record with { ResultFileIds = fileIds, TombstonedResults = tombstones, Results = entries };
     }
 
     public async Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken)
@@ -2776,8 +2785,8 @@ internal sealed class SqliteLibraryDatabase
         var results = new List<GenerationRecord>(records.Count);
         foreach (var record in records)
         {
-            var (fileIds, tombstones) = await GetGenerationResultsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false);
-            results.Add(record with { ResultFileIds = fileIds, TombstonedResults = tombstones });
+            var (fileIds, tombstones, entries) = await GetGenerationResultsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false);
+            results.Add(record with { ResultFileIds = fileIds, TombstonedResults = tombstones, Results = entries });
         }
         return results;
     }
@@ -2818,8 +2827,14 @@ internal sealed class SqliteLibraryDatabase
         if (deleted == 0) throw new RecordNotFoundException("Generation record not found.");
     }
 
-    public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, TextResultFormat? textFormat, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, CancellationToken cancellationToken, double? actualCost = null, string? actualCostCurrency = null)
+    public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, TextResultFormat? textFormat, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, CancellationToken cancellationToken, double? actualCost = null, string? actualCostCurrency = null, IReadOnlyList<GenerationResultEntry>? results = null)
     {
+        // Callers that don't track per-position outcomes (Text generation) get a simple Committed
+        // entry per successfully committed file and nothing for a shortfall — that shortfall is
+        // already surfaced through SafetyBlockedCount and the committed-vs-requested comparison, so
+        // synthesizing a duplicate generic "missing" entry here would be redundant.
+        var resolvedResults = results ?? resultFileIds.Select((fileId, index) => new GenerationResultEntry(index, GenerationResultStatus.Committed, fileId, null)).ToArray();
+
         LibraryRules.ValidateGenerationTextLength(prompt, "Prompt");
         if (systemInstructions is not null) LibraryRules.ValidateGenerationTextLength(systemInstructions, "System instructions");
         var normalizedSettings = LibraryRules.ValidateGenerationSettings(settings ?? GenerationSettings.Empty);
@@ -2843,16 +2858,16 @@ internal sealed class SqliteLibraryDatabase
             ("$actualCost", actualCost is null ? DBNull.Value : actualCost.Value), ("$actualCostCurrency", actualCostCurrency is null ? DBNull.Value : actualCostCurrency),
             .. GenerationSettingsParameters(normalizedSettings)]).ConfigureAwait(false);
 
-        var position = 0;
-        foreach (var fileId in resultFileIds)
+        foreach (var entry in resolvedResults)
         {
-            await ExecuteNonQueryAsync(connection, "INSERT INTO generation_results(id,generation_id,file_id,position) VALUES($resultId,$generation,$file,$position);",
-                cancellationToken, transaction, ("$resultId", LibraryRules.NewId()), ("$generation", id), ("$file", fileId), ("$position", position)).ConfigureAwait(false);
-            position++;
+            await ExecuteNonQueryAsync(connection, "INSERT INTO generation_results(id,generation_id,file_id,position,status,result_error_message) VALUES($resultId,$generation,$file,$position,$status,$resultError);",
+                cancellationToken, transaction,
+                ("$resultId", LibraryRules.NewId()), ("$generation", id), ("$file", entry.FileId is null ? DBNull.Value : entry.FileId),
+                ("$position", entry.Position), ("$status", (int)entry.Status), ("$resultError", entry.ErrorMessage is null ? DBNull.Value : entry.ErrorMessage)).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new GenerationRecord(id, model.Id, model.Label, model.ProviderModelId, providerType, model.Mode, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, now, now, resultFileIds, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, textFormat, Settings: normalizedSettings, SecondarySourceFileId: secondarySourceFileId, TertiarySourceFileId: tertiarySourceFileId, SafetyBlockedCount: safetyBlockedCount, ActualCost: actualCost, ActualCostCurrency: actualCostCurrency);
+        return new GenerationRecord(id, model.Id, model.Label, model.ProviderModelId, providerType, model.Mode, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, now, now, resultFileIds, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, textFormat, Settings: normalizedSettings, SecondarySourceFileId: secondarySourceFileId, TertiarySourceFileId: tertiarySourceFileId, SafetyBlockedCount: safetyBlockedCount, ActualCost: actualCost, ActualCostCurrency: actualCostCurrency, Results: resolvedResults);
     }
 
     private const string PromptImprovementRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,raw_prompt,guidance,template_version,status,error_message,candidates_json,prompt_tokens,completion_tokens,created_at,completed_at FROM prompt_improvement_records";
@@ -2896,20 +2911,23 @@ internal sealed class SqliteLibraryDatabase
         reader.IsDBNull(11) ? null : reader.GetInt32(11), reader.IsDBNull(12) ? null : reader.GetInt32(12),
         Parse(reader.GetString(13)), reader.IsDBNull(14) ? null : Parse(reader.GetString(14)));
 
-    private static async Task<(IReadOnlyList<string> ResultFileIds, IReadOnlyList<FileIdentitySnapshot> TombstonedResults)> GetGenerationResultsAsync(SqliteConnection connection, string generationId, CancellationToken cancellationToken)
+    private static async Task<(IReadOnlyList<string> ResultFileIds, IReadOnlyList<FileIdentitySnapshot> TombstonedResults, IReadOnlyList<GenerationResultEntry> Results)> GetGenerationResultsAsync(SqliteConnection connection, string generationId, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT file_id,tombstone_display_name,tombstone_media_type,tombstone_content_hash FROM generation_results WHERE generation_id=$id ORDER BY position;";
+        command.CommandText = "SELECT file_id,tombstone_display_name,tombstone_media_type,tombstone_content_hash,position,status,result_error_message FROM generation_results WHERE generation_id=$id ORDER BY position;";
         command.Parameters.AddWithValue("$id", generationId);
         var ids = new List<string>();
         var tombstones = new List<FileIdentitySnapshot>();
+        var entries = new List<GenerationResultEntry>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (!reader.IsDBNull(0)) { ids.Add(reader.GetString(0)); continue; }
-            if (!reader.IsDBNull(1)) tombstones.Add(new FileIdentitySnapshot(reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+            var fileId = reader.IsDBNull(0) ? null : reader.GetString(0);
+            if (fileId is not null) ids.Add(fileId);
+            else if (!reader.IsDBNull(1)) tombstones.Add(new FileIdentitySnapshot(reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+            entries.Add(new GenerationResultEntry(reader.GetInt32(4), (GenerationResultStatus)reader.GetInt32(5), fileId, reader.IsDBNull(6) ? null : reader.GetString(6)));
         }
-        return (ids, tombstones);
+        return (ids, tombstones, entries);
     }
 
     private static GenerationRecord ReadGenerationRecord(SqliteDataReader reader)

@@ -389,6 +389,56 @@ public sealed class GenerationRecordTests
         Assert.Equal(GenerationStatus.PartiallyCompleted, record.Status);
         var file = await workspace.GetFileAsync(Assert.Single(record.ResultFileIds));
         Assert.Equal("audio/mpeg", file.MediaType);
+
+        Assert.Equal(2, record.Results.Count);
+        var committed = Assert.Single(record.Results, entry => entry.Status == GenerationResultStatus.Committed);
+        Assert.Equal(0, committed.Position);
+        Assert.Equal(file.Id, committed.FileId);
+        Assert.Null(committed.ErrorMessage);
+        var failed = Assert.Single(record.Results, entry => entry.Status == GenerationResultStatus.Failed);
+        Assert.Equal(1, failed.Position);
+        Assert.Null(failed.FileId);
+        Assert.Contains("did not match the expected media type", failed.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AShortfallBeyondWhatTheProviderReturnedGetsAGenericPerPositionFailedEntry()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Audio Model", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+
+        // Only 1 byte array returned for a 3-result request — 2 positions never got any attempt.
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "Read this aloud", 3, workspace.Descriptor.GeneratedFolderId, [Mp3SignatureBytes], null);
+
+        Assert.Equal(3, record.Results.Count);
+        Assert.Equal(GenerationResultStatus.Committed, record.Results[0].Status);
+        Assert.Equal(GenerationResultStatus.Failed, record.Results[1].Status);
+        Assert.Equal(GenerationResultStatus.Failed, record.Results[2].Status);
+        Assert.Equal("The provider did not return a result for this position.", record.Results[1].ErrorMessage);
+        Assert.Equal("The provider did not return a result for this position.", record.Results[2].ErrorMessage);
+    }
+
+    [Fact]
+    public async Task PerPositionResultsSurviveARoundTripThroughGetGenerationRecordAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Audio Model", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+
+        var created = await workspace.RecordMediaGenerationResultAsync(model.Id, "Read this aloud", 2, workspace.Descriptor.GeneratedFolderId, [Mp3SignatureBytes, PngSignatureBytes], null);
+        var reloaded = await workspace.GetGenerationRecordAsync(created.Id);
+
+        Assert.Equal(2, reloaded.Results.Count);
+        Assert.Equal(GenerationResultStatus.Committed, reloaded.Results[0].Status);
+        Assert.Equal(GenerationResultStatus.Failed, reloaded.Results[1].Status);
+        Assert.Contains("did not match the expected media type", reloaded.Results[1].ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]

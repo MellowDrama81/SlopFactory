@@ -746,6 +746,26 @@ public enum GenerationStatus
     CancelledWithResults = 4
 }
 
+public enum GenerationResultStatus
+{
+    Committed = 0,
+    Failed = 1
+}
+
+/// <summary>
+/// One requested result position's individual outcome within a multi-result generation — e.g. a
+/// video generation requesting 3 results where the 2nd job failed independently of the other two.
+/// Scoped to Image/Audio/Video today: Text's shortfall causes (safety-blocked candidates, invalid
+/// Unicode) are already surfaced through <see cref="GenerationRecord.SafetyBlockedCount"/> and the
+/// aggregate committed-vs-requested comparison, so text generations synthesize only <c>Committed</c>
+/// entries here rather than duplicating that existing signal.
+/// </summary>
+public sealed record GenerationResultEntry(
+    int Position,
+    GenerationResultStatus Status,
+    string? FileId,
+    string? ErrorMessage);
+
 public sealed record GenerationRecord(
     string Id,
     string? ModelId,
@@ -778,10 +798,12 @@ public sealed record GenerationRecord(
     FileIdentitySnapshot? TertiarySourceFileTombstone = null,
     int SafetyBlockedCount = 0,
     double? ActualCost = null,
-    string? ActualCostCurrency = null)
+    string? ActualCostCurrency = null,
+    IReadOnlyList<GenerationResultEntry> Results = default!)
 {
     public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
+    public IReadOnlyList<GenerationResultEntry> Results { get; init; } = Results ?? [];
 }
 
 public sealed record PromptImprovementRecord(

@@ -833,6 +833,13 @@ public sealed class GenerationQueueServiceTests
         Assert.Single(outcome.Record.ResultFileIds);
         Assert.Null(outcome.Record.ErrorMessage);
         Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+
+        // The failed job's own specific reason reaches its result entry, not just a generic
+        // "no result returned" fallback — proving per-child status carries real per-job detail.
+        Assert.Equal(2, outcome.Record.Results.Count);
+        Assert.Equal(GenerationResultStatus.Committed, outcome.Record.Results[0].Status);
+        var failedEntry = Assert.Single(outcome.Record.Results, entry => entry.Status == GenerationResultStatus.Failed);
+        Assert.Equal("Moderation rejected this variation.", failedEntry.ErrorMessage);
     }
 
     private sealed class FakeProviderAdapter : IProviderAdapter

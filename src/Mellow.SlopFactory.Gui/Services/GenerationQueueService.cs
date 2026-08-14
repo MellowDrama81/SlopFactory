@@ -564,6 +564,10 @@ public sealed class GenerationQueueService
         var resultCount = Math.Max(1, snapshot.ResultCount);
         var submitted = new List<(string ProviderJobId, string AsyncRecordId)>();
         var files = new List<byte[]>();
+        // One message per failed/missing position, in the order each failure was discovered — the
+        // shared media commit path consumes these for its trailing "shortfall" positions, giving
+        // each failed child in a multi-job group its own real reason instead of one generic message.
+        var childErrorMessages = new List<string>();
         string? errorMessage = null;
         double? totalCost = null;
         string? costCurrency = null;
@@ -581,8 +585,12 @@ public sealed class GenerationQueueService
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
                 {
                     // A submission failure stops further submissions but never abandons jobs the
-                    // provider already accepted — those are still polled to completion below.
+                    // provider already accepted — those are still polled to completion below. Only
+                    // this one position gets the specific reason; any further never-attempted
+                    // positions correctly fall back to a generic "no result" message below since
+                    // they genuinely were never even submitted.
                     errorMessage ??= exception.Message;
+                    childErrorMessages.Add(exception.Message);
                     break;
                 }
             }
@@ -608,6 +616,7 @@ public sealed class GenerationQueueService
                     catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
                     {
                         errorMessage ??= exception.Message;
+                        childErrorMessages.Add(exception.Message);
                         await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, AsyncRemoteJobPhase.Failed, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
                         pending.Remove(entry);
                         continue;
@@ -635,7 +644,9 @@ public sealed class GenerationQueueService
                     }
                     else
                     {
-                        errorMessage ??= pollResult.ErrorMessage ?? "The provider reported a video generation job as failed.";
+                        var failureMessage = pollResult.ErrorMessage ?? "The provider reported a video generation job as failed.";
+                        errorMessage ??= failureMessage;
+                        childErrorMessages.Add(failureMessage);
                     }
                     pending.Remove(entry);
                 }
@@ -647,7 +658,7 @@ public sealed class GenerationQueueService
             // CancellationToken.None for the commit itself (no further network calls happen here,
             // so there is nothing left to usefully cancel) rather than letting the cancellation
             // that already fired abort this bounded, local-only step too.
-            var cancelledRecord = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, wasCancelled: true, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            var cancelledRecord = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, wasCancelled: true, childErrorMessages: childErrorMessages, cancellationToken: CancellationToken.None).ConfigureAwait(false);
             foreach (var entry in submitted)
             {
                 try
@@ -661,7 +672,7 @@ public sealed class GenerationQueueService
             return cancelledRecord;
         }
 
-        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, childErrorMessages: childErrorMessages, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         foreach (var entry in submitted)
         {
