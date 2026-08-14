@@ -122,13 +122,57 @@ public sealed class NewProviderAdapterTests
             }
             throw new InvalidOperationException($"Unexpected request to {path}.");
         });
-        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
         var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
 
         var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123");
 
         Assert.Equal(AsyncGenerationPollOutcome.Completed, result.Outcome);
         Assert.Equal([firstVideo, secondVideo], result.Files!);
+    }
+
+    // A fixed, non-network host resolver so adapter tests never perform a real DNS lookup —
+    // "never contact real providers" applies to name resolution too, not just HTTP calls.
+    private static Task<IPAddress[]> PublicAddressResolver(string host, CancellationToken cancellationToken) =>
+        Task.FromResult(new[] { IPAddress.Parse("93.184.216.34") });
+
+    private static Task<IPAddress[]> PrivateAddressResolver(string host, CancellationToken cancellationToken) =>
+        Task.FromResult(new[] { IPAddress.Parse("10.0.0.5") });
+
+    [Fact]
+    public async Task OpenRouterAdapterPollingRejectsAResultUrlThatResolvesToAPrivateAddress()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri!.ToString();
+            return path == "https://openrouter.ai/api/v1/videos/abc123"
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["https://openrouter.ai/api/v1/videos/abc123/content?index=0"]}""")
+                : throw new InvalidOperationException("The download must never be attempted once host validation rejects the result URL.");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PrivateAddressResolver);
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123"));
+
+        Assert.Contains("disallowed network address", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterPollingRejectsAnHttpResultUrl()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri!.ToString();
+            return path == "https://openrouter.ai/api/v1/videos/abc123"
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["http://openrouter.ai/api/v1/videos/abc123/content?index=0"]}""")
+                : throw new InvalidOperationException("The download must never be attempted for a non-HTTPS result URL.");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123"));
+
+        Assert.Contains("HTTPS", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

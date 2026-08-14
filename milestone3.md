@@ -266,11 +266,24 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 - [ ] Add the **Retain as Unverified Binary** path for a result whose bytes cannot be classified
       into the expected media type, storing it distinctly rather than silently discarding or
       mis-typing it.
-- [ ] Add support for provider-hosted result URLs (1min.AI/OpenRouter/DeepInfra features that
-      return a URL rather than inline base64): HTTPS-by-default validation, resolved-address-class
-      checks against loopback/link-local/private/multicast targets, redirect-target revalidation to
-      detect DNS rebinding, authentication stripped across cross-host redirects, and streaming the
-      download into temporary storage before committing.
+- [x] Add support for provider-hosted result URLs: `ResultUrlValidator` (new,
+      `Infrastructure/Providers/ResultUrlValidator.cs`) enforces HTTPS and rejects a resolved
+      address in the loopback/unspecified/private/link-local/multicast/reserved ranges (both IPv4
+      and IPv6), wired into `OpenRouterProviderAdapter.PollVideoGenerationAsync` before every
+      `unsigned_urls[]` download — a real gap in already-shipped code, not a hypothetical one: that
+      download path previously fetched a provider-returned URL with zero validation. Host
+      resolution is injected (`Func<string, CancellationToken, Task<IPAddress[]>>`, defaulting to
+      `Dns.GetHostAddressesAsync`) specifically so tests never perform a real DNS lookup. 11 new
+      tests cover the address-classification logic directly and the adapter's rejection of a
+      resolved-private-address result URL and a non-HTTPS one. **Not done**: redirect-target
+      revalidation — the shared `HttpClient` follows redirects with its default handler
+      configuration, so a server-side redirect is never re-validated against this same check;
+      closing that needs a custom non-auto-redirecting handler. DNS-rebinding protection (resolving
+      once for validation and again for the actual connection, which could differ) is also not
+      addressed. Streaming into temporary storage before committing was already unnecessary to add
+      here: `SendForBytesAsync` reads the full response before this code ever runs, and the byte
+      array is handed directly to `LibraryWorkspace`'s existing atomic staging pipeline, which
+      already stages before committing.
 - [ ] Add provider-issued signed upload destinations for adapters that require out-of-band asset
       upload before generation (rather than inline request-body bytes), following the same host/
       redirect/credential rules as result downloads.

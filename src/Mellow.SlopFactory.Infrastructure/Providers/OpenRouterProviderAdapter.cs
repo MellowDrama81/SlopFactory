@@ -20,10 +20,12 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
     private const string DefaultAudioVoice = "alloy";
 
     private readonly HttpClient _httpClient;
+    private readonly Func<string, CancellationToken, Task<IPAddress[]>> _resolveHost;
 
-    public OpenRouterProviderAdapter(HttpClient httpClient)
+    public OpenRouterProviderAdapter(HttpClient httpClient, Func<string, CancellationToken, Task<IPAddress[]>>? resolveHost = null)
     {
         _httpClient = httpClient;
+        _resolveHost = resolveHost ?? Dns.GetHostAddressesAsync;
     }
 
     public ProviderType ProviderType => ProviderType.OpenRouter;
@@ -161,7 +163,12 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
                     var files = new List<byte[]>(urls.Count);
                     foreach (var url in urls)
                     {
-                        using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, url);
+                        if (!Uri.TryCreate(url, UriKind.Absolute, out var resultUri))
+                        {
+                            throw new ProviderAdapterException("The provider returned a video result URL that could not be parsed.");
+                        }
+                        await ResultUrlValidator.ValidateHostAsync(resultUri, _resolveHost, cancellationToken).ConfigureAwait(false);
+                        using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, resultUri);
                         OpenAiCompatibleProtocol.ApplyAuthorization(downloadRequest, connection, apiKey);
                         var (downloadSucceeded, downloadStatus, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, downloadRequest, connection, cancellationToken).ConfigureAwait(false);
                         if (!downloadSucceeded) throw new ProviderAdapterException($"Downloading the completed video result failed: {OpenAiCompatibleProtocol.DescribeFailure(downloadStatus)}");
