@@ -656,6 +656,7 @@
   <data name="ResultCount" xml:space="preserve"><value>Result count</value></data>
   <data name="Generate" xml:space="preserve"><value>Generate</value></data>
   <data name="Generating" xml:space="preserve"><value>Generating…</value></data>
+  <data name="MonitoringAsyncJob" xml:space="preserve"><value>Submitted — awaiting the provider…</value></data>
   <data name="GeneratePageTitle" xml:space="preserve"><value>Generate · SlopFactory</value></data>
   <data name="GenerateEyebrow" xml:space="preserve"><value>AI generation</value></data>
   <data name="GenerateHeading" xml:space="preserve"><value>Generate</value></data>

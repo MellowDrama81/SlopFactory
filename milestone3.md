@@ -64,11 +64,27 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `Completed`, `Partially Completed`, `Completed Before Cancellation`, `Cancelled Before
       Submission`, `Cancelled`, `Cancelled with Results` and `Failed`, plus the `Paused` hold-reason
       variants (Connection Lost, restart-confirmation-required, metered-network, dependency
-      recycled). Deliberately not attempted yet: `GenerationJobPhase`/`GenerationStatus` still only
-      cover Queued/Running and Completed/Failed/PartiallyCompleted — video generation today reaches
-      a real terminal outcome (see below) without needing the fuller state vocabulary, and adding
-      unreachable states before something produces them would be exactly the speculative
-      infrastructure this project avoids.
+      recycled). Grown incrementally rather than all at once, each addition driven by something
+      real that needed it rather than spending the vocabulary speculatively:
+      `GenerationJobPhase` now also has `Monitoring` (a submit-then-poll job whose slot was
+      released) alongside `Queued`/`Running`, and `GenerationStatus` now also has
+      `Cancelled`/`CancelledWithResults` alongside `Completed`/`Failed`/`PartiallyCompleted`. Still
+      missing every `Paused`/`Preparing`/`Uploading`/`Submitting`/`Submission Outcome Unknown`/
+      `Monitoring Paused`/`Downloading Results`/`Awaiting Library`/`Cancellation Requested` value —
+      none of those has a real driver yet.
+- [x] Add the queue-scheduler change so an asynchronous job releases its submission slot after
+      durable provider acceptance rather than holding it for the entire poll duration — the one
+      architectural limitation flagged repeatedly throughout this milestone.
+      `GenerationQueueService.ReleaseSubmissionSlotEarly` decrements the device-wide/per-connection
+      counters and moves the job to `GenerationJobPhase.Monitoring` as soon as
+      `ExecuteVideoGenerationAsync`'s submission loop lands at least one job, then calls `Pump()` so
+      other queued work on the same connection can start immediately instead of waiting out the
+      video's poll loop. Verified by
+      `VideoGenerationReleasesItsConnectionSlotAfterSubmissionSoOtherQueuedWorkCanRunConcurrently`,
+      which proves a second job on the same connection (default concurrency cap 1) actually starts
+      while the video job is still being monitored, not just that the counters look right in
+      isolation. `Monitoring` is surfaced in the GUI (`Generate.razor`'s run-card and prompt-tab
+      status, `GenerationQueue.razor`'s queue list) as "Submitted — awaiting the provider…".
 - [x] Add a persisted async-job record (schema v30 `async_remote_jobs` table,
       `AsyncRemoteJobRecord`/`AsyncRemoteJobPhase`: provider job ID, connection ID, draft ID,
       submitted/last-polled timestamps, adapter-declared monitoring deadline) distinct from the
@@ -113,8 +129,14 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `ConnectionEdit.razor`'s save/credential-decision flow is already only manually verified); the
       data it depends on (`GetAsyncRemoteJobsForConnectionAsync`, `DeleteAsyncRemoteJobAsync`,
       `AsyncRemoteJobPhase`) is fully covered by `AsyncRemoteJobTests.cs`.
-- [ ] Add cancellation handling for every defined stage (before submission, mid-upload, provider
-      already accepted) distinct from today's single `CancellationTokenSource`-only path.
+- [x] / [ ] Add cancellation handling for every defined stage — partially done for video. Cancelling
+      before any job is submitted reports no history record (matches Text/Image/Audio's existing
+      "nothing sent yet" behavior); cancelling after at least one job reached the provider commits a
+      real `Cancelled`/`CancelledWithResults` record instead of discarding already-resolved provider
+      work (see the Multi-result workflows section). **Not done**: a distinct "mid-upload" stage —
+      no adapter implemented this pass uploads a separate asset before submitting (video/audio
+      requests are single JSON bodies), so there's no upload phase to distinguish cancellation
+      during.
 - [ ] Add offline/metered-network queue handling: **Paused — Connection Lost**, manual **Resume
       Queue**/**Resume All for This Connection** with per-job revalidation, and the device-wide
       metered-network transfer setting (**Allow**/**Ask**/**Wi-Fi/Unmetered Only**).

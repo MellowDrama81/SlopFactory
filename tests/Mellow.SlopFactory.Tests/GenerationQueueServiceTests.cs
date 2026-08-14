@@ -675,6 +675,34 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task VideoGenerationReleasesItsConnectionSlotAfterSubmissionSoOtherQueuedWorkCanRunConcurrently()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromSeconds(2));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var videoModel = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        var textModel = await workspace.CreateModelAsync("Text", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        adapter.NextVideoJobId = "video-slot-test";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Processing, null, null));
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Processing, null, null));
+
+        // The default per-connection concurrency cap is 1 — without releasing the video job's slot
+        // after submission, this text job could not start until the video job's entire poll loop
+        // (which never even resolves in this test) finished.
+        var videoJobId = queue.Enqueue(Snapshot("draft-video-slot", videoModel.Id, "A cat", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+        queue.Enqueue(Snapshot("draft-text-slot", textModel.Id, "concurrent-text", workspace.Descriptor.GeneratedFolderId), connection.Id);
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("concurrent-text"), timeoutMs: 4000);
+
+        var videoStatus = queue.GetJobStatus(videoJobId);
+        Assert.NotNull(videoStatus);
+        Assert.Equal(GenerationJobPhase.Monitoring, videoStatus!.Phase);
+
+        adapter.Complete("concurrent-text", new TextGenerationResult(["result"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-text-slot") is not null);
+    }
+
+    [Fact]
     public async Task VideoGenerationFailureCommitsAFailedRecordAndRemovesTheAsyncJobRegistryEntry()
     {
         using var temporary = new TemporaryDirectory();

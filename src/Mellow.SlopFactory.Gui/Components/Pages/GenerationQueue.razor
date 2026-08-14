@@ -37,7 +37,12 @@ else
                     <li>
                         <div>
                             <strong>@entry.SubmittedTabTitle</strong>
-                            <small>@ModelLabel(entry.ModelId) · @(entry.Phase == GenerationJobPhase.Running ? Strings["Generating"] : Strings["QueuePosition", entry.QueuePosition ?? 0])</small>
+                            <small>@ModelLabel(entry.ModelId) · @(entry.Phase switch
+                            {
+                                GenerationJobPhase.Running => Strings["Generating"],
+                                GenerationJobPhase.Monitoring => Strings["MonitoringAsyncJob"],
+                                _ => Strings["QueuePosition", entry.QueuePosition ?? 0]
+                            })</small>
                         </div>
                         <p>@entry.Prompt</p>
                         <div class="actions">

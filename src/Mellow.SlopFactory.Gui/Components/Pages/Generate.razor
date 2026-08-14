@@ -412,6 +412,7 @@ else
                         {
                             GenerationJobPhase.Queued => Strings["QueuePosition", runStatus.QueuePosition ?? 0],
                             GenerationJobPhase.Running => Strings["Generating"],
+                            GenerationJobPhase.Monitoring => Strings["MonitoringAsyncJob"],
                             _ => Strings["Generate"]
                         })
                     </p>
@@ -821,6 +822,7 @@ else
         {
             GenerationJobPhase.Queued => Strings["QueuePosition", status.QueuePosition ?? 0].Value,
             GenerationJobPhase.Running => Strings["Generating"].Value,
+            GenerationJobPhase.Monitoring => Strings["MonitoringAsyncJob"].Value,
             _ => null
         };
     }

@@ -8,7 +8,13 @@ namespace Mellow.SlopFactory.Gui.Services;
 public enum GenerationJobPhase
 {
     Queued = 0,
-    Running = 1
+    Running = 1,
+    /// <summary>A submit-then-poll job whose provider submission durably succeeded and whose queue
+    /// submission slot has therefore already been released — it no longer counts against the
+    /// device-wide or per-connection concurrency cap, matching plan.md's "an asynchronous job
+    /// releases its submission slot after the provider durably accepts it; later status polling
+    /// does not consume a submission slot" rule.</summary>
+    Monitoring = 2
 }
 
 public sealed record GenerationJobSnapshot(
@@ -64,6 +70,10 @@ public sealed class GenerationQueueService
         public required ILibraryWorkspace Workspace;
         public GenerationJobPhase Phase;
         public CancellationTokenSource? Cancellation;
+        /// <summary>True once this job's submission slot has been released early (moved to
+        /// <see cref="GenerationJobPhase.Monitoring"/>) — guards against double-releasing the slot
+        /// and tells <see cref="RunJobAsync"/> not to decrement the counters again at the end.</summary>
+        public bool SlotReleased;
     }
 
     private readonly Dictionary<string, LinkedList<QueuedJob>> _queues = new(StringComparer.Ordinal);
@@ -395,11 +405,34 @@ public sealed class GenerationQueueService
             _jobsById.Remove(job.JobId);
             RemoveActiveJobId(job.DraftId, job.JobId);
             RecordOutcome(job.DraftId, outcome);
-            _runningPerConnection[job.ConnectionId] = _runningPerConnection.GetValueOrDefault(job.ConnectionId) - 1;
-            _runningTotal--;
+            if (!job.SlotReleased)
+            {
+                _runningPerConnection[job.ConnectionId] = _runningPerConnection.GetValueOrDefault(job.ConnectionId) - 1;
+                _runningTotal--;
+            }
         }
         cancellation.Dispose();
         JobCompleted?.Invoke(this, outcome);
+        RaiseChanged();
+        Pump();
+    }
+
+    /// <summary>
+    /// Releases a job's submission slot early — for a submit-then-poll job (video) whose provider
+    /// submission durably succeeded, so it stops holding the device-wide/per-connection concurrency
+    /// cap while it only polls for status rather than actively submitting. Idempotent: safe to call
+    /// even if already released, though today's only caller only ever calls it once per job.
+    /// </summary>
+    private void ReleaseSubmissionSlotEarly(QueuedJob job)
+    {
+        lock (_gate)
+        {
+            if (job.SlotReleased) return;
+            job.SlotReleased = true;
+            job.Phase = GenerationJobPhase.Monitoring;
+            _runningPerConnection[job.ConnectionId] = _runningPerConnection.GetValueOrDefault(job.ConnectionId) - 1;
+            _runningTotal--;
+        }
         RaiseChanged();
         Pump();
     }
@@ -516,10 +549,14 @@ public sealed class GenerationQueueService
     /// already-completed results — unlike Text/Image/Audio's synchronous cancellation (nothing sent
     /// yet, so reporting no record at all is correct there), this is real, already-resolved provider
     /// work and reporting it as "Cancelled Before Submission" would be false.
-    /// Known limitations, not yet addressed: this holds the whole group's queue submission slot for
-    /// the entire poll duration rather than releasing it after durable provider acceptance as
-    /// plan.md describes, and polling does not resume automatically after an application restart —
-    /// both require further queue-scheduler work tracked in milestone3.md.
+    /// Once at least one job is durably accepted, this releases the connection's queue submission
+    /// slot immediately (<see cref="ReleaseSubmissionSlotEarly"/>) rather than holding it through the
+    /// whole poll duration, matching plan.md's "an asynchronous job releases its submission slot
+    /// after the provider durably accepts it" rule — the job moves to
+    /// <see cref="GenerationJobPhase.Monitoring"/> and no longer counts against the device-wide or
+    /// per-connection concurrency cap while only polling for status.
+    /// Known limitation, not yet addressed: polling does not resume automatically after an
+    /// application restart — that needs separate queue-scheduler work tracked in milestone3.md.
     /// </summary>
     private async Task<GenerationRecord> ExecuteVideoGenerationAsync(QueuedJob job, Connection connection, Model model, string? apiKey, IProviderAdapter adapter, CancellationToken cancellationToken)
     {
@@ -548,6 +585,13 @@ public sealed class GenerationQueueService
                     errorMessage ??= exception.Message;
                     break;
                 }
+            }
+
+            if (submitted.Count > 0)
+            {
+                // At least one job was durably accepted by the provider — release this connection's
+                // submission slot now instead of holding it through the whole poll duration below.
+                ReleaseSubmissionSlotEarly(job);
             }
 
             var pending = new List<(string ProviderJobId, string AsyncRecordId)>(submitted);
