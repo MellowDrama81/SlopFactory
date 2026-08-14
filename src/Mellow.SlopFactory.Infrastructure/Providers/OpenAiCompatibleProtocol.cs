@@ -44,6 +44,30 @@ internal static class OpenAiCompatibleProtocol
         }
     }
 
+    /// <summary>
+    /// Like <see cref="SendAsync"/> but reads the response as raw bytes rather than a decoded string —
+    /// required for binary responses (audio synthesis, video/image downloads) where
+    /// <see cref="HttpContent.ReadAsStringAsync()"/> would corrupt non-UTF-8 bytes. Never retried: every
+    /// caller today is either a generation submission (not safe to auto-retry without an idempotency
+    /// key, matching <see cref="SendAsync"/>'s own rule) or a one-shot authenticated result download.
+    /// </summary>
+    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, byte[] Bytes)> SendForBytesAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken)
+    {
+        var timeoutSeconds = connection.TimeoutSeconds ?? LibraryRules.DefaultConnectionTimeoutSeconds;
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        try
+        {
+            using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+            var bytes = await response.Content.ReadAsByteArrayAsync(linkedCts.Token).ConfigureAwait(false);
+            return (response.IsSuccessStatusCode, response.StatusCode, bytes);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new ProviderAdapterException($"The request timed out after {timeoutSeconds} seconds.");
+        }
+    }
+
     private static TimeSpan ComputeRetryDelay(HttpResponseMessage response, int attempt)
     {
         if (response.Headers.RetryAfter is { } retryAfter)

@@ -92,5 +92,14 @@ internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
     }
 
+    public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default) =>
+        throw new ProviderAdapterException("Audio generation is not yet implemented for the generic OpenAI-compatible adapter.");
+
+    public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default) =>
+        throw new ProviderAdapterException("Video generation is not yet implemented for the generic OpenAI-compatible adapter.");
+
+    public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default) =>
+        throw new ProviderAdapterException("Video generation is not yet implemented for the generic OpenAI-compatible adapter.");
+
     private static string? TryGetHost(string baseUrl) => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) ? uri.Host : null;
 }

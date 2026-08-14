@@ -702,6 +702,31 @@ public sealed record TextGenerationSourceImage(
     string MediaType,
     byte[] Bytes);
 
+/// <summary>
+/// The outcome of one poll of a provider's asynchronous video (or other long-running) generation job.
+/// Distinct from <see cref="AsyncRemoteJobPhase"/> — that enum is the device-local persisted registry
+/// state; this is the adapter's immediate report of what the provider said on this specific poll.
+/// Completed result bytes carry no adapter-declared media type: the actual media type is detected
+/// from the bytes themselves rather than trusted from the provider, matching the existing
+/// image-result commit convention.
+/// </summary>
+public enum AsyncGenerationPollOutcome
+{
+    Processing = 0,
+    Completed = 1,
+    Failed = 2
+}
+
+/// <summary>A provider's acknowledgement that it accepted a submit-then-poll generation request.</summary>
+public sealed record AsyncGenerationSubmission(
+    string ProviderJobId,
+    DateTimeOffset? MonitoringDeadline = null);
+
+public sealed record AsyncGenerationPollResult(
+    AsyncGenerationPollOutcome Outcome,
+    IReadOnlyList<byte[]>? Files,
+    string? ErrorMessage);
+
 public enum GenerationStatus
 {
     Completed = 0,

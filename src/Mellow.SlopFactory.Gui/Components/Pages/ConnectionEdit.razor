@@ -45,6 +45,8 @@ else
         <InputSelect id="connection-provider" @bind-Value="_form.ProviderType" disabled="@(!IsNew && _hasDependentModels)">
             <option value="@ProviderType.OpenAi">@Strings["ProviderOpenAi"]</option>
             <option value="@ProviderType.GenericOpenAiCompatible">@Strings["ProviderGenericOpenAiCompatible"]</option>
+            <option value="@ProviderType.OpenRouter">@Strings["ProviderOpenRouter"]</option>
+            <option value="@ProviderType.DeepInfra">@Strings["ProviderDeepInfra"]</option>
         </InputSelect>
         @if (!IsNew && _hasDependentModels)
         {

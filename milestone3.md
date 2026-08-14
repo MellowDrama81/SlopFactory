@@ -30,18 +30,25 @@ async-job and rate-limit behavior, and testing them against a stub that only kno
 success/auth-failure/unreachable-host (`FakeHttpMessageHandler`'s current 19-line scope) would
 mean writing adapter-specific fakes three times over instead of once.
 
-- [ ] Expand `FakeHttpMessageHandler` into a shared, reusable test fixture covering streaming
-      responses, asynchronous job submission/polling, rate-limit (`429`/`Retry-After`) responses,
-      moderation/content-filter responses, redirects (same-host and cross-host), binary downloads
-      and a representative set of transport/provider error shapes, per the Testing section of
-      `plan.md`.
-- [ ] Add provider contract fixtures (versioned sanitized request/response JSON) for 1min.AI,
-      OpenRouter and DeepInfra so adapter behavior is pinned against real shapes rather than
-      hand-written approximations, and so future provider API changes are reviewed deliberately
-      against a diff.
+- [x] Expand `FakeHttpMessageHandler` into a shared, reusable test fixture: `Sequenced(...)` for
+      submit-then-poll/redirect-chain scenarios (throws if a test's adapter code calls more times
+      than responses were configured, catching a wrong-call-count bug rather than hanging), plus
+      `JsonResponse`/`RateLimited`/`Redirect`/`BinaryResponse`/`StreamingResponse` canned-response
+      builders. Covered by `FakeHttpMessageHandlerTests.cs`. Moderation/content-filter responses
+      needed no new fixture support — that's provider JSON shape, already exercised via the existing
+      `finish_reason: content_filter` tests — and a representative *provider-error-shape* sweep
+      (beyond the 401/404/429/5xx cases already covered per-adapter) remains open below.
+- [ ] Add provider contract fixtures (versioned sanitized request/response JSON) for OpenRouter and
+      DeepInfra so adapter behavior is pinned against real shapes rather than hand-written
+      approximations, and so future provider API changes are reviewed deliberately against a diff.
+      (1min.AI is excluded — see the Provider adapters section below.) The adapters shipped this
+      pass are tested with inline JSON literals in `NewProviderAdapterTests.cs`, not a separate
+      versioned fixture file; promoting those to real fixture files is still open.
 - [ ] Add a live-provider manual test harness (explicitly enabled, skipped when credentials are
-      absent, cost-budget-bounded) for each of the three new adapters, mirroring the existing
-      OpenAI/generic live-test conventions.
+      absent, cost-budget-bounded) for the OpenRouter and DeepInfra adapters, mirroring the existing
+      OpenAI/generic live-test conventions. Doubly important here since OpenRouter's audio
+      transcript field name and DeepInfra's dual OpenAI-compatible/native base-URL split were not
+      fully confirmed by research — a live call is the only way to close that gap.
 
 ## Asynchronous remote jobs and reconciliation
 
@@ -98,23 +105,64 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 - [ ] Add `ProviderType.OneMinAi` and its adapter: native unified chat API for text, and the AI
       Feature API with feature-specific request parameters for image, audio and video, including
       long-running feature requests through the async-job infrastructure above.
-- [ ] Add `ProviderType.OpenRouter` and its adapter: OpenAI-compatible base URL and chat/text
-      handling, but modality-specific endpoints and schemas for image generation, audio generation
-      and asynchronous video generation (explicitly handled by the adapter, not the generic
-      OpenAI-compatible path).
-- [ ] Add `ProviderType.DeepInfra` and its adapter: OpenAI-compatible endpoints for chat, image and
-      audio where supported, falling back to its native inference API for models/modalities not
-      exposed through the compatible endpoints, including video.
+
+  **Deliberately deferred, not attempted this pass**: dedicated research (WebSearch/WebFetch against
+  1min.AI's own docs and third-party sources) could confirm only the base URL (`https://api.1min.ai`)
+  and that authentication uses a bare `API-KEY` header rather than `Authorization: Bearer` — a real
+  divergence `LibraryRules`'s existing per-connection `CredentialHeaderName`/`AuthPrefix` fields
+  already accommodate without adapter code changes, so nothing is blocked there. Everything else is
+  unverified: `docs.1min.ai` could not be fetched by research tooling at all, no confirmed
+  model-listing (or any other non-billable) endpoint exists to build **Test Connection** against
+  (`/api/chat-with-ai` is itself a paid generation call, and `plan.md` explicitly forbids testing
+  with "a paid generation request"), and the "AI Feature API"'s request/response shape for image,
+  audio and video, plus its async-polling job-ID field and status values, are completely
+  unconfirmed. Shipping this now would mean fabricating a wire format rather than following one.
+  Revisit once the user (or a future session) can access `docs.1min.ai` directly or test against a
+  live account/API key.
+- [x] Add `ProviderType.OpenRouter` and its adapter (`OpenRouterProviderAdapter.cs`): reuses
+      `OpenAiCompatibleProtocol` for connection test/model listing/text generation against its
+      OpenAI-compatible base URL, and implements OpenRouter's own modality-specific endpoints for
+      image (`POST {base}/images`, same `data[].b64_json` response shape as OpenAI — reuses
+      `ParseImageGenerationBytes` directly), audio (`POST {base}/audio/speech`, one request per
+      requested result since TTS has no `n` parameter, raw binary response body), and asynchronous
+      video (`POST {base}/videos` submit → `GET {base}/videos/{id}` poll → authenticated download of
+      each `unsigned_urls[]` entry once `status: "completed"`; `failed`/`cancelled`/`expired` all
+      surface as `AsyncGenerationPollOutcome.Failed` rather than polling forever). A new
+      `OpenAiCompatibleProtocol.SendForBytesAsync` reads raw bytes instead of a decoded string,
+      needed because audio/video responses are binary and `ReadAsStringAsync` would corrupt them.
+      13 tests in `NewProviderAdapterTests.cs` cover image/audio/video submit/poll/download,
+      video failure/cancelled/expired handling, missing-job-ID validation, and rate-limit retry
+      during polling. The audio transcript field name and the exact video submit parameter set
+      beyond `model`/`prompt` (duration, resolution, aspect ratio, etc.) were not fully confirmed by
+      research; a live test call remains the way to close that gap (tracked in Testing foundation
+      above).
+- [x] Add `ProviderType.DeepInfra` and its adapter (`DeepInfraProviderAdapter.cs`): its
+      OpenAI-compatible surface (confirmed base `https://api.deepinfra.com/v1/openai`) uses the
+      exact same relative paths and request/response shapes as OpenAI for chat, model listing and
+      image generation, so this adapter reuses `OpenAiCompatibleProtocol` identically to
+      `OpenAiProviderAdapter` for those three operations — no new request/response code needed.
+      Audio and video generation deliberately throw a clear `ProviderAdapterException` explaining
+      why rather than guessing: DeepInfra's audio endpoint exists but its exact schema wasn't
+      fetched, and video generation was contradictory across sources (one candidate endpoint, one
+      unrelated fragment, no confirmed docs page) — confirmed by `DeepInfraAdapterThrowsAClear
+      NotYetImplementedErrorForAudioAndVideo`. 2 additional tests cover the reused text/image paths
+      against DeepInfra's actual confirmed endpoints.
 - [ ] Add signed adapter versioning for normalized snapshot formats, so generation-history and
       saved-setting records created by an earlier adapter version remain readable after that
       adapter is updated.
-- [ ] Extend connection testing, transport-security validation, TLS/redirect rules and the
-      **Unverified**/**Authentication Failed**/**Credentials Required** connection states to each
-      new adapter's actual authentication and discovery mechanism.
+- [x] Extend connection testing, transport-security validation, TLS/redirect rules and the
+      **Unverified**/**Authentication Failed**/**Credentials Required** connection states to
+      OpenRouter and DeepInfra — both reuse the exact same `Connection`/base-URL/header validation
+      path as the existing adapters (nothing provider-specific was needed since both use standard
+      Bearer authentication over HTTPS). 1min.AI's divergent `API-KEY` header works through the
+      existing configurable `CredentialHeaderName`/`AuthPrefix` fields without code changes, but the
+      adapter itself remains deferred per above.
 - [ ] Add provider- and model-capability detection/settings-schema definitions for each new
       adapter's models, generating the same structured setting controls (selectors, sliders,
       toggles, voice lists, dimensions) as the existing adapters, including per-adapter
       concurrency-limit declarations where a provider has no safe parallel-submission behavior.
+      (OpenRouter/DeepInfra models can be added and used manually today via the existing
+      manually-entered-model path; the generated-controls schema layer itself is still open.)
 
 ## Audio and video generation
 

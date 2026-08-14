@@ -14,8 +14,12 @@ public static class DependencyInjection
         // from user-initiated generation cancellation.
         services.AddHttpClient<OpenAiProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddHttpClient<GenericOpenAiCompatibleProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddHttpClient<OpenRouterProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddHttpClient<DeepInfraProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<OpenAiProviderAdapter>());
         services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<GenericOpenAiCompatibleProviderAdapter>());
+        services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<OpenRouterProviderAdapter>());
+        services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<DeepInfraProviderAdapter>());
         services.AddSingleton<IProviderAdapterResolver, ProviderAdapterResolver>();
         return services;
     }
