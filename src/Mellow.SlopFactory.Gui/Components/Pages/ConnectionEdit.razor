@@ -35,6 +35,17 @@ else if (_awaitingKeyDecision)
         <p class="muted">@Strings["SaveNewKeyAsUnverifiedWarning"]</p>
     </div>
 }
+else if (_awaitingUnresolvedAsyncJobsDecision)
+{
+    <div class="notice error" role="dialog" aria-label="@Strings["UnresolvedAsyncJobsBlockChange", _unresolvedAsyncJobCount]">
+        <p>@Strings["UnresolvedAsyncJobsBlockChange", _unresolvedAsyncJobCount]</p>
+        <div class="actions">
+            <button type="button" class="secondary" disabled="@_busy" @onclick="CancelUnresolvedAsyncJobsDecision">@Strings["Cancel"]</button>
+            <button type="button" class="danger" disabled="@_busy" @onclick="StopTrackingAndApplyChangesAsync">@Strings["StopTrackingAndApplyChanges"]</button>
+        </div>
+        <p class="muted">@Strings["StopTrackingAndApplyChangesWarning"]</p>
+    </div>
+}
 else
 {
     <EditForm Model="_form" OnValidSubmit="SaveAsync" class="stack-form">
@@ -166,6 +177,12 @@ else
     private string? _pendingRevisionId;
     private string? _pendingFailureMessage;
     private string? _libraryId;
+    private string _originalBaseUrl = string.Empty;
+    private string _originalCredentialHeaderName = string.Empty;
+    private string _originalAuthPrefix = string.Empty;
+    private bool _awaitingUnresolvedAsyncJobsDecision;
+    private int _unresolvedAsyncJobCount;
+    private bool _confirmedStopTrackingUnresolvedJobs;
 
     protected override async Task OnInitializedAsync()
     {
@@ -184,6 +201,9 @@ else
                 _form.BaseUrl = existing.BaseUrl;
                 _form.CredentialHeaderName = existing.CredentialHeaderName;
                 _form.AuthPrefix = existing.AuthPrefix;
+                _originalBaseUrl = existing.BaseUrl;
+                _originalCredentialHeaderName = existing.CredentialHeaderName;
+                _originalAuthPrefix = existing.AuthPrefix;
                 _form.TimeoutSeconds = existing.TimeoutSeconds;
                 _form.AdditionalHeadersText = FormatHeaderLines(existing.AdditionalHeaders);
                 var modalitySettings = existing.GenericModalitySettings ?? GenericConnectionModalitySettings.Default;
@@ -241,6 +261,12 @@ else
         }
     }
 
+    /// <summary>Whether this edit touches a field plan.md requires gating on unresolved async jobs
+    /// (base URL, credential header name or auth prefix) — not label, timeout, headers or modality
+    /// settings, which never affect authentication or the request target.</summary>
+    private bool AuthStructureChanged() =>
+        !IsNew && (_form.BaseUrl.TrimEnd('/') != _originalBaseUrl.TrimEnd('/') || _form.CredentialHeaderName != _originalCredentialHeaderName || _form.AuthPrefix != _originalAuthPrefix);
+
     private async Task SaveAsync()
     {
         var workspace = LibraryState.Workspace;
@@ -248,6 +274,19 @@ else
         _busy = true;
         try
         {
+            if (AuthStructureChanged() && !_confirmedStopTrackingUnresolvedJobs)
+            {
+                var unresolvedJobs = (await workspace.GetAsyncRemoteJobsForConnectionAsync(Id))
+                    .Count(asyncJob => asyncJob.Phase is AsyncRemoteJobPhase.Submitted or AsyncRemoteJobPhase.Processing or AsyncRemoteJobPhase.MonitoringPaused);
+                if (unresolvedJobs > 0)
+                {
+                    _awaitingUnresolvedAsyncJobsDecision = true;
+                    _unresolvedAsyncJobCount = unresolvedJobs;
+                    _busy = false;
+                    return;
+                }
+            }
+
             var headers = ParseHeaderLines(_form.AdditionalHeadersText);
             var modalitySettings = BuildModalitySettings();
             var connection = IsNew
@@ -345,6 +384,33 @@ else
             Navigation.NavigateTo("/connections");
         }
         finally { _busy = false; }
+    }
+
+    private void CancelUnresolvedAsyncJobsDecision()
+    {
+        _awaitingUnresolvedAsyncJobsDecision = false;
+    }
+
+    private async Task StopTrackingAndApplyChangesAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _busy = true;
+        try
+        {
+            var unresolvedJobs = (await workspace.GetAsyncRemoteJobsForConnectionAsync(Id))
+                .Where(asyncJob => asyncJob.Phase is AsyncRemoteJobPhase.Submitted or AsyncRemoteJobPhase.Processing or AsyncRemoteJobPhase.MonitoringPaused);
+            foreach (var asyncJob in unresolvedJobs)
+            {
+                await workspace.DeleteAsyncRemoteJobAsync(asyncJob.Id);
+            }
+
+            _confirmedStopTrackingUnresolvedJobs = true;
+            _awaitingUnresolvedAsyncJobsDecision = false;
+        }
+        finally { _busy = false; }
+
+        await SaveAsync();
     }
 
     private sealed class ConnectionForm

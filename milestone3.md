@@ -98,10 +98,21 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 - [ ] Add **Attempt Reconciliation**, exposed on the affected history/activity record, and the
       **Abandon Recovery and Apply Changes** path that removes actionable request IDs/idempotency
       context while retaining sanitized non-actionable history.
-- [ ] Add the unresolved-cleanup/reconciliation gate before a base URL, provider type, credential
-      header or auth-structure change takes effect, with **Retry Cleanup**, **Stop Tracking and
-      Apply Changes**, **Attempt Reconciliation** and **Abandon Recovery and Apply Changes**
-      (deferred from Milestone 2 for exactly this infrastructure).
+- [x] Add the unresolved-async-job gate before a base URL, credential header name or auth prefix
+      change takes effect (`ConnectionEdit.razor`'s `AuthStructureChanged()`), scoped to a reduced,
+      honest 2-way choice: **Stop Tracking and Apply Changes** (deletes the connection's unresolved
+      registry rows with an explicit warning that provider processing/charges are unaffected) or
+      **Cancel**. **Retry Cleanup** and **Attempt Reconciliation** are deliberately excluded — both
+      would need a working reconciliation/status-recheck operation for an already-submitted job,
+      which does not exist yet (see the still-open items above); offering a button with no real
+      operation behind it would be worse than not offering it. Provider type is not gated: changing
+      it is already blocked by the pre-existing "no active dependent models" rule whenever an async
+      job could exist, since a model must stay active for its connection to have submitted
+      anything. This logic has no dedicated automated test (this codebase does not unit-test Razor
+      pages — no bUnit or similar is referenced — consistent with how the rest of
+      `ConnectionEdit.razor`'s save/credential-decision flow is already only manually verified); the
+      data it depends on (`GetAsyncRemoteJobsForConnectionAsync`, `DeleteAsyncRemoteJobAsync`,
+      `AsyncRemoteJobPhase`) is fully covered by `AsyncRemoteJobTests.cs`.
 - [ ] Add cancellation handling for every defined stage (before submission, mid-upload, provider
       already accepted) distinct from today's single `CancellationTokenSource`-only path.
 - [ ] Add offline/metered-network queue handling: **Paused — Connection Lost**, manual **Resume

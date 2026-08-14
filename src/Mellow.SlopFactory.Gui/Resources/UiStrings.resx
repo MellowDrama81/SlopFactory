@@ -622,6 +622,9 @@
   <data name="KeepExistingKey" xml:space="preserve"><value>Keep existing key</value></data>
   <data name="SaveNewKeyAsUnverified" xml:space="preserve"><value>Save new key as unverified</value></data>
   <data name="SaveNewKeyAsUnverifiedWarning" xml:space="preserve"><value>The new key will be saved even though it failed the connection test. Generation requests may fail until this is corrected.</value></data>
+  <data name="UnresolvedAsyncJobsBlockChange" xml:space="preserve"><value>{0} video generation(s) submitted through this connection are still being monitored. Changing the base URL, credential header or authentication prefix could prevent SlopFactory from checking their status.</value></data>
+  <data name="StopTrackingAndApplyChanges" xml:space="preserve"><value>Stop tracking and apply changes</value></data>
+  <data name="StopTrackingAndApplyChangesWarning" xml:space="preserve"><value>SlopFactory will stop checking the status of those jobs. The provider may still be processing them and any related charges are unaffected.</value></data>
   <data name="ModelsPageTitle" xml:space="preserve"><value>Models · SlopFactory</value></data>
   <data name="ModelsEyebrow" xml:space="preserve"><value>AI providers</value></data>
   <data name="ModelsHeading" xml:space="preserve"><value>Models</value></data>
