@@ -320,10 +320,18 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       completed OpenRouter video generation (real cost is now shown), but the notice itself wasn't
       updated to conditionally suppress for that case, and there's no "known estimate" to compare
       against yet regardless.
-- [ ] Add the local cost-summary view aggregating provider-reported actual cost, filterable by
-      date, provider, connection, model and operation type. OpenRouter video generation is now a
-      real, non-empty data source for this (previously every row would have been blank, per
-      Milestone 2's deferral reasoning) — building the aggregation/filter view itself is still open.
+- [x] Add the local cost-summary view aggregating provider-reported actual cost. `CostSummaryCalculator`
+      (new, `Core/Domain/CostSummaryCalculator.cs`) is a pure, unit-tested aggregator — filtering and
+      grouping logic lives there rather than in `CostSummary.razor`'s code-behind specifically so it's
+      testable at all, since this codebase has no Blazor component test harness. Filterable by date
+      range, provider and model/operation type (mirroring `GenerationHistory.razor`'s exact filter
+      dimensions), with grand-total/by-model/by-provider/by-date grouped views. **Connection** is
+      not a filter dimension: `GenerationRecord` has no connection reference at all (only a
+      snapshotted `ModelId`/`ModelLabel`/`ProviderType`), so there's nothing to filter by without a
+      join through `Model` that could easily point at a deleted model. Groups are kept separate per
+      currency rather than summed together, since nothing prevents two providers reporting cost in
+      different currencies. 7 tests cover filtering, grouping, currency separation and descending
+      sort order. New `/cost-summary` page linked from the main navigation.
 - [ ] Add the usage/cost portions of the sidecar export spec that depend on this milestone's new
       data: the `Include Usage and Cost` opt-in category, run/per-output/prompt-improvement scope
       separation, and `reported-so-far`/incomplete-flag handling for a nonterminal multi-result run.

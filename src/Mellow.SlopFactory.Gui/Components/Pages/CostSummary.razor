@@ -1,0 +1,157 @@
+@page "/cost-summary"
+@inject AppLibraryState LibraryState
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@Strings["CostSummaryPageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div><p class="eyebrow">@Strings["GenerateEyebrow"]</p><h1>@Strings["CostSummaryHeading"]</h1><p class="muted">@Strings["CostSummaryDescription"]</p></div>
+</header>
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else if (_costedRecords.Count == 0)
+{
+    <p class="empty">@Strings["NoCostData"]</p>
+}
+else
+{
+    <section class="panel">
+        <div class="inline-form">
+            <label for="cost-mode-filter">@Strings["FilterByMode"]
+                <select id="cost-mode-filter" @bind="_modeFilter">
+                    <option value="">@Strings["All"]</option>
+                    <option value="@GenerationMode.Text">@Strings["ModeText"]</option>
+                    <option value="@GenerationMode.Image">@Strings["ModeImage"]</option>
+                    <option value="@GenerationMode.Audio">@Strings["ModeAudio"]</option>
+                    <option value="@GenerationMode.Video">@Strings["ModeVideo"]</option>
+                </select>
+            </label>
+            <label for="cost-model-filter">@Strings["FilterByModel"]
+                <select id="cost-model-filter" @bind="_modelFilter">
+                    <option value="">@Strings["All"]</option>
+                    @foreach (var modelLabel in _knownModelLabels)
+                    {
+                        <option value="@modelLabel">@modelLabel</option>
+                    }
+                </select>
+            </label>
+            <label for="cost-provider-filter">@Strings["FilterByProvider"]
+                <select id="cost-provider-filter" @bind="_providerFilter">
+                    <option value="">@Strings["All"]</option>
+                    <option value="@ProviderType.OpenAi">@Strings["ProviderOpenAi"]</option>
+                    <option value="@ProviderType.GenericOpenAiCompatible">@Strings["ProviderGenericOpenAiCompatible"]</option>
+                    <option value="@ProviderType.OpenRouter">@Strings["ProviderOpenRouter"]</option>
+                    <option value="@ProviderType.DeepInfra">@Strings["ProviderDeepInfra"]</option>
+                </select>
+            </label>
+            <label for="cost-date-from-filter">@Strings["FilterByDateFrom"]
+                <input id="cost-date-from-filter" type="date" @bind="_dateFromFilter" />
+            </label>
+            <label for="cost-date-to-filter">@Strings["FilterByDateTo"]
+                <input id="cost-date-to-filter" type="date" @bind="_dateToFilter" />
+            </label>
+            <button type="button" class="secondary" @onclick="ClearFilters">@Strings["ClearSearchAndFilters"]</button>
+        </div>
+    </section>
+
+    @if (FilteredRecords.Count == 0)
+    {
+        <p class="empty">@Strings["NoFilteredCostData"]</p>
+    }
+    else
+    {
+        <section class="panel">
+            <h2>@Strings["CostSummaryGrandTotalHeading"]</h2>
+            <ul class="metadata-list">
+                @foreach (var total in GrandTotals)
+                {
+                    <li>@Strings["CostSummaryTotalLine", total.TotalCost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), total.Currency, total.RecordCount]</li>
+                }
+            </ul>
+        </section>
+
+        <section class="panel">
+            <h2>@Strings["CostSummaryByModelHeading"]</h2>
+            <ul class="metadata-list">
+                @foreach (var group in ByModel)
+                {
+                    <li>@group.Key — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), group.Currency, group.RecordCount]</li>
+                }
+            </ul>
+        </section>
+
+        <section class="panel">
+            <h2>@Strings["CostSummaryByProviderHeading"]</h2>
+            <ul class="metadata-list">
+                @foreach (var group in ByProvider)
+                {
+                    <li>@ProviderLabel(group.Key) — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), group.Currency, group.RecordCount]</li>
+                }
+            </ul>
+        </section>
+
+        <section class="panel">
+            <h2>@Strings["CostSummaryByDateHeading"]</h2>
+            <ul class="metadata-list">
+                @foreach (var group in ByDate)
+                {
+                    <li>@group.Key — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), group.Currency, group.RecordCount]</li>
+                }
+            </ul>
+        </section>
+    }
+}
+
+@code {
+    private IReadOnlyList<GenerationRecord> _costedRecords = [];
+    private string _modeFilter = string.Empty;
+    private string _modelFilter = string.Empty;
+    private string _providerFilter = string.Empty;
+    private DateOnly? _dateFromFilter;
+    private DateOnly? _dateToFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LibraryState.InitializeAsync();
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        var records = await workspace.GetGenerationHistoryAsync();
+        _costedRecords = CostSummaryCalculator.ApplyFilters(records);
+    }
+
+    private IReadOnlyList<string> _knownModelLabels => _costedRecords.Select(record => record.ModelLabel).Distinct(StringComparer.Ordinal).OrderBy(label => label, StringComparer.Ordinal).ToArray();
+
+    private IReadOnlyList<GenerationRecord> FilteredRecords => CostSummaryCalculator.ApplyFilters(_costedRecords,
+        _dateFromFilter, _dateToFilter,
+        string.IsNullOrEmpty(_providerFilter) ? null : Enum.Parse<ProviderType>(_providerFilter),
+        string.IsNullOrEmpty(_modeFilter) ? null : Enum.Parse<GenerationMode>(_modeFilter),
+        _modelFilter);
+
+    private IReadOnlyList<CostSummaryGroup> GrandTotals => CostSummaryCalculator.GroupTotalsByCurrency(FilteredRecords);
+    private IReadOnlyList<CostSummaryGroup> ByModel => CostSummaryCalculator.GroupTotals(FilteredRecords, record => record.ModelLabel);
+    private IReadOnlyList<CostSummaryGroup> ByProvider => CostSummaryCalculator.GroupTotals(FilteredRecords, record => record.ProviderType.ToString());
+    private IReadOnlyList<CostSummaryGroup> ByDate => CostSummaryCalculator.GroupTotals(FilteredRecords, record => DateOnly.FromDateTime(record.CreatedAt.ToLocalTime().DateTime).ToString("yyyy-MM-dd"));
+
+    private void ClearFilters()
+    {
+        _modeFilter = string.Empty;
+        _modelFilter = string.Empty;
+        _providerFilter = string.Empty;
+        _dateFromFilter = null;
+        _dateToFilter = null;
+    }
+
+    private string ProviderLabel(string providerTypeName) => Enum.Parse<ProviderType>(providerTypeName) switch
+    {
+        ProviderType.OpenAi => Strings["ProviderOpenAi"],
+        ProviderType.GenericOpenAiCompatible => Strings["ProviderGenericOpenAiCompatible"],
+        ProviderType.OpenRouter => Strings["ProviderOpenRouter"],
+        ProviderType.DeepInfra => Strings["ProviderDeepInfra"],
+        _ => providerTypeName
+    };
+}

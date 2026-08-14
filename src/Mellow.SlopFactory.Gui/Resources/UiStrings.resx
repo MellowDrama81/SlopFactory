@@ -650,6 +650,7 @@
   <data name="SupportsSystemInstructions" xml:space="preserve"><value>Supports system instructions</value></data>
   <data name="NavGenerate" xml:space="preserve"><value>Generate</value></data>
   <data name="NavGenerationHistory" xml:space="preserve"><value>Generation history</value></data>
+  <data name="NavCostSummary" xml:space="preserve"><value>Cost summary</value></data>
   <data name="Model" xml:space="preserve"><value>Model</value></data>
   <data name="Prompt" xml:space="preserve"><value>Prompt</value></data>
   <data name="ResultCount" xml:space="preserve"><value>Result count</value></data>
@@ -751,6 +752,16 @@
   <data name="ShowSystemInstructions" xml:space="preserve"><value>Show system instructions</value></data>
   <data name="TokenUsage" xml:space="preserve"><value>{0} prompt tokens · {1} completion tokens</value></data>
   <data name="ActualCost" xml:space="preserve"><value>Cost: {0} {1} (reported by the provider)</value></data>
+  <data name="CostSummaryPageTitle" xml:space="preserve"><value>Cost summary · SlopFactory</value></data>
+  <data name="CostSummaryHeading" xml:space="preserve"><value>Cost summary</value></data>
+  <data name="CostSummaryDescription" xml:space="preserve"><value>Aggregates only actual cost figures reported by a provider — this is not an estimate and never includes runs a provider didn't report a cost for.</value></data>
+  <data name="NoCostData" xml:space="preserve"><value>No generation has a provider-reported cost yet.</value></data>
+  <data name="NoFilteredCostData" xml:space="preserve"><value>No cost data matches the current filters.</value></data>
+  <data name="CostSummaryGrandTotalHeading" xml:space="preserve"><value>Grand total</value></data>
+  <data name="CostSummaryByModelHeading" xml:space="preserve"><value>By model</value></data>
+  <data name="CostSummaryByProviderHeading" xml:space="preserve"><value>By provider</value></data>
+  <data name="CostSummaryByDateHeading" xml:space="preserve"><value>By date</value></data>
+  <data name="CostSummaryTotalLine" xml:space="preserve"><value>{0} {1} across {2} generation(s)</value></data>
   <data name="EstimatedTokenCount" xml:space="preserve"><value>~{0} tokens (rough estimate, not exact — SlopFactory has no provider tokenizer)</value></data>
   <data name="CostUnknownNotice" xml:space="preserve"><value>Cost unknown — SlopFactory does not estimate provider cost. Check your provider's pricing before submitting.</value></data>
   <data name="SourceImageSlot1" xml:space="preserve"><value>Source 1 (optional)</value></data>
