@@ -108,6 +108,43 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task IsJobAwaitingRateLimitResetIsThePerJobEquivalentOfTheConnectionLevelCheck()
+    {
+        using var temporary = new TemporaryDirectory();
+        var tracker = new ConnectionRateLimitTracker();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), rateLimitTracker: tracker);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        tracker.Record(connection.Id, new RateLimitObservation(DateTimeOffset.UtcNow, 5000, 0, "150ms", TimeSpan.FromMilliseconds(150), null, null, null, null));
+
+        var jobId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        Assert.True(queue.IsJobAwaitingRateLimitReset(jobId));
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        Assert.False(queue.IsJobAwaitingRateLimitReset(jobId));
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+    }
+
+    [Fact]
+    public async Task IsJobAwaitingRateLimitResetIsFalseForAnUnknownOrRunningJob()
+    {
+        using var temporary = new TemporaryDirectory();
+        var tracker = new ConnectionRateLimitTracker();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), rateLimitTracker: tracker);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        Assert.False(queue.IsJobAwaitingRateLimitReset("never-enqueued"));
+
+        var jobId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        Assert.False(queue.IsJobAwaitingRateLimitReset(jobId));
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+    }
+
+    [Fact]
     public async Task ARemainingRequestCountAboveZeroDoesNotDelaySubmission()
     {
         using var temporary = new TemporaryDirectory();

@@ -267,6 +267,18 @@ public sealed class GenerationQueueService
         }
     }
 
+    /// <summary>Whether this specific still-queued job's connection is currently being held back by
+    /// the rate-limit backoff in <see cref="Pump"/> — the per-job equivalent of
+    /// <see cref="IsConnectionAwaitingRateLimitReset"/>, for a run card that only knows its own job
+    /// ID rather than a connection ID.</summary>
+    public bool IsJobAwaitingRateLimitReset(string jobId)
+    {
+        lock (_gate)
+        {
+            return _jobsById.TryGetValue(jobId, out var job) && job.Phase == GenerationJobPhase.Queued && IsConnectionOutOfRequestQuota(job.ConnectionId, out _);
+        }
+    }
+
     /// <summary>The first (oldest-submitted) active job for a draft, or null if none — a convenience
     /// accessor for the common single-run case. Use <see cref="GetActiveJobIdsForDraft"/> for every
     /// concurrently active job on the draft.</summary>

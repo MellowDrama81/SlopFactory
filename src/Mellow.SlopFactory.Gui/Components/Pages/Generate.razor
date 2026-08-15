@@ -416,6 +416,10 @@ else
                             _ => Strings["Generate"]
                         })
                     </p>
+                    @if (runStatus.Phase == GenerationJobPhase.Queued && Queue.IsJobAwaitingRateLimitReset(jobId))
+                    {
+                        <p class="notice" role="status">@Strings["RateLimitAwaitingReset"]</p>
+                    }
                     <button type="button" class="secondary" @onclick="() => Queue.Cancel(jobId)">@Strings["CancelGeneration"]</button>
                 </section>
             }

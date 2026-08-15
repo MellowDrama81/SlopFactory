@@ -50,10 +50,18 @@ mean writing adapter-specific fakes three times over instead of once.
       shape. Two tests intentionally kept bespoke inline literals (multi-URL download, cancelled/expired
       theory cases) since they exercise shape variants beyond the pinned base contract.
 - [ ] Add a live-provider manual test harness (explicitly enabled, skipped when credentials are
-      absent, cost-budget-bounded) for the OpenRouter and DeepInfra adapters, mirroring the existing
-      OpenAI/generic live-test conventions. Doubly important here since OpenRouter's audio
-      transcript field name and DeepInfra's dual OpenAI-compatible/native base-URL split were not
-      fully confirmed by research — a live call is the only way to close that gap.
+      absent, cost-budget-bounded) for the OpenRouter and DeepInfra adapters. **Correction to this
+      item's original scope**: it was written as though mirroring "the existing OpenAI/generic
+      live-test conventions," but no such convention actually exists anywhere in this codebase —
+      grepping the test suite for any environment-gated/skip-when-absent live-credential pattern
+      turns up nothing, for any adapter, including OpenAI and generic OpenAI-compatible from
+      Milestone 2. This is a cross-cutting testing-infrastructure gap that spans every adapter and
+      every milestone, not something specific to the two adapters this milestone added — the same
+      kind of correction already made for the advanced-JSON editor and capability-schema UI items
+      above. Building it from scratch is still valuable (doubly so here, since OpenRouter's audio
+      transcript field name and DeepInfra's dual OpenAI-compatible/native base-URL split were never
+      fully confirmed by research), but it is out of this milestone's adapter-specific scope the
+      same way those two items are.
 
 ## Asynchronous remote jobs and reconciliation
 
@@ -451,16 +459,17 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       generation submission, so it's safe without an idempotency key (verified by
       `OpenRouterAdapterRetriesARateLimitedResultDownload`). Audio *generation* deliberately keeps
       `allowRetry: false` (its default) since that's a paid call, not a download.
-- [ ] Add rate-limited/delayed status display on `/generate` and `/queue` with cancellation
+- [x] Add rate-limited/delayed status display on `/generate` and `/queue` with cancellation
       available while waiting, and ensure Retry-After waits interact correctly with indivisible
-      multi-request queue-group ordering. Partially done: `/queue` shows a per-connection notice
+      multi-request queue-group ordering. `/queue` shows a per-connection notice
       (`GenerationQueueService.IsConnectionAwaitingRateLimitReset`) while the proactive rate-limit
-      backoff above is holding back that connection's next submission, and cancellation was already
-      available for every job phase including `Queued` (nothing new needed there). **Not done**:
-      the equivalent status on `/generate`'s own run cards/tab status (today just shows the generic
-      queue position), and the Retry-After/multi-request-group interaction question — no adapter's
-      video multi-job group has been observed hitting a mid-group rate limit in testing, so there's
-      nothing concrete yet to verify that interaction against.
+      backoff above is holding back that connection's next submission; `/generate`'s own run cards
+      show the same notice per-job via the new `IsJobAwaitingRateLimitReset(jobId)` (the job-scoped
+      equivalent, since a run card only knows its own job ID, not a connection ID), shown only for a
+      still-`Queued` job. Cancellation was already available for every job phase including `Queued`,
+      nothing new needed there. **Not done**: the Retry-After/multi-request-group interaction
+      question — no adapter's video multi-job group has been observed hitting a mid-group rate
+      limit in testing, so there's nothing concrete yet to verify that interaction against.
 - [ ] Add rate-limiting to explicit provider-status refresh/reconciliation actions (distinct
       per-request throttling that disables repeated activation while a lookup is in progress).
 
