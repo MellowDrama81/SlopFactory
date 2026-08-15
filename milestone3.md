@@ -38,12 +38,16 @@ mean writing adapter-specific fakes three times over instead of once.
       needed no new fixture support — that's provider JSON shape, already exercised via the existing
       `finish_reason: content_filter` tests — and a representative *provider-error-shape* sweep
       (beyond the 401/404/429/5xx cases already covered per-adapter) remains open below.
-- [ ] Add provider contract fixtures (versioned sanitized request/response JSON) for OpenRouter and
+- [x] Add provider contract fixtures (versioned sanitized request/response JSON) for OpenRouter and
       DeepInfra so adapter behavior is pinned against real shapes rather than hand-written
       approximations, and so future provider API changes are reviewed deliberately against a diff.
-      (1min.AI is excluded — see the Provider adapters section below.) The adapters shipped this
-      pass are tested with inline JSON literals in `NewProviderAdapterTests.cs`, not a separate
-      versioned fixture file; promoting those to real fixture files is still open.
+      (1min.AI is excluded — see the Provider adapters section below.) `ProviderContractFixtures.cs`
+      holds named, versioned (`V1`-suffixed) constants for each confirmed response shape (OpenRouter
+      image/video-submit/video-poll variants, DeepInfra chat/image), with placeholder tokens
+      (`__JOB_ID__`, `__BASE64__`, etc.) substituted per-test via `.Replace(...)`; `NewProviderAdapterTests.cs`
+      now references these instead of inline JSON literals for every test exercising a base contract
+      shape. Two tests intentionally kept bespoke inline literals (multi-URL download, cancelled/expired
+      theory cases) since they exercise shape variants beyond the pinned base contract.
 - [ ] Add a live-provider manual test harness (explicitly enabled, skipped when credentials are
       absent, cost-budget-bounded) for the OpenRouter and DeepInfra adapters, mirroring the existing
       OpenAI/generic live-test conventions. Doubly important here since OpenRouter's audio

@@ -22,7 +22,7 @@ public sealed class NewProviderAdapterTests
         {
             Assert.Equal("https://openrouter.ai/api/v1/images", request.RequestUri!.ToString());
             Assert.Equal("Bearer secret-key", request.Headers.GetValues("Authorization").Single());
-            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, $$"""{"data":[{"b64_json":"{{Convert.ToBase64String(pngBytes)}}"}]}""");
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
@@ -60,7 +60,7 @@ public sealed class NewProviderAdapterTests
         var handler = new FakeHttpMessageHandler(request =>
         {
             Assert.Equal("https://openrouter.ai/api/v1/videos", request.RequestUri!.ToString());
-            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.Accepted, """{"id":"abc123","polling_url":"https://openrouter.ai/api/v1/videos/abc123","status":"pending"}""");
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.Accepted, ProviderContractFixtures.OpenRouterVideoSubmitResponseV1.Replace("__JOB_ID__", "abc123").Replace("__POLLING_URL__", "https://openrouter.ai/api/v1/videos/abc123"));
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
@@ -87,7 +87,7 @@ public sealed class NewProviderAdapterTests
         var handler = new FakeHttpMessageHandler(request =>
         {
             Assert.Equal("https://openrouter.ai/api/v1/videos/abc123", request.RequestUri!.ToString());
-            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"status":"pending"}""");
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterVideoPollProcessingV1);
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
@@ -138,7 +138,7 @@ public sealed class NewProviderAdapterTests
         {
             var path = request.RequestUri!.ToString();
             return path == "https://openrouter.ai/api/v1/videos/abc123"
-                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["https://openrouter.ai/api/v1/videos/abc123/content?index=0"],"usage":{"cost":0.25,"is_byok":false}}""")
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterVideoPollCompletedWithCostV1.Replace("__JOB_ID__", "abc123").Replace("__CONTENT_URL__", "https://openrouter.ai/api/v1/videos/abc123/content?index=0").Replace("__COST__", "0.25"))
                 : FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "video/mp4");
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
@@ -159,7 +159,7 @@ public sealed class NewProviderAdapterTests
         {
             var path = request.RequestUri!.ToString();
             return path == "https://openrouter.ai/api/v1/videos/abc123"
-                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["https://openrouter.ai/api/v1/videos/abc123/content?index=0"]}""")
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterVideoPollCompletedV1.Replace("__JOB_ID__", "abc123").Replace("__CONTENT_URL__", "https://openrouter.ai/api/v1/videos/abc123/content?index=0"))
                 : FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "video/mp4");
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
@@ -181,7 +181,7 @@ public sealed class NewProviderAdapterTests
             if (path == "https://openrouter.ai/api/v1/videos/abc123")
             {
                 return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
-                    """{"id":"abc123","status":"completed","unsigned_urls":["https://openrouter.ai/api/v1/videos/abc123/content?index=0"]}""");
+                    ProviderContractFixtures.OpenRouterVideoPollCompletedV1.Replace("__JOB_ID__", "abc123").Replace("__CONTENT_URL__", "https://openrouter.ai/api/v1/videos/abc123/content?index=0"));
             }
             if (path == "https://openrouter.ai/api/v1/videos/abc123/content?index=0")
             {
@@ -215,7 +215,7 @@ public sealed class NewProviderAdapterTests
         {
             var path = request.RequestUri!.ToString();
             return path == "https://openrouter.ai/api/v1/videos/abc123"
-                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["https://openrouter.ai/api/v1/videos/abc123/content?index=0"]}""")
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterVideoPollCompletedV1.Replace("__JOB_ID__", "abc123").Replace("__CONTENT_URL__", "https://openrouter.ai/api/v1/videos/abc123/content?index=0"))
                 : throw new InvalidOperationException("The download must never be attempted once host validation rejects the result URL.");
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PrivateAddressResolver);
@@ -233,7 +233,7 @@ public sealed class NewProviderAdapterTests
         {
             var path = request.RequestUri!.ToString();
             return path == "https://openrouter.ai/api/v1/videos/abc123"
-                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["http://openrouter.ai/api/v1/videos/abc123/content?index=0"]}""")
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterVideoPollCompletedV1.Replace("__JOB_ID__", "abc123").Replace("__CONTENT_URL__", "http://openrouter.ai/api/v1/videos/abc123/content?index=0"))
                 : throw new InvalidOperationException("The download must never be attempted for a non-HTTPS result URL.");
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
@@ -247,7 +247,7 @@ public sealed class NewProviderAdapterTests
     [Fact]
     public async Task OpenRouterAdapterPollingReturnsFailedWithTheProviderErrorMessage()
     {
-        var handler = new FakeHttpMessageHandler(_ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"status":"failed","error":"The prompt violated content policy."}"""));
+        var handler = new FakeHttpMessageHandler(_ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterVideoPollFailedV1.Replace("__ERROR_MESSAGE__", "The prompt violated content policy.")));
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
 
@@ -298,7 +298,7 @@ public sealed class NewProviderAdapterTests
         var handler = new FakeHttpMessageHandler(request =>
         {
             Assert.Equal("https://api.deepinfra.com/v1/openai/chat/completions", request.RequestUri!.ToString());
-            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"choices":[{"message":{"content":"Result"}}]}""");
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.DeepInfraChatCompletionResponseV1.Replace("__CONTENT__", "Result"));
         });
         var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
@@ -316,7 +316,7 @@ public sealed class NewProviderAdapterTests
         var handler = new FakeHttpMessageHandler(request =>
         {
             Assert.Equal("https://api.deepinfra.com/v1/openai/images/generations", request.RequestUri!.ToString());
-            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, $$"""{"data":[{"b64_json":"{{Convert.ToBase64String(pngBytes)}}"}]}""");
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.DeepInfraImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
         });
         var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
