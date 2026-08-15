@@ -20,8 +20,9 @@ the fake HTTP provider expansion (lines 245-246, 947-949), unresolved-cleanup/re
 gating on connection changes (lines 97-110), the local cost-summary view (lines 909-919), and the
 remaining Provider Safety Responses machinery — concealment/reveal, per-file override
 preferences, cross-duplicate shared classification, and **Provider Blocked After Delivery** late
-reclassification (lines 686-706). Each is folded into its natural section below instead of being
-repeated as a separate list.
+reclassification (lines 686-706). Each is folded into its natural section below, or into
+**Possible future work** at the end of this file if it's currently blocked on adapter support that
+doesn't exist yet, instead of being repeated as a separate list.
 
 ## Testing foundation
 
@@ -75,7 +76,8 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `Cancelled`/`CancelledWithResults` alongside `Completed`/`Failed`/`PartiallyCompleted`. Still
       missing every `Paused`/`Preparing`/`Uploading`/`Submitting`/`Submission Outcome Unknown`/
       `Monitoring Paused`/`Downloading Results`/`Awaiting Library`/`Cancellation Requested` value —
-      none of those has a real driver yet.
+      none of those has a real driver yet (see **Monitoring Paused** specifically under Possible
+      future work below).
 - [x] Add the queue-scheduler change so an asynchronous job releases its submission slot after
       durable provider acceptance rather than holding it for the entire poll duration — the one
       architectural limitation flagged repeatedly throughout this milestone.
@@ -110,14 +112,12 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       (Submitted/Processing/MonitoringPaused) async-job count with a **Discard tracking** action,
       so an abandoned row is never invisible outside `ConnectionEdit.razor`'s reconciliation gate —
       a user only reaches that gate by coincidentally editing the connection's auth settings.
-- [ ] Add **Monitoring Paused**: when an async job exceeds its adapter-defined maximum monitoring
-      lifetime while the provider still reports it running, stop automatic polling and expose
-      **Check Now**/**Resume Monitoring** rather than treating it as failed or cancelled.
 - [ ] Add idempotency-key generation and persistence, scoped only to adapters with documented
       idempotency support, generated and durably stored before any bytes are sent; separate runs,
       multi-result children, prompt-improvement attempts and **Use Again** each receive distinct
       keys, and the exact key is dropped after terminal resolution (retaining only a non-reusable
-      fingerprint for diagnostics).
+      fingerprint for diagnostics). **Moved to Possible future work below**: no currently supported
+      adapter documents idempotency-key support.
 - [ ] Add **Submission Outcome Unknown**: when transmission began but SlopFactory cannot confirm
       provider acceptance, record this indeterminate (not locally active) state instead of ordinary
       `Failed`, releasing queue slots/dependency pins and retaining only the minimum provider
@@ -160,23 +160,6 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 
 ## Provider adapters
 
-- [ ] Add `ProviderType.OneMinAi` and its adapter: native unified chat API for text, and the AI
-      Feature API with feature-specific request parameters for image, audio and video, including
-      long-running feature requests through the async-job infrastructure above.
-
-  **Deliberately deferred, not attempted this pass**: dedicated research (WebSearch/WebFetch against
-  1min.AI's own docs and third-party sources) could confirm only the base URL (`https://api.1min.ai`)
-  and that authentication uses a bare `API-KEY` header rather than `Authorization: Bearer` — a real
-  divergence `LibraryRules`'s existing per-connection `CredentialHeaderName`/`AuthPrefix` fields
-  already accommodate without adapter code changes, so nothing is blocked there. Everything else is
-  unverified: `docs.1min.ai` could not be fetched by research tooling at all, no confirmed
-  model-listing (or any other non-billable) endpoint exists to build **Test Connection** against
-  (`/api/chat-with-ai` is itself a paid generation call, and `plan.md` explicitly forbids testing
-  with "a paid generation request"), and the "AI Feature API"'s request/response shape for image,
-  audio and video, plus its async-polling job-ID field and status values, are completely
-  unconfirmed. Shipping this now would mean fabricating a wire format rather than following one.
-  Revisit once the user (or a future session) can access `docs.1min.ai` directly or test against a
-  live account/API key.
 - [x] Add `ProviderType.OpenRouter` and its adapter (`OpenRouterProviderAdapter.cs`): reuses
       `OpenAiCompatibleProtocol` for connection test/model listing/text generation against its
       OpenAI-compatible base URL, and implements OpenRouter's own modality-specific endpoints for
@@ -214,7 +197,7 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       path as the existing adapters (nothing provider-specific was needed since both use standard
       Bearer authentication over HTTPS). 1min.AI's divergent `API-KEY` header works through the
       existing configurable `CredentialHeaderName`/`AuthPrefix` fields without code changes, but the
-      adapter itself remains deferred per above.
+      adapter itself remains deferred (see Possible future work below).
 - [ ] Add provider- and model-capability detection/settings-schema definitions for each new
       adapter's models, generating the same structured setting controls (selectors, sliders,
       toggles, voice lists, dimensions) as the existing adapters, including per-adapter
@@ -231,13 +214,6 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `ModeAudio`/`ModeVideo` strings and dropdown options in place of that fallback). Drafts and
       saved settings needed no changes: they already store a plain `ModelId` and don't branch on
       mode themselves.
-- [ ] Replace the current 3 generic source-file slots (`SourceFileId`/`SecondarySourceFileId`/
-      `TertiarySourceFileId`) with a named input-slot capability model — reference image, mask,
-      first frame, last frame, source audio, source video — each with its own required media
-      type(s), count and ordering, as `plan.md` defines under Generation Inputs. Audio and video
-      generation ship this pass with no source inputs at all (matching image generation's existing
-      behavior), since neither `OpenRouterProviderAdapter.GenerateAudioAsync`/
-      `SubmitVideoGenerationAsync` accept one yet.
 - [x] Add audio and video result commit: rather than two more near-duplicate methods alongside
       `RecordImageGenerationResultCoreAsync`, `LibraryWorkspace.RecordMediaGenerationResultAsync`
       reuses that exact same core method — the atomic stage-hash-detect-move-commit pipeline never
@@ -268,9 +244,6 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       first — there is no equivalently simple "get me a waveform" platform API to lean on, and doing
       this without a new dependency (matching this project's established zero-new-package
       preference) would mean writing or invoking a real audio decoder, not a bounded follow-on.
-- [ ] Add per-slot source-input token/byte/dimension/duration accounting using each adapter's
-      documented formula where one exists, and documented count/byte/dimension/duration limits
-      otherwise.
 
 ## Multi-result workflows
 
@@ -398,14 +371,6 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       here: `SendForBytesAsync` reads the full response before this code ever runs, and the byte
       array is handed directly to `LibraryWorkspace`'s existing atomic staging pipeline, which
       already stages before committing.
-- [ ] Add provider-issued signed upload destinations for adapters that require out-of-band asset
-      upload before generation (rather than inline request-body bytes), following the same host/
-      redirect/credential rules as result downloads.
-- [ ] Add transport filename handling for adapters that require or benefit from generic/aliased
-      upload names, including alias binding that stays consistent across a prompt-improvement
-      attempt and its final generation submission.
-- [ ] Add incremental text display for adapters that support streaming, writing to a temporary file
-      until the response completes.
 
 ## Usage and cost handling
 
@@ -505,15 +470,6 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 
 ## Provider-specific capabilities and safety responses
 
-- [ ] Add the remaining Provider Safety Responses machinery deferred from Milestone 2:
-      concealment/reveal session state, per-file persistent override preferences, external-open
-      re-authorization for concealed content, and cross-duplicate shared classification events keyed
-      by content hash.
-- [ ] Add **Provider Blocked After Delivery** late reclassification, using the async-job monitoring
-      infrastructure above to detect a status change after initial delivery.
-- [ ] Extend provider safety/moderation handling to the new adapters' actual signals (each may
-      differ from OpenAI's `finish_reason: content_filter`-only model), including image, audio and
-      video modality moderation where a provider documents it.
 - [ ] Add manually entered/unknown-model advanced-JSON support for each new adapter's reserved-key
       list. **Correction to this item's original scope**: there is no existing generic-adapter
       advanced editor to mirror — `plan.md`:948-954's advanced JSON settings editor (reserved-key
@@ -535,3 +491,81 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       in `manual_tests.md`.
 - [ ] Update `plan.md` by removing only verified completed requirements, and keep user/developer
       documentation and `README.md` aligned with the finished behavior.
+
+## Possible future work
+
+These items are not blocked by unfinished SlopFactory infrastructure — each is blocked because no
+currently supported adapter (OpenAI, generic OpenAI-compatible, OpenRouter, DeepInfra) documents,
+confirms or exercises the specific capability or provider signal it depends on. They're kept
+separate from the active checklist above so that checklist's real remaining scope stays visible.
+Move an item back into its natural section above once a provider adapter actually confirms or
+exercises what it needs — most of these would become tractable immediately once 1min.AI (or a new
+adapter) ships, or once a live test against OpenRouter/DeepInfra confirms a currently-unconfirmed
+capability.
+
+- [ ] Add `ProviderType.OneMinAi` and its adapter: native unified chat API for text, and the AI
+      Feature API with feature-specific request parameters for image, audio and video, including
+      long-running feature requests through the async-job infrastructure above.
+
+  **Deliberately deferred, not attempted this pass**: dedicated research (WebSearch/WebFetch against
+  1min.AI's own docs and third-party sources) could confirm only the base URL (`https://api.1min.ai`)
+  and that authentication uses a bare `API-KEY` header rather than `Authorization: Bearer` — a real
+  divergence `LibraryRules`'s existing per-connection `CredentialHeaderName`/`AuthPrefix` fields
+  already accommodate without adapter code changes, so nothing is blocked there. Everything else is
+  unverified: `docs.1min.ai` could not be fetched by research tooling at all, no confirmed
+  model-listing (or any other non-billable) endpoint exists to build **Test Connection** against
+  (`/api/chat-with-ai` is itself a paid generation call, and `plan.md` explicitly forbids testing
+  with "a paid generation request"), and the "AI Feature API"'s request/response shape for image,
+  audio and video, plus its async-polling job-ID field and status values, are completely
+  unconfirmed. Shipping this now would mean fabricating a wire format rather than following one.
+  Revisit once the user (or a future session) can access `docs.1min.ai` directly or test against a
+  live account/API key.
+- [ ] Add **Monitoring Paused**: when an async job exceeds its adapter-defined maximum monitoring
+      lifetime while the provider still reports it running, stop automatic polling and expose
+      **Check Now**/**Resume Monitoring** rather than treating it as failed or cancelled. Blocked on
+      an actual adapter-declared deadline: `AsyncGenerationSubmission.MonitoringDeadline` exists and
+      is threaded all the way through to the async-job registry, but `OpenRouterProviderAdapter
+      .SubmitVideoGenerationAsync` never populates it (OpenRouter's own poll API already reports a
+      distinct `expired` status when *it* gives up, which is a different thing — a provider-side
+      signal already handled today, not a client-side polling-lifetime cutoff). Building this against
+      a self-imposed default cap instead of a real adapter-declared one would mean inventing a
+      threshold `plan.md` explicitly scopes to the adapter, not the application.
+- [ ] Add idempotency-key generation and persistence, scoped only to adapters with documented
+      idempotency support, generated and durably stored before any bytes are sent; separate runs,
+      multi-result children, prompt-improvement attempts and **Use Again** each receive distinct
+      keys, and the exact key is dropped after terminal resolution (retaining only a non-reusable
+      fingerprint for diagnostics). No currently supported adapter documents idempotency-key
+      support to build this against.
+- [ ] Replace the current 3 generic source-file slots (`SourceFileId`/`SecondarySourceFileId`/
+      `TertiarySourceFileId`) with a named input-slot capability model — reference image, mask,
+      first frame, last frame, source audio, source video — each with its own required media
+      type(s), count and ordering, as `plan.md` defines under Generation Inputs. Audio and video
+      generation ship with no source inputs at all (matching image generation's existing behavior),
+      since neither `OpenRouterProviderAdapter.GenerateAudioAsync`/`SubmitVideoGenerationAsync`
+      accept one yet.
+- [ ] Add per-slot source-input token/byte/dimension/duration accounting using each adapter's
+      documented formula where one exists, and documented count/byte/dimension/duration limits
+      otherwise. Depends on the named input-slot model above existing first.
+- [ ] Add provider-issued signed upload destinations for adapters that require out-of-band asset
+      upload before generation (rather than inline request-body bytes), following the same host/
+      redirect/credential rules as result downloads. No currently supported adapter requires
+      out-of-band upload.
+- [ ] Add transport filename handling for adapters that require or benefit from generic/aliased
+      upload names, including alias binding that stays consistent across a prompt-improvement
+      attempt and its final generation submission. No currently supported adapter is confirmed to
+      need generic/aliased upload names.
+- [ ] Add incremental text display for adapters that support streaming, writing to a temporary file
+      until the response completes. No currently supported adapter's streaming support is confirmed
+      and integrated.
+- [ ] Add the remaining Provider Safety Responses machinery deferred from Milestone 2:
+      concealment/reveal session state, per-file persistent override preferences, external-open
+      re-authorization for concealed content, and cross-duplicate shared classification events keyed
+      by content hash. No currently supported adapter exposes a "permitted but flagged" response to
+      drive this.
+- [ ] Add **Provider Blocked After Delivery** late reclassification, using the async-job monitoring
+      infrastructure above to detect a status change after initial delivery. No currently supported
+      adapter provides a post-delivery reclassification signal.
+- [ ] Extend provider safety/moderation handling to the new adapters' actual signals (each may
+      differ from OpenAI's `finish_reason: content_filter`-only model), including image, audio and
+      video modality moderation where a provider documents it. Unresearched/unconfirmed for
+      OpenRouter and DeepInfra this pass.
