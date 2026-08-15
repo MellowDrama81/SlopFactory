@@ -515,7 +515,15 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       differ from OpenAI's `finish_reason: content_filter`-only model), including image, audio and
       video modality moderation where a provider documents it.
 - [ ] Add manually entered/unknown-model advanced-JSON support for each new adapter's reserved-key
-      list, mirroring the existing generic-adapter advanced editor.
+      list. **Correction to this item's original scope**: there is no existing generic-adapter
+      advanced editor to mirror — `plan.md`:948-954's advanced JSON settings editor (reserved-key
+      validation, size/nesting bounds, conflict detection, merge into normalized requests) is not
+      built for any adapter yet, including the generic OpenAI-compatible one; manually entered
+      models today only select output/input type, nothing else. This is a cross-cutting base feature
+      spanning `ModelEdit.razor`, every adapter's request-building code, the sanitized request
+      preview, saved settings and generation history — not something scoped to just the three new
+      adapters — so it remains out of scope for this milestone's adapter-specific work, same as the
+      provider/model capability settings-schema UI noted above.
 
 ## Final Milestone 3 verification
 
