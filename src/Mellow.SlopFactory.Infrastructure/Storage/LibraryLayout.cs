@@ -8,6 +8,11 @@ internal sealed class LibraryLayout
     public const string DatabaseFileName = "library.sqlite3";
     public const string ManagedDirectoryName = "media";
     public const string StagingDirectoryName = ".staging";
+    /// <summary>Durably holds bytes that failed the expected-media-category check but weren't
+    /// recognized as a rejection payload, pending the user's Retain/Discard decision. Distinct from
+    /// <see cref="StagingDirectoryName"/> specifically because staging is transient (wiped on a
+    /// failed create), while these bytes must survive until the user reviews them.</summary>
+    public const string PendingReviewDirectoryName = ".pending-review";
     public const string LockFileName = ".slopfactory.lock";
 
     public LibraryLayout(string rootPath)
@@ -17,6 +22,7 @@ internal sealed class LibraryLayout
         DatabasePath = ContainedPath(DatabaseFileName);
         ManagedPath = ContainedPath(ManagedDirectoryName);
         StagingPath = ContainedPath(StagingDirectoryName);
+        PendingReviewPath = ContainedPath(PendingReviewDirectoryName);
         LockPath = ContainedPath(LockFileName);
     }
 
@@ -25,11 +31,14 @@ internal sealed class LibraryLayout
     public string DatabasePath { get; }
     public string ManagedPath { get; }
     public string StagingPath { get; }
+    public string PendingReviewPath { get; }
     public string LockPath { get; }
 
     public string ManagedFilePath(string managedName) => ContainedPath(ManagedDirectoryName, managedName);
 
     public string StagingFilePath(string name) => ContainedPath(StagingDirectoryName, name);
+
+    public string PendingReviewFilePath(string name) => ContainedPath(PendingReviewDirectoryName, name);
 
     public void ValidateExistingRoot()
     {
@@ -51,12 +60,14 @@ internal sealed class LibraryLayout
         ValidateRegularFile(DatabasePath, "library database");
         ValidateDirectory(ManagedPath, "managed-media directory");
         if (Directory.Exists(StagingPath)) ValidateDirectory(StagingPath, "staging directory");
+        if (Directory.Exists(PendingReviewPath)) ValidateDirectory(PendingReviewPath, "pending-review directory");
     }
 
     public void ValidateManagedDirectories()
     {
         ValidateDirectory(ManagedPath, "managed-media directory");
         ValidateDirectory(StagingPath, "staging directory");
+        ValidateDirectory(PendingReviewPath, "pending-review directory");
     }
 
     public void EnsureManagedPath(string path)

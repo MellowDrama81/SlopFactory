@@ -43,7 +43,7 @@ else if (_record is not null)
         {
             <p class="muted">@Strings["GenerationPartiallyCompletedDetail", _record.ResultFileIds.Count, _record.ResultCount]</p>
         }
-        @if (_record.Results.Any(entry => entry.Status == GenerationResultStatus.Failed))
+        @if (_record.Results.Any(entry => entry.Status is GenerationResultStatus.Failed or GenerationResultStatus.PendingReview))
         {
             <details open>
                 <summary>@Strings["PerResultStatusHeading"]</summary>
@@ -51,10 +51,17 @@ else if (_record is not null)
                     @foreach (var entry in _record.Results.OrderBy(candidate => candidate.Position))
                     {
                         <li>
-                            @Strings["ResultPositionLabel", entry.Position + 1]: @(entry.Status == GenerationResultStatus.Committed ? Strings["ResultCommitted"] : Strings["ResultFailed"])
+                            @Strings["ResultPositionLabel", entry.Position + 1]: @(entry.Status switch { GenerationResultStatus.Committed => Strings["ResultCommitted"], GenerationResultStatus.PendingReview => Strings["ResultPendingReview"], _ => Strings["ResultFailed"] })
                             @if (entry.ErrorMessage is not null)
                             {
                                 <span class="muted"> — @entry.ErrorMessage</span>
+                            }
+                            @if (entry.Status == GenerationResultStatus.PendingReview && _record.State == LibraryRecordState.Active)
+                            {
+                                <div class="actions">
+                                    <button type="button" class="secondary" disabled="@_busy" @onclick="() => RetainUnverifiedResultAsync(entry.Position)">@Strings["RetainAsUnverifiedBinary"]</button>
+                                    <button type="button" class="ghost danger" disabled="@_busy" @onclick="() => DiscardUnverifiedResultAsync(entry.Position)">@Strings["DiscardUnverifiedResult"]</button>
+                                </div>
                             }
                         </li>
                     }
@@ -229,6 +236,40 @@ else if (_record is not null)
                 TertiarySourceFileId: _record.TertiarySourceFileId);
             Queue.Enqueue(snapshot, connection.Id);
             Navigation.NavigateTo("/queue");
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RetainUnverifiedResultAsync(int position)
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _record is null) return;
+        _busy = true;
+        try
+        {
+            await workspace.RetainUnverifiedResultAsync(_record.Id, position);
+            _record = await workspace.GetGenerationRecordAsync(Id);
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardUnverifiedResultAsync(int position)
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _record is null) return;
+        _busy = true;
+        try
+        {
+            await workspace.DiscardUnverifiedResultAsync(_record.Id, position);
+            _record = await workspace.GetGenerationRecordAsync(Id);
         }
         catch (SlopFactoryException exception)
         {

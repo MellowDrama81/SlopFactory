@@ -677,7 +677,8 @@ public sealed class UiAssetTests
                      "GenerationRecordSummary", "GenerationCompleted", "GenerationFailed", "GenerationPartiallyCompleted",
                      "GenerationPartiallyCompletedDetail", "SafetyBlockedResultsDetail", "ShowSystemInstructions", "TokenUsage", "SourceImageSlotUsed",
                      "OpenGeneratedFile", "PromptImprovementUsed", "UseAgain", "Recycle", "ConfirmRecycleGenerationRecord",
-                     "RecycleGenerationRecordWarning", "Cancel", "SourceFilePermanentlyDeletedSlot", "ResultFilePermanentlyDeleted"
+                     "RecycleGenerationRecordWarning", "Cancel", "SourceFilePermanentlyDeletedSlot", "ResultFilePermanentlyDeleted",
+                     "ResultPendingReview", "RetainAsUnverifiedBinary", "DiscardUnverifiedResult"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

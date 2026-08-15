@@ -1647,6 +1647,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             {
                 findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.RequiredDirectoryMissing, null, null, null, "The staging directory is missing."));
             }
+            if (!Directory.Exists(_layout.PendingReviewPath))
+            {
+                findings.Add(new LibraryIntegrityFinding(LibraryIntegrityIssueKind.RequiredDirectoryMissing, null, null, null, "The pending-review directory is missing."));
+            }
             progress?.Report(new LibraryIntegrityScanProgress(++processed, total, "Enumerating managed storage"));
 
             string[] managedEntries = [];
@@ -2230,6 +2234,75 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.DeleteAsyncRemoteJobAsync(asyncJobId, cancellationToken), cancellationToken);
     }
 
+    public Task<IReadOnlyList<PendingUnverifiedResult>> GetPendingUnverifiedResultsAsync(string generationRecordId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetPendingUnverifiedResultsAsync(generationRecordId, cancellationToken);
+    }
+
+    public Task<FileRecord> RetainUnverifiedResultAsync(string generationRecordId, int position, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => RetainUnverifiedResultCoreAsync(generationRecordId, position, cancellationToken), cancellationToken);
+    }
+
+    public Task DiscardUnverifiedResultAsync(string generationRecordId, int position, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => DiscardUnverifiedResultCoreAsync(generationRecordId, position, cancellationToken), cancellationToken);
+    }
+
+    private async Task<FileRecord> RetainUnverifiedResultCoreAsync(string generationRecordId, int position, CancellationToken cancellationToken)
+    {
+        var pending = await _database.GetPendingUnverifiedResultAsync(generationRecordId, position, cancellationToken).ConfigureAwait(false);
+        var record = await _database.GetGenerationRecordAsync(generationRecordId, cancellationToken).ConfigureAwait(false);
+        var stagedPath = _layout.PendingReviewFilePath(pending.StagedFileName);
+        var fileId = LibraryRules.NewId();
+        var managedName = fileId + ".bin";
+        var managedPath = _layout.ManagedFilePath(managedName);
+        var committed = false;
+        try
+        {
+            File.Move(stagedPath, managedPath, false);
+            var safeLabel = new string(record.ModelLabel.Select(character => character is '/' or '\\' ? '_' : character).ToArray());
+            var baseName = $"{safeLabel} unverified {DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.bin";
+            var resolvedName = await _database.ResolveAvailableFileNameAsync(record.DestinationFolderId, baseName, cancellationToken).ConfigureAwait(false);
+            var now = DateTimeOffset.UtcNow;
+            // MediaType is forced to a generic opaque type rather than the mismatched bytes' own
+            // detected type (retained on the now-deleted pending row only as an audit trail) — the
+            // whole point of this path is that the detected type never matched what was expected, so
+            // trusting it here would let it slip back into image/audio/video-filtered pickers and
+            // preview logic that this retention path must stay excluded from (see ContentActionPolicy).
+            var fileRecord = new FileRecord(fileId, record.DestinationFolderId, resolvedName, resolvedName, managedName, pending.ContentHash, pending.ByteSize, "application/octet-stream",
+                FileOrigin.UnverifiedProviderOutput, LibraryRecordState.Active, now, now, null, null);
+            try
+            {
+                await _database.InsertImportedFileAsync(fileRecord, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                TryDelete(managedPath);
+                throw;
+            }
+            committed = true;
+            await _database.UpdateGenerationResultEntryAsync(generationRecordId, position, GenerationResultStatus.Committed, fileId, null, cancellationToken).ConfigureAwait(false);
+            await _database.DeletePendingUnverifiedResultAsync(pending.Id, cancellationToken).ConfigureAwait(false);
+            return fileRecord;
+        }
+        finally
+        {
+            if (!committed) TryDelete(managedPath);
+        }
+    }
+
+    private async Task DiscardUnverifiedResultCoreAsync(string generationRecordId, int position, CancellationToken cancellationToken)
+    {
+        var pending = await _database.GetPendingUnverifiedResultAsync(generationRecordId, position, cancellationToken).ConfigureAwait(false);
+        TryDelete(_layout.PendingReviewFilePath(pending.StagedFileName));
+        await _database.UpdateGenerationResultEntryAsync(generationRecordId, position, GenerationResultStatus.Failed, null, "The result was discarded as an unverified binary.", cancellationToken).ConfigureAwait(false);
+        await _database.DeletePendingUnverifiedResultAsync(pending.Id, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<GenerationRecord> RecordTextGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, CancellationToken cancellationToken)
     {
         var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
@@ -2315,6 +2388,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
         var resultFileIds = new List<string>();
         var resultEntries = new List<GenerationResultEntry>();
+        var pendingReviewCandidates = new List<(int Position, string StagedFileName, long ByteSize, string ContentHash, string DetectedMediaType)>();
 
         if (resultImages is { Count: > 0 })
         {
@@ -2341,11 +2415,25 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                         // Bytes could not be validated as the expected media category (plan.md:
                         // "the application validates ... expected media category ... When bytes
                         // cannot be validated as the expected ... type, the result fails and no
-                        // successful media record is created automatically"). Skip only this result
-                        // rather than aborting the whole batch — the staged temporary file is
-                        // cleaned up by the existing finally block below since stagingPath is never
-                        // cleared to empty on this path.
-                        resultEntries.Add(new GenerationResultEntry(currentPosition, GenerationResultStatus.Failed, null, "The provider's result bytes did not match the expected media type for this generation mode."));
+                        // successful media record is created automatically"). A recognized rejection
+                        // (error document/authentication page) is discarded exactly as before — the
+                        // staged temporary file is cleaned up by the existing finally block below
+                        // since stagingPath is never cleared to empty on that path. Otherwise the
+                        // bytes are genuinely unrecognized, so per plan.md they're held durably for
+                        // an explicit Retain-as-Unverified-Binary/Discard decision instead.
+                        if (ProviderRejectionPayloadClassifier.IsRecognizedRejectionPayload(bytes, mediaType))
+                        {
+                            resultEntries.Add(new GenerationResultEntry(currentPosition, GenerationResultStatus.Failed, null, "The provider's result bytes did not match the expected media type for this generation mode."));
+                        }
+                        else
+                        {
+                            var pendingHash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+                            var pendingFileName = fileId + ".pending";
+                            File.Move(stagingPath, _layout.PendingReviewFilePath(pendingFileName), false);
+                            stagingPath = string.Empty;
+                            pendingReviewCandidates.Add((currentPosition, pendingFileName, bytes.LongLength, pendingHash, mediaType));
+                            resultEntries.Add(new GenerationResultEntry(currentPosition, GenerationResultStatus.PendingReview, null, "The provider's result bytes did not match the expected media type for this generation mode and were not recognized as an error or authentication response — review to retain as an unverified binary or discard."));
+                        }
                         continue;
                     }
                     var managedName = fileId + extension;
@@ -2391,7 +2479,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
 
         var status = DetermineGenerationStatus(resultFileIds.Count, resultCount, wasCancelled);
-        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, null, promptImprovementRecordId, null, null, null, null, 0, cancellationToken, actualCost, actualCostCurrency, resultEntries).ConfigureAwait(false);
+        var generationRecord = await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, null, promptImprovementRecordId, null, null, null, null, 0, cancellationToken, actualCost, actualCostCurrency, resultEntries).ConfigureAwait(false);
+        foreach (var candidate in pendingReviewCandidates)
+        {
+            await _database.CreatePendingUnverifiedResultAsync(generationRecord.Id, candidate.Position, candidate.StagedFileName, candidate.ByteSize, candidate.ContentHash, candidate.DetectedMediaType, cancellationToken).ConfigureAwait(false);
+        }
+        return generationRecord;
     }
 
     private async Task<PromptImprovementRecord> RecordPromptImprovementAttemptCoreAsync(string modelId, string rawPrompt, string? guidance, string templateVersion, IReadOnlyList<string>? candidates, string? errorMessage, int? promptTokens, int? completionTokens, CancellationToken cancellationToken)

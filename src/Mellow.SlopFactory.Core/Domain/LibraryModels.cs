@@ -54,7 +54,13 @@ public enum FileOrigin
     Generated = 1,
     UserCopy = 2,
     EditedCopy = 3,
-    RecoveredProviderOutput = 4
+    RecoveredProviderOutput = 4,
+    /// <summary>A generation result whose bytes did not match the expected media category, whose
+    /// content was not recognized as a rejection payload (error document/authentication page), and
+    /// which the user explicitly chose to retain via <c>Retain as Unverified Binary</c> rather than
+    /// discard. Export-only: never previewable, never opened externally, never usable as a
+    /// generation source (see <c>ContentActionPolicy</c>).</summary>
+    UnverifiedProviderOutput = 5
 }
 
 public enum TextCopyFormat
@@ -546,7 +552,10 @@ public enum ExternalOpenSafety
     Allowed = 0,
     RequiresWarning = 1,
     BlockedActiveContent = 2,
-    BlockedUnavailableContent = 3
+    BlockedUnavailableContent = 3,
+    /// <summary>An unverified provider-output binary (<see cref="FileOrigin.UnverifiedProviderOutput"/>)
+    /// — export-only per plan.md, never opened externally regardless of its detected media type.</summary>
+    BlockedUnverifiedContent = 4
 }
 
 public sealed record MetadataNormalizationItem(
@@ -749,7 +758,13 @@ public enum GenerationStatus
 public enum GenerationResultStatus
 {
     Committed = 0,
-    Failed = 1
+    Failed = 1,
+    /// <summary>The provider returned non-empty bytes that did not match the expected media
+    /// category, and those bytes were not recognized as an error document, authentication page or
+    /// provider-blocked payload — so instead of an automatic discard, the result awaits an explicit
+    /// <c>Retain as Unverified Binary</c>/<c>Discard</c> decision (see
+    /// <c>ILibraryWorkspace.GetPendingUnverifiedResultsAsync</c>).</summary>
+    PendingReview = 2
 }
 
 /// <summary>
@@ -765,6 +780,20 @@ public sealed record GenerationResultEntry(
     GenerationResultStatus Status,
     string? FileId,
     string? ErrorMessage);
+
+/// <summary>Bytes staged durably (outside the <c>files</c> table) awaiting the user's explicit
+/// <c>Retain as Unverified Binary</c>/<c>Discard</c> decision for a <see
+/// cref="GenerationResultStatus.PendingReview"/> result. Never appears in normal library browsing —
+/// it only becomes a real <see cref="FileRecord"/> if retained.</summary>
+public sealed record PendingUnverifiedResult(
+    string Id,
+    string GenerationRecordId,
+    int Position,
+    string StagedFileName,
+    long ByteSize,
+    string ContentHash,
+    string DetectedMediaType,
+    DateTimeOffset CreatedAt);
 
 public sealed record GenerationRecord(
     string Id,

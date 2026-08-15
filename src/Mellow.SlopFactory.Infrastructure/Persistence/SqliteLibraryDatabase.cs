@@ -352,6 +352,18 @@ internal sealed class SqliteLibraryDatabase
             );
             CREATE INDEX ix_async_remote_jobs_connection ON async_remote_jobs(connection_id);
             CREATE INDEX ix_async_remote_jobs_phase ON async_remote_jobs(phase);
+
+            CREATE TABLE pending_unverified_results (
+                id TEXT PRIMARY KEY,
+                generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL,
+                staged_file_name TEXT NOT NULL,
+                byte_size INTEGER NOT NULL,
+                content_hash TEXT NOT NULL,
+                detected_media_type TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX ix_pending_unverified_results_generation ON pending_unverified_results(generation_id);
             """;
         await ExecuteNonQueryAsync(connection, schema, cancellationToken, transaction).ConfigureAwait(false);
 
@@ -603,6 +615,24 @@ internal sealed class SqliteLibraryDatabase
             // correct for pre-existing data without a data migration pass.
             await AddColumnIfMissingAsync(connection, transaction, "generation_results", "status", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
             await AddColumnIfMissingAsync(connection, transaction, "generation_results", "result_error_message", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 33)
+        {
+            await ExecuteNonQueryAsync(connection,
+                """
+                CREATE TABLE IF NOT EXISTS pending_unverified_results (
+                    id TEXT PRIMARY KEY,
+                    generation_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,
+                    position INTEGER NOT NULL,
+                    staged_file_name TEXT NOT NULL,
+                    byte_size INTEGER NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    detected_media_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_pending_unverified_results_generation ON pending_unverified_results(generation_id);
+                """,
+                cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -2734,6 +2764,66 @@ internal sealed class SqliteLibraryDatabase
         reader.GetString(0), reader.GetString(1), (ProviderType)reader.GetInt32(2), reader.GetString(3), reader.GetString(4),
         (AsyncRemoteJobPhase)reader.GetInt32(5), reader.IsDBNull(6) ? null : reader.GetString(6), Parse(reader.GetString(7)),
         reader.IsDBNull(8) ? null : Parse(reader.GetString(8)), reader.IsDBNull(9) ? null : Parse(reader.GetString(9)));
+
+    private const string PendingUnverifiedResultSelect = "SELECT id,generation_id,position,staged_file_name,byte_size,content_hash,detected_media_type,created_at FROM pending_unverified_results";
+
+    public async Task<PendingUnverifiedResult> CreatePendingUnverifiedResultAsync(string generationRecordId, int position, string stagedFileName, long byteSize, string contentHash, string detectedMediaType, CancellationToken cancellationToken)
+    {
+        var id = LibraryRules.NewId();
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO pending_unverified_results(id,generation_id,position,staged_file_name,byte_size,content_hash,detected_media_type,created_at) VALUES($id,$gen,$pos,$name,$size,$hash,$media,$now);",
+            cancellationToken, null,
+            ("$id", id), ("$gen", generationRecordId), ("$pos", position), ("$name", stagedFileName),
+            ("$size", byteSize), ("$hash", contentHash), ("$media", detectedMediaType), ("$now", Format(now))).ConfigureAwait(false);
+        return new PendingUnverifiedResult(id, generationRecordId, position, stagedFileName, byteSize, contentHash, detectedMediaType, now);
+    }
+
+    public async Task<IReadOnlyList<PendingUnverifiedResult>> GetPendingUnverifiedResultsAsync(string generationRecordId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = PendingUnverifiedResultSelect + " WHERE generation_id=$gen ORDER BY position;";
+        command.Parameters.AddWithValue("$gen", generationRecordId);
+        var results = new List<PendingUnverifiedResult>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadPendingUnverifiedResult(reader));
+        return results;
+    }
+
+    public async Task<PendingUnverifiedResult> GetPendingUnverifiedResultAsync(string generationRecordId, int position, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = PendingUnverifiedResultSelect + " WHERE generation_id=$gen AND position=$pos;";
+        command.Parameters.AddWithValue("$gen", generationRecordId);
+        command.Parameters.AddWithValue("$pos", position);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Pending unverified result not found.");
+        return ReadPendingUnverifiedResult(reader);
+    }
+
+    public async Task DeletePendingUnverifiedResultAsync(string pendingResultId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "DELETE FROM pending_unverified_results WHERE id=$id;", cancellationToken, null, ("$id", pendingResultId)).ConfigureAwait(false);
+    }
+
+    public async Task UpdateGenerationResultEntryAsync(string generationRecordId, int position, GenerationResultStatus status, string? fileId, string? errorMessage, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var updated = await ExecuteNonQueryWithCountAsync(connection,
+            "UPDATE generation_results SET status=$status,file_id=$file,result_error_message=$msg WHERE generation_id=$gen AND position=$pos;",
+            cancellationToken, null,
+            ("$status", (int)status), ("$file", fileId is null ? DBNull.Value : fileId), ("$msg", errorMessage is null ? DBNull.Value : errorMessage),
+            ("$gen", generationRecordId), ("$pos", position)).ConfigureAwait(false);
+        if (updated == 0) throw new RecordNotFoundException("Generation result entry not found.");
+    }
+
+    private static PendingUnverifiedResult ReadPendingUnverifiedResult(SqliteDataReader reader) => new(
+        reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3),
+        reader.GetInt64(4), reader.GetString(5), reader.GetString(6), Parse(reader.GetString(7)));
 
     private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,state,recycled_at,tombstone_source_display_name,tombstone_source_media_type,tombstone_source_content_hash,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,secondary_source_file_id,secondary_tombstone_display_name,secondary_tombstone_media_type,secondary_tombstone_content_hash,tertiary_source_file_id,tertiary_tombstone_display_name,tertiary_tombstone_media_type,tertiary_tombstone_content_hash,safety_blocked_count,actual_cost,actual_cost_currency FROM generation_records";
 

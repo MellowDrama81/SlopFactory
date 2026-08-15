@@ -33,6 +33,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             ValidateStorageCapabilitiesAtRoot(layout.RootPath);
             Directory.CreateDirectory(layout.ManagedPath);
             Directory.CreateDirectory(layout.StagingPath);
+            Directory.CreateDirectory(layout.PendingReviewPath);
             ValidateStorageCapabilities(layout);
             var libraryId = LibraryRules.NewId();
             var rootFolderId = LibraryRules.NewId();
@@ -84,6 +85,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
                 throw new LibraryValidationException("The library manifest changed while the library was opening.");
             }
             Directory.CreateDirectory(layout.StagingPath);
+            Directory.CreateDirectory(layout.PendingReviewPath);
             layout.ValidateManagedDirectories();
             ValidateStorageCapabilities(layout);
             var currentManifest = await UpgradeIfRequiredAsync(layout, lockedManifest, cancellationToken).ConfigureAwait(false);
@@ -180,6 +182,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         TryDelete(Path.Combine(layout.RootPath, "slopfactory-library.json.tmp"));
         TryDeleteTree(layout.ManagedPath);
         TryDeleteTree(layout.StagingPath);
+        TryDeleteTree(layout.PendingReviewPath);
         TryDelete(layout.LockPath);
     }
 

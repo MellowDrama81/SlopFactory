@@ -25,6 +25,7 @@ public static class ContentActionPolicy
     public static ExternalOpenSafety GetExternalOpenSafety(FileRecord file)
     {
         if (!CanUseManagedContent(file)) return ExternalOpenSafety.BlockedUnavailableContent;
+        if (file.Origin == FileOrigin.UnverifiedProviderOutput) return ExternalOpenSafety.BlockedUnverifiedContent;
         if (ActiveMediaTypes.Contains(file.MediaType)) return ExternalOpenSafety.BlockedActiveContent;
         return PotentiallyActiveMediaTypes.Contains(file.MediaType)
             ? ExternalOpenSafety.RequiresWarning

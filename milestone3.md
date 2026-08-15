@@ -356,9 +356,30 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       status and non-zero size were already enforced (each adapter already throws on a non-success
       status or empty bytes). **Not done**: provider-supplied checksum validation — no adapter
       implemented this pass reports one, so there's nothing to check yet.
-- [ ] Add the **Retain as Unverified Binary** path for a result whose bytes cannot be classified
+- [x] Add the **Retain as Unverified Binary** path for a result whose bytes cannot be classified
       into the expected media type, storing it distinctly rather than silently discarding or
-      mis-typing it.
+      mis-typing it. `ProviderRejectionPayloadClassifier` (new, pure, `Core/Domain/`) distinguishes a
+      recognizable rejection (HTML error/authentication page, or JSON with an `error`/`errors` key)
+      from genuinely unrecognized bytes — only a recognized rejection is still auto-discarded exactly
+      as before. Unrecognized mismatched bytes get a new `GenerationResultStatus.PendingReview`
+      instead of an automatic `Failed`, and are moved into a new durable `.pending-review` library
+      directory (schema v33 `pending_unverified_results` table) rather than the transient staging
+      directory, since staging is wiped on a failed create and these bytes must survive until
+      reviewed. `GenerationHistoryDetail.razor` shows **Retain as Unverified Binary**/**Discard**
+      actions per pending position; retaining commits a `.bin` file via the normal atomic
+      staging-into-managed-storage path with `FileOrigin.UnverifiedProviderOutput` and its media type
+      forced to `application/octet-stream` regardless of what was actually detected (trusting the
+      mismatched detection would let it slip back into image/audio/video-filtered source pickers and
+      preview logic); discarding deletes the staged bytes and leaves the position `Failed`. Export-only
+      per plan.md: `ContentActionPolicy.GetExternalOpenSafety` gained
+      `ExternalOpenSafety.BlockedUnverifiedContent` for this origin, and preview is already blocked for
+      free since `application/octet-stream` isn't a recognized preview media type. 12 new tests cover
+      the classifier (HTML/JSON-error/unrecognized-binary/oversized-payload cases), the
+      PendingReview/recognized-rejection split during commit, retain/discard, and the v32→v33
+      migration. **Not implemented**: the separate "adapter documents an opaque binary-file result"
+      case (`Unverified Content Type`, distinct from this retention path's `Unverified Provider
+      Output`) — no adapter shipped this milestone declares such a contract, so there's nothing to
+      build against yet.
 - [x] Add support for provider-hosted result URLs: `ResultUrlValidator` (new,
       `Infrastructure/Providers/ResultUrlValidator.cs`) enforces HTTPS and rejects a resolved
       address in the loopback/unspecified/private/link-local/multicast/reserved ranges (both IPv4

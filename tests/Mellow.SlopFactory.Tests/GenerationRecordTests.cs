@@ -1,3 +1,4 @@
+using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure;
 using Xunit;
@@ -395,10 +396,90 @@ public sealed class GenerationRecordTests
         Assert.Equal(0, committed.Position);
         Assert.Equal(file.Id, committed.FileId);
         Assert.Null(committed.ErrorMessage);
-        var failed = Assert.Single(record.Results, entry => entry.Status == GenerationResultStatus.Failed);
-        Assert.Equal(1, failed.Position);
+        // PNG bytes aren't recognized as an error document/authentication page, so the mismatch
+        // awaits an explicit Retain-as-Unverified-Binary/Discard decision rather than an automatic Failed.
+        var pending = Assert.Single(record.Results, entry => entry.Status == GenerationResultStatus.PendingReview);
+        Assert.Equal(1, pending.Position);
+        Assert.Null(pending.FileId);
+        Assert.Contains("did not match the expected media type", pending.ErrorMessage, StringComparison.Ordinal);
+        var pendingReviews = await workspace.GetPendingUnverifiedResultsAsync(record.Id);
+        var pendingReview = Assert.Single(pendingReviews);
+        Assert.Equal(1, pendingReview.Position);
+        Assert.Equal(PngSignatureBytes.LongLength, pendingReview.ByteSize);
+    }
+
+    [Fact]
+    public async Task AResultRecognizedAsAJsonErrorDocumentIsDiscardedAutomaticallyRatherThanHeldForReview()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Audio Model", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+        var errorDocumentBytes = System.Text.Encoding.UTF8.GetBytes("""{"error":{"message":"Invalid API key","type":"authentication_error"}}""");
+
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "Read this aloud", 1, workspace.Descriptor.GeneratedFolderId, [errorDocumentBytes], null);
+
+        Assert.Equal(GenerationStatus.Failed, record.Status);
+        var failed = Assert.Single(record.Results);
+        Assert.Equal(GenerationResultStatus.Failed, failed.Status);
+        Assert.Empty(await workspace.GetPendingUnverifiedResultsAsync(record.Id));
+    }
+
+    [Fact]
+    public async Task RetainingAnUnverifiedResultCommitsAnExportOnlyBinFileAndClearsTheReviewQueue()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Audio Model", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "Read this aloud", 1, workspace.Descriptor.GeneratedFolderId, [PngSignatureBytes], null);
+        Assert.Equal(GenerationResultStatus.PendingReview, Assert.Single(record.Results).Status);
+
+        var retained = await workspace.RetainUnverifiedResultAsync(record.Id, 0);
+
+        Assert.Equal(FileOrigin.UnverifiedProviderOutput, retained.Origin);
+        Assert.Equal("application/octet-stream", retained.MediaType);
+        Assert.EndsWith(".bin", retained.ManagedName, StringComparison.Ordinal);
+        Assert.Equal(PngSignatureBytes.LongLength, retained.ByteSize);
+        Assert.Equal(LibraryRecordState.Active, retained.State);
+        // Export-only per plan.md: never previewable (media type forced to opaque octet-stream
+        // regardless of the mismatched bytes' own detected type) and never opened externally.
+        Assert.Equal(BuiltInPreviewKind.Unsupported, BuiltInPreviewCapabilities.ForMediaType(retained.MediaType));
+
+        Assert.Empty(await workspace.GetPendingUnverifiedResultsAsync(record.Id));
+        var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
+        var committed = Assert.Single(reloaded.Results);
+        Assert.Equal(GenerationResultStatus.Committed, committed.Status);
+        Assert.Equal(retained.Id, committed.FileId);
+        Assert.Null(committed.ErrorMessage);
+
+        Assert.Equal(ExternalOpenSafety.BlockedUnverifiedContent, ContentActionPolicy.GetExternalOpenSafety(retained));
+    }
+
+    [Fact]
+    public async Task DiscardingAnUnverifiedResultRemovesTheStagedBytesAndLeavesTheResultFailed()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Audio Model", connection.Id, "openai/gpt-4o-mini-tts", GenerationMode.Audio, false);
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "Read this aloud", 1, workspace.Descriptor.GeneratedFolderId, [PngSignatureBytes], null);
+
+        await workspace.DiscardUnverifiedResultAsync(record.Id, 0);
+
+        Assert.Empty(await workspace.GetPendingUnverifiedResultsAsync(record.Id));
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(root, ".pending-review")));
+        var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
+        var failed = Assert.Single(reloaded.Results);
+        Assert.Equal(GenerationResultStatus.Failed, failed.Status);
         Assert.Null(failed.FileId);
-        Assert.Contains("did not match the expected media type", failed.ErrorMessage, StringComparison.Ordinal);
+        Assert.Empty(await workspace.GetActiveFilesAsync());
     }
 
     [Fact]
@@ -437,7 +518,7 @@ public sealed class GenerationRecordTests
 
         Assert.Equal(2, reloaded.Results.Count);
         Assert.Equal(GenerationResultStatus.Committed, reloaded.Results[0].Status);
-        Assert.Equal(GenerationResultStatus.Failed, reloaded.Results[1].Status);
+        Assert.Equal(GenerationResultStatus.PendingReview, reloaded.Results[1].Status);
         Assert.Contains("did not match the expected media type", reloaded.Results[1].ErrorMessage, StringComparison.Ordinal);
     }
 

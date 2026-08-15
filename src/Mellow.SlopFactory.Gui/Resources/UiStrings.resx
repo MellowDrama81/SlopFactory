@@ -359,6 +359,7 @@
   <data name="OriginUserCopy" xml:space="preserve"><value>User copy</value></data>
   <data name="OriginEditedCopy" xml:space="preserve"><value>Edited copy</value></data>
   <data name="OriginRecoveredProviderOutput" xml:space="preserve"><value>Recovered provider output</value></data>
+  <data name="OriginUnverifiedProviderOutput" xml:space="preserve"><value>Unverified provider output</value></data>
   <data name="ContentStateMissing" xml:space="preserve"><value>Missing</value></data>
   <data name="ContentStateChanged" xml:space="preserve"><value>Changed</value></data>
   <data name="ContentStateReplaced" xml:space="preserve"><value>Replaced</value></data>
@@ -860,6 +861,9 @@
   <data name="ResultPositionLabel" xml:space="preserve"><value>Result {0}</value></data>
   <data name="ResultCommitted" xml:space="preserve"><value>Committed</value></data>
   <data name="ResultFailed" xml:space="preserve"><value>Failed</value></data>
+  <data name="ResultPendingReview" xml:space="preserve"><value>Awaiting review</value></data>
+  <data name="RetainAsUnverifiedBinary" xml:space="preserve"><value>Retain as unverified binary</value></data>
+  <data name="DiscardUnverifiedResult" xml:space="preserve"><value>Discard</value></data>
   <data name="RetryFailedResultsOnly" xml:space="preserve"><value>Retry failed/missing results only ({0})</value></data>
   <data name="RetryModelUnavailable" xml:space="preserve"><value>The model used for this generation is no longer available, so the failed results cannot be retried automatically.</value></data>
   <data name="RetryConnectionUnavailable" xml:space="preserve"><value>The connection used for this generation is no longer available, so the failed results cannot be retried automatically.</value></data>

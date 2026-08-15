@@ -153,6 +153,10 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<AsyncRemoteJobRecord>> GetAsyncRemoteJobsForConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
     Task<AsyncRemoteJobRecord> UpdateAsyncRemoteJobPhaseAsync(string asyncJobId, AsyncRemoteJobPhase phase, DateTimeOffset? lastPolledAt = null, CancellationToken cancellationToken = default);
     Task DeleteAsyncRemoteJobAsync(string asyncJobId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PendingUnverifiedResult>> GetPendingUnverifiedResultsAsync(string generationRecordId, CancellationToken cancellationToken = default);
+    Task<FileRecord> RetainUnverifiedResultAsync(string generationRecordId, int position, CancellationToken cancellationToken = default);
+    Task DiscardUnverifiedResultAsync(string generationRecordId, int position, CancellationToken cancellationToken = default);
 }
 
 public interface ILibraryWorkspaceFactory

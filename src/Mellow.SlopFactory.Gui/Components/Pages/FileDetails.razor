@@ -26,7 +26,7 @@ else
             @if (ContentActionPolicy.CanUseManagedContent(_file))
             {
                 <button class="secondary" disabled="@_fileActionBusy" @onclick="ExportAsync">@Strings["Export"]</button>
-                @if (ContentActionPolicy.GetExternalOpenSafety(_file) != ExternalOpenSafety.BlockedActiveContent) { <button class="secondary" disabled="@_fileActionBusy" @onclick="ReviewExternalOpenAsync">@Strings["OpenInAnotherApp"]</button> }
+                @if (ContentActionPolicy.GetExternalOpenSafety(_file) is not (ExternalOpenSafety.BlockedActiveContent or ExternalOpenSafety.BlockedUnverifiedContent)) { <button class="secondary" disabled="@_fileActionBusy" @onclick="ReviewExternalOpenAsync">@Strings["OpenInAnotherApp"]</button> }
             }
             @if (_file.ContentState == FileContentState.Changed) { <button class="secondary" disabled="@_fileActionBusy" @onclick="ExportChangedBytesAsync">@Strings["ExportChangedBytes"]</button> }
             <button class="secondary" @onclick="Back">@Strings["BackToLibrary"]</button>
@@ -715,6 +715,7 @@ else
         FileOrigin.Generated => Strings["OriginGenerated"],
         FileOrigin.UserCopy => Strings["OriginUserCopy"],
         FileOrigin.EditedCopy => Strings["OriginEditedCopy"],
+        FileOrigin.UnverifiedProviderOutput => Strings["OriginUnverifiedProviderOutput"],
         _ => Strings["OriginRecoveredProviderOutput"]
     };
 
