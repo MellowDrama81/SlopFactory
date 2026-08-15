@@ -483,12 +483,30 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 
 ## Final Milestone 3 verification
 
-- [ ] Add automated coverage for every behavior above, including cancellation, partial failure,
-      cross-adapter and cross-library isolation cases.
-- [ ] Run the full shared test suite, Windows MAUI build, and Android MAUI build with zero errors.
+- [x] Add automated coverage for every behavior above, including cancellation, partial failure,
+      cross-adapter and cross-library isolation cases. Cancellation (before/during submission,
+      concurrent-job isolation, video partial-completion) and partial failure (mixed valid/mismatched
+      results, video multi-job shortfalls) were already covered by each feature's own tests as it
+      shipped. Two real gaps found and closed this pass: every existing test resolved adapters
+      through a hand-written fake resolver that always returns one adapter, so nothing had ever
+      exercised the real `ProviderAdapterResolver` with all four adapters registered together —
+      `ProviderAdapterResolverTests.cs` (new) proves it returns exactly the right adapter instance
+      for each `ProviderType` via the actual DI container, and throws rather than silently falling
+      back for an unregistered one. `ConnectionRateLimitTracker` is the one genuinely new
+      application-wide (not per-library) shared state this milestone introduced, so
+      `ConnectionRateLimitTrackerTests.cs` (new) proves two connections' observations never leak
+      into each other. Async-job/pending-unverified-result isolation across libraries needed no new
+      test: each is scoped to its own library's SQLite database file, structurally incapable of
+      cross-library leakage the same way every other per-library feature already is.
+- [x] Run the full shared test suite, Windows MAUI build, and Android MAUI build with zero errors.
+      Verified in both Debug and Release configuration: `dotnet build` and `dotnet build -c Release`
+      both produce zero warnings/errors across all four projects and both Gui target frameworks
+      (`net10.0-windows10.0.22621.0`/`net10.0-android`); `dotnet test` reports 476/476 passing.
 - [ ] Execute a Milestone-3 manual acceptance pass on supported Windows and Android devices,
       including at least one real (budget-bounded) live-provider run per new adapter, and record it
-      in `manual_tests.md`.
+      in `manual_tests.md`. **Not done by this session**: this needs a physical/emulated device, a
+      real OpenRouter and DeepInfra API key, and an approved cost budget for live billable calls —
+      none of which an autonomous coding session can provide or authorize on its own.
 - [ ] Update `plan.md` by removing only verified completed requirements, and keep user/developer
       documentation and `README.md` aligned with the finished behavior.
 
