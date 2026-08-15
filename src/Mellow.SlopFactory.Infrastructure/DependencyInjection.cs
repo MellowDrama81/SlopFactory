@@ -9,6 +9,7 @@ public static class DependencyInjection
     public static IServiceCollection AddSlopFactoryInfrastructure(this IServiceCollection services)
     {
         services.AddSingleton<ILibraryWorkspaceFactory, LibraryWorkspaceFactory>();
+        services.AddSingleton<IConnectionRateLimitTracker, ConnectionRateLimitTracker>();
         // HttpClient's own timeout is disabled here so OpenAiCompatibleProtocol.SendAsync is the single place that enforces
         // a timeout; otherwise a default HttpClient timeout could fire as a bare OperationCanceledException indistinguishable
         // from user-initiated generation cancellation.

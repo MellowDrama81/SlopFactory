@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using Mellow.SlopFactory.Domain;
+using Mellow.SlopFactory.Infrastructure;
 using Mellow.SlopFactory.Infrastructure.Providers;
 using Xunit;
 
@@ -553,5 +554,44 @@ public sealed class ProviderAdapterTests
         await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.GenerateTextAsync(connection, model, "secret-key", "Hello", 1));
 
         Assert.Equal(1, callCount);
+    }
+
+    [Fact]
+    public async Task AdapterRecordsRateLimitHeadersIntoTheInjectedTrackerOnASuccessfulResponse()
+    {
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"choices":[{"message":{"content":"Hi"}}]}""", Encoding.UTF8, "application/json") };
+            response.Headers.Add("x-ratelimit-limit-requests", "5000");
+            response.Headers.Add("x-ratelimit-remaining-requests", "4999");
+            response.Headers.Add("x-ratelimit-reset-requests", "1s");
+            return response;
+        });
+        var tracker = new ConnectionRateLimitTracker();
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler), tracker);
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel("gpt-4o");
+
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Hello", 1);
+
+        var observation = tracker.GetObservation(connection.Id);
+        Assert.NotNull(observation);
+        Assert.Equal(5000, observation!.LimitRequests);
+        Assert.Equal(4999, observation.RemainingRequests);
+        Assert.Equal(TimeSpan.FromSeconds(1), observation.ResetRequestsIn);
+    }
+
+    [Fact]
+    public async Task AdapterLeavesTheTrackerUntouchedWhenNoRateLimitHeadersArePresent()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"choices":[{"message":{"content":"Hi"}}]}""", Encoding.UTF8, "application/json") });
+        var tracker = new ConnectionRateLimitTracker();
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler), tracker);
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel("gpt-4o");
+
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Hello", 1);
+
+        Assert.Null(tracker.GetObservation(connection.Id));
     }
 }

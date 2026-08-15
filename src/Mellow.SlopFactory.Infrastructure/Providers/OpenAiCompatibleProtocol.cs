@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Linq;
+using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 
 namespace Mellow.SlopFactory.Infrastructure.Providers;
@@ -16,7 +17,7 @@ internal static class OpenAiCompatibleProtocol
     // allowRetry must only be set for idempotent requests (model listing). A generation-submission request is never
     // safe to retry automatically without provider-confirmed idempotency-key support, which this application does
     // not implement, so its failures are surfaced on the first attempt.
-    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, string Body)> SendAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken, bool allowRetry = false)
+    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, string Body)> SendAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken, bool allowRetry = false, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         var timeoutSeconds = connection.TimeoutSeconds ?? LibraryRules.DefaultConnectionTimeoutSeconds;
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
@@ -27,6 +28,7 @@ internal static class OpenAiCompatibleProtocol
             for (var attempt = 0; ; attempt++)
             {
                 using var response = await httpClient.SendAsync(currentRequest, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+                RecordRateLimitObservation(rateLimitTracker, connection, response);
                 var body = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
                 if (!allowRetry || response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxRetryAttempts)
@@ -45,6 +47,22 @@ internal static class OpenAiCompatibleProtocol
     }
 
     /// <summary>
+    /// Best-effort capture of the OpenAI-documented <c>x-ratelimit-*</c> headers (see
+    /// <see cref="RateLimitHeaderParser"/>) — silently a no-op when no tracker was supplied or none
+    /// of the expected headers are present, since not every OpenAI-compatible provider is confirmed
+    /// to emit them.
+    /// </summary>
+    private static void RecordRateLimitObservation(IConnectionRateLimitTracker? rateLimitTracker, Connection connection, HttpResponseMessage response)
+    {
+        if (rateLimitTracker is null) return;
+        var headers = response.Headers.ToDictionary(header => header.Key, header => header.Value.FirstOrDefault() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        if (RateLimitHeaderParser.TryParse(headers, DateTimeOffset.UtcNow) is { } observation)
+        {
+            rateLimitTracker.Record(connection.Id, observation);
+        }
+    }
+
+    /// <summary>
     /// Like <see cref="SendAsync"/> but reads the response as raw bytes rather than a decoded string —
     /// required for binary responses (audio synthesis, video/image downloads) where
     /// <see cref="HttpContent.ReadAsStringAsync()"/> would corrupt non-UTF-8 bytes.
@@ -52,7 +70,7 @@ internal static class OpenAiCompatibleProtocol
     /// it for a request with no side effect if repeated (a result download, never a paid generation
     /// call like audio synthesis, which stays retry-free without a confirmed idempotency key).
     /// </summary>
-    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, byte[] Bytes)> SendForBytesAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken, bool allowRetry = false)
+    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, byte[] Bytes)> SendForBytesAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken, bool allowRetry = false, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         var timeoutSeconds = connection.TimeoutSeconds ?? LibraryRules.DefaultConnectionTimeoutSeconds;
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
@@ -63,6 +81,7 @@ internal static class OpenAiCompatibleProtocol
             for (var attempt = 0; ; attempt++)
             {
                 using var response = await httpClient.SendAsync(currentRequest, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+                RecordRateLimitObservation(rateLimitTracker, connection, response);
 
                 if (!allowRetry || response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxRetryAttempts)
                 {

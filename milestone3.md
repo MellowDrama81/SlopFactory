@@ -459,9 +459,27 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 
 ## Rate-limit behavior
 
-- [ ] Add per-connection rate-limit state (last observed limit, remaining, reset time) rather than
+- [x] Add per-connection rate-limit state (last observed limit, remaining, reset time) rather than
       today's stateless retry-only handling, and adaptive throttling that backs off proactively
-      once a connection's remaining quota is known to be low.
+      once a connection's remaining quota is known to be low. Scoped to what's actually confirmed:
+      OpenAI's documented `x-ratelimit-limit-requests`/`-remaining-requests`/`-reset-requests` (plus
+      the `-tokens` equivalents) headers, present on ordinary successful responses with a Go-style
+      duration reset value (`"1s"`, `"6m0s"`) — verified against OpenAI's own API docs. OpenRouter's
+      equivalent headers are documented as present only on already-429'd platform-limit responses
+      with an unconfirmed reset format, so parsing there is deliberately defensive rather than
+      asserted: `RateLimitHeaderParser.TryParse` (new, pure, `Core/Domain/`) reports only whatever
+      recognized headers/format are actually present and returns `null` otherwise, never guessing a
+      shape a provider hasn't confirmed. `IConnectionRateLimitTracker`/`ConnectionRateLimitTracker`
+      (new, in-memory only — the data is meaningless past its reset window, so nothing is gained by
+      persisting it) is threaded through `OpenAiCompatibleProtocol.SendAsync`/`SendForBytesAsync` as
+      an optional parameter (every existing call site is unaffected; only adapters that opt in pass
+      it) and injected into all four adapters. `GenerationQueueService.Pump()` now skips starting a
+      connection's next job when its last-observed `RemainingRequests` is `0` and the reset window
+      hasn't elapsed, scheduling a one-shot delayed re-pump for exactly when it does rather than
+      leaving the connection stuck until an unrelated queue event happens to re-trigger it. Last
+      observation is shown per-connection on `/connections`. 11 new tests cover header/duration
+      parsing (including malformed and unrecognized-format cases), adapter-to-tracker capture, and
+      the scheduler actually delaying then resuming submission across the reset window.
 - [x] Extend bounded automatic retry with `Retry-After` honoring beyond model listing, to both
       async-job status polling and result downloads. `OpenRouterProviderAdapter
       .PollVideoGenerationAsync` already passed `allowRetry: true` for the status poll itself

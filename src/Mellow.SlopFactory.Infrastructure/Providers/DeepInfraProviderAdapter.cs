@@ -19,10 +19,12 @@ namespace Mellow.SlopFactory.Infrastructure.Providers;
 internal sealed class DeepInfraProviderAdapter : IProviderAdapter
 {
     private readonly HttpClient _httpClient;
+    private readonly IConnectionRateLimitTracker? _rateLimitTracker;
 
-    public DeepInfraProviderAdapter(HttpClient httpClient)
+    public DeepInfraProviderAdapter(HttpClient httpClient, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         _httpClient = httpClient;
+        _rateLimitTracker = rateLimitTracker;
     }
 
     public ProviderType ProviderType => ProviderType.DeepInfra;
@@ -50,7 +52,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "models"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess)
         {
             if (statusCode == System.Net.HttpStatusCode.NotFound)
@@ -70,7 +72,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         request.Content = new StringContent(OpenAiCompatibleProtocol.BuildChatCompletionRequestBody(model.ProviderModelId, prompt, resultCount, systemInstructions, sourceImage, settings, secondarySourceImage, tertiarySourceImage), Encoding.UTF8, "application/json");
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseChatCompletionResult(body);
     }
@@ -81,7 +83,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         request.Content = new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
     }

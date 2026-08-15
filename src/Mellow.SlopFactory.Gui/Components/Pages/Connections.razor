@@ -1,5 +1,6 @@
 @page "/connections"
 @inject AppLibraryState LibraryState
+@inject IConnectionRateLimitTracker RateLimitTracker
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -48,6 +49,10 @@ else
                                 @Strings["UnresolvedAsyncJobsNotice", unresolvedCount]
                                 <button type="button" class="ghost" disabled="@_busy" @onclick="() => DiscardUnresolvedAsyncJobsAsync(connection.Id)">@Strings["DiscardUnresolvedAsyncJobs"]</button>
                             </div>
+                        }
+                        @if (RateLimitTracker.GetObservation(connection.Id) is { } observation && observation.RemainingRequests is not null && observation.LimitRequests is not null)
+                        {
+                            <small class="muted">@Strings["RateLimitObservedSummary", observation.RemainingRequests, observation.LimitRequests, observation.ObservedAt.ToLocalTime().ToString("t")]</small>
                         }
                         <a class="ghost" href="@($"/connections/{connection.Id}")">@Strings["Edit"]</a>
                         @if (_recycleCandidate == connection.Id)

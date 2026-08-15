@@ -9,14 +9,14 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
         var adapter = new FakeProviderAdapter();
         preferences ??= new FakeAppPreferenceStore();
         energy ??= new FakeDeviceEnergyStateProvider();
-        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval);
+        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker);
         queue.Start();
         return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
@@ -66,6 +66,43 @@ public sealed class GenerationQueueServiceTests
 
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-3") is not null);
         Assert.Equal(["prompt1", "prompt2", "prompt3"], adapter.InvokedPrompts);
+    }
+
+    [Fact]
+    public async Task AConnectionReportingZeroRemainingRequestsDelaysTheNextSubmissionUntilItsResetWindowElapses()
+    {
+        using var temporary = new TemporaryDirectory();
+        var tracker = new ConnectionRateLimitTracker();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), rateLimitTracker: tracker);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        tracker.Record(connection.Id, new RateLimitObservation(DateTimeOffset.UtcNow, 5000, 0, "200ms", TimeSpan.FromMilliseconds(200), null, null, null, null));
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+
+        await Task.Delay(80);
+        Assert.DoesNotContain("prompt1", adapter.InvokedPrompts);
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+    }
+
+    [Fact]
+    public async Task ARemainingRequestCountAboveZeroDoesNotDelaySubmission()
+    {
+        using var temporary = new TemporaryDirectory();
+        var tracker = new ConnectionRateLimitTracker();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), rateLimitTracker: tracker);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        tracker.Record(connection.Id, new RateLimitObservation(DateTimeOffset.UtcNow, 5000, 4999, "1s", TimeSpan.FromSeconds(1), null, null, null, null));
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
     }
 
     [Fact]

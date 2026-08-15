@@ -145,8 +145,10 @@ public sealed class GenerationQueueService
 
     private static readonly TimeSpan DefaultVideoPollInterval = TimeSpan.FromSeconds(5);
     private readonly TimeSpan _videoPollInterval;
+    private readonly IConnectionRateLimitTracker? _rateLimitTracker;
+    private readonly HashSet<string> _rateLimitPumpScheduled = new(StringComparer.Ordinal);
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null)
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
@@ -154,6 +156,7 @@ public sealed class GenerationQueueService
         _preferences = preferences;
         _energy = energy;
         _videoPollInterval = videoPollInterval ?? DefaultVideoPollInterval;
+        _rateLimitTracker = rateLimitTracker;
     }
 
     public event EventHandler? Changed;
@@ -378,6 +381,11 @@ public sealed class GenerationQueueService
                     if (!_queues.TryGetValue(connectionId, out var queue) || queue.Count == 0) continue;
                     _runningPerConnection.TryGetValue(connectionId, out var running);
                     if (running >= GetConnectionCap(connectionId)) continue;
+                    if (IsConnectionOutOfRequestQuota(connectionId, out var resetsAt))
+                    {
+                        ScheduleRateLimitRetryPump(connectionId, resetsAt);
+                        continue;
+                    }
                     started = queue.First!.Value;
                     queue.RemoveFirst();
                     started.Phase = GenerationJobPhase.Running;
@@ -390,6 +398,38 @@ public sealed class GenerationQueueService
             if (started is null) break;
             _ = RunJobAsync(started);
         }
+    }
+
+    /// <summary>
+    /// Proactive backoff per plan.md: once a connection's last-observed remaining request quota
+    /// (from the OpenAI-documented <c>x-ratelimit-remaining-requests</c> header — see
+    /// <see cref="RateLimitHeaderParser"/>) hits zero and its reset window hasn't elapsed yet, new
+    /// submissions on that connection wait rather than being sent into a near-certain 429.
+    /// Already-running jobs are unaffected; this only gates the next job Pump() would otherwise start.
+    /// </summary>
+    private bool IsConnectionOutOfRequestQuota(string connectionId, out DateTimeOffset resetsAt)
+    {
+        resetsAt = default;
+        var observation = _rateLimitTracker?.GetObservation(connectionId);
+        if (observation is null || observation.RemainingRequests is not { } remaining || remaining > 0) return false;
+        if (observation.ResetRequestsIn is not { } resetIn) return false;
+        resetsAt = observation.ObservedAt + resetIn;
+        return resetsAt > DateTimeOffset.UtcNow;
+    }
+
+    private void ScheduleRateLimitRetryPump(string connectionId, DateTimeOffset resetsAt)
+    {
+        lock (_gate)
+        {
+            if (!_rateLimitPumpScheduled.Add(connectionId)) return;
+        }
+        var delay = resetsAt - DateTimeOffset.UtcNow;
+        if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
+        _ = Task.Delay(delay).ContinueWith(_ =>
+        {
+            lock (_gate) _rateLimitPumpScheduled.Remove(connectionId);
+            Pump();
+        }, TaskScheduler.Default);
     }
 
     private async Task RunJobAsync(QueuedJob job)

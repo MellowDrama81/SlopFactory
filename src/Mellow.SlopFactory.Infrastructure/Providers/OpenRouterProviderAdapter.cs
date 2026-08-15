@@ -21,11 +21,13 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
 
     private readonly HttpClient _httpClient;
     private readonly Func<string, CancellationToken, Task<IPAddress[]>> _resolveHost;
+    private readonly IConnectionRateLimitTracker? _rateLimitTracker;
 
-    public OpenRouterProviderAdapter(HttpClient httpClient, Func<string, CancellationToken, Task<IPAddress[]>>? resolveHost = null)
+    public OpenRouterProviderAdapter(HttpClient httpClient, Func<string, CancellationToken, Task<IPAddress[]>>? resolveHost = null, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         _httpClient = httpClient;
         _resolveHost = resolveHost ?? Dns.GetHostAddressesAsync;
+        _rateLimitTracker = rateLimitTracker;
     }
 
     public ProviderType ProviderType => ProviderType.OpenRouter;
@@ -53,7 +55,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "models"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess)
         {
             if (statusCode == HttpStatusCode.NotFound)
@@ -73,7 +75,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         request.Content = new StringContent(OpenAiCompatibleProtocol.BuildChatCompletionRequestBody(model.ProviderModelId, prompt, resultCount, systemInstructions, sourceImage, settings, secondarySourceImage, tertiarySourceImage), Encoding.UTF8, "application/json");
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseChatCompletionResult(body);
     }
@@ -84,7 +86,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         request.Content = new StringContent(BuildImageRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
     }
@@ -99,7 +101,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
             OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
             OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
             request.Content = new StringContent(BuildAudioSpeechRequestBody(model.ProviderModelId, prompt), Encoding.UTF8, "application/json");
-            var (isSuccess, statusCode, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
+            var (isSuccess, statusCode, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
             if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
             if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty audio result.");
             results.Add(bytes);
@@ -114,7 +116,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         request.Content = new StringContent(BuildVideoSubmissionRequestBody(model.ProviderModelId, prompt), Encoding.UTF8, "application/json");
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
 
         try
@@ -140,7 +142,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, $"videos/{Uri.EscapeDataString(providerJobId)}"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true).ConfigureAwait(false);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
 
         try
@@ -170,7 +172,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
                         await ResultUrlValidator.ValidateHostAsync(resultUri, _resolveHost, cancellationToken).ConfigureAwait(false);
                         using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, resultUri);
                         OpenAiCompatibleProtocol.ApplyAuthorization(downloadRequest, connection, apiKey);
-                        var (downloadSucceeded, downloadStatus, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, downloadRequest, connection, cancellationToken, allowRetry: true).ConfigureAwait(false);
+                        var (downloadSucceeded, downloadStatus, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, downloadRequest, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
                         if (!downloadSucceeded) throw new ProviderAdapterException($"Downloading the completed video result failed: {OpenAiCompatibleProtocol.DescribeFailure(downloadStatus)}");
                         if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty video result.");
                         files.Add(bytes);
