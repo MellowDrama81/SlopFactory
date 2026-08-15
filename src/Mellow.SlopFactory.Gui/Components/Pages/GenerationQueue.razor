@@ -31,6 +31,10 @@ else
     {
         <section class="panel">
             <h2>@ConnectionLabel(group.Key)</h2>
+            @if (Queue.IsConnectionAwaitingRateLimitReset(group.Key))
+            {
+                <p class="notice" role="status">@Strings["RateLimitAwaitingReset"]</p>
+            }
             <ul class="metadata-list">
                 @foreach (var entry in group.OrderBy(candidate => candidate.Phase).ThenBy(candidate => candidate.QueuePosition ?? 0))
                 {

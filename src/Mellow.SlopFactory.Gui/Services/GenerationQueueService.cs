@@ -417,6 +417,11 @@ public sealed class GenerationQueueService
         return resetsAt > DateTimeOffset.UtcNow;
     }
 
+    /// <summary>Whether the next queued job on this connection is currently being held back by the
+    /// proactive rate-limit backoff above, for display on <c>/queue</c> — distinct from ordinary
+    /// "waiting for a device/connection concurrency slot" queueing.</summary>
+    public bool IsConnectionAwaitingRateLimitReset(string connectionId) => IsConnectionOutOfRequestQuota(connectionId, out _);
+
     private void ScheduleRateLimitRetryPump(string connectionId, DateTimeOffset resetsAt)
     {
         lock (_gate)

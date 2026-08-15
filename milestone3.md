@@ -492,7 +492,14 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `allowRetry: false` (its default) since that's a paid call, not a download.
 - [ ] Add rate-limited/delayed status display on `/generate` and `/queue` with cancellation
       available while waiting, and ensure Retry-After waits interact correctly with indivisible
-      multi-request queue-group ordering.
+      multi-request queue-group ordering. Partially done: `/queue` shows a per-connection notice
+      (`GenerationQueueService.IsConnectionAwaitingRateLimitReset`) while the proactive rate-limit
+      backoff above is holding back that connection's next submission, and cancellation was already
+      available for every job phase including `Queued` (nothing new needed there). **Not done**:
+      the equivalent status on `/generate`'s own run cards/tab status (today just shows the generic
+      queue position), and the Retry-After/multi-request-group interaction question — no adapter's
+      video multi-job group has been observed hitting a mid-group rate limit in testing, so there's
+      nothing concrete yet to verify that interaction against.
 - [ ] Add rate-limiting to explicit provider-status refresh/reconciliation actions (distinct
       per-request throttling that disables repeated activation while a lookup is in progress).
 
