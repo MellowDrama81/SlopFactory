@@ -224,12 +224,8 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       async-job record, polls on a configurable interval (`_videoPollInterval`, defaulting to 5s)
       and commits once terminal. 4 new queue-level tests cover audio success/failure and video
       success (asserting the pending-registry row exists mid-poll and is removed after commit) and
-      failure. **Known limitation, called out in code and tests**: a video job holds its queue
-      submission slot for the entire poll duration rather than releasing it after durable provider
-      acceptance as `plan.md` describes (`An asynchronous job releases its submission slot after the
-      provider durably accepts it`) — fixing this needs the scheduler to separate "holding a
-      submission slot" from "still being monitored," which is a real queue-architecture change, not
-      attempted this pass to avoid rushing a concurrency change unverified.
+      failure. The submission-slot-release limitation originally noted here was fixed later in this
+      same milestone — see `ReleaseSubmissionSlotEarly` under Asynchronous remote jobs above.
 - [ ] Add audio waveform thumbnails to the regenerable preview cache. **Correction to this item's
       original scope**: video posters and full audio/video file-viewer playback were already
       implemented before this milestone (`PreviewCacheService.GetVideoPosterAsync`/
@@ -507,8 +503,25 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       in `manual_tests.md`. **Not done by this session**: this needs a physical/emulated device, a
       real OpenRouter and DeepInfra API key, and an approved cost budget for live billable calls —
       none of which an autonomous coding session can provide or authorize on its own.
-- [ ] Update `plan.md` by removing only verified completed requirements, and keep user/developer
-      documentation and `README.md` aligned with the finished behavior.
+- [x] Update `plan.md` by removing only verified completed requirements, and keep user/developer
+      documentation and `README.md` aligned with the finished behavior. Removed 8 fully-satisfied
+      `plan.md` bullets (fake-HTTP-provider streaming/async-job/rate-limit coverage, provider
+      contract fixture versioning, the OpenRouter modality-endpoint bullet, per-connection
+      rate-limit-state scoping, and 3 of the Retain-as-Unverified-Binary bullets) — left every
+      bullet mixing a done and an undone clause (e.g. checksum validation, Unverified Content Type)
+      untouched rather than removing something only partially true. `docs/developer/architecture.md`
+      gained 8 new sections covering every shipped Milestone 3 behavior in the same dense
+      per-symbol style the file already uses. `docs/developer/testing.md` had a stale SDK-version
+      prerequisite and test count corrected. `README.md` gained a Milestone 3 feature-bullet block
+      and its "remain under development" closing paragraph was rewritten to name only what's
+      actually still open (1min.AI, the async-status vocabulary, named input slots, Provider Safety
+      Responses). `docs/user/README.md`'s literal "Planned provider connections and AI generation
+      are not available yet" claim — stale since Milestone 2, not just this pass — was corrected,
+      and a new `docs/user/generation.md` documents the connections/models/generation/queue/history/
+      cost-summary workflow end to end, since no user-facing doc for any of it existed before now.
+      **Not done**: `docs/developer/library-format.md` still only documents schema version 6/7 even
+      though the schema is now at v33 — a pre-existing gap spanning every milestone since, not
+      something reasonable to backfill as part of this item.
 
 ## Possible future work
 

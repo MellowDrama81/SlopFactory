@@ -70,7 +70,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 ## Testing
 
 - Provider adapters are unit-tested using sanitized request and response fixtures.
-- A local fake HTTP provider covers authentication, discovery, streaming, asynchronous jobs, rate limits, moderation, redirects, downloads and errors.
 - Standard automated tests never contact real providers.
 - Live provider tests are separate, manual or explicitly enabled and skipped when credentials are absent.
 - Test credentials are stored only in OS secure storage or CI secret storage.
@@ -78,7 +77,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Billable live tests require an explicit cost budget and stop when it is exhausted.
 - Media-generation smoke tests do not run during ordinary builds.
 - Live-test output is sanitized before being stored as a test artifact.
-- Provider contract fixtures are versioned so API changes can be reviewed deliberately.
 - Release-blocking export tests on Windows and Android inject crashes before and after every journal flush, external-object creation, identity binding, content flush, verification, atomic commit and journal removal boundary.
 - Fake filesystem and document-provider tests cover partial writes, silent provider renames, expired permissions, provider unavailability, target identity/type swaps, symlink or reparse substitution, tampered or unauthenticated journals, already-absent targets, media/sidecar mismatch and failed cleanup.
 - Tests assert that no unverified object is deleted, no failed or partial export is reported successful, successful unrelated files survive batch failures and no sensitive sidecar data enters diagnostics or notifications.
@@ -930,7 +928,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - A sandboxed third-party plug-in system is deferred until there is demonstrated demand and a secure cross-platform design.
 - Each supported provider has its own adapter. An adapter can reuse common OpenAI-compatible request and response handling where applicable while overriding authentication, endpoints, capabilities, settings and job handling by modality.
 - 1min.AI uses its native APIs. Chat requests use its unified chat API, while image, audio and video generation use its AI Feature API with feature-specific request parameters. Long-running feature requests can use its asynchronous result polling.
-- OpenRouter uses its OpenAI-compatible base URL, but media generation uses OpenRouter's modality-specific endpoints and schemas. Image generation, asynchronous video generation and audio generation are handled explicitly by the OpenRouter adapter.
 - DeepInfra uses its OpenAI-compatible endpoints where supported, including chat, image and audio operations. Its native inference API is used for models and modalities, including video generation, which are not exposed through the compatible endpoints.
 - Provider and model capabilities are detected from provider metadata where available and supplemented by provider-specific definitions where the metadata is incomplete.
 - Provider adapters supply typed settings schemas for known models and modalities.
@@ -1582,13 +1579,8 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - Provider results are downloaded immediately when returned because result URLs may expire.
 - Each result is written to a temporary file within the active library location.
 - Before committing a result, the application validates the response status, content type, expected media category, non-zero size and provider checksum when available.
-- When bytes cannot be validated as the expected text, image, audio or video type, the result fails and no successful media record is created automatically.
-- If the non-empty bytes are not recognized as an error document, authentication page or provider-blocked payload, the result review offers **Retain as Unverified Binary** or **Discard**.
-- Retention commits a distinct `.bin` file marked **Unverified Provider Output**. It is export-only and cannot be previewed, opened externally or reused as a generation source; the failed expected-media outcome remains visible in generation history.
-- Recognized error, authentication and blocked payloads are never eligible for binary retention and their temporary bytes are removed.
 - An adapter may retain unknown bytes only when its documented output contract explicitly defines an opaque binary-file result.
 - Such an output uses a `.bin` extension, is marked **Unverified Content Type**, provides metadata and export only, and cannot be previewed or opened externally from managed storage.
-- A provider error document or HTML page returned with a successful HTTP status is never stored as a successful media result.
 - The application calculates its own content hash after download.
 - A completed temporary file is moved atomically into managed storage and its database record is created transactionally.
 - A successful library-file record never points only to a remote provider URL.
@@ -1660,7 +1652,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - While an active multi-request group waits for `Retry-After`, later work on the same connection does not overtake it.
 - The wait remains cancellable; cancelling the group releases the connection queue after normal cancellation handling.
 - Independent connection queues can continue during that delay unless their own provider responses impose limits.
-- Rate-limit state, reset times and adaptive throttling are scoped to the connection which received the provider response.
 - SlopFactory does not compare API keys, headers or account details to infer that separate connections share an account or quota.
 - Account-wide throttling reported by a provider is explained on the affected connection but is not silently propagated to other connection records.
 - Retries use bounded exponential backoff with jitter.
