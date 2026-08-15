@@ -277,7 +277,7 @@ else
             if (AuthStructureChanged() && !_confirmedStopTrackingUnresolvedJobs)
             {
                 var unresolvedJobs = (await workspace.GetAsyncRemoteJobsForConnectionAsync(Id))
-                    .Count(asyncJob => asyncJob.Phase is AsyncRemoteJobPhase.Submitted or AsyncRemoteJobPhase.Processing or AsyncRemoteJobPhase.MonitoringPaused);
+                    .Count(asyncJob => asyncJob.Phase is AsyncRemoteJobPhase.Submitted or AsyncRemoteJobPhase.Processing or AsyncRemoteJobPhase.MonitoringPaused or AsyncRemoteJobPhase.CompletedAwaitingDownload);
                 if (unresolvedJobs > 0)
                 {
                     _awaitingUnresolvedAsyncJobsDecision = true;
@@ -399,7 +399,7 @@ else
         try
         {
             var unresolvedJobs = (await workspace.GetAsyncRemoteJobsForConnectionAsync(Id))
-                .Where(asyncJob => asyncJob.Phase is AsyncRemoteJobPhase.Submitted or AsyncRemoteJobPhase.Processing or AsyncRemoteJobPhase.MonitoringPaused);
+                .Where(asyncJob => asyncJob.Phase is AsyncRemoteJobPhase.Submitted or AsyncRemoteJobPhase.Processing or AsyncRemoteJobPhase.MonitoringPaused or AsyncRemoteJobPhase.CompletedAwaitingDownload);
             foreach (var asyncJob in unresolvedJobs)
             {
                 await workspace.DeleteAsyncRemoteJobAsync(asyncJob.Id);

@@ -96,7 +96,7 @@ else
         if (workspace is null) return;
         _activeConnections = await workspace.GetActiveConnectionsAsync();
         _activeModels = await workspace.GetActiveModelsAsync();
-        // Pending (Submitted/Processing/MonitoringPaused) async jobs — e.g. a video generation
+        // Pending (Submitted/Processing/MonitoringPaused/CompletedAwaitingDownload) async jobs — e.g. a video generation
         // whose poll loop never finished because the app closed mid-poll — are otherwise only
         // visible through ConnectionEdit.razor's reconciliation gate, which a user only ever sees
         // if they happen to edit that connection's auth settings. Surfacing them here gives real

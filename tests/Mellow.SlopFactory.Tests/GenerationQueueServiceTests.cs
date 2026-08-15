@@ -768,6 +768,84 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task ACompletedVideoJobWhoseDownloadFailsLeavesARecoverableAsyncJobLinkedToItsFailedPosition()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-job-download-fail";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.CompletedDownloadFailed, null, "Downloading the completed video result failed."));
+
+        queue.Enqueue(Snapshot("draft-video", model.Id, "A cat on a skateboard", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video") is not null);
+
+        var outcome = queue.GetLastOutcomeForDraft("draft-video")!;
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.Failed, outcome.Record!.Status);
+        var failedEntry = Assert.Single(outcome.Record.Results);
+        Assert.Equal(GenerationResultStatus.Failed, failedEntry.Status);
+        Assert.Contains("download", failedEntry.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        // The registry row survives — linked to the exact failed position — instead of being
+        // deleted like every other terminal outcome, so Refresh Provider Status has something to
+        // retry against.
+        var asyncJob = Assert.Single(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+        Assert.Equal(AsyncRemoteJobPhase.CompletedAwaitingDownload, asyncJob.Phase);
+        Assert.Equal(outcome.Record.Id, asyncJob.GenerationRecordId);
+        Assert.Equal(0, asyncJob.Position);
+    }
+
+    [Fact]
+    public async Task RetryMissingResultDownloadCommitsTheRecoveredFileAndRemovesTheRegistryRowOnSuccess()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-job-download-fail";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.CompletedDownloadFailed, null, "Downloading the completed video result failed."));
+        queue.Enqueue(Snapshot("draft-video", model.Id, "A cat on a skateboard", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video") is not null);
+        var record = queue.GetLastOutcomeForDraft("draft-video")!.Record!;
+        var asyncJob = Assert.Single(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+
+        byte[] mp4SignatureBytes = [0, 0, 0, 0x18, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'i', (byte)'s', (byte)'o', (byte)'m', 0, 0, 0, 0];
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [mp4SignatureBytes], null));
+
+        var recovered = await queue.RetryMissingResultDownloadAsync(asyncJob.Id);
+
+        Assert.True(recovered);
+        Assert.Empty(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+        var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
+        var committed = Assert.Single(reloaded.Results);
+        Assert.Equal(GenerationResultStatus.Committed, committed.Status);
+        Assert.Single(reloaded.ResultFileIds);
+    }
+
+    [Fact]
+    public async Task RetryMissingResultDownloadLeavesTheRegistryRowUntouchedWhenTheDownloadFailsAgain()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-job-download-fail";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.CompletedDownloadFailed, null, "Downloading the completed video result failed."));
+        queue.Enqueue(Snapshot("draft-video", model.Id, "A cat on a skateboard", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video") is not null);
+        var asyncJob = Assert.Single(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.CompletedDownloadFailed, null, "Downloading the completed video result failed again."));
+
+        var recovered = await queue.RetryMissingResultDownloadAsync(asyncJob.Id);
+
+        Assert.False(recovered);
+        var stillPending = Assert.Single(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+        Assert.Equal(AsyncRemoteJobPhase.CompletedAwaitingDownload, stillPending.Phase);
+    }
+
+    [Fact]
     public async Task VideoGenerationReleasesItsConnectionSlotAfterSubmissionSoOtherQueuedWorkCanRunConcurrently()
     {
         using var temporary = new TemporaryDirectory();

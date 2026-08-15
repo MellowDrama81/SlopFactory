@@ -483,6 +483,66 @@ public sealed class GenerationRecordTests
     }
 
     [Fact]
+    public async Task ImportMissingResultCommitsALateRecoveredVideoIntoItsFailedPosition()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Video Model", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        // Simulates a video job that completed at the provider but whose download failed —
+        // committed with no files and a childErrorMessage, exactly like
+        // GenerationQueueService.ExecuteVideoGenerationAsync does for AsyncGenerationPollOutcome
+        // .CompletedDownloadFailed.
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "A cat on a skateboard", 1, workspace.Descriptor.GeneratedFolderId, null, null, childErrorMessages: ["Downloading the completed video result failed."]);
+        Assert.Equal(GenerationResultStatus.Failed, Assert.Single(record.Results).Status);
+
+        var imported = await workspace.ImportMissingResultAsync(record.Id, 0, Mp4SignatureBytes);
+
+        Assert.Equal(FileOrigin.Generated, imported.Origin);
+        Assert.Equal("video/mp4", imported.MediaType);
+        var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
+        var committed = Assert.Single(reloaded.Results);
+        Assert.Equal(GenerationResultStatus.Committed, committed.Status);
+        Assert.Equal(imported.Id, committed.FileId);
+        Assert.Null(committed.ErrorMessage);
+        Assert.Equal(imported.Id, Assert.Single(reloaded.ResultFileIds));
+    }
+
+    [Fact]
+    public async Task ImportMissingResultRejectsBytesThatDoNotMatchTheExpectedMediaType()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Video Model", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "A cat on a skateboard", 1, workspace.Descriptor.GeneratedFolderId, null, null, childErrorMessages: ["download failed"]);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ImportMissingResultAsync(record.Id, 0, PngSignatureBytes));
+
+        var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
+        Assert.Equal(GenerationResultStatus.Failed, Assert.Single(reloaded.Results).Status);
+    }
+
+    [Fact]
+    public async Task ImportMissingResultRejectsAPositionThatIsNotAwaitingImport()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenRouter, "https://openrouter.ai/api/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Video Model", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        var record = await workspace.RecordMediaGenerationResultAsync(model.Id, "A cat on a skateboard", 1, workspace.Descriptor.GeneratedFolderId, [Mp4SignatureBytes], null);
+        Assert.Equal(GenerationResultStatus.Committed, Assert.Single(record.Results).Status);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ImportMissingResultAsync(record.Id, 0, Mp4SignatureBytes));
+    }
+
+    [Fact]
     public async Task AShortfallBeyondWhatTheProviderReturnedGetsAGenericPerPositionFailedEntry()
     {
         using var temporary = new TemporaryDirectory();

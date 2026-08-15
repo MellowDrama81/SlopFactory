@@ -63,6 +63,12 @@ else if (_record is not null)
                                     <button type="button" class="ghost danger" disabled="@_busy" @onclick="() => DiscardUnverifiedResultAsync(entry.Position)">@Strings["DiscardUnverifiedResult"]</button>
                                 </div>
                             }
+                            @if (entry.Status == GenerationResultStatus.Failed && _record.State == LibraryRecordState.Active && _recoverableAsyncJobIdByPosition.ContainsKey(entry.Position))
+                            {
+                                <div class="actions">
+                                    <button type="button" class="secondary" disabled="@_busy" @onclick="() => RefreshMissingResultAsync(entry.Position)">@Strings["RefreshProviderStatus"]</button>
+                                </div>
+                            }
                         </li>
                     }
                 </ul>
@@ -150,16 +156,26 @@ else if (_record is not null)
     private string? _message;
     private bool _recycleConfirm;
     private bool _busy;
+    private Dictionary<int, string> _recoverableAsyncJobIdByPosition = new();
 
     protected override async Task OnInitializedAsync()
     {
         NotificationCoordinator.VisibleGenerationRecordId = Id;
         await LibraryState.InitializeAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
         try
         {
             _record = await workspace.GetGenerationRecordAsync(Id);
+            var asyncJobs = await workspace.GetAsyncRemoteJobsForGenerationRecordAsync(Id);
+            _recoverableAsyncJobIdByPosition = asyncJobs
+                .Where(asyncJob => asyncJob.Phase == AsyncRemoteJobPhase.CompletedAwaitingDownload && asyncJob.Position is not null)
+                .ToDictionary(asyncJob => asyncJob.Position!.Value, asyncJob => asyncJob.Id);
         }
         catch (SlopFactoryException exception)
         {
@@ -178,7 +194,7 @@ else if (_record is not null)
         {
             await workspace.RecycleGenerationRecordAsync(Id);
             _recycleConfirm = false;
-            _record = await workspace.GetGenerationRecordAsync(Id);
+            await ReloadAsync();
         }
         catch (SlopFactoryException exception)
         {
@@ -252,7 +268,7 @@ else if (_record is not null)
         try
         {
             await workspace.RetainUnverifiedResultAsync(_record.Id, position);
-            _record = await workspace.GetGenerationRecordAsync(Id);
+            await ReloadAsync();
         }
         catch (SlopFactoryException exception)
         {
@@ -269,7 +285,30 @@ else if (_record is not null)
         try
         {
             await workspace.DiscardUnverifiedResultAsync(_record.Id, position);
-            _record = await workspace.GetGenerationRecordAsync(Id);
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    /// <summary>
+    /// **Refresh Provider Status**/**Import Missing Results**: retries downloading a result whose
+    /// provider job completed but whose initial download failed. The async job's own retry logic
+    /// lives on <see cref="GenerationQueueService"/> since it needs adapter/credential resolution,
+    /// which only that service (not <see cref="ILibraryWorkspace"/>) has access to.
+    /// </summary>
+    private async Task RefreshMissingResultAsync(int position)
+    {
+        if (!_recoverableAsyncJobIdByPosition.TryGetValue(position, out var asyncJobId)) return;
+        _busy = true;
+        try
+        {
+            var recovered = await Queue.RetryMissingResultDownloadAsync(asyncJobId);
+            _message = recovered ? null : Strings["RefreshProviderStatusStillUnavailable"].Value;
+            await ReloadAsync();
         }
         catch (SlopFactoryException exception)
         {

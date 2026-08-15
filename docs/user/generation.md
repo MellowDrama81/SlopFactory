@@ -28,7 +28,7 @@ Image, audio and video generation each use their target model's own request shap
 
 Clicking **Generate** enqueues the request rather than sending it inline — the page stays responsive, and the same tab can submit another run while an earlier one is still active. Every submission shows its own run card with a **Cancel** action; cancelling before anything reached the provider records no history entry, while cancelling after a video job was already accepted keeps whatever results had already finished rather than discarding them.
 
-If a multi-result request completes with some results missing or failed, its history detail page offers **Retry Failed/Missing Results Only** — a new, independent run covering just the shortfall, without altering the original record.
+If a multi-result request completes with some results missing or failed, its history detail page offers **Retry Failed/Missing Results Only** — a new, independent run covering just the shortfall, without altering the original record. If a video result specifically failed only because downloading it didn't succeed (the provider itself finished the job), that position instead offers **Refresh Provider Status** — retrying just the download, without generating anything again.
 
 ## Queue and rate limits
 

@@ -348,10 +348,13 @@ internal sealed class SqliteLibraryDatabase
                 idempotency_key TEXT NULL,
                 submitted_at TEXT NOT NULL,
                 last_polled_at TEXT NULL,
-                monitoring_deadline TEXT NULL
+                monitoring_deadline TEXT NULL,
+                generation_record_id TEXT NULL REFERENCES generation_records(id) ON DELETE CASCADE,
+                position INTEGER NULL
             );
             CREATE INDEX ix_async_remote_jobs_connection ON async_remote_jobs(connection_id);
             CREATE INDEX ix_async_remote_jobs_phase ON async_remote_jobs(phase);
+            CREATE INDEX ix_async_remote_jobs_generation ON async_remote_jobs(generation_record_id);
 
             CREATE TABLE pending_unverified_results (
                 id TEXT PRIMARY KEY,
@@ -633,6 +636,12 @@ internal sealed class SqliteLibraryDatabase
                 CREATE INDEX IF NOT EXISTS ix_pending_unverified_results_generation ON pending_unverified_results(generation_id);
                 """,
                 cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 34)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "async_remote_jobs", "generation_record_id", "TEXT NULL REFERENCES generation_records(id) ON DELETE CASCADE", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "async_remote_jobs", "position", "INTEGER NULL", cancellationToken).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection, "CREATE INDEX IF NOT EXISTS ix_async_remote_jobs_generation ON async_remote_jobs(generation_record_id);", cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -2696,7 +2705,7 @@ internal sealed class SqliteLibraryDatabase
         Parse(reader.GetString(11)), Parse(reader.GetString(12)), ReadGenerationSettings(reader, 13),
         reader.IsDBNull(18) ? null : reader.GetString(18), reader.IsDBNull(19) ? null : reader.GetString(19));
 
-    private const string AsyncRemoteJobSelect = "SELECT id,draft_id,provider_type,connection_id,provider_job_id,phase,idempotency_key,submitted_at,last_polled_at,monitoring_deadline FROM async_remote_jobs";
+    private const string AsyncRemoteJobSelect = "SELECT id,draft_id,provider_type,connection_id,provider_job_id,phase,idempotency_key,submitted_at,last_polled_at,monitoring_deadline,generation_record_id,position FROM async_remote_jobs";
 
     public async Task<AsyncRemoteJobRecord> CreateAsyncRemoteJobAsync(string draftId, ProviderType providerType, string connectionId, string providerJobId, string? idempotencyKey, DateTimeOffset? monitoringDeadline, CancellationToken cancellationToken)
     {
@@ -2716,10 +2725,11 @@ internal sealed class SqliteLibraryDatabase
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = AsyncRemoteJobSelect + " WHERE phase IN ($submitted,$processing,$paused) ORDER BY submitted_at;";
+        command.CommandText = AsyncRemoteJobSelect + " WHERE phase IN ($submitted,$processing,$paused,$awaitingDownload) ORDER BY submitted_at;";
         command.Parameters.AddWithValue("$submitted", (int)AsyncRemoteJobPhase.Submitted);
         command.Parameters.AddWithValue("$processing", (int)AsyncRemoteJobPhase.Processing);
         command.Parameters.AddWithValue("$paused", (int)AsyncRemoteJobPhase.MonitoringPaused);
+        command.Parameters.AddWithValue("$awaitingDownload", (int)AsyncRemoteJobPhase.CompletedAwaitingDownload);
         var results = new List<AsyncRemoteJobRecord>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadAsyncRemoteJob(reader));
@@ -2760,10 +2770,39 @@ internal sealed class SqliteLibraryDatabase
         await ExecuteNonQueryAsync(connection, "DELETE FROM async_remote_jobs WHERE id=$id;", cancellationToken, null, ("$id", asyncJobId)).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<AsyncRemoteJobRecord>> GetAsyncRemoteJobsForGenerationRecordAsync(string generationRecordId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = AsyncRemoteJobSelect + " WHERE generation_record_id=$gen ORDER BY position;";
+        command.Parameters.AddWithValue("$gen", generationRecordId);
+        var results = new List<AsyncRemoteJobRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(ReadAsyncRemoteJob(reader));
+        return results;
+    }
+
+    public async Task<AsyncRemoteJobRecord> LinkAsyncRemoteJobToGenerationResultAsync(string asyncJobId, string generationRecordId, int position, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var updated = await ExecuteNonQueryWithCountAsync(connection,
+            "UPDATE async_remote_jobs SET generation_record_id=$gen,position=$pos WHERE id=$id;",
+            cancellationToken, null,
+            ("$gen", generationRecordId), ("$pos", position), ("$id", asyncJobId)).ConfigureAwait(false);
+        if (updated == 0) throw new RecordNotFoundException("Asynchronous remote job not found.");
+        await using var command = connection.CreateCommand();
+        command.CommandText = AsyncRemoteJobSelect + " WHERE id=$id;";
+        command.Parameters.AddWithValue("$id", asyncJobId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Asynchronous remote job not found.");
+        return ReadAsyncRemoteJob(reader);
+    }
+
     private static AsyncRemoteJobRecord ReadAsyncRemoteJob(SqliteDataReader reader) => new(
         reader.GetString(0), reader.GetString(1), (ProviderType)reader.GetInt32(2), reader.GetString(3), reader.GetString(4),
         (AsyncRemoteJobPhase)reader.GetInt32(5), reader.IsDBNull(6) ? null : reader.GetString(6), Parse(reader.GetString(7)),
-        reader.IsDBNull(8) ? null : Parse(reader.GetString(8)), reader.IsDBNull(9) ? null : Parse(reader.GetString(9)));
+        reader.IsDBNull(8) ? null : Parse(reader.GetString(8)), reader.IsDBNull(9) ? null : Parse(reader.GetString(9)),
+        reader.IsDBNull(10) ? null : reader.GetString(10), reader.IsDBNull(11) ? null : reader.GetInt32(11));
 
     private const string PendingUnverifiedResultSelect = "SELECT id,generation_id,position,staged_file_name,byte_size,content_hash,detected_media_type,created_at FROM pending_unverified_results";
 

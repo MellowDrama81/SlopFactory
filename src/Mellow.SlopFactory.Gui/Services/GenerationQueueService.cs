@@ -625,6 +625,12 @@ public sealed class GenerationQueueService
         // shared media commit path consumes these for its trailing "shortfall" positions, giving
         // each failed child in a multi-job group its own real reason instead of one generic message.
         var childErrorMessages = new List<string>();
+        // Maps an async job whose provider job completed but whose download failed to the index its
+        // message occupies in childErrorMessages — since the shared commit path assigns shortfall
+        // positions as files.Count + messageIndex (in childErrorMessages order), this is what lets
+        // the async-job registry row be linked to its exact result position after the commit below,
+        // instead of being deleted like every other terminal job.
+        var downloadFailedMessageIndexByAsyncId = new Dictionary<string, int>(StringComparer.Ordinal);
         string? errorMessage = null;
         double? totalCost = null;
         string? costCurrency = null;
@@ -685,6 +691,22 @@ public sealed class GenerationQueueService
                         continue;
                     }
 
+                    if (pollResult.Outcome == AsyncGenerationPollOutcome.CompletedDownloadFailed)
+                    {
+                        // The provider itself confirmed completion — only the download failed, so
+                        // this position is retryable via Refresh Provider Status/Import Missing
+                        // Results rather than a genuine provider-side failure. The registry row is
+                        // kept (linked to its result position after the commit below) instead of
+                        // being deleted like every other terminal outcome.
+                        var failureMessage = pollResult.ErrorMessage ?? "The provider completed this result, but downloading it failed.";
+                        downloadFailedMessageIndexByAsyncId[entry.AsyncRecordId] = childErrorMessages.Count;
+                        errorMessage ??= failureMessage;
+                        childErrorMessages.Add(failureMessage);
+                        await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, AsyncRemoteJobPhase.CompletedAwaitingDownload, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                        pending.Remove(entry);
+                        continue;
+                    }
+
                     var phase = pollResult.Outcome == AsyncGenerationPollOutcome.Completed ? AsyncRemoteJobPhase.Completed : AsyncRemoteJobPhase.Failed;
                     await job.Workspace.UpdateAsyncRemoteJobPhaseAsync(entry.AsyncRecordId, phase, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
                     if (pollResult.Outcome == AsyncGenerationPollOutcome.Completed && pollResult.Files is { Count: > 0 })
@@ -733,6 +755,22 @@ public sealed class GenerationQueueService
 
         foreach (var entry in submitted)
         {
+            // A download-failed job's position matches the shared commit path's own shortfall-slot
+            // assignment (committed files first, then one shortfall slot per childErrorMessages
+            // entry in order) — see downloadFailedMessageIndexByAsyncId's own comment above.
+            if (downloadFailedMessageIndexByAsyncId.TryGetValue(entry.AsyncRecordId, out var messageIndex))
+            {
+                try
+                {
+                    await job.Workspace.LinkAsyncRemoteJobToGenerationResultAsync(entry.AsyncRecordId, record.Id, files.Count + messageIndex, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+                catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
+                {
+                    // Fall through and try to delete it instead — an un-linked row would otherwise be
+                    // invisible to Refresh Provider Status but still show up as an unresolved job.
+                }
+            }
             try
             {
                 await job.Workspace.DeleteAsyncRemoteJobAsync(entry.AsyncRecordId, cancellationToken).ConfigureAwait(false);
@@ -745,6 +783,61 @@ public sealed class GenerationQueueService
         }
 
         return record;
+    }
+
+    /// <summary>
+    /// Retries downloading a result whose provider job completed but whose initial download failed
+    /// (<see cref="AsyncRemoteJobPhase.CompletedAwaitingDownload"/>) — the **Refresh Provider
+    /// Status**/**Import Missing Results** action. Re-polls the same provider job ID; since the
+    /// provider already reported it completed once, a successful poll now always returns
+    /// <see cref="AsyncGenerationPollOutcome.Completed"/> or the same
+    /// <see cref="AsyncGenerationPollOutcome.CompletedDownloadFailed"/> again (never back to
+    /// <see cref="AsyncGenerationPollOutcome.Processing"/>). On success, commits the recovered bytes
+    /// into the existing generation record's failed position and removes the registry row; on a
+    /// repeat download failure, the row is left exactly as it was for a later retry.
+    /// </summary>
+    public async Task<bool> RetryMissingResultDownloadAsync(string asyncJobId, CancellationToken cancellationToken = default)
+    {
+        var workspace = _libraries.Workspace ?? throw new InvalidOperationException("No library is open.");
+        var jobs = await workspace.GetPendingAsyncRemoteJobsAsync(cancellationToken).ConfigureAwait(false);
+        var asyncJob = jobs.FirstOrDefault(candidate => candidate.Id == asyncJobId);
+        if (asyncJob is not { Phase: AsyncRemoteJobPhase.CompletedAwaitingDownload, GenerationRecordId: { } generationRecordId, Position: { } position })
+        {
+            return false;
+        }
+
+        var connections = await workspace.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
+        var connection = connections.FirstOrDefault(candidate => candidate.Id == asyncJob.ConnectionId);
+        if (connection is not { HasCredential: true, CredentialRequiresRepair: false, CredentialRevisionId: { } revisionId })
+        {
+            return false;
+        }
+
+        var adapter = _adapterResolver.Resolve(connection.ProviderType);
+        var apiKey = await _credentials.GetActiveAsync(workspace.Descriptor.LibraryId, connection.Id, revisionId).ConfigureAwait(false);
+
+        AsyncGenerationPollResult pollResult;
+        try
+        {
+            pollResult = await adapter.PollVideoGenerationAsync(connection, apiKey, asyncJob.ProviderJobId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+        {
+            return false;
+        }
+
+        if (pollResult.Outcome != AsyncGenerationPollOutcome.Completed || pollResult.Files is not { Count: > 0 } files)
+        {
+            return false;
+        }
+
+        // One submitted job fills exactly one result position; if the provider's unsigned_urls[]
+        // ever returned more than one entry for a single job, only the first is recoverable here —
+        // the same single-job/single-position assumption the original commit path already makes.
+        await workspace.ImportMissingResultAsync(generationRecordId, position, files[0], cancellationToken).ConfigureAwait(false);
+        await workspace.DeleteAsyncRemoteJobAsync(asyncJobId, cancellationToken).ConfigureAwait(false);
+        RaiseChanged();
+        return true;
     }
 
     private static GenerationJobOutcome LocalFailureOutcome(QueuedJob job, string message) =>

@@ -2234,6 +2234,18 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.DeleteAsyncRemoteJobAsync(asyncJobId, cancellationToken), cancellationToken);
     }
 
+    public Task<IReadOnlyList<AsyncRemoteJobRecord>> GetAsyncRemoteJobsForGenerationRecordAsync(string generationRecordId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetAsyncRemoteJobsForGenerationRecordAsync(generationRecordId, cancellationToken);
+    }
+
+    public Task<AsyncRemoteJobRecord> LinkAsyncRemoteJobToGenerationResultAsync(string asyncJobId, string generationRecordId, int position, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.LinkAsyncRemoteJobToGenerationResultAsync(asyncJobId, generationRecordId, position, cancellationToken), cancellationToken);
+    }
+
     public Task<IReadOnlyList<PendingUnverifiedResult>> GetPendingUnverifiedResultsAsync(string generationRecordId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -2250,6 +2262,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         ThrowIfDisposed();
         return RunMutationAsync(() => DiscardUnverifiedResultCoreAsync(generationRecordId, position, cancellationToken), cancellationToken);
+    }
+
+    public Task<FileRecord> ImportMissingResultAsync(string generationRecordId, int position, byte[] bytes, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => ImportMissingResultCoreAsync(generationRecordId, position, bytes, cancellationToken), cancellationToken);
     }
 
     private async Task<FileRecord> RetainUnverifiedResultCoreAsync(string generationRecordId, int position, CancellationToken cancellationToken)
@@ -2301,6 +2319,68 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         TryDelete(_layout.PendingReviewFilePath(pending.StagedFileName));
         await _database.UpdateGenerationResultEntryAsync(generationRecordId, position, GenerationResultStatus.Failed, null, "The result was discarded as an unverified binary.", cancellationToken).ConfigureAwait(false);
         await _database.DeletePendingUnverifiedResultAsync(pending.Id, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Commits a late-recovered result for a position that previously failed only because its
+    /// download failed after the provider had already completed the job — see
+    /// <see cref="AsyncGenerationPollOutcome.CompletedDownloadFailed"/>/<c>GenerationQueueService
+    /// .RetryMissingResultDownloadAsync</c>. Reuses the same stage-hash-detect-move-commit pipeline
+    /// as an ordinary successful result (this genuinely is one, just recovered late), rather than
+    /// the Retain-as-Unverified-Binary path, which is for bytes that never matched the expected type
+    /// at all.
+    /// </summary>
+    private async Task<FileRecord> ImportMissingResultCoreAsync(string generationRecordId, int position, byte[] bytes, CancellationToken cancellationToken)
+    {
+        var record = await _database.GetGenerationRecordAsync(generationRecordId, cancellationToken).ConfigureAwait(false);
+        var existing = record.Results.FirstOrDefault(entry => entry.Position == position);
+        if (existing is not { Status: GenerationResultStatus.Failed }) throw new LibraryValidationException("This result position is not awaiting a missing-result import.");
+        if (record.ModelId is null) throw new LibraryValidationException("The model used for this generation is no longer available.");
+        var model = await _database.GetModelAsync(record.ModelId, cancellationToken).ConfigureAwait(false);
+
+        var fileId = LibraryRules.NewId();
+        var stagingPath = _layout.StagingFilePath(fileId + ".generating");
+        var managedPath = string.Empty;
+        try
+        {
+            await using (var stream = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65_536, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+            var (mediaType, extension) = await MediaTypeDetector.DetectAsync(stagingPath, cancellationToken).ConfigureAwait(false);
+            if (ExpectedMediaTypeCategory(model.Mode) is { } expectedCategory && !mediaType.StartsWith(expectedCategory, StringComparison.Ordinal))
+            {
+                throw new LibraryValidationException("The recovered result's bytes did not match the expected media type for this generation mode.");
+            }
+            var managedName = fileId + extension;
+            managedPath = _layout.ManagedFilePath(managedName);
+            var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+            File.Move(stagingPath, managedPath, false);
+            stagingPath = string.Empty;
+            var safeLabel = new string(record.ModelLabel.Select(character => character is '/' or '\\' ? '_' : character).ToArray());
+            var resolvedName = await _database.ResolveAvailableFileNameAsync(record.DestinationFolderId, $"{safeLabel} {DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}{extension}", cancellationToken).ConfigureAwait(false);
+            var now = DateTimeOffset.UtcNow;
+            var fileRecord = new FileRecord(fileId, record.DestinationFolderId, resolvedName, resolvedName, managedName, hash, bytes.LongLength, mediaType,
+                FileOrigin.Generated, LibraryRecordState.Active, now, now, null, null);
+            try
+            {
+                await _database.InsertImportedFileAsync(fileRecord, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                TryDelete(managedPath);
+                throw;
+            }
+            managedPath = string.Empty;
+            await _database.UpdateGenerationResultEntryAsync(generationRecordId, position, GenerationResultStatus.Committed, fileId, null, cancellationToken).ConfigureAwait(false);
+            return fileRecord;
+        }
+        finally
+        {
+            TryDelete(stagingPath);
+            TryDelete(managedPath);
+        }
     }
 
     private async Task<GenerationRecord> RecordTextGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, CancellationToken cancellationToken)

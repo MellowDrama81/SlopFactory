@@ -165,17 +165,33 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
                     var files = new List<byte[]>(urls.Count);
                     foreach (var url in urls)
                     {
+                        // A malformed URL or one that fails SSRF host validation is not a transient
+                        // download problem — retrying later would fail identically every time — so
+                        // these deliberately still throw hard rather than becoming
+                        // CompletedDownloadFailed, unlike the retryable network/HTTP failures below.
                         if (!Uri.TryCreate(url, UriKind.Absolute, out var resultUri))
                         {
                             throw new ProviderAdapterException("The provider returned a video result URL that could not be parsed.");
                         }
                         await ResultUrlValidator.ValidateHostAsync(resultUri, _resolveHost, cancellationToken).ConfigureAwait(false);
+
                         using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, resultUri);
                         OpenAiCompatibleProtocol.ApplyAuthorization(downloadRequest, connection, apiKey);
-                        var (downloadSucceeded, downloadStatus, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, downloadRequest, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
-                        if (!downloadSucceeded) throw new ProviderAdapterException($"Downloading the completed video result failed: {OpenAiCompatibleProtocol.DescribeFailure(downloadStatus)}");
-                        if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty video result.");
-                        files.Add(bytes);
+                        try
+                        {
+                            var (downloadSucceeded, downloadStatus, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, downloadRequest, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
+                            if (!downloadSucceeded) throw new ProviderAdapterException($"Downloading the completed video result failed: {OpenAiCompatibleProtocol.DescribeFailure(downloadStatus)}");
+                            if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty video result.");
+                            files.Add(bytes);
+                        }
+                        catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+                        {
+                            // The provider itself confirmed completion — only the download failed, so
+                            // this is retryable (the provider's result may still be available) rather
+                            // than a genuine provider-side failure. See AsyncGenerationPollOutcome
+                            // .CompletedDownloadFailed.
+                            return new AsyncGenerationPollResult(AsyncGenerationPollOutcome.CompletedDownloadFailed, null, exception.Message);
+                        }
                     }
                     return new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, files, null, ParseCost(root));
                 case "failed":

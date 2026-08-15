@@ -200,6 +200,44 @@ public sealed class NewProviderAdapterTests
         Assert.Equal(video, Assert.Single(result.Files!));
     }
 
+    [Fact]
+    public async Task OpenRouterAdapterPollingReturnsCompletedDownloadFailedRatherThanThrowingWhenTheDownloadFails()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri!.ToString();
+            return path == "https://openrouter.ai/api/v1/videos/abc123"
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterVideoPollCompletedV1.Replace("__JOB_ID__", "abc123").Replace("__CONTENT_URL__", "https://openrouter.ai/api/v1/videos/abc123/content?index=0"))
+                : new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.CompletedDownloadFailed, result.Outcome);
+        Assert.Null(result.Files);
+        Assert.NotNull(result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterPollingReturnsCompletedDownloadFailedWhenTheProviderReturnsAnEmptyBody()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri!.ToString();
+            return path == "https://openrouter.ai/api/v1/videos/abc123"
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterVideoPollCompletedV1.Replace("__JOB_ID__", "abc123").Replace("__CONTENT_URL__", "https://openrouter.ai/api/v1/videos/abc123/content?index=0"))
+                : FakeHttpMessageHandler.BinaryResponse([], "video/mp4");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.CompletedDownloadFailed, result.Outcome);
+    }
+
     // A fixed, non-network host resolver so adapter tests never perform a real DNS lookup —
     // "never contact real providers" applies to name resolution too, not just HTTP calls.
     private static Task<IPAddress[]> PublicAddressResolver(string host, CancellationToken cancellationToken) =>

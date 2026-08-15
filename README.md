@@ -78,6 +78,7 @@ The current development build implements the local-library foundation, including
 - per-child result status within one multi-result generation, a **Retry Failed/Missing Results Only** action, and `Cancelled`/`Cancelled with Results` outcomes that keep whatever a video job's already-completed children produced instead of discarding real provider work; and
 - a **Retain as Unverified Binary**/**Discard** decision for a result whose bytes don't match the expected media type and aren't recognizable as a provider error/authentication response, kept export-only (never previewable, never opened externally, never reusable as a source) if retained; and
 - provider-hosted result-URL downloads validated against HTTPS and private/loopback/reserved address ranges before every fetch; and
+- a **Refresh Provider Status** action for a video result that failed only because its download didn't succeed (the provider itself finished the job), retrying just the download instead of generating anything again; and
 - provider-reported actual generation cost captured per run where an adapter reports it, plus a local **Cost Summary** page aggregating it by date range, provider and model; and
 - per-connection rate-limit tracking from OpenAI's documented `x-ratelimit-*` response headers, with the generation queue proactively holding back a connection's next submission once its quota is known to be exhausted until its reset window passes.
 

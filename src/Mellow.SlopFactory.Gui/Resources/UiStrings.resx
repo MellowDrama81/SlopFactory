@@ -864,6 +864,8 @@
   <data name="ResultPendingReview" xml:space="preserve"><value>Awaiting review</value></data>
   <data name="RetainAsUnverifiedBinary" xml:space="preserve"><value>Retain as unverified binary</value></data>
   <data name="DiscardUnverifiedResult" xml:space="preserve"><value>Discard</value></data>
+  <data name="RefreshProviderStatus" xml:space="preserve"><value>Refresh provider status</value></data>
+  <data name="RefreshProviderStatusStillUnavailable" xml:space="preserve"><value>The provider's result is still not available for download. Try again later.</value></data>
   <data name="RetryFailedResultsOnly" xml:space="preserve"><value>Retry failed/missing results only ({0})</value></data>
   <data name="RetryModelUnavailable" xml:space="preserve"><value>The model used for this generation is no longer available, so the failed results cannot be retried automatically.</value></data>
   <data name="RetryConnectionUnavailable" xml:space="preserve"><value>The connection used for this generation is no longer available, so the failed results cannot be retried automatically.</value></data>

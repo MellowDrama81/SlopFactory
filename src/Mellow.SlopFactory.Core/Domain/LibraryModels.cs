@@ -723,7 +723,13 @@ public enum AsyncGenerationPollOutcome
 {
     Processing = 0,
     Completed = 1,
-    Failed = 2
+    Failed = 2,
+    /// <summary>The provider reported the job as completed, but downloading its result failed (a
+    /// network error, an unexpected empty body, or a result URL rejected by
+    /// <c>ResultUrlValidator</c>) — distinct from <see cref="Failed"/> specifically so the async-job
+    /// registry row survives for a later <c>Refresh Provider Status</c>/<c>Import Missing Results</c>
+    /// retry instead of being treated as a genuine provider-side failure.</summary>
+    CompletedDownloadFailed = 3
 }
 
 /// <summary>A provider's acknowledgement that it accepted a submit-then-poll generation request.</summary>
@@ -876,7 +882,12 @@ public enum AsyncRemoteJobPhase
     MonitoringPaused = 2,
     Completed = 3,
     Failed = 4,
-    Cancelled = 5
+    Cancelled = 5,
+    /// <summary>The provider completed this job, but downloading its result failed; the registry row
+    /// is kept (rather than deleted like every other terminal phase) so a later
+    /// <c>Refresh Provider Status</c>/<c>Import Missing Results</c> action can retry the download
+    /// while the provider's result remains available.</summary>
+    CompletedAwaitingDownload = 6
 }
 
 /// <summary>
@@ -895,7 +906,14 @@ public sealed record AsyncRemoteJobRecord(
     string? IdempotencyKey,
     DateTimeOffset SubmittedAt,
     DateTimeOffset? LastPolledAt,
-    DateTimeOffset? MonitoringDeadline);
+    DateTimeOffset? MonitoringDeadline,
+    /// <summary>Set only once the generation this job belongs to has committed a history record —
+    /// null before then, since no <see cref="GenerationRecord"/> exists yet. Together with
+    /// <see cref="Position"/>, lets a <see cref="AsyncRemoteJobPhase.CompletedAwaitingDownload"/> row
+    /// (which survives past the normal end-of-generation registry cleanup) be retried against the
+    /// exact result position it belongs to.</summary>
+    string? GenerationRecordId = null,
+    int? Position = null);
 
 public sealed record SavedGenerationSetting(
     string Id,

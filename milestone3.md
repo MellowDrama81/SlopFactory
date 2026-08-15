@@ -159,10 +159,31 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 - [ ] Add offline/metered-network queue handling: **Paused — Connection Lost**, manual **Resume
       Queue**/**Resume All for This Connection** with per-job revalidation, and the device-wide
       metered-network transfer setting (**Allow**/**Ask**/**Wi-Fi/Unmetered Only**).
-- [ ] Add a **Refresh Provider Status** / **Import Missing Results** action for late-recovered
+- [x] Add a **Refresh Provider Status** / **Import Missing Results** action for late-recovered
       results (job succeeded but result download failed, or a result becomes available after
       `Monitoring Paused`), retaining remote job details and retrying while the provider result
-      remains available.
+      remains available. Covers the "job succeeded but result download failed" case: previously
+      `OpenRouterProviderAdapter.PollVideoGenerationAsync` threw on a download failure, indistinguishable
+      from a genuine provider-side failure — the async-job registry row was deleted and the provider
+      job ID lost forever the moment the group committed. A new `AsyncGenerationPollOutcome
+      .CompletedDownloadFailed` (adapter) and `AsyncRemoteJobPhase.CompletedAwaitingDownload`
+      (registry) distinguish "provider confirmed completion, only the download failed" from a real
+      failure — deliberately narrow: a malformed URL or one rejected by `ResultUrlValidator` still
+      throws hard, since retrying those would fail identically every time, unlike a transient
+      network/HTTP error. `AsyncRemoteJobRecord` gained nullable `GenerationRecordId`/`Position`
+      (schema v34), set once the group commits so the still-alive registry row can be matched back
+      to its exact failed result position later. `GenerationHistoryDetail.razor` shows **Refresh
+      Provider Status** next to a `Failed` position with a linked recoverable job; it calls
+      `GenerationQueueService.RetryMissingResultDownloadAsync` (re-polls the same provider job ID —
+      adapter/credential resolution only lives on the queue service, not `ILibraryWorkspace`), which
+      on success calls the new `LibraryWorkspace.ImportMissingResultAsync` to commit the recovered
+      bytes into the existing failed position (reusing the ordinary stage-hash-detect-move-commit
+      pipeline, since this genuinely is a normal result, just recovered late) and removes the
+      registry row; on a repeat failure the row is left untouched for a later retry.
+      `Connections.razor`/`ConnectionEdit.razor`'s unresolved-async-job counts and gate now also
+      count `CompletedAwaitingDownload` rows. **Not done**: the "result becomes available after
+      `Monitoring Paused`" half — `Monitoring Paused` itself remains unimplemented (see Possible
+      future work below), so there's nothing to recover from yet on that path.
 - [ ] Add the required temporary asset association lifecycle for an in-flight async job (kept until
       the job reaches a terminal or explicitly discarded state) and its dependency-pin release.
 
