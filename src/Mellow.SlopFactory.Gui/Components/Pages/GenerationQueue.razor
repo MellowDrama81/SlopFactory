@@ -17,6 +17,14 @@
     <div class="notice" role="status">@Strings["EnergySaverCapActive", Queue.EffectiveDeviceCap]</div>
 }
 
+@if (Queue.IsPausedForConnectionLost || Queue.IsPausedForMeteredNetwork)
+{
+    <div class="notice error" role="status">
+        @(Queue.IsPausedForConnectionLost ? Strings["QueuePausedConnectionLost"] : Strings["QueuePausedMeteredNetwork"])
+        <button type="button" class="secondary" @onclick="() => Queue.ResumeQueue()">@Strings["ResumeQueue"]</button>
+    </div>
+}
+
 @if (LibraryState.Workspace is null)
 {
     <p class="empty">@Strings["NoLocationOpen"]</p>

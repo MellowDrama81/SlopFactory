@@ -43,6 +43,13 @@
         <InputNumber id="device-cap" @bind-Value="_queueCapForm.Value" min="@GenerationQueueService.MinDeviceCap" max="@GenerationQueueService.MaxDeviceCap" />
         <button type="submit">@Strings["SaveDeviceCap"]</button>
     </EditForm>
+    <p class="muted">@Strings["MeteredNetworkPolicyHelp"]</p>
+    <label for="metered-network-policy">@Strings["MeteredNetworkPolicy"]</label>
+    <select id="metered-network-policy" value="@Queue.MeteredNetworkPolicy" @onchange="ChangeMeteredNetworkPolicy">
+        <option value="@MeteredNetworkTransferPolicy.Allow">@Strings["MeteredNetworkAllow"]</option>
+        <option value="@MeteredNetworkTransferPolicy.Ask">@Strings["MeteredNetworkAsk"]</option>
+        <option value="@MeteredNetworkTransferPolicy.WifiOnly">@Strings["MeteredNetworkWifiOnly"]</option>
+    </select>
 </section>
 
 <section class="panel">
@@ -237,6 +244,7 @@
         _queueCapForm.Value = Queue.DeviceCap;
         _message = Strings["DeviceCapSaved"];
     }
+    private void ChangeMeteredNetworkPolicy(ChangeEventArgs args) => Queue.SetMeteredNetworkPolicy(Enum.Parse<MeteredNetworkTransferPolicy>(args.Value?.ToString() ?? nameof(MeteredNetworkTransferPolicy.Allow)));
     private async Task ToggleNotificationsAsync(ChangeEventArgs args)
     {
         var enable = args.Value is bool value && value;

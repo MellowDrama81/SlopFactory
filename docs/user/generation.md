@@ -36,6 +36,8 @@ Open **Queue** to see every submission across every tab and connection, grouped 
 
 For a connection whose provider reports standard rate-limit headers (currently OpenAI), the Connections page shows the last-observed remaining quota and reset time. If a connection's quota is known to be exhausted, the Queue page shows a notice while its next submission waits for the reset window to pass, rather than sending a request that would just be rejected.
 
+If the device loses network connectivity, new submissions pause automatically (already-running requests are left alone) — this pause does not clear on its own once connectivity returns; the Queue page shows **Paused — Connection Lost** with a **Resume queue** button to continue explicitly. The device-wide **Metered-network transfers** setting (Library Settings) controls what happens on a metered connection such as cellular: **Allow** sends normally, **Wi-Fi/unmetered only** always pauses until you're back on an unmetered connection, and **Ask** pauses until you resume once.
+
 ## Results and unverified binaries
 
 Every generated result becomes a library file linked to its generation-history record. If a result's bytes don't match what the model's mode expects — and aren't recognizable as a provider error page or authentication response — its history detail page offers **Retain as Unverified Binary** or **Discard** instead of silently dropping it. A retained file is export-only: it can't be previewed, opened in another app, or selected as a source for a later generation.

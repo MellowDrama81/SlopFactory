@@ -9,14 +9,14 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
         var adapter = new FakeProviderAdapter();
         preferences ??= new FakeAppPreferenceStore();
         energy ??= new FakeDeviceEnergyStateProvider();
-        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker);
+        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker, connectivity);
         queue.Start();
         return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
@@ -371,6 +371,124 @@ public sealed class GenerationQueueServiceTests
 
         await WaitUntilAsync(() => adapter.InvokedPrompts.Count == 4);
         Assert.Equal(0, queue.QueuedCount);
+    }
+
+    [Fact]
+    public async Task GoingOfflinePausesNewSubmissionsWithoutCancellingAnAlreadyRunningJob()
+    {
+        using var temporary = new TemporaryDirectory();
+        var connectivity = new FakeDeviceConnectivityStateProvider();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), connectivity: connectivity);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        // A second, independent connection so prompt2's block below is unambiguously attributable to
+        // the device-wide connectivity latch, not the (also-true) per-connection concurrency cap.
+        var secondConnection = await CreateReadyConnectionAsync(workspace, "SecondConnection");
+        var secondModel = await workspace.CreateModelAsync("GPT2", secondConnection.Id, "gpt-4o", GenerationMode.Text, true);
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+
+        connectivity.IsOffline = true;
+        queue.Enqueue(Snapshot("draft-2", secondModel.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), secondConnection.Id);
+        await Task.Delay(50);
+
+        Assert.True(queue.IsPausedForConnectionLost);
+        Assert.DoesNotContain("prompt2", adapter.InvokedPrompts);
+        Assert.Equal(1, queue.RunningCount); // the already-running job is unaffected
+
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+        await Task.Delay(50);
+        Assert.DoesNotContain("prompt2", adapter.InvokedPrompts); // still paused even though a slot freed up
+    }
+
+    [Fact]
+    public async Task ConnectionLostStaysPausedAfterConnectivityReturnsUntilResumeQueueIsCalled()
+    {
+        using var temporary = new TemporaryDirectory();
+        var connectivity = new FakeDeviceConnectivityStateProvider();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), connectivity: connectivity);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        connectivity.IsOffline = true;
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await Task.Delay(50);
+        Assert.True(queue.IsPausedForConnectionLost);
+
+        connectivity.IsOffline = false; // connectivity returns, but the pause is manual-resume-only
+        await Task.Delay(50);
+        Assert.DoesNotContain("prompt1", adapter.InvokedPrompts);
+
+        queue.ResumeQueue();
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        Assert.False(queue.IsPausedForConnectionLost);
+    }
+
+    [Fact]
+    public async Task MeteredNetworkPolicyAllowNeverPausesSubmissions()
+    {
+        using var temporary = new TemporaryDirectory();
+        var connectivity = new FakeDeviceConnectivityStateProvider { IsMetered = true };
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), connectivity: connectivity);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        Assert.False(queue.IsPausedForMeteredNetwork);
+    }
+
+    [Theory]
+    [InlineData(MeteredNetworkTransferPolicy.WifiOnly)]
+    [InlineData(MeteredNetworkTransferPolicy.Ask)]
+    public async Task MeteredNetworkPolicyBlockingModesPauseNewSubmissionsUntilResumed(MeteredNetworkTransferPolicy policy)
+    {
+        using var temporary = new TemporaryDirectory();
+        var connectivity = new FakeDeviceConnectivityStateProvider { IsMetered = true };
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), connectivity: connectivity);
+        queue.SetMeteredNetworkPolicy(policy);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await Task.Delay(50);
+
+        Assert.True(queue.IsPausedForMeteredNetwork);
+        Assert.DoesNotContain("prompt1", adapter.InvokedPrompts);
+
+        queue.ResumeQueue();
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        Assert.False(queue.IsPausedForMeteredNetwork);
+    }
+
+    [Fact]
+    public async Task AConnectivityTransitionClearsAnEarlierResumeQueueOverrideSoTheNextMeteredSubmissionPausesAgain()
+    {
+        using var temporary = new TemporaryDirectory();
+        var connectivity = new FakeDeviceConnectivityStateProvider { IsMetered = true };
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), connectivity: connectivity);
+        queue.SetMeteredNetworkPolicy(MeteredNetworkTransferPolicy.Ask);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await Task.Delay(50);
+        queue.ResumeQueue();
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+
+        // A real connectivity transition (still metered, but a distinct event) resets the override —
+        // the next submission needs a fresh resume rather than inheriting the earlier one forever.
+        connectivity.IsMetered = false;
+        connectivity.IsMetered = true;
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await Task.Delay(50);
+
+        Assert.True(queue.IsPausedForMeteredNetwork);
+        Assert.DoesNotContain("prompt2", adapter.InvokedPrompts);
     }
 
     [Fact]
@@ -1098,6 +1216,35 @@ public sealed class GenerationQueueServiceTests
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }
+        public event EventHandler? Changed;
+    }
+
+    private sealed class FakeDeviceConnectivityStateProvider : IDeviceConnectivityStateProvider
+    {
+        private bool _isOffline;
+        public bool IsOffline
+        {
+            get => _isOffline;
+            set
+            {
+                if (_isOffline == value) return;
+                _isOffline = value;
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        private bool _isMetered;
+        public bool IsMetered
+        {
+            get => _isMetered;
+            set
+            {
+                if (_isMetered == value) return;
+                _isMetered = value;
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
         public event EventHandler? Changed;
     }
 

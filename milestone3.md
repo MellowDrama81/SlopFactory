@@ -156,9 +156,31 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       no adapter implemented this pass uploads a separate asset before submitting (video/audio
       requests are single JSON bodies), so there's no upload phase to distinguish cancellation
       during.
-- [ ] Add offline/metered-network queue handling: **Paused — Connection Lost**, manual **Resume
+- [x] Add offline/metered-network queue handling: **Paused — Connection Lost**, manual **Resume
       Queue**/**Resume All for This Connection** with per-job revalidation, and the device-wide
       metered-network transfer setting (**Allow**/**Ask**/**Wi-Fi/Unmetered Only**).
+      `IDeviceConnectivityStateProvider`/`MauiDeviceConnectivityStateProvider` (Gui/Services) wraps
+      MAUI's `Connectivity` API, mirroring the existing `IDeviceEnergyStateProvider` split exactly.
+      `GenerationQueueService.Pump()` latches a device-wide pause the moment it observes the device
+      offline, or metered under a blocking `MeteredNetworkTransferPolicy` (`WifiOnly` or `Ask`) —
+      **staying paused even after connectivity returns**, per the manual-resume requirement, until
+      `ResumeQueue()` is called explicitly; it only ever stops a *new* submission from starting,
+      never cancels one already running, matching the existing energy-saver cap's own contract.
+      **Resume All for This Connection** was not added as functionally distinct from **Resume
+      Queue**: offline/metered state is a device-wide condition, not a per-connection one, so a
+      second button with the identical effect would be redundant — one `ResumeQueue()` clears both
+      latches for every connection at once. "Per-job revalidation" needed no new code: `ExecuteAsync`
+      already re-resolves each job's model/connection fresh from the workspace immediately before
+      submitting, so a job resumed after being offline is naturally revalidated rather than assumed
+      still valid. `MeteredNetworkPolicy`/`SetMeteredNetworkPolicy` persist the transfer setting via
+      `IAppPreferenceStore`, exposed as a select control on `LibrarySettings.razor`'s existing
+      **Generation queue** panel; `GenerationQueue.razor` shows a **Paused — Connection Lost** or
+      metered-pause notice with **Resume queue** while either latch is active. 6 new tests cover
+      going offline mid-run (already-running job unaffected, a second connection's new submission
+      blocked), staying paused after connectivity returns until an explicit resume, each blocking
+      metered policy pausing until resumed, `Allow` never pausing, and a genuine connectivity
+      transition correctly clearing an earlier resume override rather than letting it silently cover
+      every future metered session.
 - [x] Add a **Refresh Provider Status** / **Import Missing Results** action for late-recovered
       results (job succeeded but result download failed, or a result becomes available after
       `Monitoring Paused`), retaining remote job details and retrying while the provider result

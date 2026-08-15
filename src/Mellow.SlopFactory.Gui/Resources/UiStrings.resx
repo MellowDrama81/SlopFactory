@@ -27,6 +27,11 @@
   <data name="DeviceWideSubmissionCap" xml:space="preserve"><value>Device-wide submission cap</value></data>
   <data name="DeviceWideSubmissionCapHelp" xml:space="preserve"><value>The maximum number of generation requests this device runs at the same time, across all connections.</value></data>
   <data name="SaveDeviceCap" xml:space="preserve"><value>Save cap</value></data>
+  <data name="MeteredNetworkPolicyHelp" xml:space="preserve"><value>Controls whether new submissions start automatically while this device's current connection is metered (for example, cellular).</value></data>
+  <data name="MeteredNetworkPolicy" xml:space="preserve"><value>Metered-network transfers</value></data>
+  <data name="MeteredNetworkAllow" xml:space="preserve"><value>Allow</value></data>
+  <data name="MeteredNetworkAsk" xml:space="preserve"><value>Ask (pause until resumed)</value></data>
+  <data name="MeteredNetworkWifiOnly" xml:space="preserve"><value>Wi-Fi/unmetered only</value></data>
   <data name="DeviceCapSaved" xml:space="preserve"><value>Submission cap saved.</value></data>
   <data name="GenerationNotificationsHeading" xml:space="preserve"><value>Generation notifications</value></data>
   <data name="GenerationNotificationsHelp" xml:space="preserve"><value>Show an OS notification with the model and status when a generation finishes or fails while SlopFactory is backgrounded or unfocused. Notifications never include prompts, filenames or provider error details.</value></data>
@@ -798,6 +803,9 @@
   <data name="GenerationCancelledBeforeSubmission" xml:space="preserve"><value>Cancelled before any request was sent. No provider charge was incurred.</value></data>
   <data name="GenerationQueueActivity" xml:space="preserve"><value>{0} queued, {1} running</value></data>
   <data name="EnergySaverCapActive" xml:space="preserve"><value>Energy Saver is limiting submissions to {0} at a time.</value></data>
+  <data name="QueuePausedConnectionLost" xml:space="preserve"><value>Paused — connection lost. New submissions will not be sent until you resume.</value></data>
+  <data name="QueuePausedMeteredNetwork" xml:space="preserve"><value>Paused — this connection is metered and the metered-network setting requires confirmation before sending new submissions.</value></data>
+  <data name="ResumeQueue" xml:space="preserve"><value>Resume queue</value></data>
   <data name="DirtyDraftsDetected" xml:space="preserve"><value>{0} draft tab(s) may have unsaved edits from a previous session — SlopFactory restored the last version it successfully saved.</value></data>
   <data name="NavQueue" xml:space="preserve"><value>Queue</value></data>
   <data name="QueuePageTitle" xml:space="preserve"><value>Queue · SlopFactory</value></data>

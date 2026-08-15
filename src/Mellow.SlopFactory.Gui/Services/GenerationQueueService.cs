@@ -17,6 +17,22 @@ public enum GenerationJobPhase
     Monitoring = 2
 }
 
+/// <summary>Device-wide policy for starting a new submission while the device's current connection
+/// is metered (cellular) — distinct from being offline entirely, which always pauses regardless of
+/// this setting.</summary>
+public enum MeteredNetworkTransferPolicy
+{
+    /// <summary>Start new submissions on a metered connection exactly as on any other.</summary>
+    Allow = 0,
+    /// <summary>Never auto-start a new submission on a metered connection; require an explicit
+    /// <see cref="GenerationQueueService.ResumeQueue"/> first (a coarse, queue-wide "ask" rather than
+    /// a per-job interactive prompt).</summary>
+    Ask = 1,
+    /// <summary>Never start a new submission on a metered connection; only an unmetered connection
+    /// (or an explicit resume) allows one to start.</summary>
+    WifiOnly = 2
+}
+
 public sealed record GenerationJobSnapshot(
     string DraftId,
     string SubmittedTabTitle,
@@ -119,6 +135,63 @@ public sealed class GenerationQueueService
     /// <summary>Whether the OS-reported energy-saver constraint is currently in effect.</summary>
     public bool EnergySaverCapActive => _energy.IsEnergySaverOn;
 
+    private const string MeteredNetworkPolicyPreferenceKey = "slopfactory.queue.meterednetworkpolicy";
+    private bool _connectionLostLatched;
+    private bool _meteredPauseLatched;
+    // Set by ResumeQueue() so a manual resume actually lets a job start even while still offline/
+    // metered (the whole point of an explicit override) instead of immediately re-latching on the
+    // very next Pump() call; cleared the moment a real connectivity transition is observed, since a
+    // fresh network state deserves a fresh pause decision rather than inheriting an old override.
+    private bool _connectivityOverrideActive;
+
+    /// <summary>
+    /// True once the device has been observed offline while the queue had (or was offered) work to
+    /// start — stays true even after connectivity returns, per plan.md's manual-resume requirement,
+    /// until <see cref="ResumeQueue"/> is called explicitly. Never affects an already-running job.
+    /// </summary>
+    public bool IsPausedForConnectionLost { get { lock (_gate) return _connectionLostLatched; } }
+
+    /// <summary>True once a metered connection blocked a new submission under the current
+    /// <see cref="MeteredNetworkPolicy"/> (`WifiOnly`, or `Ask` without an explicit resume) — same
+    /// manual-resume semantics as <see cref="IsPausedForConnectionLost"/>.</summary>
+    public bool IsPausedForMeteredNetwork { get { lock (_gate) return _meteredPauseLatched; } }
+
+    /// <summary>
+    /// Clears both connectivity-driven pause latches and re-pumps immediately. There is no separate
+    /// per-connection "Resume All for This Connection" action: connectivity/metered state is a
+    /// device-wide condition, not a per-connection one, so a second button with the identical effect
+    /// would be redundant — every connection's queue resumes together.
+    /// </summary>
+    public void ResumeQueue()
+    {
+        lock (_gate)
+        {
+            _connectionLostLatched = false;
+            _meteredPauseLatched = false;
+            _connectivityOverrideActive = true;
+        }
+        RaiseChanged();
+        Pump();
+    }
+
+    public MeteredNetworkTransferPolicy MeteredNetworkPolicy
+    {
+        get
+        {
+            var stored = _preferences.ReadString(MeteredNetworkPolicyPreferenceKey, ((int)MeteredNetworkTransferPolicy.Allow).ToString(CultureInfo.InvariantCulture));
+            return int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && Enum.IsDefined(typeof(MeteredNetworkTransferPolicy), value)
+                ? (MeteredNetworkTransferPolicy)value
+                : MeteredNetworkTransferPolicy.Allow;
+        }
+    }
+
+    public void SetMeteredNetworkPolicy(MeteredNetworkTransferPolicy policy)
+    {
+        _preferences.WriteString(MeteredNetworkPolicyPreferenceKey, ((int)policy).ToString(CultureInfo.InvariantCulture));
+        RaiseChanged();
+        Pump();
+    }
+
     private const string ConnectionCapPreferenceKeyPrefix = "slopfactory.queue.connectioncap.";
     private static int DefaultConnectionCap => 1;
     public static int MinConnectionCap => 1;
@@ -147,8 +220,9 @@ public sealed class GenerationQueueService
     private readonly TimeSpan _videoPollInterval;
     private readonly IConnectionRateLimitTracker? _rateLimitTracker;
     private readonly HashSet<string> _rateLimitPumpScheduled = new(StringComparer.Ordinal);
+    private readonly IDeviceConnectivityStateProvider? _connectivity;
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null)
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
@@ -157,6 +231,7 @@ public sealed class GenerationQueueService
         _energy = energy;
         _videoPollInterval = videoPollInterval ?? DefaultVideoPollInterval;
         _rateLimitTracker = rateLimitTracker;
+        _connectivity = connectivity;
     }
 
     public event EventHandler? Changed;
@@ -171,10 +246,20 @@ public sealed class GenerationQueueService
         _started = true;
         _libraries.Changed += OnLibraryChanged;
         _energy.Changed += OnEnergyStateChanged;
+        if (_connectivity is not null) _connectivity.Changed += OnConnectivityChanged;
     }
 
     private void OnEnergyStateChanged(object? sender, EventArgs args)
     {
+        RaiseChanged();
+        Pump();
+    }
+
+    private void OnConnectivityChanged(object? sender, EventArgs args)
+    {
+        // A genuine network transition deserves a fresh pause decision rather than inheriting
+        // whatever override an earlier ResumeQueue() call left active.
+        lock (_gate) _connectivityOverrideActive = false;
         RaiseChanged();
         Pump();
     }
@@ -384,6 +469,22 @@ public sealed class GenerationQueueService
             QueuedJob? started = null;
             lock (_gate)
             {
+                // Offline/metered-network gating happens once per Pump() call, before scanning for
+                // work to start — never affects a job already running, matching the energy-saver
+                // cap's own "only ever stops new starts" contract. Skipped entirely while a manual
+                // ResumeQueue() override is active, so resuming actually lets a job start now rather
+                // than immediately re-latching on this very call.
+                if (!_connectivityOverrideActive)
+                {
+                    if (_connectivity?.IsOffline == true) _connectionLostLatched = true;
+                    if (_connectivity?.IsMetered == true)
+                    {
+                        var policy = MeteredNetworkPolicy;
+                        if (policy is MeteredNetworkTransferPolicy.WifiOnly or MeteredNetworkTransferPolicy.Ask) _meteredPauseLatched = true;
+                    }
+                }
+                if (_connectionLostLatched || _meteredPauseLatched) break;
+
                 if (_runningTotal >= EffectiveDeviceCap) break;
                 var count = _connectionOrder.Count;
                 for (var i = 0; i < count; i++)

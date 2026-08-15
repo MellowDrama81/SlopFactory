@@ -31,6 +31,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISecureCredentialStore, MauiSecureCredentialStore>();
         builder.Services.AddSingleton<CredentialReconciliationService>();
         builder.Services.AddSingleton<IDeviceEnergyStateProvider, MauiDeviceEnergyStateProvider>();
+        builder.Services.AddSingleton<IDeviceConnectivityStateProvider, MauiDeviceConnectivityStateProvider>();
         builder.Services.AddSingleton<AppLifecycleState>();
         builder.Services.AddSingleton<IAppLifecycleState>(services => services.GetRequiredService<AppLifecycleState>());
         builder.Services.AddSingleton<INotificationService, MauiNotificationService>();
