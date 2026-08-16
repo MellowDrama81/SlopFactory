@@ -9,13 +9,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .theme-light .sidebar, .theme-light .file-type-icon, .theme-light input, .theme-light textarea, .theme-light select, .theme-light .image-viewport, .theme-light .text-viewer, .theme-light .metadata-list li { background: #e8edf5; color: #18202b; }
 .theme-light .panel, .theme-light .card, .theme-light .file-row, .theme-light .file-card, .theme-light .notice, .theme-light .inline-form, .theme-light .browser-controls { background: #fff; color: #18202b; border-color: #b8c1ce; }
 .theme-light .brand, .theme-light .sidebar nav a, .theme-light .secondary, .theme-light button.ghost { color: #18202b; }
-@media (prefers-color-scheme: light) { .theme-system { color-scheme: light; background: #f4f6fa; color: #18202b; } .theme-system .sidebar, .theme-system .file-type-icon, .theme-system input, .theme-system textarea, .theme-system select { background: #e8edf5; color: #18202b; } .theme-system .panel, .theme-system .card, .theme-system .file-row, .theme-system .file-card, .theme-system .notice, .theme-system .inline-form, .theme-system .browser-controls { background: #fff; color: #18202b; border-color: #b8c1ce; } .theme-system .brand, .theme-system .sidebar nav a, .theme-system .secondary, .theme-system button.ghost { color: #18202b; } }
+/* WCAG 2.2 AA: #9ea5b3 (the shared dark-theme .muted colour) is only 2.3-2.5:1 against this
+   theme's light backgrounds — #475569 keeps the same "muted" intent while passing 4.5:1. */
+.theme-light .muted, .theme-light .empty, .theme-light small { color: #475569; }
+@media (prefers-color-scheme: light) { .theme-system { color-scheme: light; background: #f4f6fa; color: #18202b; } .theme-system .sidebar, .theme-system .file-type-icon, .theme-system input, .theme-system textarea, .theme-system select { background: #e8edf5; color: #18202b; } .theme-system .panel, .theme-system .card, .theme-system .file-row, .theme-system .file-card, .theme-system .notice, .theme-system .inline-form, .theme-system .browser-controls { background: #fff; color: #18202b; border-color: #b8c1ce; } .theme-system .brand, .theme-system .sidebar nav a, .theme-system .secondary, .theme-system button.ghost { color: #18202b; } .theme-system .muted, .theme-system .empty, .theme-system small { color: #475569; } }
 @media (forced-colors: active) { button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid Highlight; } }
+/* No literal color values are needed here — prefers-contrast: more only widens borders/outlines
+   that are already colour-driven elsewhere, giving every themed surface a stronger edge without
+   duplicating this file's colour choices. */
+@media (prefers-contrast: more) { .panel, .card, .file-row, .file-card, .empty-panel, .notice, .inline-form, .tab, .tab-switcher, .tab-switcher-compact, .browser-controls { border-width: 2px; } button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline-width: 4px; } }
 button:disabled { opacity: .55; cursor: wait; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .concealed-value { font-family: ui-monospace, monospace; letter-spacing: .04em; }
 .secondary, button.ghost { background: #2a303b; color: #f4f1e8; }
-.danger { background: #c95151; color: white; }
+/* #c95151 was 4.39:1 against white text, just under WCAG AA's 4.5:1 for normal-size text —
+   darkened slightly; a darker background only ever increases contrast against white. */
+.danger { background: #b84545; color: white; }
 .danger.ghost { background: transparent; color: #ff9999; }
 .text-button { padding-left: 0; background: transparent; color: #e7b15b; }
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
@@ -178,5 +187,9 @@ audio.media-viewer { min-height: 3.5rem; }
 .bulk-metadata-form .check { display: flex; }
 .bulk-metadata-value { grid-column: 1 / -1; }
 @media (max-width: 720px) { .bulk-metadata-form { grid-template-columns: 1fr; } .bulk-metadata-value { grid-column: auto; } }
+/* WCAG 2.2 SC 2.5.8 (24x24 CSS px minimum) applies regardless of pointer type — the existing
+   44px rule below only fires for pointer: coarse, which left small icon-only controls (tab
+   move/close) with no guaranteed minimum on a mouse/trackpad/fine-pointer touchscreen. */
+.tab-move, .tab-close { min-height: 24px; min-width: 24px; }
 @media (pointer: coarse) { button, input, select { min-height: 44px; } .actions > * { flex: 1 1 9rem; } }
 @media (max-width: 420px) { .content { padding: .75rem; } .panel, .notice, .inline-form { padding: .8rem; } dl { grid-template-columns: 1fr; } .actions > * { width: 100%; } }

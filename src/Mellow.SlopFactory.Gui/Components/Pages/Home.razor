@@ -101,7 +101,12 @@ else
             </ul>
             @if (_importProgress is not null)
             {
-                <div class="scan-progress" role="status" aria-live="polite">
+                <!-- Deliberately not an aria-live region: this text changes on every single
+                     imported item, which would otherwise re-announce hundreds of times during a
+                     large import (plan.md:161's "without repeatedly interrupting the user"). The
+                     one-shot completion message (below, role="status") already announces once the
+                     whole operation finishes. -->
+                <div class="scan-progress" aria-live="off">
                     <progress max="@Math.Max(_importProgress.TotalBytes, 1)" value="@_importProgress.BytesProcessed"></progress>
                     <span>@Strings["ImportProgress", ImportProgressStage(_importProgress.Stage), _importProgress.DisplayName, _importProgress.ItemIndex, _importProgress.TotalItems]</span>
                 </div>

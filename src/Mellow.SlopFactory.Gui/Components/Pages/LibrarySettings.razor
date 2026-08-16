@@ -218,7 +218,11 @@
     </div>
     @if (_scanProgress is not null)
     {
-        <div class="scan-progress" role="status" aria-live="polite">
+        <!-- Not an aria-live region: this text changes per scanned file, which would otherwise
+             re-announce on every single one across a large library (plan.md:161). The scan's
+             completion is already announced separately once _scanReport is set (role="status"
+             region below). -->
+        <div class="scan-progress" aria-live="off">
             <progress max="@Math.Max(_scanProgress.TotalItems, 1)" value="@_scanProgress.ProcessedItems"></progress>
             <span>@Strings["IntegrityProgress", _scanProgress.Stage, _scanProgress.ProcessedItems, _scanProgress.TotalItems]</span>
         </div>

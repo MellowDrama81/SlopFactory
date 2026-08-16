@@ -49,7 +49,7 @@ else
                     <li>
                         <div>
                             <strong>@entry.SubmittedTabTitle</strong>
-                            <small>@ModelLabel(entry.ModelId) · @(entry.Phase switch
+                            <small role="status">@ModelLabel(entry.ModelId) · @(entry.Phase switch
                             {
                                 GenerationJobPhase.Running => Strings["Generating"],
                                 GenerationJobPhase.Monitoring => Strings["MonitoringAsyncJob"],

@@ -407,7 +407,7 @@ else
             @if (runStatus is not null)
             {
                 <section class="panel run-card" @key="jobId">
-                    <p>
+                    <p role="status">
                         @(runStatus.Phase switch
                         {
                             GenerationJobPhase.Queued => Strings["QueuePosition", runStatus.QueuePosition ?? 0],
@@ -428,7 +428,7 @@ else
 
         @foreach (var outcome in RecentOutcomes)
         {
-            <section class="panel run-card" @key="outcome.JobId">
+            <section class="panel run-card" @key="outcome.JobId" role="status">
                 @if (outcome.CancelledBeforeSubmission)
                 {
                     <p class="muted">@Strings["GenerationCancelledBeforeSubmission"]</p>

@@ -18,6 +18,48 @@ public sealed class UiAssetTests
     }
 
     [Fact]
+    public void AccessibilityStylesCoverReducedMotionContrastAndUniversalTouchTargets()
+    {
+        var css = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "wwwroot", "css", "app.css");
+
+        // plan.md:160 — respects reduced-motion and a heightened-contrast system preference.
+        Assert.Contains("@media (prefers-reduced-motion: reduce)", css, StringComparison.Ordinal);
+        Assert.Contains("@media (prefers-contrast: more)", css, StringComparison.Ordinal);
+        // plan.md:159 — the shared dark-theme .muted colour (#9ea5b3) fails WCAG 2.2 AA against
+        // this theme's light backgrounds; both light-theme selectors must override it.
+        Assert.Contains(".theme-light .muted, .theme-light .empty, .theme-light small { color: #475569; }", css, StringComparison.Ordinal);
+        Assert.Contains(".theme-system .muted, .theme-system .empty, .theme-system small { color: #475569; }", css, StringComparison.Ordinal);
+        // plan.md:163 — WCAG 2.2 SC 2.5.8's 24x24 CSS px minimum applies regardless of pointer
+        // type, not only under the existing pointer: coarse 44px rule.
+        Assert.Contains(".tab-move, .tab-close { min-height: 24px; min-width: 24px; }", css, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GenerationProgressAndCompletionAreAnnouncedAccessibly()
+    {
+        var generate = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "Generate.razor");
+        var queue = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "GenerationQueue.razor");
+
+        // plan.md:161 — generation progress, completion and failure are announced accessibly.
+        Assert.Contains("<p role=\"status\">", generate, StringComparison.Ordinal);
+        Assert.Contains("<section class=\"panel run-card\" @key=\"outcome.JobId\" role=\"status\">", generate, StringComparison.Ordinal);
+        Assert.Contains("<small role=\"status\">", queue, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PerItemImportAndScanProgressDoNotRepeatedlyInterruptScreenReaderUsers()
+    {
+        var home = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "Home.razor");
+        var librarySettings = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "LibrarySettings.razor");
+
+        // plan.md:161's "without repeatedly interrupting the user" — text that changes on every
+        // single imported/scanned item must not be an aria-live region (a one-shot completion
+        // message elsewhere already announces once the whole operation finishes).
+        Assert.Contains("<div class=\"scan-progress\" aria-live=\"off\">", home, StringComparison.Ordinal);
+        Assert.Contains("<div class=\"scan-progress\" aria-live=\"off\">", librarySettings, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThemePreferencePersistsAndTheShellUpdatesImmediately()
     {
         var service = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Services", "ThemePreferenceService.cs");
