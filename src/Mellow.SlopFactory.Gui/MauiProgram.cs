@@ -40,6 +40,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAppLifecycleState>(services => services.GetRequiredService<AppLifecycleState>());
         builder.Services.AddSingleton<INotificationService, MauiNotificationService>();
         builder.Services.AddSingleton<GenerationNotificationCoordinator>();
+#if WINDOWS
+        builder.Services.AddSingleton<ITrayIconService, WindowsTrayIconService>();
+#else
+        builder.Services.AddSingleton<ITrayIconService, NullTrayIconService>();
+#endif
+        builder.Services.AddSingleton<IWindowsExitCoordinator, WindowsExitCoordinator>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif

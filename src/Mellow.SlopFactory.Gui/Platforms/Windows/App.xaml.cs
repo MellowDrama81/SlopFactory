@@ -1,5 +1,6 @@
 using Microsoft.Windows.AppLifecycle;
 using Windows.ApplicationModel.Activation;
+using Mellow.SlopFactory.Gui.Services;
 
 namespace Mellow.SlopFactory.Gui.WinUI;
 
@@ -39,6 +40,7 @@ public partial class App : MauiWinUIApplication
     {
         base.OnLaunched(args);
         QueueActivatedFiles(AppInstance.GetCurrent().GetActivatedEventArgs());
+        HookWindowClosing();
     }
 
     private static void OnAppActivated(object? sender, AppActivationArguments args) => QueueActivatedFiles(args);
@@ -48,5 +50,53 @@ public partial class App : MauiWinUIApplication
         if (args.Kind != ExtendedActivationKind.File || args.Data is not FileActivatedEventArgs fileActivation) return;
         var service = IPlatformApplication.Current?.Services.GetService<Mellow.SlopFactory.Gui.Services.IncomingImportService>();
         service?.QueueLocalPaths(fileActivation.Files.OfType<Windows.Storage.StorageFile>().Select(file => file.Path));
+    }
+
+    /// <summary>
+    /// plan.md:440-448 — with active local work, closing the main window offers **Keep Running**/
+    /// **Cancel Work and Exit**/**Return to App** instead of exiting immediately. Uses the native
+    /// WinUI <c>AppWindow.Closing</c> event (cancelable) rather than MAUI's cross-platform
+    /// <c>Window.Destroying</c> (used elsewhere in this app only for best-effort, non-blocking
+    /// cleanup — it cannot actually stop a close from proceeding), since only the native event can
+    /// genuinely gate whether the window closes.
+    /// </summary>
+    private static void HookWindowClosing()
+    {
+        var services = IPlatformApplication.Current?.Services;
+        var coordinator = services?.GetService<IWindowsExitCoordinator>();
+        var trayIcon = services?.GetService<ITrayIconService>();
+        var queue = services?.GetService<GenerationQueueService>();
+        if (coordinator is null || trayIcon is null || queue is null) return;
+
+        var windows = Microsoft.Maui.Controls.Application.Current?.Windows;
+        var window = windows is { Count: > 0 } ? windows[0].Handler?.PlatformView as Microsoft.UI.Xaml.Window : null;
+        if (window is null) return;
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+        var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+        if (appWindow is null) return;
+
+        appWindow.Closing += (_, closingArgs) =>
+        {
+            // plan.md:434 — with no active work, closing exits normally; only active work gates it.
+            if (queue.RunningCount == 0 && queue.QueuedCount == 0) return;
+            closingArgs.Cancel = true;
+            if (coordinator.RememberedKeepRunning) { coordinator.KeepRunning(remember: true); return; }
+            coordinator.RequestDecision();
+        };
+        coordinator.KeptRunning += (_, _) =>
+        {
+            // plan.md:441 — places SlopFactory in the notification area; the tray icon itself is
+            // shown by whoever handles KeptRunning at the Blazor layer (MainLayout.razor), since
+            // that is also where the aggregate-status tooltip text is known.
+            appWindow.Hide();
+        };
+        trayIcon.OpenRequested += (_, _) =>
+        {
+            appWindow.Show();
+            window.Activate();
+        };
+        trayIcon.ExitRequested += (_, _) => coordinator.CancelWorkAndExit();
+        coordinator.ExitConfirmed += (_, _) => Environment.Exit(0);
     }
 }

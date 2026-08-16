@@ -1493,6 +1493,70 @@ public sealed class GenerationQueueServiceTests
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
     }
 
+    [Fact]
+    public async Task CancelWorkAndExitCancelsEveryQueuedJobAndRaisesExitConfirmed()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, preferences) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        var coordinator = new WindowsExitCoordinator(queue, preferences);
+        var exitConfirmed = false;
+        coordinator.ExitConfirmed += (_, _) => exitConfirmed = true;
+
+        coordinator.CancelWorkAndExit();
+
+        Assert.True(exitConfirmed);
+        Assert.False(coordinator.PendingDecision);
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-2") is not null);
+        Assert.True(queue.GetLastOutcomeForDraft("draft-2")!.CancelledBeforeSubmission);
+    }
+
+    [Fact]
+    public async Task KeepRunningOnlyPersistsTheRememberedChoiceWhenAskedTo()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, _, queue, _, preferences) = await CreateHarnessAsync(temporary.Child("library"));
+        var coordinator = new WindowsExitCoordinator(queue, preferences);
+        var keptRunningRaised = 0;
+        coordinator.KeptRunning += (_, _) => keptRunningRaised++;
+        coordinator.RequestDecision();
+        Assert.True(coordinator.PendingDecision);
+
+        coordinator.KeepRunning(remember: false);
+        Assert.False(coordinator.PendingDecision);
+        Assert.False(coordinator.RememberedKeepRunning);
+        Assert.Equal(1, keptRunningRaised);
+
+        coordinator.RequestDecision();
+        coordinator.KeepRunning(remember: true);
+        Assert.True(coordinator.RememberedKeepRunning);
+        Assert.Equal(2, keptRunningRaised);
+    }
+
+    [Fact]
+    public async Task ReturnToAppClearsThePendingDecisionWithoutAffectingAnyQueuedWork()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, preferences) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        var coordinator = new WindowsExitCoordinator(queue, preferences);
+        coordinator.RequestDecision();
+
+        coordinator.ReturnToApp();
+
+        Assert.False(coordinator.PendingDecision);
+        Assert.Equal(GenerationJobPhase.Running, queue.GetJobStatus(queue.GetActiveJobIdForDraft("draft-1")!)!.Phase);
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+    }
+
     private sealed class FakeProviderAdapter : IProviderAdapter
     {
         private readonly object _gate = new();

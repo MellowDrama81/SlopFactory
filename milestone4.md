@@ -169,23 +169,75 @@ there.
 
 ## Windows notification-area and background-work behavior
 
-- [ ] Add the **Keep Running** / **Cancel Work and Exit** / **Return to App** dialog shown when
-      closing the main window while local work is active (`plan.md:440`), distinct from the
-      already-implemented no-active-work exit path and the draft-flush **Retry Save** /
-      **Exit and Lose Unsaved Edits** / **Return to App** gate (both already shipped —
-      `plan.md:434-439`, `FlushForSuspensionAsync`).
-- [ ] **Keep Running** places SlopFactory in the Windows notification area, preserves active work,
+- [x] Add the **Keep Running** / **Cancel Work and Exit** / **Return to App** dialog shown when
+      closing the main window while local work is active (`plan.md:440`).
+      **Correction to this item's original planning-time note**: it previously claimed a
+      no-active-work exit path and a draft-flush **Retry Save**/**Exit and Lose Unsaved Edits**/
+      **Return to App** gate were "already shipped" (`plan.md:434-439`) via `FlushForSuspensionAsync`.
+      Checking directly before implementing this phase found that's not accurate: `FlushForSuspensionAsync`
+      is wired to MAUI's cross-platform `Window.Destroying`/`Window.Stopped` events, which are plain
+      notifications — every existing handler discards their event args (`(_, _) => ...`) and nothing
+      anywhere sets a `Cancel` flag, because there is none to set. That means today closing the
+      window *always* proceeds regardless of unsaved drafts; the flush is a best-effort background
+      attempt, not a real blocking gate, and no **Retry Save** dialog exists anywhere in the code.
+      This phase's own dialog is therefore the first *real* close-blocking gate in the app, built on
+      the native WinUI `AppWindow.Closing` event (which genuinely supports `args.Cancel`, unlike
+      MAUI's abstraction) rather than the non-blocking event used elsewhere — `Platforms/Windows/App.xaml.cs`'s
+      `HookWindowClosing` subscribes to it once the main window exists, checks
+      `GenerationQueueService.RunningCount`/`QueuedCount`, and only cancels the close (then requests
+      the dialog via the new `IWindowsExitCoordinator`) when work is actually active; with none, the
+      close proceeds untouched, matching `plan.md:434`. The draft-flush gate itself remains exactly
+      as before (unchanged, still non-blocking) — building a real one is a separate, pre-existing
+      gap this milestone doesn't claim.
+- [x] **Keep Running** places SlopFactory in the Windows notification area, preserves active work,
       is not itself an exit, and keeps failed draft edits in memory with retry available once the
-      window reopens (`plan.md:441-442`).
+      window reopens (`plan.md:441-442`). `IWindowsExitCoordinator.KeepRunning` raises `KeptRunning`,
+      which the native handler uses to hide the window (`AppWindow.Hide()`) — the process, its
+      libraries and in-memory state are completely untouched, so failed draft edits remain exactly
+      as available as they always were once the window is shown again.
 - [ ] If **Cancel Work and Exit** would also lose unsaved draft edits, run the existing draft-exit
       gate to completion before cancellation or process termination begins (`plan.md:443`).
-- [ ] Add a notification-area icon showing aggregate status with reopen/exit actions
-      (`plan.md:444`); exiting attempts provider cancellation where supported under the normal
-      cancellation rules, and submitted asynchronous remote jobs remain persisted for reconciliation
-      on the next launch (`plan.md:445-446`).
-- [ ] Add a rememberable **Keep Running** choice, changeable later in settings (`plan.md:447`), and
-      never hide in the notification area without first explaining that SlopFactory remains active
-      (`plan.md:448`).
+      **Not done**: since the draft-exit gate itself isn't a real blocking mechanism today (see the
+      correction above — there is nothing to "run to completion" that would actually stop
+      termination), this bullet has no real gate to sequence with yet. `CancelWorkAndExit` does
+      still call `FlushForSuspensionAsync` indirectly (via the same `Window.Destroying` handlers
+      firing during the real close that follows `Environment.Exit(0)`... actually `Environment.Exit`
+      terminates immediately without running window-lifecycle events at all, so today's flush does
+      **not** get a chance to run on this path). This is a real, narrow gap worth flagging
+      precisely: `CancelWorkAndExit`'s cancellation of queue jobs is unconditional and immediate,
+      with no draft-save attempt first. Left open rather than silently claimed as handled.
+- [x] Add a notification-area icon showing aggregate status with reopen/exit actions
+      (`plan.md:444`). `ITrayIconService`/`WindowsTrayIconService` implements this directly against
+      the classic Win32 `Shell_NotifyIcon` API (a dedicated invisible native window receives the
+      icon's callback message and a right-click context menu's **Open SlopFactory**/**Exit**
+      commands) rather than adding a third-party NuGet package — there is no notify-icon control in
+      the stable Windows App SDK, and this project prefers not to add a new dependency for something
+      a small amount of interop already covers. `MainLayout.razor` calls `TrayIcon.Show(...)` with a
+      running/queued-count tooltip when the user chooses **Keep Running**; the tray's **Open**
+      action restores the window, **Exit** routes through the same `CancelWorkAndExit` path as the
+      in-app button. A `NullTrayIconService` is registered on Android (no tray-icon concept there;
+      background-work status there is a persistent notification instead, in the next section).
+      Provider cancellation on exit and asynchronous-job persistence for next-launch reconciliation
+      (`plan.md:445-446`) were already true before this phase — `GenerationQueueService.Cancel`
+      already attempts the normal provider-cancellation path for a running job, and async remote
+      jobs already persist to the per-library registry regardless of how the app exits.
+- [x] Add a rememberable **Keep Running** choice, changeable later in settings (`plan.md:447`).
+      `IWindowsExitCoordinator.RememberedKeepRunning`/`SetRememberedKeepRunning` persist it via the
+      existing `IAppPreferenceStore`; the native close handler checks it before ever requesting the
+      dialog, and `LibrarySettings.razor` (Windows only) exposes a checkbox to change it later.
+      Never hiding in the notification area without first explaining that SlopFactory remains active
+      (`plan.md:448`) is satisfied by construction: the window is only ever hidden as a direct
+      response to the user explicitly clicking **Keep Running** in the dialog above (or having
+      previously chosen to remember that decision) — there is no path that hides the window silently
+      without that explanation having been shown at least once.
+
+  **Not independently verified beyond compiling**: like the single-instance work in Crash and
+  Session Recovery, this is real WinUI/Win32 interop with no automated test harness for actual
+  window-close/tray-icon/context-menu behavior — `WindowsExitCoordinator`'s decision logic itself
+  (remembered-choice handling, cancel-and-raise-exit, return-to-app) is unit-tested, but the native
+  glue in `Platforms/Windows/App.xaml.cs`/`WindowsTrayIconService.cs` needs a manual check on a real
+  Windows install (close with active work showing the dialog, Keep Running hiding to tray, tray
+  Open/Exit, and the remembered-choice setting actually skipping the dialog next time).
 
 ## Android background transfers
 

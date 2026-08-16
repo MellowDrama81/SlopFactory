@@ -11,6 +11,7 @@
 @inject IPlatformFileActionService PlatformFiles
 @inject IRecoveryStagingService RecoveryStaging
 @inject IDiagnosticsLogger Diagnostics
+@inject IWindowsExitCoordinator ExitCoordinator
 @using Mellow.SlopFactory.Application
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -269,6 +270,13 @@
         <button class="secondary" @onclick="Diagnostics.EnableVerbose">@Strings["EnableVerboseDiagnosticsFor1Hour"]</button>
     }
     <a class="ghost" href="/diagnostics">@Strings["NavDiagnostics"]</a>
+    @if (OperatingSystem.IsWindows())
+    {
+        <label class="check">
+            <input type="checkbox" checked="@ExitCoordinator.RememberedKeepRunning" @onchange="eventArgs => ExitCoordinator.SetRememberedKeepRunning(eventArgs.Value is true)" />
+            @Strings["KeepRunningSetting"]
+        </label>
+    }
 </section>
 
 @code {

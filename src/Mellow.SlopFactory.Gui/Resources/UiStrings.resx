@@ -940,4 +940,12 @@
   <data name="DiagnosticsExported" xml:space="preserve"><value>Diagnostics were exported.</value></data>
   <data name="DidNotCloseNormallyNotice" xml:space="preserve"><value>SlopFactory did not close normally last time.</value></data>
   <data name="ViewDiagnostics" xml:space="preserve"><value>View diagnostics</value></data>
+  <data name="ExitWithActiveWorkTitle" xml:space="preserve"><value>SlopFactory has active work</value></data>
+  <data name="ExitWithActiveWorkWarning" xml:space="preserve"><value>{0} generation(s) are running and {1} are queued. Closing now can keep them running in the background, cancel them and exit, or you can return to the app.</value></data>
+  <data name="RememberKeepRunningChoice" xml:space="preserve"><value>Remember this choice</value></data>
+  <data name="KeepRunning" xml:space="preserve"><value>Keep Running</value></data>
+  <data name="CancelWorkAndExit" xml:space="preserve"><value>Cancel Work and Exit</value></data>
+  <data name="ReturnToApp" xml:space="preserve"><value>Return to App</value></data>
+  <data name="TrayIconTooltip" xml:space="preserve"><value>SlopFactory — {0} running, {1} queued</value></data>
+  <data name="KeepRunningSetting" xml:space="preserve"><value>Remember "Keep Running" when closing with active work</value></data>
 </root>
