@@ -1,0 +1,80 @@
+@page "/diagnostics"
+@inject IDiagnosticsLogger DiagnosticsLogger
+@inject IPlatformFileActionService PlatformFiles
+@inject IStringLocalizer<UiStrings> Strings
+@using System.Text.Json
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@Strings["DiagnosticsPageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">@Strings["Diagnostics"]</p>
+        <h1>@Strings["DiagnosticsHeading"]</h1>
+        <p class="muted">@Strings["DiagnosticsExportWarning"]</p>
+    </div>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice" role="status">@_message</div>
+}
+
+<div class="actions">
+    <button class="secondary" disabled="@_busy" @onclick="ExportAsync">@Strings["ExportDiagnostics"]</button>
+    <button class="ghost danger" disabled="@_busy" @onclick="Clear">@Strings["ClearDiagnostics"]</button>
+</div>
+
+@if (_entries.Count == 0)
+{
+    <div class="empty-panel"><p>@Strings["DiagnosticsEmpty"]</p></div>
+}
+else
+{
+    <ul class="metadata-list">
+        @foreach (var entry in _entries)
+        {
+            <li>
+                <div>
+                    <strong>@entry.OperationType</strong>
+                    <small>@entry.Timestamp.ToLocalTime().ToString("g")@(entry.IsVerbose ? $" · {Strings["Verbose"]}" : string.Empty)</small>
+                </div>
+                @if (entry.SanitizedError is not null) { <p class="error">@entry.SanitizedError</p> }
+                @if (entry.HttpStatusCode is not null) { <small class="muted">@Strings["HttpStatus", entry.HttpStatusCode]</small> }
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private IReadOnlyList<DiagnosticLogEntry> _entries = [];
+    private bool _busy;
+    private string? _message;
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload() => _entries = DiagnosticsLogger.ReadAll().OrderByDescending(entry => entry.Timestamp).ToArray();
+
+    private void Clear()
+    {
+        DiagnosticsLogger.Clear();
+        Reload();
+    }
+
+    private async Task ExportAsync()
+    {
+        _busy = true;
+        try
+        {
+            var json = JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true });
+            var exported = await PlatformFiles.ExportRawBytesAsync(System.Text.Encoding.UTF8.GetBytes(json), $"slopfactory-diagnostics-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json", "application/json");
+            _message = exported ? Strings["DiagnosticsExported"].Value : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+}

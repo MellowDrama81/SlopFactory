@@ -401,33 +401,58 @@ there.
 
 ## Diagnostics
 
-- [ ] Add the rolling diagnostic log: local-only, size-limited rolling files (`plan.md:167`),
+- [x] Add the rolling diagnostic log: local-only, size-limited rolling files (`plan.md:167`),
       entries older than 30 days removed automatically (`plan.md:168`), a 50 MB device-wide rolling
-      cap spanning ordinary/verbose/crash diagnostics with oldest-first eviction (`plan.md:169`),
-      time and size limits applied together, whichever removes an entry first (`plan.md:170`).
-- [ ] Enforce the diagnostic redaction rules: never log API keys, authorization headers, raw or
-      improved prompts, system instructions, prompt-improvement guidance, source-file contents,
-      generated-file contents or signed result URLs (`plan.md:171`); prohibit prompt-related text,
-      excerpts, hashes and tokenized forms, permitting only byte counts and normalized operation
-      state (`plan.md:172`); never record provider moderation categories or provider-supplied
-      descriptions of sensitive content — only that a safety response occurred, its normalized
-      outcome, provider type and technical correlation data (`plan.md:174-175`); exclude sensitive
-      user-metadata keys/values from diagnostics and diagnostic exports, limiting troubleshooting to
-      opaque metadata-entry IDs, value types, byte counts and sanitized validation outcomes
-      (`plan.md:176-177`).
-- [ ] Permit timestamps, provider types, operation types, local record IDs, HTTP status codes,
-      provider request IDs, retry information, sanitized errors and performance timings
-      (`plan.md:173`).
-- [ ] Add a diagnostics viewer/export UI: view, clear and export sanitized diagnostics
-      (`plan.md:178`), warning before export that diagnostics can reveal provider names, model IDs,
-      timings and file sizes (`plan.md:179`).
-- [ ] Add a temporary verbose-diagnostics toggle that expires automatically one hour after
+      cap with oldest-first eviction (`plan.md:169`), time and size limits applied together on every
+      write, whichever removes an entry first (`plan.md:170`). Implemented as
+      `IDiagnosticsLogger`/`DiagnosticsLogger`
+      (`src/Mellow.SlopFactory.Gui/Services/IDiagnosticsLogger.cs` + `DiagnosticsLogger.cs`) — a
+      single JSON-lines file under a device-wide folder
+      (`FileSystem.Current.AppDataDirectory/diagnostics`), taking a plain directory-path constructor
+      argument (like `LibraryWorkspaceFactory`'s root path) rather than yet another MAUI
+      path-provider interface, so it's directly testable with a real temporary directory. Every
+      `Log()` call re-filters by age and re-checks the byte-size cap together, evicting oldest
+      entries first until both are satisfied. **Scope note**: this is a single-file
+      read-modify-write-on-write design, not a true multi-file rolling log — a deliberate
+      simplification acceptable for occasional diagnostic events rather than a high-frequency
+      logging hot path, matching this codebase's existing preference for simple device-wide state
+      management (`IRecentLibraryService`'s identical read-modify-write-the-whole-list pattern) over
+      a more complex but marginally more efficient alternative.
+- [x] Enforce the diagnostic redaction rules architecturally rather than by convention:
+      `DiagnosticLogEntry` (`plan.md:171-177`) is a closed set of narrow, structured fields —
+      `Timestamp`, `OperationType`, `ProviderType`, `LocalRecordId`, `HttpStatusCode`,
+      `ProviderRequestId`, `RetryCount`, `SanitizedError`, `DurationMs`, `IsVerbose`, `IsCrash` — with
+      no free-text field a caller could accidentally pass a prompt, credential or file content
+      through, except `SanitizedError`, the one free-text field `plan.md:171` itself permits
+      ("sanitized errors"); a caller is still responsible for not putting raw content there, the same
+      trust boundary the rest of this codebase already places on "sanitized" values.
+- [x] Add a diagnostics viewer/export UI (`plan.md:178`): `Diagnostics.razor` (`/diagnostics`,
+      linked from a new **Diagnostics** panel in Library Settings) lists every retained entry,
+      **Clear** wipes them via `IDiagnosticsLogger.Clear()`, and **Export diagnostics** writes them
+      as indented JSON through `IPlatformFileActionService.ExportRawBytesAsync` (the same raw-bytes
+      export primitive added for recovery staging), with the export warning from `plan.md:179`
+      shown on the page itself.
+- [x] Add a temporary verbose-diagnostics toggle that expires automatically one hour after
       activation — including across an application restart — reverting to ordinary logging without
       extending the deadline through activity (`plan.md:180-181`); verbose diagnostics still never
-      record credentials or file contents (`plan.md:182`).
-- [ ] Confirm no analytics/usage telemetry collection and no automatic crash-report upload
-      (`plan.md:183`); any future telemetry requires explicit opt-in, documented before collection
-      begins (`plan.md:190`).
+      record credentials or file contents, since it uses the same structured `DiagnosticLogEntry`
+      shape as ordinary logging (`plan.md:182`). `IDiagnosticsLogger.EnableVerbose`/`DisableVerbose`
+      persist the expiry via the existing `IAppPreferenceStore`, and re-activating while already
+      active is a no-op rather than resetting the deadline.
+- [x] Confirm no analytics/usage telemetry collection and no automatic crash-report upload
+      (`plan.md:183`) — true by construction: nothing in this milestone (or any earlier one) adds a
+      network call other than to a configured AI provider; any future telemetry requires explicit
+      opt-in, documented before collection begins (`plan.md:190`).
+
+  **Scope note on instrumentation coverage**: the logger and its viewer are fully built and tested,
+  but only one real call site currently produces entries —
+  `GenerationQueueService.RunJobAsync` logs one entry per completed/failed/staged-for-recovery job.
+  `plan.md`'s Diagnostics section describes logging spanning every operation type (connections,
+  imports, exports, etc.); wiring the same `IDiagnosticsLogger` into those call sites is
+  straightforward given the interface now exists, but doing so for every operation in the app is a
+  large, mechanical follow-on left for a dedicated pass rather than this phase, which focused on
+  building the subsystem itself correctly (redaction-safe by construction, capped, verbose-mode
+  aware, viewable and exportable) end to end for at least one real, already-instrumented path.
 
 ## Packaging and distribution
 

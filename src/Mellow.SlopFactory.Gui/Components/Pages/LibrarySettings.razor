@@ -10,6 +10,7 @@
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject IPlatformFileActionService PlatformFiles
 @inject IRecoveryStagingService RecoveryStaging
+@inject IDiagnosticsLogger Diagnostics
 @using Mellow.SlopFactory.Application
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -249,6 +250,21 @@
             }
         </div>
     }
+</section>
+
+<section class="panel">
+    <h2>@Strings["Diagnostics"]</h2>
+    <p class="muted">@Strings["DiagnosticsGuidance"]</p>
+    @if (Diagnostics.VerboseEnabled)
+    {
+        <p class="notice">@Strings["VerboseDiagnosticsActiveUntil", Diagnostics.VerboseExpiresAt!.Value.ToLocalTime().ToString("t")]</p>
+        <button class="secondary" @onclick="Diagnostics.DisableVerbose">@Strings["DisableVerboseDiagnostics"]</button>
+    }
+    else
+    {
+        <button class="secondary" @onclick="Diagnostics.EnableVerbose">@Strings["EnableVerboseDiagnosticsFor1Hour"]</button>
+    }
+    <a class="ghost" href="/diagnostics">@Strings["NavDiagnostics"]</a>
 </section>
 
 @code {

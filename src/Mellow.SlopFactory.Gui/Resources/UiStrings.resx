@@ -923,4 +923,19 @@
   <data name="DeleteRecoveryDataAndForget" xml:space="preserve"><value>Delete Recovery Data and Forget</value></data>
   <data name="ConfirmDeleteRecoveryDataAndForget" xml:space="preserve"><value>Confirm deleting recovery data and forgetting this library</value></data>
   <data name="DeleteRecoveryDataAndForgetWarning" xml:space="preserve"><value>This permanently deletes {0}'s device-local draft-edit markers and any staged provider results, then forgets the library. Export any staged result first if you want to keep it. The library's own content is not affected.</value></data>
+  <data name="Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="DiagnosticsGuidance" xml:space="preserve"><value>Diagnostic logs stay on this device and never include prompts, credentials, or file contents.</value></data>
+  <data name="VerboseDiagnosticsActiveUntil" xml:space="preserve"><value>Verbose diagnostics are active until {0}.</value></data>
+  <data name="DisableVerboseDiagnostics" xml:space="preserve"><value>Disable verbose diagnostics</value></data>
+  <data name="EnableVerboseDiagnosticsFor1Hour" xml:space="preserve"><value>Enable verbose diagnostics for 1 hour</value></data>
+  <data name="NavDiagnostics" xml:space="preserve"><value>View diagnostics</value></data>
+  <data name="DiagnosticsPageTitle" xml:space="preserve"><value>Diagnostics · SlopFactory</value></data>
+  <data name="DiagnosticsHeading" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="DiagnosticsExportWarning" xml:space="preserve"><value>Exporting diagnostics can reveal provider names, model IDs, timings and file sizes.</value></data>
+  <data name="ExportDiagnostics" xml:space="preserve"><value>Export diagnostics</value></data>
+  <data name="ClearDiagnostics" xml:space="preserve"><value>Clear diagnostics</value></data>
+  <data name="DiagnosticsEmpty" xml:space="preserve"><value>No diagnostic entries yet.</value></data>
+  <data name="Verbose" xml:space="preserve"><value>Verbose</value></data>
+  <data name="HttpStatus" xml:space="preserve"><value>HTTP {0}</value></data>
+  <data name="DiagnosticsExported" xml:space="preserve"><value>Diagnostics were exported.</value></data>
 </root>

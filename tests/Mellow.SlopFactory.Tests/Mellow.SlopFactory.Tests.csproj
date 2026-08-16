@@ -35,5 +35,7 @@
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IRecoveryStagingPathProvider.cs" Link="Services\IRecoveryStagingPathProvider.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IPendingResultRegistryService.cs" Link="Services\IPendingResultRegistryService.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IRecoveryStagingService.cs" Link="Services\IRecoveryStagingService.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IDiagnosticsLogger.cs" Link="Services\IDiagnosticsLogger.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\DiagnosticsLogger.cs" Link="Services\DiagnosticsLogger.cs" />
   </ItemGroup>
 </Project>

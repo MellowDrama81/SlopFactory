@@ -250,8 +250,9 @@ public sealed class GenerationQueueService
     private readonly IDeviceConnectivityStateProvider? _connectivity;
     private readonly IRecoveryStagingService? _recoveryStaging;
     private readonly ILibraryAvailabilityProbe? _availabilityProbe;
+    private readonly IDiagnosticsLogger? _diagnostics;
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null)
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, IDiagnosticsLogger? diagnostics = null)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
@@ -263,6 +264,7 @@ public sealed class GenerationQueueService
         _connectivity = connectivity;
         _recoveryStaging = recoveryStaging;
         _availabilityProbe = availabilityProbe;
+        _diagnostics = diagnostics;
     }
 
     public event EventHandler? Changed;
@@ -784,6 +786,12 @@ public sealed class GenerationQueueService
         // plan.md:430 — a background-kept library's lock is released once its last operation
         // completes. A no-op for the still-active workspace or one with other jobs still pending.
         if (!HasActiveWorkFor(job.Workspace)) _ = _libraries.ReleaseBackgroundWorkspaceIfIdleAsync(job.Workspace);
+        _diagnostics?.Log(new DiagnosticLogEntry(
+            DateTimeOffset.UtcNow,
+            OperationType: outcome.StagedForRecovery ? "Generation.StagedForRecovery" : outcome.Record is not null ? "Generation.Completed" : outcome.CancelledBeforeSubmission ? "Generation.CancelledBeforeSubmission" : "Generation.Failed",
+            LocalRecordId: outcome.Record?.Id,
+            SanitizedError: outcome.LocalErrorMessage,
+            IsVerbose: _diagnostics.VerboseEnabled));
     }
 
     /// <summary>
