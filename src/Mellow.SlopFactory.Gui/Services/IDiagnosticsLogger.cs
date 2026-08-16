@@ -50,4 +50,24 @@ public interface IDiagnosticsLogger
     void EnableVerbose();
 
     void DisableVerbose();
+
+    /// <summary>
+    /// True once per process lifetime, computed the first time <see cref="MarkSessionStarted"/> is
+    /// called: whether the previous session's marker was still present, meaning it never reached a
+    /// graceful shutdown (plan.md:184-185). Call <see cref="MarkSessionStarted"/> once at startup
+    /// before reading this.
+    /// </summary>
+    bool DidNotCloseNormallyLastSession { get; }
+
+    /// <summary>
+    /// Call once at application startup, before anything else touches this logger. Detects whether
+    /// the previous session's marker is still present (crash/kill, never a graceful exit) — if so,
+    /// logs a crash entry (<see cref="DiagnosticLogEntry.IsCrash"/>) and sets
+    /// <see cref="DidNotCloseNormallyLastSession"/> — then writes a fresh marker for this session.
+    /// </summary>
+    void MarkSessionStarted();
+
+    /// <summary>Call from the app's own graceful-exit path once it is genuinely about to terminate
+    /// normally (plan.md:184's crash detection only fires when this was never called last time).</summary>
+    void MarkSessionEndedNormally();
 }

@@ -75,6 +75,33 @@ public sealed class DiagnosticsLogger : IDiagnosticsLogger
 
     public void DisableVerbose() => _preferences.WriteString(VerboseExpiresAtPreferenceKey, string.Empty);
 
+    public bool DidNotCloseNormallyLastSession { get; private set; }
+
+    private string SessionMarkerPath => Path.Combine(_logDirectory, "session.marker");
+
+    public void MarkSessionStarted()
+    {
+        lock (_gate)
+        {
+            Directory.CreateDirectory(_logDirectory);
+            if (File.Exists(SessionMarkerPath))
+            {
+                DidNotCloseNormallyLastSession = true;
+                File.AppendAllText(LogFilePath, JsonSerializer.Serialize(new DiagnosticLogEntry(DateTimeOffset.UtcNow, "Application.UncleanShutdownDetected", IsCrash: true), JsonOptions) + Environment.NewLine);
+                EnforceRetention();
+            }
+            File.WriteAllText(SessionMarkerPath, DateTimeOffset.UtcNow.ToString("o"));
+        }
+    }
+
+    public void MarkSessionEndedNormally()
+    {
+        lock (_gate)
+        {
+            try { File.Delete(SessionMarkerPath); } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
     private List<DiagnosticLogEntry> ReadAllUnlocked()
     {
         if (!File.Exists(LogFilePath)) return [];

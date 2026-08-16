@@ -280,6 +280,46 @@ public sealed class GenerationQueueService
         _libraries.Changed += OnLibraryChanged;
         _energy.Changed += OnEnergyStateChanged;
         if (_connectivity is not null) _connectivity.Changed += OnConnectivityChanged;
+        _ = ResumePendingDownloadsAsync();
+    }
+
+    /// <summary>
+    /// plan.md:1433 ("When the application reopens, it resumes polling incomplete asynchronous
+    /// jobs") — scoped to the one case resumable without the original submission context
+    /// (prompt/model/settings), which per-async-job persistence deliberately never retains: a job
+    /// the provider already confirmed <see cref="AsyncRemoteJobPhase.CompletedAwaitingDownload"/> can
+    /// be retried purely from its existing generation-record position, via the same
+    /// <see cref="RetryMissingResultDownloadAsync"/> used by **Refresh Provider Status**. A job still
+    /// genuinely in flight (Submitted/Processing/MonitoringPaused) has no persisted context to resume
+    /// a poll loop into and is left as visible, discardable "unresolved" state (`Connections.razor`)
+    /// instead — attempting to fabricate one would mean guessing at a request that was never
+    /// recorded. Called once when the queue starts (for whichever library is already open) and again
+    /// every time the active library changes (open, switch or reopen).
+    /// </summary>
+    private async Task ResumePendingDownloadsAsync()
+    {
+        var workspace = _libraries.Workspace;
+        if (workspace is null) return;
+        IReadOnlyList<AsyncRemoteJobRecord> pending;
+        try
+        {
+            pending = await workspace.GetPendingAsyncRemoteJobsAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
+        {
+            return;
+        }
+        foreach (var job in pending.Where(job => job.Phase == AsyncRemoteJobPhase.CompletedAwaitingDownload))
+        {
+            try
+            {
+                await RetryMissingResultDownloadAsync(job.Id).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
+            {
+                // Left as an unresolved row for a later manual Refresh Provider Status attempt.
+            }
+        }
     }
 
     private void OnEnergyStateChanged(object? sender, EventArgs args)
@@ -497,6 +537,7 @@ public sealed class GenerationQueueService
         }
         foreach (var cancellation in toCancel) cancellation.Cancel();
         RaiseChanged();
+        _ = ResumePendingDownloadsAsync();
     }
 
     private static bool ReferencesFile(GenerationJobSnapshot snapshot, string fileId) =>

@@ -304,25 +304,70 @@ there.
 
 ## Crash and session recovery
 
-- [ ] Enforce one running SlopFactory process per signed-in Windows user session (`plan.md:352`);
+- [x] Enforce one running SlopFactory process per signed-in Windows user session (`plan.md:352`);
       launching SlopFactory again activates the existing process instead of starting another
-      (`plan.md:355`).
-- [ ] Forward a second-launch request to open a library or import files to the existing process,
+      (`plan.md:355`). Implemented in `Platforms/Windows/App.xaml.cs` using
+      `Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey` checked synchronously in the
+      `App` constructor, before `InitializeComponent()` — a second launch redirects its activation to
+      the existing instance and calls `Environment.Exit(0)` immediately, so no window is ever created
+      for it. Doing this check synchronously (blocking on `RedirectActivationToAsync(...).AsTask()
+      .GetAwaiter().GetResult()`) rather than fire-and-forget matters: `OnLaunched` would otherwise be
+      free to run against a half-constructed app before the async redirect/exit completed.
+      **Not independently verified beyond compiling** — this is real WinUI platform code with no
+      automated test harness for actual process launch/redirect behavior; needs a manual check on a
+      real Windows install (launch, launch again, confirm only one window and one process).
+- [x] Forward a second-launch request to open a library or import files to the existing process,
       requiring explicit user confirmation before it changes the active library or imports anything
       (`plan.md:356`); forwarded requests never switch libraries, import files or submit work
-      automatically (`plan.md:357`).
-- [ ] Keep per-library exclusive locking enforced on both platforms as protection against other
+      automatically (`plan.md:357`). No new code needed here: `RedirectActivationToAsync` delivers
+      the second launch's activation args to the existing process's own `Activated` handler, which
+      already only handles file activation by queuing paths into `IncomingImportService` — a
+      pre-existing flow whose confirmation step (the user must explicitly accept queued incoming
+      files before anything imports) already satisfies this requirement. There is no
+      "open a specific library" launch argument anywhere in this app to forward, so nothing exists to
+      build for that half.
+- [x] Keep per-library exclusive locking enforced on both platforms as protection against other
       processes and unexpected re-entry (`plan.md:360`), consistent with the single Windows process
       being able to hold multiple libraries open at once for explicitly submitted background work
-      (`plan.md:358`).
-- [ ] Create a sanitized local diagnostic record on crash (`plan.md:184`); on next launch, notify
+      (`plan.md:358`) — already true since `LibraryWorkspaceFactory.AcquireLock`'s `FileShare.None`
+      lock file predates this milestone and Milestone 4's own multi-library background-work section
+      builds on it directly; no change needed here.
+- [x] Create a sanitized local diagnostic record on crash (`plan.md:184`); on next launch, notify
       the user that the application did not close normally and offer to view, clear or export the
       crash diagnostics (`plan.md:185`), with stack traces and request context following the
-      existing diagnostic redaction rules (`plan.md:186`, `plan.md:171-176`).
-- [ ] Resume polling of every incomplete asynchronous provider job when the application reopens,
-      keyed off the already-persisted job IDs (`plan.md:1433`) — closing the known gap
-      `GenerationQueueService.cs`'s own code comment and `milestone3.md` both already flag
-      ("polling does not resume automatically after an application restart").
+      existing diagnostic redaction rules (`plan.md:186`, `plan.md:171-176` — no stack traces are
+      actually captured, since nothing in this app catches unhandled exceptions to record one; see
+      the scope note below). `IDiagnosticsLogger` gained `MarkSessionStarted`/`MarkSessionEndedNormally`/
+      `DidNotCloseNormallyLastSession`, backed by a simple marker file written at startup and deleted
+      on a graceful exit — if the marker from a previous run is still present at the next
+      `MarkSessionStarted()` call, that run never reached a graceful exit, so a crash entry
+      (`DiagnosticLogEntry.IsCrash`) is logged and the flag is set. Wired to `App.xaml.cs`'s
+      constructor (session start) and its `Window.Destroying` handler (the same signal
+      `FlushForSuspensionAsync` already treats as "the app is genuinely closing," reused here for
+      consistency) for session end. `MainLayout.razor` shows a dismissible notice with **View
+      diagnostics**/**Clear diagnostics** actions when the flag is set on startup. **Scope note**:
+      this detects *that* the process didn't exit cleanly (crash, kill, power loss), which is what
+      `plan.md:184`'s "diagnostic record" and "did not close normally" prompt actually need — it does
+      not capture the crash's stack trace itself, since nothing in the app subscribes to
+      `AppDomain.UnhandledException`/`TaskScheduler.UnobservedTaskException` to record one before the
+      process dies; adding that is a natural, bounded follow-on once a real crash needs deeper
+      diagnosis, not attempted here.
+- [x] Resume polling of every incomplete asynchronous provider job when the application reopens,
+      keyed off the already-persisted job IDs (`plan.md:1433`), scoped to the one case resumable
+      without inventing missing context: a job the provider already confirmed
+      `AsyncRemoteJobPhase.CompletedAwaitingDownload` (has an existing generation-record
+      position to commit into) is automatically retried via the same
+      `RetryMissingResultDownloadAsync` **Refresh Provider Status** already uses, called once when
+      `GenerationQueueService.Start()` runs and again on every subsequent library switch/reopen
+      (`OnLibraryChanged`). **Not resumable, and deliberately not attempted**: a job still genuinely
+      `Submitted`/`Processing`/`MonitoringPaused` when the app closed has no persisted prompt, model
+      or settings context to resume a poll loop into — only `DraftId`, connection ID, provider job ID
+      and monitoring deadline are ever persisted per async job (by design, matching the device-wide
+      registry's own privacy constraint elsewhere in this milestone). Building a full resume for that
+      case is the same underlying gap as Milestone 3's already-tracked **Submission Outcome
+      Unknown**/**Attempt Reconciliation** debt — a genuine architecture change (capturing a durable
+      pre-submission snapshot), not a bounded extension of this phase. Those jobs remain visible and
+      discardable via `Connections.razor`'s existing "unresolved async jobs" notice, unchanged.
 
 ## Integrity checks
 

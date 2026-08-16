@@ -10,6 +10,7 @@
 @inject GenerationNotificationCoordinator NotificationCoordinator
 @inject INotificationService Notifications
 @inject NavigationManager Navigation
+@inject IDiagnosticsLogger Diagnostics
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -94,13 +95,25 @@
                 </ul>
             </div>
         }
+        @if (_showCrashNotice)
+        {
+            <div class="notice error" role="alert">
+                @Strings["DidNotCloseNormallyNotice"]
+                <a class="ghost" href="/diagnostics">@Strings["ViewDiagnostics"]</a>
+                <button class="ghost" @onclick="() => { Diagnostics.Clear(); _showCrashNotice = false; }">@Strings["ClearDiagnostics"]</button>
+                <button class="ghost" @onclick="() => _showCrashNotice = false">@Strings["Dismiss"]</button>
+            </div>
+        }
         @Body
     </main>
 </div>
 
 @code {
+    private bool _showCrashNotice;
+
     protected override void OnInitialized()
     {
+        _showCrashNotice = Diagnostics.DidNotCloseNormallyLastSession;
         IncomingImports.PendingChanged += OnPendingChanged;
         ContentWatch.Changed += OnPendingChanged;
         ContentWatch.Start();

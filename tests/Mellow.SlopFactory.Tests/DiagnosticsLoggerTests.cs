@@ -138,6 +138,54 @@ public sealed class DiagnosticsLoggerTests
     }
 
     [Fact]
+    public void FirstSessionStartLeavesNoCrashMarkAndCreatesASessionMarker()
+    {
+        using var temporary = new TemporaryDirectory();
+        var directory = temporary.Child("diagnostics");
+        var logger = new DiagnosticsLogger(directory, new FakeAppPreferenceStore());
+
+        logger.MarkSessionStarted();
+
+        Assert.False(logger.DidNotCloseNormallyLastSession);
+        Assert.True(File.Exists(Path.Combine(directory, "session.marker")));
+        Assert.Empty(logger.ReadAll());
+    }
+
+    [Fact]
+    public void AMissingSessionEndMarkerIsDetectedAsAnUncleanShutdownOnTheNextStart()
+    {
+        using var temporary = new TemporaryDirectory();
+        var directory = temporary.Child("diagnostics");
+        var firstRun = new DiagnosticsLogger(directory, new FakeAppPreferenceStore());
+        firstRun.MarkSessionStarted();
+        // No MarkSessionEndedNormally() call — simulates a crash/kill.
+
+        var secondRun = new DiagnosticsLogger(directory, new FakeAppPreferenceStore());
+        secondRun.MarkSessionStarted();
+
+        Assert.True(secondRun.DidNotCloseNormallyLastSession);
+        var crashEntry = Assert.Single(secondRun.ReadAll());
+        Assert.True(crashEntry.IsCrash);
+        Assert.Equal("Application.UncleanShutdownDetected", crashEntry.OperationType);
+    }
+
+    [Fact]
+    public void AGracefulSessionEndPreventsTheNextStartFromDetectingACrash()
+    {
+        using var temporary = new TemporaryDirectory();
+        var directory = temporary.Child("diagnostics");
+        var firstRun = new DiagnosticsLogger(directory, new FakeAppPreferenceStore());
+        firstRun.MarkSessionStarted();
+        firstRun.MarkSessionEndedNormally();
+
+        var secondRun = new DiagnosticsLogger(directory, new FakeAppPreferenceStore());
+        secondRun.MarkSessionStarted();
+
+        Assert.False(secondRun.DidNotCloseNormallyLastSession);
+        Assert.Empty(secondRun.ReadAll());
+    }
+
+    [Fact]
     public void DisableVerboseClearsAnActivePeriod()
     {
         var preferences = new FakeAppPreferenceStore();

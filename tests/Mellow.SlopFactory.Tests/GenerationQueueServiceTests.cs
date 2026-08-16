@@ -9,7 +9,7 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, bool autoStart = true)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
@@ -17,7 +17,7 @@ public sealed class GenerationQueueServiceTests
         preferences ??= new FakeAppPreferenceStore();
         energy ??= new FakeDeviceEnergyStateProvider();
         var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker, connectivity, recoveryStaging, availabilityProbe);
-        queue.Start();
+        if (autoStart) queue.Start();
         return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
 
@@ -1020,6 +1020,45 @@ public sealed class GenerationQueueServiceTests
         Assert.False(recovered);
         var stillPending = Assert.Single(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
         Assert.Equal(AsyncRemoteJobPhase.CompletedAwaitingDownload, stillPending.Phase);
+    }
+
+    [Fact]
+    public async Task StartingTheQueueAgainstAnAlreadyOpenLibraryAutomaticallyResumesACompletedButUndownloadedResult()
+    {
+        using var temporary = new TemporaryDirectory();
+        var libraryPath = temporary.Child("library");
+        byte[] mp4 = [0, 0, 0, 0x18, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'i', (byte)'s', (byte)'o', (byte)'m', 0, 0, 0, 0];
+
+        // "First session": a video result completes at the provider but its download fails,
+        // leaving a CompletedAwaitingDownload registry row, then the app "closes."
+        {
+            var (libraries, workspace, queue, adapter, _) = await CreateHarnessAsync(libraryPath, videoPollInterval: TimeSpan.FromMilliseconds(5));
+            var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+            var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+            adapter.NextVideoJobId = "video-resume";
+            adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.CompletedDownloadFailed, null, "Downloading failed."));
+            queue.Enqueue(Snapshot("draft-video-resume", model.Id, "A cat", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+            await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video-resume") is not null);
+            Assert.Single(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+            await libraries.DisposeAsync();
+        }
+
+        // "Second session": reopening the same library and starting a fresh queue (no manual
+        // Refresh Provider Status call) resolves the leftover row on its own. autoStart is deferred
+        // so the poll result can be queued before Start()'s resume pass runs — otherwise Start()
+        // would race the adapter setup below and find nothing queued yet.
+        var (_, workspace2, queue2, adapter2, _) = await CreateHarnessAsync(libraryPath, videoPollInterval: TimeSpan.FromMilliseconds(5), autoStart: false);
+        adapter2.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [mp4], null));
+        queue2.Start();
+
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while ((await workspace2.GetPendingAsyncRemoteJobsAsync()).Count > 0)
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("The leftover async job was never resumed.");
+            await Task.Delay(10);
+        }
+        var record = Assert.Single(await workspace2.GetGenerationHistoryAsync());
+        Assert.Single(record.ResultFileIds);
     }
 
     [Fact]
