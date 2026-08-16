@@ -40,6 +40,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAppLifecycleState>(services => services.GetRequiredService<AppLifecycleState>());
         builder.Services.AddSingleton<INotificationService, MauiNotificationService>();
         builder.Services.AddSingleton<GenerationNotificationCoordinator>();
+        builder.Services.AddSingleton<IAppBuildInfo, AppBuildInfo>();
 #if WINDOWS
         builder.Services.AddSingleton<ITrayIconService, WindowsTrayIconService>();
 #else

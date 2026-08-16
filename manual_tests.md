@@ -303,6 +303,16 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** a content-filtered text candidate is reported with a sanitized, specific note (not a silent shortfall or a generic error) on both `/generate` and its history detail page, other candidates in the same request are unaffected, and image-mode generation behaves exactly as before.
 
+## MT-24 — Windows/Android package identity, channel display, and default-library survival across uninstall
+
+1. Build and install a **Release**-configuration MSIX (e.g. `dotnet publish -c Release -f net10.0-windows10.0.22621.0`) and, separately, a **Debug**-configuration packaged build. Confirm both can be installed on the same machine at once without one replacing the other (the dev build's package identity is `Mellow.SlopFactory.Dev`; the Release identity is `Mellow.SlopFactory`).
+2. In the Release install, open `/about` and `/diagnostics`. Confirm both show channel **Direct**, display version `0.1.0`, a build number, and an Application ID of `com.mellow.slopfactory` (no `.dev` suffix). In the Debug install, confirm channel **Development** and Application ID `com.mellow.slopfactory.dev`.
+3. In the Release install, create or open the default library, add at least one file, then fully uninstall the Release package. Reinstall it and confirm the default library and its file are still present and are offered for reopening. **This is the specific item this test exists to catch:** `Environment.SpecialFolder.LocalApplicationData` (used by `LibraryLocationService.DefaultPath` for Windows) is, per Microsoft's own MSIX documentation, sometimes virtualized/redirected into package-managed storage for full-trust packaged apps specifically so it gets cleaned up on uninstall — which would silently violate `plan.md:61-62`'s requirement that the default library survive an uninstall. This has not been verified against a real installed package anywhere in this repository's history; if the library does *not* survive, this is a real defect requiring a fix (e.g. an explicit non-package-managed path) before a production Windows release.
+4. Repeat the same install/add-file/uninstall/reinstall sequence for Android with a Release-signed build, confirming instead that the app-specific library is *not* preserved (Android's plan.md-documented, intentionally different uninstall behavior) and that the existing uninstall warning accurately describes this.
+5. Attempt to install a lower `ApplicationDisplayVersion`/`ApplicationVersion` package over a higher one already installed, on both platforms. Confirm the platform's installer rejects the downgrade rather than SlopFactory needing to guard against it itself.
+
+**Pass:** dev and production packages coexist side by side without collision; About/diagnostics show accurate channel/version/build/application-ID values per build; the Windows default library survives a real uninstall/reinstall cycle (or, if it does not, this is filed as a defect rather than assumed fine); Android's app-specific library is removed on uninstall per its documented, intentionally different behavior; and downgrade installs are rejected by the OS on both platforms.
+
 ## Reporting
 
 For each test case, record:

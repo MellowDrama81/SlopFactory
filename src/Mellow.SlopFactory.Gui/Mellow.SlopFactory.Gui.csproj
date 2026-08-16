@@ -6,9 +6,20 @@
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
     <ApplicationTitle>SlopFactory</ApplicationTitle>
-    <ApplicationId>com.mellow.slopfactory.dev</ApplicationId>
+    <!-- plan.md:60 — dev builds use a distinct package identifier from production so they never
+         collide with (or gain access to) a production install's secure storage or Android
+         app-specific storage. Override with /p:ApplicationId=... only for a real production build
+         pipeline that also supplies real signing credentials via the env vars below. -->
+    <ApplicationId Condition="'$(Configuration)'=='Release'">com.mellow.slopfactory</ApplicationId>
+    <ApplicationId Condition="'$(Configuration)'!='Release'">com.mellow.slopfactory.dev</ApplicationId>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
+    <!-- plan.md:40 — the distribution channel shown in About/diagnostics. Defaults to
+         Development for non-Release configs and Direct for Release; a real Store packaging
+         pipeline overrides this with /p:SlopFactoryChannel=Store since this repo has no way to
+         detect Store-vs-direct installation at runtime without a Store SDK dependency. -->
+    <SlopFactoryChannel Condition="'$(SlopFactoryChannel)'=='' and '$(Configuration)'=='Release'">Direct</SlopFactoryChannel>
+    <SlopFactoryChannel Condition="'$(SlopFactoryChannel)'=='' and '$(Configuration)'!='Release'">Development</SlopFactoryChannel>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.19045.0</SupportedOSPlatformVersion>
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.19045.0</TargetPlatformMinVersion>
@@ -18,7 +29,31 @@
     <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#171A21" BaseSize="128,128" />
     <MauiImage Include="Resources\Images\*" />
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <AssemblyMetadata Include="SlopFactoryChannel" Value="$(SlopFactoryChannel)" />
+    <AssemblyMetadata Include="SlopFactoryDownloadPageUrl" Value="$(SlopFactoryDownloadPageUrl)" />
   </ItemGroup>
+  <!-- plan.md:49-52 — production Windows builds (Store and direct-download alike) share one
+       package identity (Mellow.SlopFactory) so they can never install side by side and so MSIX's
+       built-in downgrade rejection and signing-lineage validation apply uniformly; dev builds use
+       Package.appxmanifest's distinct Mellow.SlopFactory.Dev identity so a dev build can coexist
+       on the same machine as a production install for testing. -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' and '$(Configuration)'=='Release'">
+    <AppxManifest Remove="Platforms\Windows\Package.appxmanifest" />
+    <AppxManifest Include="Platforms\Windows\Package.Release.appxmanifest" />
+  </ItemGroup>
+  <!-- plan.md:54 — signing credentials never live in this repo. These properties stay unset
+       (builds remain unsigned/dev-signed) unless a real release pipeline supplies them via
+       environment variables; the *Pass properties use the "env:" prefix so the secret value is
+       read at sign time rather than persisted into any build-log or intermediate file. -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' and '$(SLOPFACTORY_WINDOWS_CERT_THUMBPRINT)' != ''">
+    <PackageCertificateThumbprint>$(SLOPFACTORY_WINDOWS_CERT_THUMBPRINT)</PackageCertificateThumbprint>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' and '$(SLOPFACTORY_ANDROID_KEYSTORE)' != ''">
+    <AndroidSigningKeyStore>$(SLOPFACTORY_ANDROID_KEYSTORE)</AndroidSigningKeyStore>
+    <AndroidSigningKeyAlias>$(SLOPFACTORY_ANDROID_KEY_ALIAS)</AndroidSigningKeyAlias>
+    <AndroidSigningKeyPass>env:SLOPFACTORY_ANDROID_KEY_PASS</AndroidSigningKeyPass>
+    <AndroidSigningStorePass>env:SLOPFACTORY_ANDROID_STORE_PASS</AndroidSigningStorePass>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.20" />

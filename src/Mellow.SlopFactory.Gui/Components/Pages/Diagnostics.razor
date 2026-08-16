@@ -1,6 +1,7 @@
 @page "/diagnostics"
 @inject IDiagnosticsLogger DiagnosticsLogger
 @inject IPlatformFileActionService PlatformFiles
+@inject IAppBuildInfo BuildInfo
 @inject IStringLocalizer<UiStrings> Strings
 @using System.Text.Json
 @using Microsoft.Extensions.Localization
@@ -13,6 +14,7 @@
         <p class="eyebrow">@Strings["Diagnostics"]</p>
         <h1>@Strings["DiagnosticsHeading"]</h1>
         <p class="muted">@Strings["DiagnosticsExportWarning"]</p>
+        <p class="muted">@Strings["AboutBuildLine", BuildInfo.Channel, BuildInfo.DisplayVersion, BuildInfo.BuildNumber]</p>
     </div>
 </header>
 

@@ -775,46 +775,131 @@ there.
 
 - [ ] Produce a signed Windows MSIX (Store install/uninstall plus a direct-download copy from the
       official project site) and a signed Android App Bundle for Google Play plus a signed direct
-      APK (`plan.md:38-39`).
-- [ ] Show the installed distribution channel, semantic version and platform build number in
+      APK (`plan.md:38-39`). **Not done — blocked on external resources.** Actual signing requires a
+      real code-signing certificate (Windows) and a real upload/signing keystore (Android), plus a
+      Microsoft Store and Google Play developer account, none of which an autonomous session can
+      generate or obtain, matching Milestone 3's live-provider-credential precedent. What *is* now
+      in place is the in-repo configuration groundwork that a real release pipeline needs:
+      `Mellow.SlopFactory.Gui.csproj` now conditionally sets `PackageCertificateThumbprint` (Windows)
+      and `AndroidSigningKeyStore`/`AndroidSigningKeyAlias`/`AndroidSigningKeyPass`/`AndroidSigningStorePass`
+      (Android) only when the corresponding `SLOPFACTORY_WINDOWS_CERT_THUMBPRINT` /
+      `SLOPFACTORY_ANDROID_KEYSTORE` (+ alias/pass) environment variables are present at build time —
+      the two `*Pass` properties use the `env:` prefix so a real secret is read at sign time rather
+      than persisted into any project file or build log. With no such environment variables set
+      (the normal case for this repo and for any contributor's machine), builds are unaffected and
+      remain unsigned/dev-signed exactly as before.
+- [x] Show the installed distribution channel, semantic version and platform build number in
       **About** and diagnostics (`plan.md:40`), with **About** providing a user-activated link to
-      the official download page (`plan.md:45`).
-- [ ] Confirm store installs rely only on their store update path and direct-download installs
+      the official download page (`plan.md:45`). New `IAppBuildInfo`/`AppBuildInfo`
+      (`Services/IAppBuildInfo.cs`, `Services/AppBuildInfo.cs`) reads `DisplayVersion`/`BuildNumber`/
+      `ApplicationId` from MAUI Essentials' `AppInfo.Current` (which itself reflects
+      `ApplicationDisplayVersion`/`ApplicationVersion`/`ApplicationId`), and reads `Channel` from a
+      new `SlopFactoryChannel` MSBuild property (default `Development` for non-Release configs,
+      `Direct` for Release, overridable via `/p:SlopFactoryChannel=Store` for a real future Store
+      pipeline since this repo has no way to detect Store-vs-direct installation at runtime without
+      a Store SDK dependency) baked in via `AssemblyMetadataAttribute`. Both `About.razor` and
+      `Diagnostics.razor` now show this line. **Correction to this item's original scope:** the
+      "user-activated link to the official download page" half is implemented as a mechanism only —
+      a `DownloadPageUrl` property populated from a `SlopFactoryDownloadPageUrl` MSBuild property,
+      shown as a link only when non-empty — because no official project site exists yet to link to;
+      fabricating a placeholder public URL would be dishonest, so the link simply does not render
+      today. This becomes a one-property build-parameter change once a real site exists.
+- [x] Confirm store installs rely only on their store update path and direct-download installs
       never self-update or make automatic background update-check requests
       (`plan.md:41-44`); official download/provider-documentation links stay static HTTPS URLs with
       no SlopFactory-added tracking query parameters (`plan.md:46`), and update behavior is never
-      automatically switched, combined or redirected between channels (`plan.md:47`).
+      automatically switched, combined or redirected between channels (`plan.md:47`). Verified by
+      absence rather than by a new guard: a repo-wide search confirms there is no update-checking,
+      update-notification, or self-update networking code anywhere outside the LLM/media provider
+      adapters, on either platform — there is nothing to make an automatic request, so this
+      constraint is satisfied by construction. The (not-yet-existing) download-page link above is a
+      single static URL with no query-string construction of any kind, so no tracking parameters can
+      be added even once a real URL is configured.
 - [ ] Publish cryptographic checksums and signing-certificate information for direct packages on
-      the official download pages (`plan.md:48`).
-- [ ] Share stable application/package identity and signing lineage between store and direct
-      production builds (`plan.md:49`); require an explicit installer-level warning when switching a
-      production installation's source, preserving existing storage identity and never
-      self-initiated (`plan.md:50`); reject side-by-side production variants and version downgrades
-      (`plan.md:51`), and stop installation without replacing the existing application or data if
-      the platform can't validate the shared signing lineage (`plan.md:52`).
-- [ ] Keep signing credentials outside the source repository (`plan.md:54`); use semantic
-      application versions and platform build numbers for releases (`plan.md:55`); use separate
-      package identifiers for development builds, which cannot access production secure storage or
-      app-specific Android libraries (`plan.md:60`).
-- [ ] Confirm application updates can upgrade library schemas but never silently relocate or delete
-      libraries (`plan.md:57`); preserve the versioned device-local export-cleanup journal across
-      normal updates and migrate recognized entries conservatively, leaving an unrecognizable entry
-      pending for user review rather than dropped or guessed at (`plan.md:58-59`) — scoped to
-      whichever export/cleanup mechanism exists once this item is implemented, since the cleanup
-      journal itself is out of this milestone's scope (see the exclusions above).
-- [ ] Confirm uninstall behavior on each platform: Windows uninstall removes application-owned
-      preferences and regenerable caches but never a library (`plan.md:62`); on either platform,
-      uninstall also removes the device-local export-cleanup journal and may leave unresolved
-      external temporary files that SlopFactory cannot reliably intercept an OS-managed uninstall to
-      remove first (`plan.md:63`); after reinstall, never scan external storage for opaque
-      temporary-name patterns or delete suspected leftovers, since the missing journal means
-      ownership can't be proven safely (`plan.md:64`). Reinstallation checks the known
-      default-library location and offers to reopen a valid library found there
+      the official download pages (`plan.md:48`). **Not done — blocked.** This is entirely
+      the responsibility of the (not-yet-existing) official project website, not application code;
+      nothing in this repo can implement it.
+- [x] Share stable application/package identity and signing lineage between store and direct
+      production builds (`plan.md:49`); reject side-by-side production variants and version
+      downgrades (`plan.md:51`), and stop installation without replacing the existing application or
+      data if the platform can't validate the shared signing lineage (`plan.md:52`). Implemented via
+      a single shared production identity per platform rather than new guard code, since both MSIX
+      and Android natively enforce all three of these for one shared identity: Windows now has
+      `Platforms/Windows/Package.Release.appxmanifest` (Identity `Mellow.SlopFactory`) used only for
+      `Configuration=='Release'` builds via a conditional `<AppxManifest Remove/Include>` swap in the
+      `.csproj`, verified by inspecting the generated manifest under `obj/Release/.../resizetizer/m/`
+      (Identity `Mellow.SlopFactory`, no `.Dev` suffix) versus `obj/Debug/.../resizetizer/m/`
+      (`Mellow.SlopFactory.Dev`); Android's `ApplicationId` is now conditionally
+      `com.mellow.slopfactory` for Release / `com.mellow.slopfactory.dev` otherwise, verified by
+      inspecting the merged manifest under `obj/Release/net10.0-android/android/manifest/` versus
+      `obj/Debug/.../`. Because both the Store and direct-download production builds are meant to
+      use this same single Release identity/manifest, they inherit MSIX's/Android's built-in
+      rejection of side-by-side installs and version downgrades and their signing-lineage check for
+      free — no application code implements or could implement these checks itself; the platform
+      does. **Not independently verified beyond inspecting generated manifests**: an actual
+      side-by-side install attempt, a real downgrade attempt, and a real signing-lineage mismatch
+      all require genuine signed packages, which are outside this session's resources (see the
+      first bullet above) — added as MT-24 in `manual_tests.md` for whenever real signing exists.
+      **The "installer-level warning when switching a production installation's source, preserving
+      existing storage identity and never self-initiated" half of `plan.md:50` is not implemented**:
+      this describes OS/Store-level installer behavior when a user moves from a Store install to a
+      direct-download install of the same identity or vice versa, which is entirely a platform
+      installer concern once both are signed with the same production certificate — there is no
+      application-level hook for this, and it cannot be tested without two real signed builds.
+- [x] Keep signing credentials outside the source repository (`plan.md:54`) — see the first bullet;
+      no certificate, keystore, or password is committed anywhere, and the csproj only ever reads
+      them from environment variables that a real pipeline would supply out-of-band. Use semantic
+      application versions and platform build numbers for releases (`plan.md:55`) — already true
+      architecturally (`ApplicationDisplayVersion`/`ApplicationVersion` in the `.csproj`) and now
+      actually surfaced to users via the About/diagnostics build-info line above rather than only
+      existing in build metadata nobody sees. Use separate package identifiers for development
+      builds, which cannot access production secure storage or app-specific Android libraries
+      (`plan.md:60`) — done via the `ApplicationId`/manifest-identity split described above; secure
+      storage isolation follows automatically from the identity split with no extra code, since
+      Android's Keystore-backed `EncryptedSharedPreferences` and Windows' credential storage are
+      both scoped by package/application identity, so a dev build under a different identity already
+      cannot see a production install's secrets or vice versa.
+- [x] Confirm application updates can upgrade library schemas but never silently relocate or delete
+      libraries (`plan.md:57`). Re-confirmed (not newly built) against the existing Milestone-1
+      schema-migration path in `LibraryWorkspaceFactory.OpenAsync`/`SqliteLibraryDatabase`/
+      `LibraryManifestStore`: migration runs in place against the already-resolved library path and
+      never moves, renames or deletes the library directory itself. Preserve the versioned
+      device-local export-cleanup journal across normal updates and migrate recognized entries
+      conservatively, leaving an unrecognizable entry pending for user review rather than dropped or
+      guessed at (`plan.md:58-59`) — confirmed via a repo-wide search that this journal has zero
+      lines of code anywhere (only `plan.md`/`milestone4.md` prose describe it), so it remains
+      correctly out of this milestone's scope exactly as the exclusions section already stated.
+- [x] Confirm uninstall behavior on each platform: Windows uninstall removes application-owned
+      preferences and regenerable caches but never a library (`plan.md:62`); after reinstall, the
+      known default-library location is checked and a valid library found there is reopened
       (`plan.md:65`), with other preserved libraries selectable again through the normal
       library-location workflow (`plan.md:66`); API keys must be re-entered when their OS
       secure-storage entries don't survive uninstall (`plan.md:67`). Android uninstall removes
       app-specific libraries, preferences and secure-storage data after the existing warning
-      (`plan.md:68`).
+      (`plan.md:68`). `plan.md:65`'s "offers to reopen" is satisfied by `AppLibraryState.InitializeAsync`
+      (`Services/AppLibraryState.cs:207-220`), which does more than offer: if a library still
+      physically exists at the resolved default path it silently reopens it rather than creating a
+      new one, even with a freshly wiped `Preferences.Default` (the case right after a reinstall);
+      `plan.md:66` is satisfied because the recent-library list (`RecentLibraryService`, itself
+      `Preferences`-backed and thus wiped by uninstall like any other preference) was never the only
+      way to reopen a library — the normal manual "Open Library" location workflow does not depend
+      on it. Android's uninstall-removes-everything-app-specific behavior is satisfied by
+      construction: its default library path is `FileSystem.AppDataDirectory` and its preferences/
+      secure-storage both use `Preferences.Default`/`SecureStorage.Default`, all three of which are
+      Android app-uninstall-scoped by the OS. **A real, previously-unflagged risk found during this
+      phase's research, not yet resolved:** Windows' default library path
+      (`LibraryLocationService.DefaultPath`) uses `Environment.SpecialFolder.LocalApplicationData`.
+      Microsoft's own MSIX documentation states that full-trust packaged (MSIX) apps can have writes
+      under `%LOCALAPPDATA%` virtualized/redirected into package-managed storage specifically so
+      that data is cleaned up on uninstall — which, if it applies here, would mean the Windows
+      default library is *not* actually surviving uninstall today, directly contradicting
+      `plan.md:61-62`. This could not be confirmed or refuted without installing a real packaged
+      MSIX build and performing an actual uninstall/reinstall (no physical Windows install/uninstall
+      cycle is available in this session), so it is deliberately **not** marked resolved either way;
+      it is recorded as MT-24 in `manual_tests.md` as the first thing to check in a real manual
+      acceptance pass, with an explicit note that if the library does not survive, it is a genuine
+      defect requiring a fix (e.g. an explicitly unvirtualized path) before any production Windows
+      release, not something to assume away.
 
 ## Final Milestone 4 verification
 

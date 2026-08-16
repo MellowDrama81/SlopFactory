@@ -948,4 +948,11 @@
   <data name="ReturnToApp" xml:space="preserve"><value>Return to App</value></data>
   <data name="TrayIconTooltip" xml:space="preserve"><value>SlopFactory — {0} running, {1} queued</value></data>
   <data name="KeepRunningSetting" xml:space="preserve"><value>Remember "Keep Running" when closing with active work</value></data>
+  <data name="AboutHeading" xml:space="preserve"><value>SlopFactory</value></data>
+  <data name="AboutIntro" xml:space="preserve"><value>Local-first AI media library</value></data>
+  <data name="AboutDescription" xml:space="preserve"><value>SlopFactory stores its library database and managed files on this device. Library content is not application-level encrypted.</value></data>
+  <data name="AboutBuildLine" xml:space="preserve"><value>{0} build {1} (build {2})</value></data>
+  <data name="AboutApplicationId" xml:space="preserve"><value>Application ID: {0}</value></data>
+  <data name="DownloadPageLink" xml:space="preserve"><value>Official download page</value></data>
+  <data name="BuildInformation" xml:space="preserve"><value>Build information</value></data>
 </root>

@@ -1,9 +1,26 @@
 @page "/about"
+@inject IAppBuildInfo BuildInfo
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
 
-<PageTitle>About · SlopFactory</PageTitle>
-<header class="page-header"><div><p class="eyebrow">About</p><h1>SlopFactory</h1><p class="muted">Development build 0.1.0</p></div></header>
+<PageTitle>@Strings["NavAbout"] · SlopFactory</PageTitle>
+<header class="page-header">
+    <div>
+        <p class="eyebrow">@Strings["NavAbout"]</p>
+        <h1>@Strings["AboutHeading"]</h1>
+        <p class="muted">@Strings["AboutBuildLine", BuildInfo.Channel, BuildInfo.DisplayVersion, BuildInfo.BuildNumber]</p>
+    </div>
+</header>
 <section class="panel prose">
-    <h2>Local-first AI media library</h2>
-    <p>SlopFactory stores its library database and managed files on this device. Library content is not application-level encrypted.</p>
-    <p>This development milestone implements configurable local libraries, managed imports and duplication, folders, text viewing and Edit as Copy, raster image viewing, user metadata, file links, schema upgrades, and recycle-bin recovery. Provider connections and generation are still planned.</p>
+    <h2>@Strings["AboutIntro"]</h2>
+    <p>@Strings["AboutDescription"]</p>
+</section>
+<section class="panel prose">
+    <h2>@Strings["BuildInformation"]</h2>
+    <p class="muted">@Strings["AboutApplicationId", BuildInfo.ApplicationId]</p>
+    @if (BuildInfo.DownloadPageUrl is { Length: > 0 } url)
+    {
+        <p><a href="@url" target="_blank" rel="noopener noreferrer">@Strings["DownloadPageLink"]</a></p>
+    }
 </section>
