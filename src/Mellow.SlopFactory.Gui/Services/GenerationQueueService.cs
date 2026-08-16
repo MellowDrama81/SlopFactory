@@ -251,8 +251,9 @@ public sealed class GenerationQueueService
     private readonly IRecoveryStagingService? _recoveryStaging;
     private readonly ILibraryAvailabilityProbe? _availabilityProbe;
     private readonly IDiagnosticsLogger? _diagnostics;
+    private readonly IBackgroundExecutionService? _backgroundExecution;
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, IDiagnosticsLogger? diagnostics = null)
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, IDiagnosticsLogger? diagnostics = null, IBackgroundExecutionService? backgroundExecution = null)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
@@ -265,6 +266,7 @@ public sealed class GenerationQueueService
         _recoveryStaging = recoveryStaging;
         _availabilityProbe = availabilityProbe;
         _diagnostics = diagnostics;
+        _backgroundExecution = backgroundExecution;
     }
 
     public event EventHandler? Changed;
@@ -1244,5 +1246,31 @@ public sealed class GenerationQueueService
     private static GenerationJobOutcome LocalFailureOutcome(QueuedJob job, string message) =>
         new(job.JobId, job.DraftId, null, message, false, DateTimeOffset.UtcNow);
 
-    private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+    private void RaiseChanged()
+    {
+        UpdateBackgroundExecution();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Starts/stops Android's foreground background-execution service (plan.md:263-272) to match
+    /// whether any job actually needs it — <see cref="GenerationJobPhase.Running"/> (actively
+    /// uploading/reading) or <see cref="GenerationJobPhase.Monitoring"/> (actively polling a
+    /// submitted async job). A merely <see cref="GenerationJobPhase.Queued"/> job needs no
+    /// background execution yet, matching plan.md:269's "used for active transfers rather than
+    /// indefinite provider-status polling." A no-op on every other platform
+    /// (<see cref="NullBackgroundExecutionService"/>).
+    /// </summary>
+    private void UpdateBackgroundExecution()
+    {
+        if (_backgroundExecution is null) return;
+        int running, monitoring;
+        lock (_gate)
+        {
+            running = _jobsById.Values.Count(job => job.Phase == GenerationJobPhase.Running);
+            monitoring = _jobsById.Values.Count(job => job.Phase == GenerationJobPhase.Monitoring);
+        }
+        if (running + monitoring > 0) _backgroundExecution.EnsureRunning($"{running + monitoring} generation(s) in progress");
+        else _backgroundExecution.StopRunning();
+    }
 }

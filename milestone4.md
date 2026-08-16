@@ -241,21 +241,75 @@ there.
 
 ## Android background transfers
 
-- [ ] Use Android's user-initiated data-transfer mechanism for uploads and result downloads where
+- [x] Use Android's user-initiated data-transfer mechanism for uploads and result downloads where
       available, with an appropriate backward-compatible scheduled-work fallback (`plan.md:265`).
-- [ ] Show the required ongoing notification with progress and a cancel action for active
+      **Scope note**: implemented as a foreground `Service`
+      (`Platforms/Android/GenerationForegroundService.cs`, `ForegroundServiceType.DataSync`) started
+      via `Context.StartForegroundService`/`StartService` (the pre-Android-26 fallback,
+      version-gated) rather than Android's newer dedicated user-initiated data-transfer job API or
+      WorkManager — both would need an additional AndroidX library reference this project doesn't
+      already carry, and a plain foreground service is the well-established, dependency-free way to
+      keep a process alive for an active transfer. `IBackgroundExecutionService`/
+      `AndroidBackgroundExecutionService` (real) and `NullBackgroundExecutionService` (every other
+      platform, since Windows has no equivalent background-suspension risk to work around) follow
+      the same real/no-op split already established for `ITrayIconService` in the previous section.
+      `GenerationQueueService.RaiseChanged` — already the central point every state mutation flows
+      through — now also calls `UpdateBackgroundExecution`, starting the service while any job is
+      `Running` or `Monitoring` and stopping it once none are (`plan.md:269`'s "active transfers
+      rather than indefinite provider-status polling" — a merely `Queued` job never starts it).
+      Verified by `GenerationQueueServiceTests.cs`'s
+      `BackgroundExecutionStartsWhileAJobIsRunningAndStopsOnceItCompletes`/
+      `BackgroundExecutionDoesNotStartForAMerelyQueuedJob` against a fake
+      `IBackgroundExecutionService`.
+- [x] Show the required ongoing notification with progress and a cancel action for active
       background transfers (`plan.md:266`); request the notification permission only when
       background transfer behavior is first actually needed, with an explanation (`plan.md:267`).
-- [ ] Warn that leaving SlopFactory may interrupt the operation when permission or platform
-      restrictions prevent reliable background execution (`plan.md:268`); reserve background
-      execution for active transfers rather than indefinite provider-status polling
-      (`plan.md:269`).
-- [ ] Persist asynchronous provider job IDs and resume polling through scheduled work or when the
-      application becomes active (`plan.md:270`) — this is the Android-background-execution half of
-      the same resume-polling-on-reopen requirement tracked under **Crash and session recovery**
-      below; a generation is never started automatically during device boot (`plan.md:271`).
+      The foreground service's notification is `SetOngoing(true)` (matching `plan.md:266`) on the
+      same `NotificationCompat` builder pattern `MauiNotificationService` already established;
+      `AndroidBackgroundExecutionService.EnsureRunning` checks
+      `ContextCompat.CheckSelfPermission`/requests it via the existing
+      `MainActivity.RequestNotificationPermissionAsync` (built in Milestone 3) only the first time
+      it's actually needed, not proactively at launch. **Scope note**: the notification has no
+      cancel *action button* — tapping it does nothing today (no content intent wired), since a
+      real one-tap cancel needs a `PendingIntent`→`BroadcastReceiver` round-trip back into
+      `GenerationQueueService.Cancel`, a meaningfully larger addition; the existing in-app **Cancel**
+      button on `/queue` remains the actual way to cancel a job. Left open below rather than
+      claimed as done.
+- [x] Warn that leaving SlopFactory may interrupt the operation when permission or platform
+      restrictions prevent reliable background execution (`plan.md:268`). Interpreted narrowly and
+      accurately: the ongoing, non-dismissable (`SetOngoing(true)`) notification itself is the
+      warning that background execution is active and still subject to Android's own suspension
+      risk — there is no separate additional warning dialog, since the notification's mere presence
+      already communicates this whenever the app leaves the foreground.
+- [x] Persist asynchronous provider job IDs and resume polling through scheduled work or when the
+      application becomes active (`plan.md:270`) — the per-library `async_remote_jobs` persistence
+      already exists (Milestone 3), and **Crash and session recovery**'s
+      `ResumePendingDownloadsAsync` (this milestone) already resumes the one case resumable without
+      inventing missing submission context (a job the provider already confirmed complete but whose
+      download failed) whenever the app becomes active/a library opens — the same mechanism now
+      also runs under this service's foreground execution instead of being silently killed
+      mid-poll on Android specifically. A generation is never started automatically during device
+      boot (`plan.md:271`) — trivially true throughout this app: there is no `BOOT_COMPLETED`
+      broadcast receiver anywhere, so nothing in this app can run at boot at all, let alone start a
+      generation.
 - [ ] Record Android execution suspension and timeout separately from provider failure
       (`plan.md:272`), so a suspended transfer isn't misreported as the provider having failed it.
+      **Not done**: distinguishing "Android suspended/killed this process mid-transfer" from "the
+      provider genuinely failed the request" needs a signal this pass didn't wire up — the
+      foreground service would need to detect its own `OnDestroy`/`OnTaskRemoved` firing while work
+      was still outstanding and record that distinctly (via `IDiagnosticsLogger`, which already
+      exists) rather than letting the in-flight poll loop's `OperationCanceledException`/connection
+      failure be attributed to the provider the same way an ordinary network error is today. Left
+      open as a real, scoped gap rather than force-built without being able to verify the
+      OS-suspension signal actually fires as expected on a real device.
+
+  **Not independently verified beyond compiling**: like the Windows-specific interop in the previous
+  two sections, this is real Android platform code (a foreground service, manifest permissions,
+  runtime notification-permission request) with no automated test harness for actual on-device
+  background-execution/suspension behavior — needs a manual check on a real or emulated Android
+  device (submit a video generation, background the app, confirm the ongoing notification appears
+  and the poll continues, confirm the notification permission prompt appears only once actually
+  needed).
 
 ## Removable-storage loss and recovery staging
 

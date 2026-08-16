@@ -46,6 +46,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<ITrayIconService, NullTrayIconService>();
 #endif
         builder.Services.AddSingleton<IWindowsExitCoordinator, WindowsExitCoordinator>();
+#if ANDROID
+        builder.Services.AddSingleton<IBackgroundExecutionService, AndroidBackgroundExecutionService>();
+#else
+        builder.Services.AddSingleton<IBackgroundExecutionService, NullBackgroundExecutionService>();
+#endif
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif

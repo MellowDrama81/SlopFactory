@@ -9,14 +9,14 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, bool autoStart = true)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, bool autoStart = true, IBackgroundExecutionService? backgroundExecution = null)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
         var adapter = new FakeProviderAdapter();
         preferences ??= new FakeAppPreferenceStore();
         energy ??= new FakeDeviceEnergyStateProvider();
-        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker, connectivity, recoveryStaging, availabilityProbe);
+        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker, connectivity, recoveryStaging, availabilityProbe, backgroundExecution: backgroundExecution);
         if (autoStart) queue.Start();
         return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
@@ -1557,6 +1557,48 @@ public sealed class GenerationQueueServiceTests
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
     }
 
+    [Fact]
+    public async Task BackgroundExecutionStartsWhileAJobIsRunningAndStopsOnceItCompletes()
+    {
+        using var temporary = new TemporaryDirectory();
+        var backgroundExecution = new FakeBackgroundExecutionService();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), backgroundExecution: backgroundExecution);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        Assert.True(backgroundExecution.IsRunning);
+
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+        Assert.False(backgroundExecution.IsRunning);
+    }
+
+    [Fact]
+    public async Task BackgroundExecutionDoesNotStartForAMerelyQueuedJob()
+    {
+        using var temporary = new TemporaryDirectory();
+        var backgroundExecution = new FakeBackgroundExecutionService();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), backgroundExecution: backgroundExecution);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        // The first job starts running (needs background execution); the second stays merely
+        // Queued behind it — plan.md:269's "active transfers", not indefinite queue waiting.
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+
+        Assert.True(backgroundExecution.IsRunning);
+        Assert.DoesNotContain("prompt2", adapter.InvokedPrompts);
+
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt2"));
+        adapter.Complete("prompt2", new TextGenerationResult(["result2"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-2") is not null);
+    }
+
     private sealed class FakeProviderAdapter : IProviderAdapter
     {
         private readonly object _gate = new();
@@ -1718,6 +1760,15 @@ public sealed class GenerationQueueServiceTests
     private sealed class FakeRecoveryStagingPathProvider(string directory) : IRecoveryStagingPathProvider
     {
         public string StagingDirectory => directory;
+    }
+
+    private sealed class FakeBackgroundExecutionService : IBackgroundExecutionService
+    {
+        public int EnsureRunningCallCount { get; private set; }
+        public int StopRunningCallCount { get; private set; }
+        public bool IsRunning { get; private set; }
+        public void EnsureRunning(string statusText) { EnsureRunningCallCount++; IsRunning = true; }
+        public void StopRunning() { StopRunningCallCount++; IsRunning = false; }
     }
 
     private sealed class FakeLibraryAvailabilityProbe : ILibraryAvailabilityProbe
