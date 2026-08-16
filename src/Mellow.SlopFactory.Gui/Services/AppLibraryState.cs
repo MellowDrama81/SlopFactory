@@ -171,6 +171,26 @@ public sealed class AppLibraryState : IAsyncDisposable
                 .Split(',', StringSplitOptions.RemoveEmptyEntries);
     }
 
+    /// <summary>Count of dirty-draft markers for any library, active or not — reads the same
+    /// device-wide preference key <see cref="LoadDirtyDraftIds"/> keeps current for the active
+    /// library, so it works for a library that's merely remembered too. Used to block
+    /// **Forget Library** while unreconciled emergency draft markers exist (plan.md:459).</summary>
+    public int GetDirtyDraftCount(string libraryId) =>
+        _preferences.ReadString(DirtyDraftsPreferenceKeyPrefix + libraryId, string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
+
+    /// <summary>**Delete Recovery Drafts and Forget**'s draft-side step (plan.md:461): clears every
+    /// dirty-draft marker for this library so **Forget Library** can proceed. Only removes the
+    /// device-local marker, never the library's own persisted draft content.</summary>
+    public void DeleteDirtyDraftsFor(string libraryId)
+    {
+        _preferences.WriteString(DirtyDraftsPreferenceKeyPrefix + libraryId, string.Empty);
+        if (Workspace?.Descriptor.LibraryId == libraryId)
+        {
+            DirtyDraftIds = [];
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public async Task InitializeAsync()
     {
         if (IsInitialized) return;

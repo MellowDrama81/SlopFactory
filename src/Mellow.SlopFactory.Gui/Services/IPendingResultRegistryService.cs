@@ -1,0 +1,31 @@
+namespace Mellow.SlopFactory.Gui.Services;
+
+/// <summary>
+/// A single staged provider result, per plan.md:322 ("library ID, provider type, connection ID,
+/// remote job ID and status, but never prompts or source content") extended with the minimum extra
+/// fields plan.md:329 requires the recovery-staging list to show (safe filename, media type, size,
+/// generation identifier, validation status). Deliberately carries no prompt, model settings or
+/// source-file content — only enough to let the user identify, preview, export or discard the file,
+/// and to link it back to its owning library and draft once that library is available again.
+/// </summary>
+public sealed record StagedResultEntry(
+    string Id,
+    string LibraryId,
+    string LibraryDisplayName,
+    string DraftId,
+    string SafeFileName,
+    string MediaType,
+    long ByteSize,
+    DateTimeOffset CreatedAt);
+
+/// <summary>Device-wide index of staged results — deliberately a thin registry of metadata only; the
+/// actual bytes live in <see cref="IRecoveryStagingPathProvider.StagingDirectory"/>, addressed by
+/// <see cref="StagedResultEntry.Id"/>. Mirrors <see cref="IRecentLibraryService"/>'s
+/// Preferences-backed JSON-list pattern, the closest existing precedent for a small device-wide
+/// record list.</summary>
+public interface IPendingResultRegistryService
+{
+    IReadOnlyList<StagedResultEntry> GetAll();
+    void Add(StagedResultEntry entry);
+    void Remove(string id);
+}

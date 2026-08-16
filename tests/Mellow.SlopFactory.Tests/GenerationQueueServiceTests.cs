@@ -9,14 +9,14 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
         var adapter = new FakeProviderAdapter();
         preferences ??= new FakeAppPreferenceStore();
         energy ??= new FakeDeviceEnergyStateProvider();
-        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker, connectivity);
+        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker, connectivity, recoveryStaging, availabilityProbe);
         queue.Start();
         return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
@@ -1206,6 +1206,69 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task AVideoResultIsStagedForRecoveryWhenItsLibraryBecomesUnavailableDuringTheFinalCommit()
+    {
+        using var temporary = new TemporaryDirectory();
+        var libraryPath = temporary.Child("library");
+        var stagingDirectory = temporary.Child("staging");
+        var registry = new FakePendingResultRegistryService();
+        var recoveryStaging = new RecoveryStagingService(registry, new FakeRecoveryStagingPathProvider(stagingDirectory));
+        var availabilityProbe = new FakeLibraryAvailabilityProbe();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(libraryPath, videoPollInterval: TimeSpan.FromMilliseconds(200), recoveryStaging: recoveryStaging, availabilityProbe: availabilityProbe);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-recovery";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null));
+
+        queue.Enqueue(Snapshot("draft-video-recovery", model.Id, "A cat skateboarding", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+        // The 200ms poll interval gives this a comfortable window before the first poll (which would
+        // otherwise commit successfully). Deleting the managed-files directory the commit writes
+        // into (not the SQLite database or the exclusively-locked .slopfactory.lock file, both of
+        // which Windows would refuse to touch while LibraryWorkspace holds them open) makes the
+        // write genuinely throw an IOException without any file-locking conflicts. The availability
+        // probe is a fake here rather than the real disk-based one, since the real probe doesn't
+        // check the managed-files directory specifically — this test is about the staging behavior
+        // once a storage exception AND an unavailable report coincide, not about reproducing every
+        // real-world way a volume disconnect could be detected.
+        Directory.Delete(Path.Combine(libraryPath, "media"), recursive: true);
+        availabilityProbe.IsAvailableValue = false;
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video-recovery") is not null, timeoutMs: 5000);
+        var outcome = queue.GetLastOutcomeForDraft("draft-video-recovery")!;
+        Assert.True(outcome.StagedForRecovery);
+        Assert.Null(outcome.Record);
+
+        var staged = Assert.Single(registry.GetAll());
+        Assert.Equal(workspace.Descriptor.LibraryId, staged.LibraryId);
+        Assert.Equal("draft-video-recovery", staged.DraftId);
+        Assert.Equal("video/mp4", staged.MediaType);
+        Assert.Equal(Mp4SignatureBytes.LongLength, staged.ByteSize);
+        Assert.Equal(Mp4SignatureBytes, await recoveryStaging.ReadBytesAsync(staged.Id));
+    }
+
+    [Fact]
+    public async Task RecoveryStagingServiceRoundTripsAndDiscardsStagedBytes()
+    {
+        using var temporary = new TemporaryDirectory();
+        var registry = new FakePendingResultRegistryService();
+        var service = new RecoveryStagingService(registry, new FakeRecoveryStagingPathProvider(temporary.Child("staging")));
+
+        var id = await service.StageAsync("library-1", "My Library", "draft-1", [1, 2, 3, 4], "result.mp4", "video/mp4");
+
+        var entry = Assert.Single(service.GetAll());
+        Assert.Equal(id, entry.Id);
+        Assert.Equal("library-1", entry.LibraryId);
+        Assert.Equal("My Library", entry.LibraryDisplayName);
+        Assert.Equal("result.mp4", entry.SafeFileName);
+        Assert.Equal(4, entry.ByteSize);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, await service.ReadBytesAsync(id));
+
+        await service.DiscardAsync(id);
+        Assert.Empty(service.GetAll());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReadBytesAsync(id));
+    }
+
+    [Fact]
     public async Task RecyclingASourceFilePausesAQueuedJobDependingOnItAndRestoringResumesIt()
     {
         using var temporary = new TemporaryDirectory();
@@ -1539,5 +1602,28 @@ public sealed class GenerationQueueServiceTests
         private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
         public string ReadString(string key, string defaultValue) => _values.TryGetValue(key, out var value) ? value : defaultValue;
         public void WriteString(string key, string value) => _values[key] = value;
+    }
+
+    private sealed class FakePendingResultRegistryService : IPendingResultRegistryService
+    {
+        private readonly List<StagedResultEntry> _entries = [];
+        public IReadOnlyList<StagedResultEntry> GetAll() => _entries.OrderByDescending(entry => entry.CreatedAt).ToArray();
+        public void Add(StagedResultEntry entry) => _entries.Add(entry);
+        public void Remove(string id) => _entries.RemoveAll(entry => entry.Id == id);
+    }
+
+    private sealed class FakeRecoveryStagingPathProvider(string directory) : IRecoveryStagingPathProvider
+    {
+        public string StagingDirectory => directory;
+    }
+
+    private sealed class FakeLibraryAvailabilityProbe : ILibraryAvailabilityProbe
+    {
+        public bool IsAvailableValue { get; set; } = true;
+        public bool IsAvailable(string path, string? expectedVolumeIdentity, out string failureStage)
+        {
+            failureStage = "root-missing";
+            return IsAvailableValue;
+        }
     }
 }

@@ -72,13 +72,19 @@ public sealed record GenerationQueueEntry(
     int? QueuePosition,
     bool NonRunnable = false);
 
+/// <param name="StagedForRecovery">True when a video result finished at the provider but could not
+/// be committed because its destination library's volume was unavailable, and the already-downloaded
+/// bytes were staged into device-wide recovery storage instead of being discarded (plan.md:323).
+/// <see cref="Record"/> is null in that case — the result exists only in recovery staging, not as a
+/// generation-history record, until the library returns and the user resolves it.</param>
 public sealed record GenerationJobOutcome(
     string JobId,
     string DraftId,
     GenerationRecord? Record,
     string? LocalErrorMessage,
     bool CancelledBeforeSubmission,
-    DateTimeOffset CompletedAt);
+    DateTimeOffset CompletedAt,
+    bool StagedForRecovery = false);
 
 public sealed class GenerationQueueService
 {
@@ -242,8 +248,10 @@ public sealed class GenerationQueueService
     private readonly IConnectionRateLimitTracker? _rateLimitTracker;
     private readonly HashSet<string> _rateLimitPumpScheduled = new(StringComparer.Ordinal);
     private readonly IDeviceConnectivityStateProvider? _connectivity;
+    private readonly IRecoveryStagingService? _recoveryStaging;
+    private readonly ILibraryAvailabilityProbe? _availabilityProbe;
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null)
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
@@ -253,6 +261,8 @@ public sealed class GenerationQueueService
         _videoPollInterval = videoPollInterval ?? DefaultVideoPollInterval;
         _rateLimitTracker = rateLimitTracker;
         _connectivity = connectivity;
+        _recoveryStaging = recoveryStaging;
+        _availabilityProbe = availabilityProbe;
     }
 
     public event EventHandler? Changed;
@@ -811,7 +821,8 @@ public sealed class GenerationQueueService
             var adapter = _adapterResolver.Resolve(connection.ProviderType);
             var apiKey = await _credentials.GetActiveAsync(job.Workspace.Descriptor.LibraryId, connection.Id, revisionId).ConfigureAwait(false);
 
-            GenerationRecord record;
+            GenerationRecord? record;
+            var stagedForRecovery = false;
             if (snapshot.Mode == GenerationMode.Image)
             {
                 IReadOnlyList<byte[]>? images = null;
@@ -844,7 +855,7 @@ public sealed class GenerationQueueService
             }
             else if (snapshot.Mode == GenerationMode.Video)
             {
-                record = await ExecuteVideoGenerationAsync(job, connection, model, apiKey, adapter, cancellationToken).ConfigureAwait(false);
+                (record, stagedForRecovery) = await ExecuteVideoGenerationAsync(job, connection, model, apiKey, adapter, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -881,14 +892,20 @@ public sealed class GenerationQueueService
                 record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceFileId, snapshot.AcceptedImprovementRecordId, snapshot.Settings, snapshot.SecondarySourceFileId, snapshot.TertiarySourceFileId, result?.SafetyBlockedCount ?? 0, cancellationToken).ConfigureAwait(false);
             }
 
-            return new GenerationJobOutcome(job.JobId, job.DraftId, record, null, false, DateTimeOffset.UtcNow);
+            return new GenerationJobOutcome(job.JobId, job.DraftId, record, null, false, DateTimeOffset.UtcNow, stagedForRecovery);
         }
         catch (OperationCanceledException)
         {
             return new GenerationJobOutcome(job.JobId, job.DraftId, null, null, CancelledBeforeSubmission: false, DateTimeOffset.UtcNow);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException or ObjectDisposedException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException or ObjectDisposedException or Microsoft.Data.Sqlite.SqliteException)
         {
+            // Microsoft.Data.Sqlite.SqliteException is caught here too: a genuine storage failure
+            // during the final commit's SQLite write throws that type directly (LibraryWorkspace's
+            // mutation wrapper does no exception translation), not IOException/SlopFactoryException —
+            // without this, such a failure would escape RunJobAsync's fire-and-forget call site as an
+            // unobserved task exception, silently losing already-decoded result bytes with no outcome
+            // recorded at all. A real gap found while adding recovery staging, not merely theoretical.
             return LocalFailureOutcome(job, exception.Message);
         }
     }
@@ -916,8 +933,15 @@ public sealed class GenerationQueueService
     /// per-connection concurrency cap while only polling for status.
     /// Known limitation, not yet addressed: polling does not resume automatically after an
     /// application restart — that needs separate queue-scheduler work tracked in milestone3.md.
+    /// If the final commit fails because the destination library's volume is disconnected
+    /// (checked via <see cref="ILibraryAvailabilityProbe"/> only once bytes are already in hand —
+    /// never for an ordinary provider/validation failure), the downloaded result files are staged
+    /// into device-wide recovery storage instead of being discarded (plan.md:322-334) and the
+    /// returned record is null with <c>StagedForRecovery</c> true. Both new dependencies are
+    /// optional constructor params — a harness that omits them gets the pre-recovery-staging
+    /// behavior (an ordinary local failure) unchanged.
     /// </summary>
-    private async Task<GenerationRecord> ExecuteVideoGenerationAsync(QueuedJob job, Connection connection, Model model, string? apiKey, IProviderAdapter adapter, CancellationToken cancellationToken)
+    private async Task<(GenerationRecord? Record, bool StagedForRecovery)> ExecuteVideoGenerationAsync(QueuedJob job, Connection connection, Model model, string? apiKey, IProviderAdapter adapter, CancellationToken cancellationToken)
     {
         var snapshot = job.Snapshot;
         var resultCount = Math.Max(1, snapshot.ResultCount);
@@ -1050,41 +1074,67 @@ public sealed class GenerationQueueService
                 {
                 }
             }
-            return cancelledRecord;
+            return (cancelledRecord, false);
         }
 
-        var record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, childErrorMessages: childErrorMessages, cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        foreach (var entry in submitted)
+        GenerationRecord? record;
+        var stagedForRecovery = false;
+        try
         {
-            // A download-failed job's position matches the shared commit path's own shortfall-slot
-            // assignment (committed files first, then one shortfall slot per childErrorMessages
-            // entry in order) — see downloadFailedMessageIndexByAsyncId's own comment above.
-            if (downloadFailedMessageIndexByAsyncId.TryGetValue(entry.AsyncRecordId, out var messageIndex))
+            record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, childErrorMessages: childErrorMessages, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (files.Count > 0 && _recoveryStaging is not null && _availabilityProbe is not null
+            && exception is IOException or Microsoft.Data.Sqlite.SqliteException
+            && !_availabilityProbe.IsAvailable(job.Workspace.Descriptor.RootPath, null, out _))
+        {
+            // The destination volume is gone — not some other storage fault, which is why the
+            // availability probe is checked only after catching a storage-shaped exception, never
+            // for an ordinary provider/validation failure. Stage every already-downloaded file
+            // instead of silently discarding real, already-completed provider work (plan.md:323).
+            foreach (var file in files)
             {
+                await _recoveryStaging.StageAsync(job.Workspace.Descriptor.LibraryId, job.Workspace.Descriptor.DisplayName, job.DraftId, file, $"video-result-{Guid.NewGuid():N}.mp4", "video/mp4", CancellationToken.None).ConfigureAwait(false);
+            }
+            record = null;
+            stagedForRecovery = true;
+        }
+
+        if (!stagedForRecovery)
+        {
+            foreach (var entry in submitted)
+            {
+                // A download-failed job's position matches the shared commit path's own
+                // shortfall-slot assignment (committed files first, then one shortfall slot per
+                // childErrorMessages entry in order) — see downloadFailedMessageIndexByAsyncId's own
+                // comment above.
+                if (downloadFailedMessageIndexByAsyncId.TryGetValue(entry.AsyncRecordId, out var messageIndex))
+                {
+                    try
+                    {
+                        await job.Workspace.LinkAsyncRemoteJobToGenerationResultAsync(entry.AsyncRecordId, record!.Id, files.Count + messageIndex, cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+                    catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
+                    {
+                        // Fall through and try to delete it instead — an un-linked row would
+                        // otherwise be invisible to Refresh Provider Status but still show up as an
+                        // unresolved job.
+                    }
+                }
                 try
                 {
-                    await job.Workspace.LinkAsyncRemoteJobToGenerationResultAsync(entry.AsyncRecordId, record.Id, files.Count + messageIndex, cancellationToken).ConfigureAwait(false);
-                    continue;
+                    await job.Workspace.DeleteAsyncRemoteJobAsync(entry.AsyncRecordId, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
                 {
-                    // Fall through and try to delete it instead — an un-linked row would otherwise be
-                    // invisible to Refresh Provider Status but still show up as an unresolved job.
+                    // The generation already committed above; failing to remove a now-stale
+                    // pending-job registry row is a harmless leftover, not a reason to report the
+                    // generation as failed.
                 }
-            }
-            try
-            {
-                await job.Workspace.DeleteAsyncRemoteJobAsync(entry.AsyncRecordId, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
-            {
-                // The generation already committed above; failing to remove a now-stale pending-job
-                // registry row is a harmless leftover, not a reason to report the generation as failed.
             }
         }
 
-        return record;
+        return (record, stagedForRecovery);
     }
 
     /// <summary>

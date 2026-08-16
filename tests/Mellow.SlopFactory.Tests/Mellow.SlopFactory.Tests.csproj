@@ -32,5 +32,8 @@
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IAppLifecycleState.cs" Link="Services\IAppLifecycleState.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\INotificationService.cs" Link="Services\INotificationService.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\GenerationNotificationCoordinator.cs" Link="Services\GenerationNotificationCoordinator.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IRecoveryStagingPathProvider.cs" Link="Services\IRecoveryStagingPathProvider.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IPendingResultRegistryService.cs" Link="Services\IPendingResultRegistryService.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IRecoveryStagingService.cs" Link="Services\IRecoveryStagingService.cs" />
   </ItemGroup>
 </Project>

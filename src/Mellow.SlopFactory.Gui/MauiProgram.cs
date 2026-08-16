@@ -23,6 +23,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISensitiveRevealSessionService, SensitiveRevealSessionService>();
         builder.Services.AddSingleton<IncomingImportService>();
         builder.Services.AddSingleton<ManagedContentWatchService>();
+        builder.Services.AddSingleton<IRecoveryStagingPathProvider, MauiRecoveryStagingPathProvider>();
+        builder.Services.AddSingleton<IPendingResultRegistryService, PendingResultRegistryService>();
+        builder.Services.AddSingleton<IRecoveryStagingService, RecoveryStagingService>();
         builder.Services.AddSingleton<GenerationQueueService>();
         builder.Services.AddSingleton<IntegrityScanRecommendationService>();
         builder.Services.AddSingleton<IPlatformFileActionService, PlatformFileActionService>();

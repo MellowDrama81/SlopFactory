@@ -907,4 +907,20 @@
   <data name="BackgroundActivityItem" xml:space="preserve"><value>{0}: {1} active generation(s)</value></data>
   <data name="SwitchLibrary" xml:space="preserve"><value>Switch to this library</value></data>
   <data name="LibraryHasActiveWorkNotice" xml:space="preserve"><value>This library has active generation work and cannot be forgotten until it finishes.</value></data>
+  <data name="RecoveryStagingPageTitle" xml:space="preserve"><value>Recovery staging · SlopFactory</value></data>
+  <data name="RecoveryStagingHeading" xml:space="preserve"><value>Recovery staging</value></data>
+  <data name="RecoveryStagingDescription" xml:space="preserve"><value>Provider results that finished while their destination library was unavailable are held here temporarily so they are not lost.</value></data>
+  <data name="RecoveryStagingEmpty" xml:space="preserve"><value>No results are currently staged for recovery.</value></data>
+  <data name="RecoveryStagingEntrySummary" xml:space="preserve"><value>{0} · {1} · staged {2}</value></data>
+  <data name="ExportCopy" xml:space="preserve"><value>Export Copy</value></data>
+  <data name="ExportCopySucceeded" xml:space="preserve"><value>A copy was exported. The staged result remains here until it is discarded.</value></data>
+  <data name="Discard" xml:space="preserve"><value>Discard</value></data>
+  <data name="ConfirmDiscardStagedResult" xml:space="preserve"><value>Confirm discarding this staged result</value></data>
+  <data name="DiscardStagedResultWarning" xml:space="preserve"><value>This permanently deletes the recovered bytes. Export a copy first if you want to keep them.</value></data>
+  <data name="ResultStagedForRecoveryNotice" xml:space="preserve"><value>The provider finished this result, but its destination library was unavailable, so it was staged for recovery instead of being lost.</value></data>
+  <data name="NavRecoveryStaging" xml:space="preserve"><value>Recovery staging</value></data>
+  <data name="LibraryHasRecoveryDataNotice" xml:space="preserve"><value>This library has unreconciled draft edits or staged provider results and cannot be forgotten until they are resolved.</value></data>
+  <data name="DeleteRecoveryDataAndForget" xml:space="preserve"><value>Delete Recovery Data and Forget</value></data>
+  <data name="ConfirmDeleteRecoveryDataAndForget" xml:space="preserve"><value>Confirm deleting recovery data and forgetting this library</value></data>
+  <data name="DeleteRecoveryDataAndForgetWarning" xml:space="preserve"><value>This permanently deletes {0}'s device-local draft-edit markers and any staged provider results, then forgets the library. Export any staged result first if you want to keep it. The library's own content is not affected.</value></data>
 </root>

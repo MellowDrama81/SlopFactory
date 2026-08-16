@@ -433,6 +433,11 @@ else
                 {
                     <p class="muted">@Strings["GenerationCancelledBeforeSubmission"]</p>
                 }
+                else if (outcome.StagedForRecovery)
+                {
+                    <p class="notice">@Strings["ResultStagedForRecoveryNotice"]</p>
+                    <a class="ghost" href="/recovery-staging">@Strings["NavRecoveryStaging"]</a>
+                }
                 else if (outcome.Record is null && outcome.LocalErrorMessage is null)
                 {
                     <p class="muted">@Strings["GenerationCancelledByUser"]</p>

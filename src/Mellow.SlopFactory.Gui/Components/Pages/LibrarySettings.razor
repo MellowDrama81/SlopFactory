@@ -9,6 +9,7 @@
 @inject GenerationNotificationCoordinator NotificationCoordinator
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject IPlatformFileActionService PlatformFiles
+@inject IRecoveryStagingService RecoveryStaging
 @using Mellow.SlopFactory.Application
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -155,10 +156,15 @@
                     <button class="ghost" disabled="@(active || !available || _busy || _scanning)" @onclick="() => OpenRecentAsync(library)">@Strings["Open"]</button>
                     @if (!available) { <button class="ghost" disabled="@(_busy || _scanning)" @onclick="() => RelinkRecentAsync(library)">@Strings["RelinkUsingLocation"]</button> }
                     @if (OperatingSystem.IsWindows() && library.State == RememberedLibraryState.Corrupt && Directory.Exists(library.Path)) { <button class="ghost" @onclick="() => OpenRememberedLocationAsync(library.Path)">@Strings["OpenLocation"]</button> }
-                    <button class="ghost danger" disabled="@(active || HasActiveWork(library) || _busy || _scanning)" @onclick="() => _forgetCandidate = library">@Strings["Forget"]</button>
+                    <button class="ghost danger" disabled="@(active || HasActiveWork(library) || HasDirtyDrafts(library) || HasStagedResults(library) || _busy || _scanning)" @onclick="() => _forgetCandidate = library">@Strings["Forget"]</button>
                     @if (!active && HasActiveWork(library))
                     {
                         <small class="muted">@Strings["LibraryHasActiveWorkNotice"]</small>
+                    }
+                    @if (!active && !HasActiveWork(library) && (HasDirtyDrafts(library) || HasStagedResults(library)))
+                    {
+                        <small class="muted">@Strings["LibraryHasRecoveryDataNotice"]</small>
+                        <button class="ghost danger" disabled="@_busy" @onclick="() => _forceForgetCandidate = library">@Strings["DeleteRecoveryDataAndForget"]</button>
                     }
                 </li>
             }
@@ -170,6 +176,12 @@
     {
         <div class="inline-form" role="dialog" aria-label="@Strings["ConfirmForgetLibrary"]"><span>@Strings["ForgetLibraryWarning", _forgetCandidate.DisplayName]</span><button class="danger" @onclick="ForgetRecentAsync">@Strings["ForgetLibrary"]</button>
             <button class="secondary" @onclick="() => _forgetCandidate = null">@Strings["Cancel"]</button>
+        </div>
+    }
+    @if (_forceForgetCandidate is not null)
+    {
+        <div class="inline-form" role="dialog" aria-label="@Strings["ConfirmDeleteRecoveryDataAndForget"]"><span>@Strings["DeleteRecoveryDataAndForgetWarning", _forceForgetCandidate.DisplayName]</span><button class="danger" @onclick="ForceForgetRecentAsync">@Strings["DeleteRecoveryDataAndForget"]</button>
+            <button class="secondary" @onclick="() => _forceForgetCandidate = null">@Strings["Cancel"]</button>
         </div>
     }
 </section>
@@ -272,6 +284,7 @@
     private PreviewRebuildProgress? _previewRebuildProgress;
     private IReadOnlyList<RecentLibrary> _recentLibraries = [];
     private RecentLibrary? _forgetCandidate;
+    private RecentLibrary? _forceForgetCandidate;
     private string? _adoptCandidatePath;
     private string? _cloudSyncCandidatePath;
     private bool _confirmOpenLocation;
@@ -499,13 +512,44 @@
     /// forgotten, whether it is the currently active library or one kept open in the background.</summary>
     private bool HasActiveWork(RecentLibrary library) => LibraryState.HasActiveWorkFor(library.LibraryId);
 
+    /// <summary>plan.md:459 — blocks ordinary Forget Library while unreconciled emergency draft
+    /// markers exist for this library, since they may be the only record that unsaved work exists.</summary>
+    private bool HasDirtyDrafts(RecentLibrary library) => LibraryState.GetDirtyDraftCount(library.LibraryId) > 0;
+
+    /// <summary>plan.md:463 — blocks ordinary Forget Library while completed provider results remain
+    /// staged for recovery for this library.</summary>
+    private bool HasStagedResults(RecentLibrary library) => RecoveryStaging.GetAll().Any(entry => entry.LibraryId == library.LibraryId);
+
     private async Task ForgetRecentAsync()
     {
-        if (_forgetCandidate is null || IsActive(_forgetCandidate) || HasActiveWork(_forgetCandidate)) return;
+        if (_forgetCandidate is null || IsActive(_forgetCandidate) || HasActiveWork(_forgetCandidate) || HasDirtyDrafts(_forgetCandidate) || HasStagedResults(_forgetCandidate)) return;
         RecentLibraries.Forget(_forgetCandidate.LibraryId, _forgetCandidate.Path);
         await PreviewCache.ForgetLibraryAsync(_forgetCandidate.LibraryId);
         _message = Strings["ForgotLibrary", _forgetCandidate.DisplayName];
         _forgetCandidate = null;
+        ReloadRecentLibraries();
+        await ReloadCacheStatusAsync();
+    }
+
+    /// <summary>**Delete Recovery Drafts and Forget** / **Discard Staged Results and Forget**
+    /// combined (plan.md:460-461, 464-465): explicitly clears whichever device-local recovery data
+    /// blocks the ordinary Forget above, then completes the normal forget workflow. Never touches the
+    /// library's own database — dirty-draft markers and staged results are both device-local-only
+    /// state, not library content, matching plan.md:462's "does not enter the library recycle bin"
+    /// rule (there is nothing library-side to recycle).</summary>
+    private async Task ForceForgetRecentAsync()
+    {
+        if (_forceForgetCandidate is null || IsActive(_forceForgetCandidate) || HasActiveWork(_forceForgetCandidate)) return;
+        var libraryId = _forceForgetCandidate.LibraryId;
+        LibraryState.DeleteDirtyDraftsFor(libraryId);
+        foreach (var entry in RecoveryStaging.GetAll().Where(entry => entry.LibraryId == libraryId).ToArray())
+        {
+            await RecoveryStaging.DiscardAsync(entry.Id);
+        }
+        RecentLibraries.Forget(libraryId, _forceForgetCandidate.Path);
+        await PreviewCache.ForgetLibraryAsync(libraryId);
+        _message = Strings["ForgotLibrary", _forceForgetCandidate.DisplayName];
+        _forceForgetCandidate = null;
         ReloadRecentLibraries();
         await ReloadCacheStatusAsync();
     }

@@ -207,41 +207,100 @@ there.
 
 ## Removable-storage loss and recovery staging
 
-- [ ] Add a minimal device-wide pending-job registry storing library ID, provider type, connection
-      ID, remote job ID and status only — never prompts or source content (`plan.md:322`).
-- [ ] When a provider result becomes available while its destination volume is disconnected,
-      download it into temporary internal app-specific recovery storage before its remote URL
-      expires (`plan.md:323`); recovery staging is identified as temporary and is never treated as
-      another library (`plan.md:324`). When the intended library returns, move the staged result
-      into it atomically and delete the staged copy (`plan.md:325`); if internal storage is
-      insufficient, retain remote job details and retry the download only while the provider result
-      remains available (`plan.md:326`).
-- [ ] Notify the user that a result is awaiting its library and may expire remotely
-      (`plan.md:327`); a staged result is never placed into a different library automatically and
-      can be discarded explicitly (`plan.md:328`).
-- [ ] Add a recovery-staging list showing each completed result's safe filename, media type, size,
-      generation identifier and validation status (`plan.md:329`), previewable through the normal
-      sandboxed viewer and media-decoding safety limits (`plan.md:330`).
-- [ ] Add **Export Copy**, writing staged bytes to a user-selected external destination without
-      creating a library record or changing the intended library (`plan.md:331`); exporting does
-      not mark a staged result as reconciled or delete it — it stays staged until the intended
-      library accepts it or the user explicitly discards it (`plan.md:332`), and a failed or
-      cancelled export leaves the staged copy unchanged (`plan.md:333`).
-- [ ] Remove a pending-job registry entry only after successful reconciliation or explicit discard
-      (`plan.md:334`).
-- [ ] Block ordinary **Forget Library** while completed provider results remain in internal
-      recovery staging for that unavailable library (`plan.md:463`), offering cancel/reconnect/
-      reconcile or **Discard Staged Results and Forget** (`plan.md:464`), which lists each affected
-      generation and staged result, warns the recovered bytes will be permanently lost, and requires
-      explicit confirmation before deleting the temporary files (`plan.md:465`). Staged provider
-      results are never deleted merely because the library is forgotten or unavailable
-      (`plan.md:466`).
+- [x] Add a minimal device-wide registry of staged results — library ID, a cached display name (so
+      the UI can show something meaningful even while that library is unavailable), draft ID, safe
+      filename, media type, byte size and creation time (`plan.md:322`, extended with the fields
+      `plan.md:329` requires the staging list to show — never a prompt, model settings or source
+      content). Implemented as `IPendingResultRegistryService`/`PendingResultRegistryService`
+      (`src/Mellow.SlopFactory.Gui/Services/IPendingResultRegistryService.cs` +
+      `PendingResultRegistryService.cs`), mirroring `IRecentLibraryService`'s existing
+      Preferences-backed JSON-list pattern — the closest existing precedent for a small device-wide
+      record list, read-modify-write under one in-process lock. **Scope note**: `plan.md:322`
+      describes this as a registry of every outstanding async job (so a minimal cross-check survives
+      even if a library's own per-library `async_remote_jobs` table becomes unreachable); this pass
+      only creates an entry reactively, at the exact moment a result would otherwise be lost (see
+      below), rather than proactively mirroring every submitted async job device-wide from the
+      moment of submission — a full parallel mirror of every in-flight job is a larger, separate
+      piece of bookkeeping not attempted here.
+- [x] When a video result finishes at the provider but its destination volume is disconnected,
+      stage the already-downloaded bytes into device-wide app-specific recovery storage instead of
+      discarding them (`plan.md:323`). `IRecoveryStagingPathProvider`/`MauiRecoveryStagingPathProvider`
+      supplies the physical folder (`FileSystem.Current.AppDataDirectory/recovery-staging`);
+      `IRecoveryStagingService`/`RecoveryStagingService` combines it with the registry above.
+      `GenerationQueueService.ExecuteVideoGenerationAsync`'s final commit is now wrapped: on catching
+      an `IOException`/`Microsoft.Data.Sqlite.SqliteException` with at least one downloaded file in
+      hand, it checks `ILibraryAvailabilityProbe.IsAvailable` for the destination library's root —
+      only if that reports unavailable does it stage the files (an ordinary validation/provider
+      failure, or a storage error while the library is genuinely still available, is never
+      staged — it falls through to the existing `LocalFailureOutcome` path unchanged).
+      `GenerationJobOutcome` gained a `StagedForRecovery` flag so `Generate.razor`'s run cards show a
+      distinct notice with a link to the new `/recovery-staging` page instead of an ordinary failure
+      message. **Real bug found and fixed while wiring this in**: `ExecuteAsync`'s catch clause only
+      listed `IOException`/`UnauthorizedAccessException`/`SlopFactoryException`/`ObjectDisposedException`
+      — a genuine storage failure during the final commit's SQLite write throws
+      `Microsoft.Data.Sqlite.SqliteException` directly (the mutation wrapper does no exception
+      translation), which escaped as an unobserved task exception from `RunJobAsync`'s fire-and-forget
+      call site, silently losing the outcome entirely with no notification at all. Now caught
+      uniformly, matching the existing `PermanentlyDeleteFileCoreAsync`/`PermanentlyDeleteFolderCoreAsync`
+      precedent for translating that same exception type. **Scope note**: only the video path is
+      wired up — Image/Audio/Text's synchronous commits could hit the same failure mode, but video is
+      where an unavailable-mid-flight library is most realistic (it is the one asynchronous,
+      long-running mode), and the staging helper (`IRecoveryStagingService.StageAsync`) is written
+      generically enough to extend to the other modes later without rework.
+- [x] Add **Export Copy** (`plan.md:331`), writing staged bytes to a user-selected external
+      destination without creating a library record or changing the intended library; exporting
+      never marks a staged result as reconciled or deletes it (`plan.md:332`), and a failed or
+      cancelled export leaves the staged copy unchanged (`plan.md:333`, since
+      `IRecoveryStagingService.ReadBytesAsync` never mutates the registry — only
+      `DiscardAsync`/`Remove` do). `IPlatformFileActionService` gained `ExportRawBytesAsync` (same
+      Windows `FileSavePicker`/Android `CreateDocumentAsync` idiom as the existing `ExportAsync`,
+      but for bytes that don't belong to any `FileRecord`/`ILibraryWorkspace`, which the staged
+      bytes never do until reconciled). Surfaced on a new **Recovery staging** page
+      (`RecoveryStaging.razor`, `/recovery-staging`, linked from the main nav and from a staged run
+      card) grouped by library display name, with **Discard** as the explicit-confirmation-gated
+      deletion action (`plan.md:328`, `334`).
+- [x] Block ordinary **Forget Library** while completed provider results remain staged for that
+      library (`plan.md:463`), or while its unreconciled dirty-draft markers exist
+      (`plan.md:459` — see the correction below), offering a combined **Delete Recovery Data and
+      Forget** action (`LibrarySettings.razor`) that discards every staged result for that library
+      and clears its dirty-draft markers before completing the normal forget workflow
+      (`plan.md:464-465`, `461`). Staged results and dirty-draft markers are never removed merely
+      because the library is forgotten or unavailable on their own (`plan.md:466`) — only this
+      explicit action removes them.
 
-  **Relationship to existing Session Recovery work**: `milestone2.md` already shipped the
-  draft/autosave half of Session Recovery (dirty-draft marker, autosave, emergency draft snapshot
-  for an unavailable library, and the parallel `Forget Library` block/`Delete Recovery Drafts and
-  Forget` path for unreconciled draft snapshots, `plan.md:459-462`). This section is the separate
-  *result*-staging half plan.md defines alongside it, which has no implementation yet.
+  **Correction to milestone4.md's original planning note**: this section originally claimed
+  `milestone2.md` already shipped "the parallel `Forget Library` block/`Delete Recovery Drafts and
+  Forget` path for unreconciled draft snapshots." That was wrong — checked directly against
+  `LibrarySettings.razor` and `AppLibraryState.cs` before starting this phase: Milestone 2 shipped
+  only the dirty-draft *marker* (`AppLibraryState.DirtyDraftIds`, IDs only, no content) and a bare
+  **Dismiss** button in `MainLayout.razor`; there was no Forget-Library gating tied to it at all
+  until this phase added `AppLibraryState.GetDirtyDraftCount`/`DeleteDirtyDraftsFor` and wired them
+  into the same **Delete Recovery Data and Forget** action built for staged results above. The
+  planning-time description was describing `plan.md`'s spec, not shipped code — corrected here per
+  this project's standing practice of fixing a prior inaccuracy as soon as it's found, rather than
+  carrying it forward.
+
+  **Not done this pass**: automatic reconciliation — "when the intended library returns, move the
+  staged result into it atomically and delete the staged copy" (`plan.md:325`). The device-wide
+  registry deliberately excludes the prompt and model settings needed to recreate a normal
+  generation-history record (matching `plan.md:322`'s privacy constraint), and
+  `RecordMediaGenerationResultAsync` requires exactly that context to commit one — so an automatic,
+  provenance-preserving reconcile-on-return needs new design (what a staged result becomes once
+  imported without a prompt to attach it to) rather than being a bounded extension of what shipped
+  here. **Export Copy** and **Discard** are real, working resolutions in the meantime; a dedicated
+  reconcile action is left open below rather than force-fit into this pass.
+  Retry-while-still-available (`plan.md:326`) and the "notify the user a result is awaiting its
+  library" surfacing (`plan.md:327`) beyond the recovery-staging page's own list are the same kind
+  of follow-on, left open together.
+
+- [ ] Add automatic reconciliation once the intended library becomes available again — move the
+      staged result into it and delete the staged copy (`plan.md:325`), retry the staged download
+      while internal storage was insufficient and the provider result remains available
+      (`plan.md:326`), and notify the user proactively that a result is awaiting its library
+      (`plan.md:327`) rather than only showing it on the Recovery staging page when visited. See the
+      "Not done this pass" note above for why this needs new design (a provenance-preserving import
+      path that doesn't depend on the prompt/settings context the device-wide registry deliberately
+      never retains) rather than being an extension of what shipped in this phase.
 
 ## Crash and session recovery
 

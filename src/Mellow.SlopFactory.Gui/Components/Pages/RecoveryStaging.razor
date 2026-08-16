@@ -1,0 +1,105 @@
+@page "/recovery-staging"
+@inject IRecoveryStagingService Staging
+@inject IPlatformFileActionService PlatformFiles
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+
+<PageTitle>@Strings["RecoveryStagingPageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">@Strings["Recovery"]</p>
+        <h1>@Strings["RecoveryStagingHeading"]</h1>
+        <p class="muted">@Strings["RecoveryStagingDescription"]</p>
+    </div>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice" role="status">@_message</div>
+}
+
+@if (_entries.Count == 0)
+{
+    <div class="empty-panel"><p>@Strings["RecoveryStagingEmpty"]</p></div>
+}
+else
+{
+    @foreach (var group in _entries.GroupBy(entry => entry.LibraryDisplayName))
+    {
+        <section class="panel">
+            <h2>@group.Key</h2>
+            <ul class="metadata-list">
+                @foreach (var entry in group)
+                {
+                    <li>
+                        <div>
+                            <strong>@entry.SafeFileName</strong>
+                            <small>@Strings["RecoveryStagingEntrySummary", entry.MediaType, FormatSize(entry.ByteSize), entry.CreatedAt.ToLocalTime().ToString("g")]</small>
+                        </div>
+                        <button class="ghost" disabled="@_busy" @onclick="() => ExportCopyAsync(entry)">@Strings["ExportCopy"]</button>
+                        @if (_discardCandidate == entry.Id)
+                        {
+                            <span role="dialog" aria-label="@Strings["ConfirmDiscardStagedResult"]">
+                                <span>@Strings["DiscardStagedResultWarning"]</span>
+                                <button class="danger" disabled="@_busy" @onclick="() => DiscardAsync(entry.Id)">@Strings["Discard"]</button>
+                                <button class="secondary" disabled="@_busy" @onclick="() => _discardCandidate = null">@Strings["Cancel"]</button>
+                            </span>
+                        }
+                        else
+                        {
+                            <button class="ghost danger" disabled="@_busy" @onclick="() => _discardCandidate = entry.Id">@Strings["Discard"]</button>
+                        }
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+}
+
+@code {
+    private IReadOnlyList<StagedResultEntry> _entries = [];
+    private string? _discardCandidate;
+    private bool _busy;
+    private string? _message;
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload() => _entries = Staging.GetAll();
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1_048_576 => $"{bytes / 1_048_576.0:0.#} MiB",
+        >= 1024 => $"{bytes / 1024.0:0.#} KiB",
+        _ => $"{bytes} B"
+    };
+
+    private async Task ExportCopyAsync(StagedResultEntry entry)
+    {
+        _busy = true;
+        try
+        {
+            var bytes = await Staging.ReadBytesAsync(entry.Id);
+            var exported = await PlatformFiles.ExportRawBytesAsync(bytes, entry.SafeFileName, entry.MediaType);
+            _message = exported ? Strings["ExportCopySucceeded"].Value : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardAsync(string id)
+    {
+        _busy = true;
+        try
+        {
+            await Staging.DiscardAsync(id);
+            _discardCandidate = null;
+            Reload();
+        }
+        finally { _busy = false; }
+    }
+}

@@ -9,6 +9,11 @@ public interface IPlatformFileActionService
     bool HasPermissionBlock { get; }
     Task PickRecursiveImportFolderAsync(bool includeHiddenFiles, CancellationToken cancellationToken = default);
     Task<FileExportResult> ExportAsync(ILibraryWorkspace workspace, FileRecord file, bool changedBytes, CancellationToken cancellationToken = default);
+    /// <summary>Writes arbitrary bytes not owned by any library to a user-chosen destination — used
+    /// by recovery staging's **Export Copy** (plan.md:331), which has no <see cref="FileRecord"/> or
+    /// <see cref="ILibraryWorkspace"/> to export from. Returns true if the user completed the save,
+    /// false if they cancelled the picker.</summary>
+    Task<bool> ExportRawBytesAsync(byte[] bytes, string suggestedFileName, string mediaType, CancellationToken cancellationToken = default);
     Task OpenExternallyAsync(ILibraryWorkspace workspace, FileRecord file, CancellationToken cancellationToken = default);
     void OpenApplicationSettings();
 }
@@ -93,6 +98,40 @@ public sealed class PlatformFileActionService(IncomingImportService incoming) : 
         finally { try { if (File.Exists(temporary)) File.Delete(temporary); } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { } }
 #else
         return await Task.FromResult(new FileExportResult(file.Id, string.Empty, FileExportOutcome.Failed, 0, null, "Export is unavailable on this platform."));
+#endif
+    }
+
+    public async Task<bool> ExportRawBytesAsync(byte[] bytes, string suggestedFileName, string mediaType, CancellationToken cancellationToken = default)
+    {
+#if WINDOWS
+        var extension = Path.GetExtension(suggestedFileName);
+        if (string.IsNullOrWhiteSpace(extension)) extension = ".bin";
+        var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedFileName = Path.GetFileNameWithoutExtension(suggestedFileName) };
+        picker.FileTypeChoices.Add("Recovered file", [extension]);
+        InitializeWindowsPicker(picker);
+        var destination = await picker.PickSaveFileAsync();
+        if (destination is null) return false;
+        await File.WriteAllBytesAsync(destination.Path, bytes, cancellationToken).ConfigureAwait(false);
+        return true;
+#elif ANDROID
+        var activity = MainActivity.Current ?? throw new InvalidOperationException("The Android activity is unavailable.");
+        var uri = await activity.CreateDocumentAsync(suggestedFileName, mediaType, cancellationToken).ConfigureAwait(false);
+        if (uri is null) return false;
+        try
+        {
+            await using var destination = activity.ContentResolver?.OpenOutputStream(uri, "wt") ?? throw new IOException("The selected document destination could not be opened.");
+            await destination.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+            HasPermissionBlock = false;
+            return true;
+        }
+        catch (Java.Lang.SecurityException)
+        {
+            try { activity.ContentResolver?.Delete(uri, null, null); } catch (Exception exception) when (exception is Java.Lang.SecurityException or InvalidOperationException) { }
+            HasPermissionBlock = true;
+            throw new IOException("The document provider denied access. Choose another destination or open system settings if access was permanently denied.");
+        }
+#else
+        return await Task.FromResult(false);
 #endif
     }
 
