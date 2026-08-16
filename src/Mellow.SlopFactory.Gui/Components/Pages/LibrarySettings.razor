@@ -155,7 +155,11 @@
                     <button class="ghost" disabled="@(active || !available || _busy || _scanning)" @onclick="() => OpenRecentAsync(library)">@Strings["Open"]</button>
                     @if (!available) { <button class="ghost" disabled="@(_busy || _scanning)" @onclick="() => RelinkRecentAsync(library)">@Strings["RelinkUsingLocation"]</button> }
                     @if (OperatingSystem.IsWindows() && library.State == RememberedLibraryState.Corrupt && Directory.Exists(library.Path)) { <button class="ghost" @onclick="() => OpenRememberedLocationAsync(library.Path)">@Strings["OpenLocation"]</button> }
-                    <button class="ghost danger" disabled="@(active || _busy || _scanning)" @onclick="() => _forgetCandidate = library">@Strings["Forget"]</button>
+                    <button class="ghost danger" disabled="@(active || HasActiveWork(library) || _busy || _scanning)" @onclick="() => _forgetCandidate = library">@Strings["Forget"]</button>
+                    @if (!active && HasActiveWork(library))
+                    {
+                        <small class="muted">@Strings["LibraryHasActiveWorkNotice"]</small>
+                    }
                 </li>
             }
         </ul>
@@ -491,9 +495,13 @@
         await SwitchAsync();
     }
 
+    /// <summary>plan.md:428 — a library with active queued/running/monitoring work cannot be
+    /// forgotten, whether it is the currently active library or one kept open in the background.</summary>
+    private bool HasActiveWork(RecentLibrary library) => LibraryState.HasActiveWorkFor(library.LibraryId);
+
     private async Task ForgetRecentAsync()
     {
-        if (_forgetCandidate is null || IsActive(_forgetCandidate)) return;
+        if (_forgetCandidate is null || IsActive(_forgetCandidate) || HasActiveWork(_forgetCandidate)) return;
         RecentLibraries.Forget(_forgetCandidate.LibraryId, _forgetCandidate.Path);
         await PreviewCache.ForgetLibraryAsync(_forgetCandidate.LibraryId);
         _message = Strings["ForgotLibrary", _forgetCandidate.DisplayName];

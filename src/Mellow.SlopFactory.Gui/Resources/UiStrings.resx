@@ -903,4 +903,8 @@
   <data name="RecycleModelQueuedJobsWarning" xml:space="preserve"><value>{0} queued (not yet submitted) generation(s) using this model will be cancelled.</value></data>
   <data name="DependencyRecycledNotice" xml:space="preserve"><value>Paused — a source file or destination folder it needs was recycled. Restore it to resume, or cancel this run.</value></data>
   <data name="DependencyPermanentlyDeletedNotice" xml:space="preserve"><value>Cannot run — a source file or destination folder it needed was permanently deleted. Cancel this run and resubmit with a replacement.</value></data>
+  <data name="BackgroundActivityHeading" xml:space="preserve"><value>Active work in other libraries</value></data>
+  <data name="BackgroundActivityItem" xml:space="preserve"><value>{0}: {1} active generation(s)</value></data>
+  <data name="SwitchLibrary" xml:space="preserve"><value>Switch to this library</value></data>
+  <data name="LibraryHasActiveWorkNotice" xml:space="preserve"><value>This library has active generation work and cannot be forgotten until it finishes.</value></data>
 </root>

@@ -26,20 +26,67 @@ there.
 
 ## Multi-library background work
 
-- [ ] Add a global activity indicator that groups active work by library display name, covering
-      every library with queued or running work rather than only the active one (`plan.md:425`).
-- [ ] Keep each library with active work open and locked by the same SlopFactory process until its
+- [x] Keep each library with active work open and locked by the same SlopFactory process until its
       operations finish, even while the user switches the active library away from it
-      (`plan.md:423-424`); explicitly submitted work continues after switching, while queued work
-      still requiring post-restart confirmation stays paused (`plan.md:426`).
-- [ ] Route notifications and activity-indicator entries to identify the owning library and, when
-      selected, switch to that library and open the relevant record (`plan.md:427`).
-- [ ] Block **Forget Library** while that library has active work (`plan.md:428`), and release its
-      background lock only after the final operation completes (`plan.md:430`).
-- [ ] Pause local work safely for a library whose removable volume disappears mid-operation while
-      keeping its remote asynchronous jobs tracked for later reconciliation (`plan.md:429` — the
-      polling/tracking half; see **Removable-storage loss and recovery staging** below for the
-      destination-side recovery-staging half of this same scenario).
+      (`plan.md:423-424`); explicitly submitted work continues after switching (`plan.md:426`'s
+      first half — the "queued work requiring post-restart confirmation stays paused" half doesn't
+      apply yet since nothing in the app today requires post-restart confirmation to resume, see
+      **Crash and session recovery**'s resume-polling item). Implemented as a predicate hook rather
+      than a direct dependency between the two services, to avoid a circular constructor reference:
+      `AppLibraryState.RegisterKeepOpenPredicate` (`src/Mellow.SlopFactory.Gui/Services/AppLibraryState.cs`)
+      lets `GenerationQueueService` register `HasActiveWorkFor(ILibraryWorkspace)` once at startup
+      (`MainLayout.razor`'s `OnInitialized`, alongside `Queue.Start()`); `SwitchAsync`/`RelinkAsync`/
+      `AdoptCopyAsync` consult it before disposing the outgoing workspace, moving it into a
+      `_backgroundWorkspaces` dictionary (keyed by library ID) instead when it still has active work.
+      `GenerationQueueService.OnLibraryChanged` was changed from "cancel/drop anything not
+      `ReferenceEquals` the new active workspace" to "cancel/drop only a job whose workspace is
+      genuinely no longer open" (`AppLibraryState.IsWorkspaceOpen`, true for the active workspace or
+      any background-tracked one) — job execution itself (`ExecuteAsync`/`ExecuteVideoGenerationAsync`)
+      needed no changes, since it already only ever touches its own captured `job.Workspace`
+      reference. **Switching back to a backgrounded library reuses the existing instance** rather
+      than attempting a second `OpenAsync`, which would otherwise fail against the OS-level exclusive
+      lock (`FileShare.None`) this same process already holds — a real correctness issue found and
+      fixed while implementing this, not merely a nice-to-have. `ReleaseBackgroundWorkspaceIfIdleAsync`
+      releases a background workspace's lock once `GenerationQueueService` reports no more active
+      work for it (called from `RunJobAsync` after each job completes) (`plan.md:430`), and
+      `AppLibraryState.DisposeAsync` disposes every remaining background workspace on app shutdown.
+      Verified by `GenerationQueueServiceTests.cs`:
+      `RegisteringTheKeepOpenPredicateLetsALibrarySwitchAwayFromKeepActiveWorkRunning` (work survives
+      the switch, background tracking appears and clears on completion) and
+      `SwitchingBackToABackgroundLibraryReusesItsInstanceInsteadOfFailingToReacquireItsLock`
+      (round-trip switch without a lock exception); the pre-existing
+      `LibrarySwitchDropsQueuedAndCancelsRunningJobsTiedToTheOutgoingWorkspace` test (unchanged)
+      continues to prove the original cancel/drop behavior still holds when nothing registers the
+      predicate.
+- [x] Add a global activity indicator that groups active work by library display name, covering
+      every library with queued or running work rather than only the active one (`plan.md:425`).
+      `AppLibraryState.BackgroundLibraries` exposes each tracked library's ID/display name/workspace;
+      `GenerationQueueService.GetActiveJobCountForWorkspace` supplies its count.
+      `MainLayout.razor`'s shell shows a notice per background library with a **Switch to this
+      library** action (`AppLibraryState.SwitchAsync`, which reuses the tracked instance per the item
+      above rather than reopening it).
+- [x] Block **Forget Library** while that library has active work (`plan.md:428`).
+      `AppLibraryState.HasActiveWorkFor(libraryId)` reports true for the active library (if the
+      predicate says so) or any library present in the background set; `LibrarySettings.razor`'s
+      recent-libraries **Forget** button is disabled and shows an explanatory notice for either case,
+      not only for "this is the currently open library" as before.
+
+  **Not done this pass**: routing notifications and the activity indicator's own entries to identify
+  the owning library, so selecting one switches to that library and opens the relevant record
+  (`plan.md:427`'s tap-through half — the activity indicator's own "Switch to this library" action
+  above already covers switching, just not from a tapped OS notification). `INotificationService
+  .Show`/`Tapped` and `GenerationNotificationCoordinator` carry only a generation-record ID today,
+  with `MainLayout.OnNotificationTapped` navigating on the assumption the record belongs to whichever
+  library is currently active — true before this milestone (only one library was ever open), no
+  longer guaranteed now that a background library can also complete work. Extending this needs the
+  library path threaded through `GenerationJobOutcome` → `NotifyRequested` → `INotificationService
+  .Show`/`Tapped`, plus a `LibraryState.SwitchAsync` call before navigating on tap — a real, bounded
+  change, just not made in this pass to keep this phase's diff reviewable; tracked here rather than
+  silently dropped.
+
+  Pausing local work safely for a library whose removable volume disappears mid-operation while
+  keeping its remote asynchronous jobs tracked for later reconciliation (`plan.md:429`) is covered by
+  **Removable-storage loss and recovery staging** below, not this section.
 
   **Deliberately deferred, previously noted**: `milestone2.md` explicitly scoped this out — "a real
   multi-library background-work model remains a separate, larger milestone" — so this section is

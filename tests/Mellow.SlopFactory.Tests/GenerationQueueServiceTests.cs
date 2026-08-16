@@ -730,6 +730,65 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task RegisteringTheKeepOpenPredicateLetsALibrarySwitchAwayFromKeepActiveWorkRunning()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (libraries, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        // Mirrors MainLayout.razor's real startup registration.
+        libraries.RegisterKeepOpenPredicate(queue.HasActiveWorkFor);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var libraryId = workspace.Descriptor.LibraryId;
+
+        queue.Enqueue(Snapshot("draft-running", model.Id, "running", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("running"));
+
+        await libraries.SwitchAsync(temporary.Child("library-2"));
+
+        // Unlike the no-predicate case above, the job keeps running rather than being cancelled, and
+        // the outgoing library is tracked as a background activity instead of disposed.
+        Assert.NotNull(queue.GetActiveJobIdForDraft("draft-running"));
+        Assert.Contains(libraries.BackgroundLibraries, entry => entry.LibraryId == libraryId);
+        Assert.True(libraries.HasActiveWorkFor(libraryId));
+        Assert.Equal(1, queue.GetActiveJobCountForWorkspace(workspace));
+
+        adapter.Complete("running", new TextGenerationResult(["result"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-running") is not null);
+        Assert.NotNull(queue.GetLastOutcomeForDraft("draft-running")!.Record);
+
+        // plan.md:430 — the background lock releases once the last operation completes.
+        await WaitUntilAsync(() => !libraries.BackgroundLibraries.Any(entry => entry.LibraryId == libraryId));
+        Assert.False(libraries.HasActiveWorkFor(libraryId));
+    }
+
+    [Fact]
+    public async Task SwitchingBackToABackgroundLibraryReusesItsInstanceInsteadOfFailingToReacquireItsLock()
+    {
+        using var temporary = new TemporaryDirectory();
+        var libraryOnePath = temporary.Child("library");
+        var (libraries, workspace, queue, adapter, _) = await CreateHarnessAsync(libraryOnePath);
+        libraries.RegisterKeepOpenPredicate(queue.HasActiveWorkFor);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var originalWorkspace = workspace;
+
+        queue.Enqueue(Snapshot("draft-running", model.Id, "running", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("running"));
+
+        await libraries.SwitchAsync(temporary.Child("library-2"));
+        Assert.NotEmpty(libraries.BackgroundLibraries);
+
+        // Switching back must not attempt to re-acquire an exclusive lock this same process already
+        // holds via the background-kept instance — it should reuse it instead of throwing.
+        await libraries.SwitchAsync(libraryOnePath);
+        Assert.Same(originalWorkspace, libraries.Workspace);
+        Assert.Empty(libraries.BackgroundLibraries);
+
+        adapter.Complete("running", new TextGenerationResult(["result"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-running") is not null);
+    }
+
+    [Fact]
     public async Task GetSnapshotReflectsQueuedAndRunningJobsAcrossConnections()
     {
         using var temporary = new TemporaryDirectory();

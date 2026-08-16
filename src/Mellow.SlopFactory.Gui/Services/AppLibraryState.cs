@@ -28,6 +28,57 @@ public sealed class AppLibraryState : IAsyncDisposable
     public LibraryBrowserSession BrowserSession { get; private set; } = new();
     public event EventHandler? Changed;
 
+    private readonly List<Func<ILibraryWorkspace, bool>> _keepOpenPredicates = [];
+    private readonly Dictionary<string, ILibraryWorkspace> _backgroundWorkspaces = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Registers a predicate consulted before disposing the outgoing workspace on a library switch
+    /// (plan.md:423-424): if any registered predicate returns true for it, it is kept open in the
+    /// background instead of disposed. <see cref="GenerationQueueService"/> registers one during
+    /// startup so a library with active queued/running work is never torn out from under it merely
+    /// because the user switched away. Not itself a DI registration (kept as a plain method call to
+    /// avoid a circular constructor dependency between the two services).
+    /// </summary>
+    public void RegisterKeepOpenPredicate(Func<ILibraryWorkspace, bool> predicate) => _keepOpenPredicates.Add(predicate);
+
+    private bool HasRegisteredActiveWork(ILibraryWorkspace workspace) => _keepOpenPredicates.Any(predicate => predicate(workspace));
+
+    /// <summary>Every library kept open in the background for still-active work, for a global
+    /// activity indicator (plan.md:425) grouped by library display name.</summary>
+    public IReadOnlyList<(string LibraryId, string DisplayName, ILibraryWorkspace Workspace)> BackgroundLibraries =>
+        _backgroundWorkspaces.Values.Select(workspace => (workspace.Descriptor.LibraryId, workspace.Descriptor.DisplayName, workspace)).ToArray();
+
+    /// <summary>True if this library — active or kept open in the background — currently has
+    /// registered active work, so **Forget Library** can refuse it (plan.md:428).</summary>
+    public bool HasActiveWorkFor(string libraryId)
+    {
+        if (Workspace is not null && Workspace.Descriptor.LibraryId == libraryId && HasRegisteredActiveWork(Workspace)) return true;
+        return _backgroundWorkspaces.ContainsKey(libraryId);
+    }
+
+    /// <summary>True while <paramref name="workspace"/> is either the active workspace or tracked in
+    /// the background set — i.e. still genuinely open, as opposed to already disposed. Used by
+    /// <see cref="GenerationQueueService"/> to decide whether a job's workspace reference is still
+    /// safe to keep working against after a library switch.</summary>
+    public bool IsWorkspaceOpen(ILibraryWorkspace workspace) =>
+        ReferenceEquals(Workspace, workspace) || _backgroundWorkspaces.Values.Any(candidate => ReferenceEquals(candidate, workspace));
+
+    /// <summary>
+    /// Releases a background-kept workspace's lock once its last operation completes (plan.md:430).
+    /// A no-op for the current active workspace (which has its own lifecycle) or a workspace not
+    /// currently tracked in the background set, so a caller never needs to check which case applies
+    /// first.
+    /// </summary>
+    public async Task ReleaseBackgroundWorkspaceIfIdleAsync(ILibraryWorkspace workspace)
+    {
+        if (ReferenceEquals(Workspace, workspace)) return;
+        var libraryId = workspace.Descriptor.LibraryId;
+        if (!_backgroundWorkspaces.TryGetValue(libraryId, out var tracked) || !ReferenceEquals(tracked, workspace)) return;
+        _backgroundWorkspaces.Remove(libraryId);
+        await workspace.DisposeAsync().ConfigureAwait(false);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>
     /// Raised while the current <see cref="Workspace"/> is still expected to be reachable,
     /// immediately before it is replaced or closed, so subscribers can flush in-flight state (e.g. a
@@ -183,17 +234,31 @@ public sealed class AppLibraryState : IAsyncDisposable
             var fullPath = Path.GetFullPath(path);
             if (!allowSamePathRetry && Workspace is not null && string.Equals(fullPath, ActivePath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
             _recentLibraries.ValidateNoOverlap(fullPath);
-            var replacement = File.Exists(Path.Combine(fullPath, "slopfactory-library.json"))
-                ? await _factory.OpenAsync(fullPath).ConfigureAwait(false)
-                : await _factory.CreateAsync(fullPath).ConfigureAwait(false);
-            var duplicate = _recentLibraries.GetAll().FirstOrDefault(item =>
-                string.Equals(item.LibraryId, replacement.Descriptor.LibraryId, StringComparison.Ordinal)
-                && !string.Equals(Path.GetFullPath(item.Path), fullPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
-                && Directory.Exists(item.Path));
-            if (duplicate is not null)
+            // If this path is already held open in the background (kept there by an earlier switch
+            // away while it still had active work), reuse that instance rather than opening a second
+            // exclusive lock on the same library — the lock file's FileShare.None would otherwise
+            // reject it as "already open," which would be true but confusingly self-inflicted.
+            var reusedBackgroundEntry = _backgroundWorkspaces.Values.FirstOrDefault(candidate => SamePath(candidate.Descriptor.RootPath, fullPath));
+            ILibraryWorkspace replacement;
+            if (reusedBackgroundEntry is not null)
             {
-                await replacement.DisposeAsync().ConfigureAwait(false);
-                throw new LibraryValidationException("Another available location is already registered with this library ID. Open the registered location or remove the copied directory conflict.");
+                replacement = reusedBackgroundEntry;
+                _backgroundWorkspaces.Remove(reusedBackgroundEntry.Descriptor.LibraryId);
+            }
+            else
+            {
+                replacement = File.Exists(Path.Combine(fullPath, "slopfactory-library.json"))
+                    ? await _factory.OpenAsync(fullPath).ConfigureAwait(false)
+                    : await _factory.CreateAsync(fullPath).ConfigureAwait(false);
+                var duplicate = _recentLibraries.GetAll().FirstOrDefault(item =>
+                    string.Equals(item.LibraryId, replacement.Descriptor.LibraryId, StringComparison.Ordinal)
+                    && !string.Equals(Path.GetFullPath(item.Path), fullPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                    && Directory.Exists(item.Path));
+                if (duplicate is not null)
+                {
+                    await replacement.DisposeAsync().ConfigureAwait(false);
+                    throw new LibraryValidationException("Another available location is already registered with this library ID. Open the registered location or remove the copied directory conflict.");
+                }
             }
             var previous = Workspace;
             if (previous is not null) await RaiseClosingAsync().ConfigureAwait(false);
@@ -204,7 +269,13 @@ public sealed class AppLibraryState : IAsyncDisposable
             _preferences.WriteString("active_library_path", fullPath);
             _recentLibraries.RecordOpened(replacement.Descriptor);
             LoadDirtyDraftIds();
-            if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
+            // plan.md:423-424 — a library with active queued/running work stays open and locked
+            // rather than being disposed merely because the user switched away from it.
+            if (previous is not null)
+            {
+                if (HasRegisteredActiveWork(previous)) _backgroundWorkspaces[previous.Descriptor.LibraryId] = previous;
+                else await previous.DisposeAsync().ConfigureAwait(false);
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
@@ -252,7 +323,11 @@ public sealed class AppLibraryState : IAsyncDisposable
             _preferences.WriteString("active_library_path", fullPath);
             _recentLibraries.RecordOpened(replacement.Descriptor);
             LoadDirtyDraftIds();
-            if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
+            if (previous is not null)
+            {
+                if (HasRegisteredActiveWork(previous)) _backgroundWorkspaces[previous.Descriptor.LibraryId] = previous;
+                else await previous.DisposeAsync().ConfigureAwait(false);
+            }
         }
         finally { _gate.Release(); Changed?.Invoke(this, EventArgs.Empty); }
     }
@@ -286,7 +361,11 @@ public sealed class AppLibraryState : IAsyncDisposable
             _preferences.WriteString("active_library_path", fullPath);
             _recentLibraries.RecordOpened(replacement.Descriptor);
             LoadDirtyDraftIds();
-            if (previous is not null) await previous.DisposeAsync().ConfigureAwait(false);
+            if (previous is not null)
+            {
+                if (HasRegisteredActiveWork(previous)) _backgroundWorkspaces[previous.Descriptor.LibraryId] = previous;
+                else await previous.DisposeAsync().ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -333,6 +412,7 @@ public sealed class AppLibraryState : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (Workspace is not null) await Workspace.DisposeAsync().ConfigureAwait(false);
+        foreach (var background in _backgroundWorkspaces.Values) await background.DisposeAsync().ConfigureAwait(false);
         _gate.Dispose();
     }
 

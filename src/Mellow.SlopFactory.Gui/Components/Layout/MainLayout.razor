@@ -78,6 +78,21 @@
                 <button class="ghost" @onclick="LibraryState.DismissDirtyDrafts">@Strings["Dismiss"]</button>
             </div>
         }
+        @if (LibraryState.BackgroundLibraries.Count > 0)
+        {
+            <div class="notice" role="status">
+                <strong>@Strings["BackgroundActivityHeading"]</strong>
+                <ul>
+                    @foreach (var background in LibraryState.BackgroundLibraries)
+                    {
+                        <li>
+                            @Strings["BackgroundActivityItem", background.DisplayName, Queue.GetActiveJobCountForWorkspace(background.Workspace)]
+                            <button class="ghost" @onclick="() => SwitchToBackgroundLibraryAsync(background.Workspace.Descriptor.RootPath)">@Strings["SwitchLibrary"]</button>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
         @Body
     </main>
 </div>
@@ -90,6 +105,7 @@
         ContentWatch.Start();
         Queue.Changed += OnPendingChanged;
         Queue.Start();
+        LibraryState.RegisterKeepOpenPredicate(Queue.HasActiveWorkFor);
         Theme.Changed += OnPendingChanged;
         ScanRecommendation.Changed += OnPendingChanged;
         LibraryState.Changed += OnPendingChanged;
@@ -99,6 +115,7 @@
         Notifications.Tapped += OnNotificationTapped;
     }
     private void OnPendingChanged(object? sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+    private Task SwitchToBackgroundLibraryAsync(string path) => LibraryState.SwitchAsync(path);
     private void OnNotifyRequested(object? sender, GenerationRecord record) => Notifications.Show(record.Id, record.ModelLabel, StatusLabel(record.Status));
     private void OnNotificationTapped(object? sender, string recordId) => _ = InvokeAsync(() => Navigation.NavigateTo($"/generation-history/{recordId}"));
     private string StatusLabel(GenerationStatus status) => status switch

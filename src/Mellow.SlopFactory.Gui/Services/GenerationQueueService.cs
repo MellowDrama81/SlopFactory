@@ -460,13 +460,17 @@ public sealed class GenerationQueueService
 
     private void OnLibraryChanged(object? sender, EventArgs args)
     {
-        var current = _libraries.Workspace;
         List<CancellationTokenSource> toCancel = [];
         lock (_gate)
         {
             foreach (var job in _jobsById.Values.ToArray())
             {
-                if (ReferenceEquals(job.Workspace, current)) continue;
+                // plan.md:423-424 — a job whose library was switched away from keeps running as long
+                // as that workspace is still open (either still active, or kept open in the
+                // background by AppLibraryState because this same check told it to). Only a job
+                // whose workspace was actually disposed (switched away from with no active work, or
+                // now genuinely closed) needs to be torn down here.
+                if (_libraries.IsWorkspaceOpen(job.Workspace)) continue;
                 if (job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled)
                 {
                     _queues[job.ConnectionId].Remove(job);
@@ -517,6 +521,22 @@ public sealed class GenerationQueueService
     public bool IsModelActivelyInUse(string modelId)
     {
         lock (_gate) return _jobsById.Values.Any(job => job.Snapshot.ModelId == modelId && job.Phase is GenerationJobPhase.Running or GenerationJobPhase.Monitoring);
+    }
+
+    /// <summary>True while any job (queued, running, monitoring or dependency-paused) still belongs
+    /// to this workspace — the predicate <see cref="AppLibraryState.RegisterKeepOpenPredicate"/>
+    /// registers so a library the user switches away from stays open and locked while it has active
+    /// work (plan.md:423-424), rather than being disposed and taking that work down with it.</summary>
+    public bool HasActiveWorkFor(ILibraryWorkspace workspace)
+    {
+        lock (_gate) return _jobsById.Values.Any(job => ReferenceEquals(job.Workspace, workspace));
+    }
+
+    /// <summary>Count of active jobs against this workspace, for a global activity indicator grouped
+    /// by library (plan.md:425).</summary>
+    public int GetActiveJobCountForWorkspace(ILibraryWorkspace workspace)
+    {
+        lock (_gate) return _jobsById.Values.Count(job => ReferenceEquals(job.Workspace, workspace));
     }
 
     /// <summary>Submitted-tab titles of every still-queued (never yet submitted) job that depends on
@@ -751,6 +771,9 @@ public sealed class GenerationQueueService
         JobCompleted?.Invoke(this, outcome);
         RaiseChanged();
         Pump();
+        // plan.md:430 — a background-kept library's lock is released once its last operation
+        // completes. A no-op for the still-active workspace or one with other jobs still pending.
+        if (!HasActiveWorkFor(job.Workspace)) _ = _libraries.ReleaseBackgroundWorkspaceIfIdleAsync(job.Workspace);
     }
 
     /// <summary>
