@@ -70,7 +70,7 @@ else
             <ul class="metadata-list">
                 @foreach (var total in GrandTotals)
                 {
-                    <li>@Strings["CostSummaryTotalLine", total.TotalCost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), total.Currency, total.RecordCount]</li>
+                    <li>@Strings["CostSummaryTotalLine", total.TotalCost.ToString("0.####", System.Globalization.CultureInfo.CurrentCulture), total.Currency, total.RecordCount]</li>
                 }
             </ul>
         </section>
@@ -80,7 +80,7 @@ else
             <ul class="metadata-list">
                 @foreach (var group in ByModel)
                 {
-                    <li>@group.Key — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), group.Currency, group.RecordCount]</li>
+                    <li>@group.Key — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.CurrentCulture), group.Currency, group.RecordCount]</li>
                 }
             </ul>
         </section>
@@ -90,7 +90,7 @@ else
             <ul class="metadata-list">
                 @foreach (var group in ByProvider)
                 {
-                    <li>@ProviderLabel(group.Key) — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), group.Currency, group.RecordCount]</li>
+                    <li>@ProviderLabel(group.Key) — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.CurrentCulture), group.Currency, group.RecordCount]</li>
                 }
             </ul>
         </section>
@@ -100,7 +100,7 @@ else
             <ul class="metadata-list">
                 @foreach (var group in ByDate)
                 {
-                    <li>@group.Key — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), group.Currency, group.RecordCount]</li>
+                    <li>@group.Key — @Strings["CostSummaryTotalLine", group.TotalCost.ToString("0.####", System.Globalization.CultureInfo.CurrentCulture), group.Currency, group.RecordCount]</li>
                 }
             </ul>
         </section>

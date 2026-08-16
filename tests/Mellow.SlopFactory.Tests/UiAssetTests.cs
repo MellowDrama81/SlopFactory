@@ -60,6 +60,40 @@ public sealed class UiAssetTests
     }
 
     [Fact]
+    public void LayoutUsesLogicalCssPropertiesInsteadOfPhysicalLeftRightOnesForRtlReadiness()
+    {
+        var css = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "wwwroot", "css", "app.css");
+
+        // plan.md:151 — layouts accommodate a future right-to-left language without restructuring
+        // core screens; logical properties (inline-start/end) flip automatically under dir="rtl",
+        // unlike a hard-coded left/right.
+        Assert.Contains("border-inline-end", css, StringComparison.Ordinal);
+        Assert.Contains("padding-inline-start", css, StringComparison.Ordinal);
+        Assert.Contains("margin-inline-start", css, StringComparison.Ordinal);
+        Assert.Contains("text-align: start", css, StringComparison.Ordinal);
+        Assert.DoesNotContain("margin-left", css, StringComparison.Ordinal);
+        Assert.DoesNotContain("padding-left", css, StringComparison.Ordinal);
+        Assert.DoesNotContain("border-right", css, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReportedCostAmountsFormatUsingTheDeviceLocaleNotAFixedInvariantOne()
+    {
+        var costSummary = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "CostSummary.razor");
+        var historyDetail = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "GenerationHistoryDetail.razor");
+
+        // plan.md:146 — dates, times, numbers, byte sizes and currencies use the device locale.
+        // These two pages previously formatted the numeric cost amount with a fixed
+        // CultureInfo.InvariantCulture, ignoring the device's decimal-separator/grouping
+        // convention (date/time/byte-size formatting elsewhere already used CurrentCulture
+        // implicitly by never overriding it).
+        Assert.DoesNotContain("CultureInfo.InvariantCulture", costSummary, StringComparison.Ordinal);
+        Assert.DoesNotContain("CultureInfo.InvariantCulture", historyDetail, StringComparison.Ordinal);
+        Assert.Contains("CultureInfo.CurrentCulture", costSummary, StringComparison.Ordinal);
+        Assert.Contains("CultureInfo.CurrentCulture", historyDetail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThemePreferencePersistsAndTheShellUpdatesImmediately()
     {
         var service = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Services", "ThemePreferenceService.cs");

@@ -562,19 +562,53 @@ there.
 
 ## Localization readiness
 
-- [ ] Use the device locale for dates, times, numbers, byte sizes and currencies throughout the
+- [x] Use the device locale for dates, times, numbers, byte sizes and currencies throughout the
       application (`plan.md:146`), beyond Milestone 1's no-hard-coded-strings resource-coverage
-      guard.
-- [ ] Accommodate future longer translations and right-to-left languages in layouts without
-      restructuring core screens (`plan.md:151`).
-- [ ] Lay groundwork so the device-wide language setting can support a future language override
+      guard. An audit found this was **already true almost everywhere by default**: every
+      date/time display (`.ToLocalTime().ToString("g"/"t")` etc.) and every byte-size helper
+      (`FormatBytes`'s `$"{bytes:0.##} MB"`-style interpolation) never overrides culture, so they
+      already format via `CultureInfo.CurrentCulture` — and this app has no
+      `InvariantGlobalization`/trimming setting anywhere, so `CurrentCulture` genuinely reflects the
+      device's OS locale rather than being forced to a fixed one. The one real, concrete gap:
+      `CostSummary.razor` (3 call sites) and `GenerationHistoryDetail.razor` (1 call site) formatted
+      the numeric portion of a reported cost with a hard-coded `CultureInfo.InvariantCulture`,
+      ignoring the device's decimal-separator/grouping convention — fixed to `CurrentCulture`; the
+      ISO currency *code* (e.g. `"USD"`) is still shown as-is alongside the number, not translated
+      or reformatted as a symbol, since guessing a symbol for an arbitrary reported currency code
+      would risk being wrong. Locked in by
+      `UiAssetTests.ReportedCostAmountsFormatUsingTheDeviceLocaleNotAFixedInvariantOne`.
+- [x] Accommodate future longer translations and right-to-left languages in layouts without
+      restructuring core screens (`plan.md:151`). Converted every physical-direction CSS property
+      in `app.css` to its logical equivalent (`margin-left`→`margin-inline-start`,
+      `border-right`→`border-inline-end`, `padding-left`→`padding-inline-start`,
+      `text-align: left`→`text-align: start`, etc.) — these flip automatically under a future
+      `dir="rtl"` without any additional CSS, whereas a hard-coded `left`/`right` would need a
+      parallel RTL override for every rule. Grid-based layouts (`.app-shell`'s sidebar/content
+      columns, `.dl` metadata grids) were already direction-agnostic (CSS Grid auto-placement
+      already respects `direction`) and needed no change. Locked in by
+      `UiAssetTests.LayoutUsesLogicalCssPropertiesInsteadOfPhysicalLeftRightOnesForRtlReadiness`.
+      Longer-translation accommodation was already in place via this app's existing
+      flex-wrap/`clamp()`/`overflow-wrap: anywhere` usage throughout `app.css`, predating this
+      milestone.
+- [x] Lay groundwork so the device-wide language setting can support a future language override
       (`plan.md:147`), without shipping a second language in this milestone (the first release is
-      English only, `plan.md:144`).
-- [ ] Confirm provider model IDs, metadata keys and raw technical identifiers stay unlocalized
+      English only, `plan.md:144`). **Correction to this item's original scope**: this groundwork
+      already exists and needed no new code — every user-facing string already goes through
+      `IStringLocalizer<UiStrings>` backed by `.resx` resource files (the mechanism Milestone 1's
+      own resource-coverage guard enforces), which is exactly .NET's standard mechanism for adding a
+      translated `UiStrings.<culture>.resx` file and switching `CultureInfo.CurrentUICulture` to
+      pick it up later — there is nothing further to prepare structurally until an actual second
+      language and its translated resource file exist.
+- [x] Confirm provider model IDs, metadata keys and raw technical identifiers stay unlocalized
       (`plan.md:148`), common provider errors continue converting into localizable application
       messages while sanitized technical details remain separately available (`plan.md:149`), and
       user prompts, metadata, filenames and provider output are never machine-translated
-      (`plan.md:150`).
+      (`plan.md:150`) — all already true by construction throughout this codebase (provider model
+      IDs/metadata keys are always rendered as plain values via `@value` interpolation, never
+      passed through `Strings[...]`; error messages shown to the user are always a
+      localized/templated `Strings[...]` call with the raw exception detail kept separate in
+      diagnostics per this milestone's own Diagnostics section; nothing in the app calls a
+      translation service of any kind). No change needed.
 
 ## Diagnostics
 
