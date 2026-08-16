@@ -7,6 +7,8 @@
 @inject ISensitiveMetadataDisclosureService SensitiveDisclosure
 @inject ISensitiveRevealSessionService SensitiveReveals
 @inject IPlatformFileActionService PlatformFiles
+@inject IntegrityScanRecommendationService ScanRecommendation
+@inject GenerationQueueService Queue
 @implements IAsyncDisposable
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
@@ -763,6 +765,13 @@ else
     private async Task CommitReplacementAsync()
     {
         if (LibraryState.Workspace is null || _replacementReview is null) return;
+        // plan.md:556 — a file actively pinned by a queued/running generation using it as a source
+        // input cannot be replaced or accepted until the pin releases or the work is cancelled.
+        if (Queue.IsFileActivelyInUse(Id))
+        {
+            _message = Strings["FileActivelyInUse"];
+            return;
+        }
         _replacingContent = true;
         try
         {
@@ -956,6 +965,10 @@ else
         try
         {
             var result = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: false);
+            // plan.md:649-652 — a destination read-back mismatch recommends an integrity scan rather
+            // than silently retrying or claiming the failure means the source library file is
+            // corrupt (nothing about this failure touches its ContentState at all).
+            if (result.Outcome == FileExportOutcome.VerificationFailed) ScanRecommendation.Recommend(IntegrityScanRecommendationReason.StorageInconsistency);
             _message = result.Outcome switch { FileExportOutcome.Exported => Strings["ExportCompleted"], FileExportOutcome.Cancelled => Strings["ExportCancelled"], _ => result.Error ?? Strings["ExportFailed"] };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or SlopFactoryException) { _message = exception.Message; }
@@ -979,6 +992,7 @@ else
         try
         {
             var result = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: true);
+            if (result.Outcome == FileExportOutcome.VerificationFailed) ScanRecommendation.Recommend(IntegrityScanRecommendationReason.StorageInconsistency);
             _message = result.Outcome switch { FileExportOutcome.Exported => Strings["ChangedBytesExported"], FileExportOutcome.Cancelled => Strings["ChangedBytesExportCancelled"], _ => result.Error ?? Strings["ChangedBytesExportFailed"] };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or SlopFactoryException) { _message = exception.Message; }

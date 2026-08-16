@@ -371,23 +371,67 @@ there.
 
 ## Integrity checks
 
-- [ ] Add an explicit, user-triggered integrity-investigation action that performs a real
+- [x] Add an explicit, user-triggered integrity-investigation action that performs a real
       byte-for-byte re-comparison for diagnosing suspected storage or implementation faults,
       distinct from and in addition to the existing single-pass hash check routine duplicate/
       classification workflows already rely on (`plan.md:583`, `plan.md:580-582`).
-- [ ] Add managed-file existence verification before export and before provider submission
+      **Correction to this item's original scope**: this was already fully built before this
+      milestone — `LibraryWorkspace.RunIntegrityScanAsync` (backing `LibrarySettings.razor`'s
+      existing "Library Integrity" panel, present since Milestone 1) already performs a real,
+      explicit, user-triggered, resumable/cancellable SHA-256 re-hash of every active managed file's
+      on-disk bytes against its stored `ContentHash` — exactly the "explicit integrity
+      investigation" `plan.md:583` describes, and structurally separate from the import-time
+      duplicate-detection comparison (which only compares an incoming candidate's hash against an
+      already-stored digest, never re-reading the existing file's bytes). Checking directly against
+      the codebase before starting this phase (rather than assuming milestone4.md's original,
+      planning-time framing was accurate) found no gap here to fill.
+- [x] Add managed-file existence verification before export and before provider submission
       (`plan.md:547`), keeping explicit existence, containment and hash checks in those workflows
       regardless of file-watcher state (`plan.md:548`); make export and provider upload
       unavailable while managed content is missing (`plan.md:557`), and never claim to recover
-      missing bytes when no backup exists (`plan.md:558`).
-- [ ] Add export outgoing-stream-mismatch handling: an outgoing-stream mismatch detected before
+      missing bytes when no backup exists (`plan.md:558`). **Also already substantially in place**:
+      `LibraryWorkspace.ExportCoreAsync`'s `ValidateRegularManagedFile` checks existence/
+      directory-substitution/reparse-point/hard-link regardless of cached `ContentState`, and the
+      export never completes unless the freshly-streamed bytes' hash matches the stored digest
+      (so a missing-content export already fails, satisfying `plan.md:557-558`); Text mode's source
+      image submission already goes through `GetVerifiedContentFileAsync` (full live existence+hash
+      re-check on every call, `ReadImageFileAsync`'s underlying helper), so provider submission was
+      already covered too. No other adapter currently uploads local managed-file bytes to a provider
+      (audio/video accept no source input, per Milestone 3), so there is nothing further to verify
+      there yet.
+- [x] Add export outgoing-stream-mismatch handling: an outgoing-stream mismatch detected before
       commit aborts the export, cleans up the temporary output, writes no sidecar, marks the
       library record for integrity review, and reports that export did not complete
       (`plan.md:649`) — without marking the library record corrupt or changed merely because a
       destination read-back mismatch occurred after the outgoing stream already matched the stored
       digest and size (`plan.md:651`); if the mismatched object replaced or cannot be removed at the
       destination, report it as potentially corrupt without claiming the prior external object was
-      restored (`plan.md:652`).
+      restored (`plan.md:652`). The pre-commit outgoing-stream check already existed
+      (`Hashing.CopyAndHashAsync` + a hash comparison before `File.Move`, aborting and cleaning up the
+      temp file on mismatch); genuinely new this pass: `ExportCoreAsync` now re-hashes the actual
+      destination file immediately after `File.Move` and compares it to the already-verified outgoing
+      hash — a new `FileExportOutcome.VerificationFailed` value distinguishes this from an ordinary
+      pre-commit `Failed`, since the destination path may already have replaced something. On
+      mismatch it attempts to delete the bad destination file, reporting whether that succeeded
+      (matching `plan.md:652`'s "cannot be removed... reports it as potentially corrupt" case) without
+      ever touching the *source* library record's `ContentState` (nothing in the export path does,
+      by construction, so "never marks the record corrupt" is unconditionally true). `FileDetails.razor`
+      recommends an integrity scan (`IntegrityScanRecommendationService`) on this outcome instead of
+      silently discarding it. **Not independently unit-tested**: triggering a genuine destination
+      read-back mismatch requires the destination file to diverge between an atomic `File.Move` and
+      an immediate re-read on the same volume, which isn't practically reproducible in a controlled
+      test without making the hashing step itself fault-injectable — left as a code-reviewed, not
+      automated-test-covered, path.
+- [x] Block content-replacement commit while the file is actively pinned by a queued/running
+      generation using it as a source input (`plan.md:556`) — reuses
+      `GenerationQueueService.IsFileActivelyInUse` from this milestone's Work Queue Resilience phase;
+      `FileDetails.razor`'s `CommitReplacementAsync` now checks it before calling
+      `CommitManagedContentReplacementAsync`, matching the same GUI-layer enforcement pattern already
+      used for recycling (Infrastructure/`LibraryWorkspace` has no reference to the queue service, by
+      design — the same layering already established in Work Queue Resilience). **Not
+      unit-tested**: like the rest of this project's Razor-page code-behind, this guard lives in
+      markup/code-behind, which this codebase deliberately does not cover with automated tests.
+
 - [ ] Add **Reacquire Permanently Deleted Output**: when an output file was permanently deleted but
       its history tombstone still identifies a remotely available provider result, let the user
       explicitly reacquire it (`plan.md:1418`) — confirmation-gated, downloaded and validated
@@ -397,21 +441,48 @@ there.
       tombstone's stored hash (`plan.md:1420`); a mismatch preserves the tombstone and requires a
       clear warning before the new bytes may be committed as a separate **Provider Output Changed**
       result — never described as recovery of the permanently deleted file (`plan.md:1421`).
+      **Not done this pass**: `GenerationRecord`'s tombstone (`FileIdentitySnapshot` — display name,
+      media type, content hash only) is exactly what's needed to *compare against* once new bytes
+      are in hand, but there is nothing to *download from* — the per-library `async_remote_jobs`
+      registry row for a job is deleted once its generation commits successfully (by design, so it
+      doesn't linger as a stale "unresolved" row forever), and `GenerationRecord` itself never
+      retains the provider job ID or a fresh result URL permanently. A "reacquire" action needs a
+      real answer to "reacquire from where" that this data model doesn't currently provide — adding
+      that means deciding whether to retain a provider job ID indefinitely post-commit (with its own
+      privacy/staleness tradeoffs) purely to support a rarely-used recovery path, which is a real
+      design decision, not a bounded implementation task. Left open rather than built on a guess.
 - [ ] Add the provider-safety-classification/content-replacement integrity rules for a **Missing**
       or **Content Changed** record: a classification received in that state attaches only to the
       immutable provenance of the record's original bytes (`plan.md:549`); restoring
       algorithm/digest/size-matching bytes reactivates the classification and concealment on the
       current file, while differing or externally changed bytes never inherit it (`plan.md:550`).
-      A content-replaced file keeps its original provenance for historical context but clearly
-      states its current bytes aren't the original content (`plan.md:551`), and generation history
-      keeps the original result hash, media type and byte size, immutable after replacement
-      (`plan.md:552`). After replacement, revalidate every open generation-tab draft and saved
-      setting referencing the file against its new media properties (`plan.md:553`) — an
-      incompatible reference shows **Needs Review** and can't be submitted until replaced, restored
-      or removed from that input role (`plan.md:554`); compatible references stay selected but show
-      **Content Replaced** (`plan.md:555`). A file pinned by queued preparation, upload or another
-      active submitted operation can't be replaced or accepted until the pin releases or the work
-      is cancelled (`plan.md:556`).
+      **Not done — blocked on the same prerequisite `milestone2.md` already documented as missing**:
+      `milestone2.md` explicitly scoped the entire provider-safety-classification/concealment storage
+      mechanism (a persistent per-file classification value, concealment state, reveal sessions) out
+      of Milestone 2 as "confirmed not buildable honestly right now," since no supported adapter
+      exposes a signal to drive it. `plan.md:549-550` describes reactivating *that* classification on
+      a matching-hash restore — with no classification value ever persisted anywhere in this
+      codebase, there is nothing to reactivate. This stays blocked on the same adapter-signal gap
+      `milestone3.md`'s own "Possible future work" section already tracks (Provider Safety
+      Responses), not new debt introduced here.
+- [ ] The content-replacement mechanics this needs already exist and are unaffected by the two items
+      above: a content-replaced file keeps its original provenance for historical context but
+      clearly states its current bytes aren't the original content (`plan.md:551`), and generation
+      history keeps the original result hash, media type and byte size, immutable after replacement
+      (`plan.md:552`) — both already shipped via `LibraryWorkspace.CommitManagedContentReplacementAsync`/
+      `AcceptFileContentAsync`'s existing `RestoresOriginal`/provenance-retention logic, predating
+      this milestone. **Still open**: after a replacement, revalidating every open generation-tab
+      draft and saved generation setting referencing the file against its new media properties
+      (`plan.md:553`) — an incompatible reference showing **Needs Review** and blocked from
+      submission until replaced/restored/removed (`plan.md:554`), a compatible reference instead
+      showing **Content Replaced** (`plan.md:555`). Not attempted this pass: doing this properly
+      needs a real revalidation pass over `Generate.razor`'s draft-loading code (which today silently
+      clears an unresolvable source-file reference back to blank rather than flagging it, the same
+      pre-existing gap noted in the Work Queue Resilience section above) and over saved generation
+      settings, plus a genuine "Needs Review" state distinct from a silently-cleared reference — a
+      larger, dedicated UI/data-model change bundled with (not separable from) the tab-reference
+      redesign already left open in Work Queue Resilience, rather than a bounded addition to this
+      phase.
 
 ## Accessibility
 

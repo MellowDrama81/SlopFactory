@@ -508,7 +508,12 @@ public enum FileExportOutcome
 {
     Exported = 0,
     Failed = 1,
-    Cancelled = 2
+    Cancelled = 2,
+    /// <summary>A destination read-back mismatch after the outgoing stream already matched the
+    /// source (plan.md:649-652) — distinct from <see cref="Failed"/> (an outgoing-stream mismatch
+    /// caught before anything was committed) because the destination file may already have replaced
+    /// something, so recovery guidance differs.</summary>
+    VerificationFailed = 3
 }
 
 public sealed record FileExportResult(

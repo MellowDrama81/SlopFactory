@@ -1212,6 +1212,26 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             if (!string.Equals(copied.Hash, expectedHash, StringComparison.Ordinal) || copied.Bytes != new FileInfo(source).Length) throw new IOException("Export verification failed; the destination was not committed.");
             File.Move(temporary, destination, collisionChoice == ExportCollisionChoice.Replace);
             temporary = null;
+
+            // plan.md:649-652 — the outgoing stream above already matched the source, but that only
+            // proves what was sent, not what physically landed at the destination (a filesystem quirk
+            // or partial flush could still diverge). A mismatch here never marks the source library
+            // record corrupt or changed — nothing above touches its ContentState at all — and it is
+            // reported as a distinct outcome from an ordinary outgoing-stream failure, since the
+            // destination path may already have replaced something the caller cannot assume was
+            // "restored" merely because this attempt failed.
+            var readBackHash = await Hashing.Sha256Async(destination, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(readBackHash, copied.Hash, StringComparison.Ordinal))
+            {
+                bool removed;
+                try { File.Delete(destination); removed = true; }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { removed = false; }
+                var message = removed
+                    ? "The exported file did not match its source after being written and was removed; export did not complete."
+                    : "The exported file did not match its source after being written and could not be removed; the destination may be corrupt.";
+                return new FileExportResult(file.Id, destination, FileExportOutcome.VerificationFailed, copied.Bytes, copied.Hash, message);
+            }
+
             return new FileExportResult(file.Id, destination, FileExportOutcome.Exported, copied.Bytes, copied.Hash, null);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
