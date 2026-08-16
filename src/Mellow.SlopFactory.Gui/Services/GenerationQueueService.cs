@@ -14,7 +14,15 @@ public enum GenerationJobPhase
     /// device-wide or per-connection concurrency cap, matching plan.md's "an asynchronous job
     /// releases its submission slot after the provider durably accepts it; later status polling
     /// does not consume a submission slot" rule.</summary>
-    Monitoring = 2
+    Monitoring = 2,
+    /// <summary>A still-queued (not yet submitted) job paused because a source file or destination
+    /// folder it depends on was recycled (plan.md:413) or permanently deleted
+    /// (<see cref="GenerationQueueEntry.NonRunnable"/> distinguishes the two — permanent deletion
+    /// also sets that flag). Retains its queue position and never proceeds using the recycled/deleted
+    /// dependency automatically; restoring every paused dependency returns it to <see cref="Queued"/>
+    /// (plan.md:414), while a permanently deleted dependency requires the user to cancel and resubmit
+    /// from the originating tab (plan.md:415).</summary>
+    DependencyRecycled = 3
 }
 
 /// <summary>Device-wide policy for starting a new submission while the device's current connection
@@ -50,6 +58,9 @@ public sealed record GenerationJobSnapshot(
 
 public sealed record GenerationJobStatusSnapshot(string JobId, string DraftId, GenerationJobPhase Phase, int? QueuePosition);
 
+/// <param name="NonRunnable">True once a dependency this job needs was permanently deleted rather
+/// than merely recycled — restoring a dependency can never clear this, so the job can only ever be
+/// cancelled and resubmitted, matching plan.md:415.</param>
 public sealed record GenerationQueueEntry(
     string JobId,
     string DraftId,
@@ -58,7 +69,8 @@ public sealed record GenerationQueueEntry(
     string ModelId,
     string Prompt,
     GenerationJobPhase Phase,
-    int? QueuePosition);
+    int? QueuePosition,
+    bool NonRunnable = false);
 
 public sealed record GenerationJobOutcome(
     string JobId,
@@ -90,6 +102,15 @@ public sealed class GenerationQueueService
         /// <see cref="GenerationJobPhase.Monitoring"/>) — guards against double-releasing the slot
         /// and tells <see cref="RunJobAsync"/> not to decrement the counters again at the end.</summary>
         public bool SlotReleased;
+        /// <summary>True once a dependency (source file or destination folder) this job needs was
+        /// permanently deleted — terminal, never cleared by a later restore, matching plan.md:415.</summary>
+        public bool NonRunnable;
+        /// <summary>IDs of currently-recycled dependencies (source file/destination folder) keeping
+        /// this job paused at <see cref="GenerationJobPhase.DependencyRecycled"/> — the job only
+        /// returns to <see cref="GenerationJobPhase.Queued"/> once this set is empty again and it is
+        /// not <see cref="NonRunnable"/>, so two independently recycled dependencies both have to be
+        /// restored before the job resumes.</summary>
+        public readonly HashSet<string> RecycledDependencyIds = new(StringComparer.Ordinal);
     }
 
     private readonly Dictionary<string, LinkedList<QueuedJob>> _queues = new(StringComparer.Ordinal);
@@ -326,7 +347,7 @@ public sealed class GenerationQueueService
         lock (_gate)
         {
             if (!_jobsById.TryGetValue(jobId, out var job)) return;
-            if (job.Phase == GenerationJobPhase.Queued)
+            if (job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled)
             {
                 _queues[job.ConnectionId].Remove(job);
                 _jobsById.Remove(jobId);
@@ -400,7 +421,7 @@ public sealed class GenerationQueueService
             var entries = new List<GenerationQueueEntry>();
             foreach (var job in _jobsById.Values)
             {
-                entries.Add(new GenerationQueueEntry(job.JobId, job.DraftId, job.Snapshot.SubmittedTabTitle, job.ConnectionId, job.Snapshot.ModelId, job.Snapshot.Prompt, job.Phase, ComputeQueuePosition(job)));
+                entries.Add(new GenerationQueueEntry(job.JobId, job.DraftId, job.Snapshot.SubmittedTabTitle, job.ConnectionId, job.Snapshot.ModelId, job.Snapshot.Prompt, job.Phase, ComputeQueuePosition(job), job.NonRunnable));
             }
             return entries.OrderBy(entry => entry.ConnectionId, StringComparer.Ordinal).ThenBy(entry => entry.Phase).ThenBy(entry => entry.QueuePosition ?? 0).ToList();
         }
@@ -427,7 +448,7 @@ public sealed class GenerationQueueService
 
     private int? ComputeQueuePosition(QueuedJob job)
     {
-        if (job.Phase != GenerationJobPhase.Queued) return null;
+        if (job.Phase != GenerationJobPhase.Queued && job.Phase != GenerationJobPhase.DependencyRecycled) return null;
         var position = 1;
         foreach (var candidate in _queues[job.ConnectionId])
         {
@@ -446,7 +467,7 @@ public sealed class GenerationQueueService
             foreach (var job in _jobsById.Values.ToArray())
             {
                 if (ReferenceEquals(job.Workspace, current)) continue;
-                if (job.Phase == GenerationJobPhase.Queued)
+                if (job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled)
                 {
                     _queues[job.ConnectionId].Remove(job);
                     _jobsById.Remove(job.JobId);
@@ -461,6 +482,157 @@ public sealed class GenerationQueueService
         foreach (var cancellation in toCancel) cancellation.Cancel();
         RaiseChanged();
     }
+
+    private static bool ReferencesFile(GenerationJobSnapshot snapshot, string fileId) =>
+        snapshot.SourceFileId == fileId || snapshot.SecondarySourceFileId == fileId || snapshot.TertiarySourceFileId == fileId;
+
+    private static bool ReferencesFolder(GenerationJobSnapshot snapshot, string folderId) => snapshot.DestinationFolderId == folderId;
+
+    /// <summary>True while a still-<see cref="GenerationJobPhase.Running"/> job is actively reading or
+    /// uploading this file as a source input — the narrow "actively in use" sense plan.md:418 uses to
+    /// block recycling, distinct from a merely-<see cref="GenerationJobPhase.Queued"/> job that
+    /// references the same file (which pauses instead of blocking, see <see cref="NotifyFileRecycled"/>).</summary>
+    public bool IsFileActivelyInUse(string fileId)
+    {
+        lock (_gate) return _jobsById.Values.Any(job => job.Phase == GenerationJobPhase.Running && ReferencesFile(job.Snapshot, fileId));
+    }
+
+    /// <summary>Same as <see cref="IsFileActivelyInUse"/> but for a destination folder.</summary>
+    public bool IsFolderActivelyInUse(string folderId)
+    {
+        lock (_gate) return _jobsById.Values.Any(job => job.Phase == GenerationJobPhase.Running && ReferencesFolder(job.Snapshot, folderId));
+    }
+
+    /// <summary>True while a connection has a submitted (<see cref="GenerationJobPhase.Running"/> or
+    /// <see cref="GenerationJobPhase.Monitoring"/>) job against it — plan.md:417 requires the user to
+    /// cancel or wait for these rather than recycling the connection out from under them. A merely
+    /// <see cref="GenerationJobPhase.Queued"/> job never blocks recycling; see
+    /// <see cref="CancelQueuedJobsForConnection"/> for the cascade that handles those instead.</summary>
+    public bool IsConnectionActivelyInUse(string connectionId)
+    {
+        lock (_gate) return _jobsById.Values.Any(job => job.ConnectionId == connectionId && job.Phase is GenerationJobPhase.Running or GenerationJobPhase.Monitoring);
+    }
+
+    /// <summary>Same as <see cref="IsConnectionActivelyInUse"/> but for a model.</summary>
+    public bool IsModelActivelyInUse(string modelId)
+    {
+        lock (_gate) return _jobsById.Values.Any(job => job.Snapshot.ModelId == modelId && job.Phase is GenerationJobPhase.Running or GenerationJobPhase.Monitoring);
+    }
+
+    /// <summary>Submitted-tab titles of every still-queued (never yet submitted) job that depends on
+    /// this connection — for a recycle-confirmation cascade warning, matching plan.md:419's "included
+    /// in the cascade warning" requirement.</summary>
+    public IReadOnlyList<string> GetQueuedJobTitlesForConnection(string connectionId)
+    {
+        lock (_gate) return _jobsById.Values.Where(job => job.ConnectionId == connectionId && job.Phase == GenerationJobPhase.Queued).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
+    }
+
+    /// <summary>Same as <see cref="GetQueuedJobTitlesForConnection"/> but for a model.</summary>
+    public IReadOnlyList<string> GetQueuedJobTitlesForModel(string modelId)
+    {
+        lock (_gate) return _jobsById.Values.Where(job => job.Snapshot.ModelId == modelId && job.Phase == GenerationJobPhase.Queued).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
+    }
+
+    /// <summary>Submitted-tab titles of every job (queued or already dependency-paused) that
+    /// references this file, for a recycle/permanent-deletion preview (plan.md:409-410).</summary>
+    public IReadOnlyList<string> GetQueuedJobTitlesForFile(string fileId)
+    {
+        lock (_gate) return _jobsById.Values.Where(job => job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled && ReferencesFile(job.Snapshot, fileId)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
+    }
+
+    /// <summary>Same as <see cref="GetQueuedJobTitlesForFile"/> but for a destination folder.</summary>
+    public IReadOnlyList<string> GetQueuedJobTitlesForFolder(string folderId)
+    {
+        lock (_gate) return _jobsById.Values.Where(job => job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled && ReferencesFolder(job.Snapshot, folderId)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
+    }
+
+    /// <summary>Cascade-cancels every still-queued (never yet submitted) job depending on this
+    /// connection — called after the user confirms a recycle-connection cascade warning
+    /// (plan.md:419). A job that already reached <see cref="GenerationJobPhase.Running"/> or
+    /// <see cref="GenerationJobPhase.Monitoring"/> is never touched here; recycling is blocked
+    /// entirely while one of those exists (see <see cref="IsConnectionActivelyInUse"/>), so by the
+    /// time this runs only genuinely never-submitted jobs remain.</summary>
+    public void CancelQueuedJobsForConnection(string connectionId)
+    {
+        List<string> toCancel;
+        lock (_gate) toCancel = _jobsById.Values.Where(job => job.ConnectionId == connectionId && job.Phase == GenerationJobPhase.Queued).Select(job => job.JobId).ToList();
+        foreach (var jobId in toCancel) Cancel(jobId);
+    }
+
+    /// <summary>Same as <see cref="CancelQueuedJobsForConnection"/> but for a model.</summary>
+    public void CancelQueuedJobsForModel(string modelId)
+    {
+        List<string> toCancel;
+        lock (_gate) toCancel = _jobsById.Values.Where(job => job.Snapshot.ModelId == modelId && job.Phase == GenerationJobPhase.Queued).Select(job => job.JobId).ToList();
+        foreach (var jobId in toCancel) Cancel(jobId);
+    }
+
+    private void MarkDependencyRecycled(string dependencyId, Func<GenerationJobSnapshot, string, bool> references)
+    {
+        var changed = false;
+        lock (_gate)
+        {
+            foreach (var job in _jobsById.Values)
+            {
+                if (job.Phase is not (GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled) || !references(job.Snapshot, dependencyId)) continue;
+                if (job.RecycledDependencyIds.Add(dependencyId)) changed = true;
+                if (job.Phase == GenerationJobPhase.Queued) { job.Phase = GenerationJobPhase.DependencyRecycled; changed = true; }
+            }
+        }
+        if (changed) RaiseChanged();
+    }
+
+    private void MarkDependencyRestored(string dependencyId, Func<GenerationJobSnapshot, string, bool> references)
+    {
+        var changed = false;
+        lock (_gate)
+        {
+            foreach (var job in _jobsById.Values)
+            {
+                if (job.Phase != GenerationJobPhase.DependencyRecycled || !references(job.Snapshot, dependencyId) || !job.RecycledDependencyIds.Remove(dependencyId)) continue;
+                changed = true;
+                if (job.RecycledDependencyIds.Count == 0 && !job.NonRunnable) job.Phase = GenerationJobPhase.Queued;
+            }
+        }
+        if (changed) { RaiseChanged(); Pump(); }
+    }
+
+    private void MarkDependencyPermanentlyDeleted(string dependencyId, Func<GenerationJobSnapshot, string, bool> references)
+    {
+        var changed = false;
+        lock (_gate)
+        {
+            foreach (var job in _jobsById.Values)
+            {
+                if (job.Phase is not (GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled) || !references(job.Snapshot, dependencyId)) continue;
+                job.NonRunnable = true;
+                if (job.Phase == GenerationJobPhase.Queued) job.Phase = GenerationJobPhase.DependencyRecycled;
+                changed = true;
+            }
+        }
+        if (changed) RaiseChanged();
+    }
+
+    /// <summary>Pauses every still-queued job whose source-image slot references this file
+    /// (plan.md:413) — called after a source file is recycled.</summary>
+    public void NotifyFileRecycled(string fileId) => MarkDependencyRecycled(fileId, ReferencesFile);
+
+    /// <summary>Resumes a paused job once every dependency it was waiting on (this file included) is
+    /// restored (plan.md:414) — called after a source file is restored from the recycle bin.</summary>
+    public void NotifyFileRestored(string fileId) => MarkDependencyRestored(fileId, ReferencesFile);
+
+    /// <summary>Marks every job referencing this file as permanently non-runnable (plan.md:415) —
+    /// called after a source file is permanently deleted.</summary>
+    public void NotifyFilePermanentlyDeleted(string fileId) => MarkDependencyPermanentlyDeleted(fileId, ReferencesFile);
+
+    /// <summary>Same as <see cref="NotifyFileRecycled"/> but for a destination folder.</summary>
+    public void NotifyFolderRecycled(string folderId) => MarkDependencyRecycled(folderId, ReferencesFolder);
+
+    /// <summary>Same as <see cref="NotifyFileRestored"/> but for a destination folder.</summary>
+    public void NotifyFolderRestored(string folderId) => MarkDependencyRestored(folderId, ReferencesFolder);
+
+    /// <summary>Same as <see cref="NotifyFilePermanentlyDeleted"/> but for a destination folder.</summary>
+    public void NotifyFolderPermanentlyDeleted(string folderId) => MarkDependencyPermanentlyDeleted(folderId, ReferencesFolder);
 
     private void Pump()
     {
@@ -492,6 +664,12 @@ public sealed class GenerationQueueService
                     var index = (_cursor + i) % count;
                     var connectionId = _connectionOrder[index];
                     if (!_queues.TryGetValue(connectionId, out var queue) || queue.Count == 0) continue;
+                    // A dependency-recycled job keeps its place in the queue (plan.md:413) but is
+                    // never itself eligible to start — later, unaffected jobs on the same connection
+                    // must still be able to run around it rather than stalling behind it.
+                    var node = queue.First;
+                    while (node is not null && node.Value.Phase != GenerationJobPhase.Queued) node = node.Next;
+                    if (node is null) continue;
                     _runningPerConnection.TryGetValue(connectionId, out var running);
                     if (running >= GetConnectionCap(connectionId)) continue;
                     if (IsConnectionOutOfRequestQuota(connectionId, out var resetsAt))
@@ -499,8 +677,8 @@ public sealed class GenerationQueueService
                         ScheduleRateLimitRetryPump(connectionId, resetsAt);
                         continue;
                     }
-                    started = queue.First!.Value;
-                    queue.RemoveFirst();
+                    started = node.Value;
+                    queue.Remove(node);
                     started.Phase = GenerationJobPhase.Running;
                     _runningPerConnection[connectionId] = running + 1;
                     _runningTotal++;

@@ -1,6 +1,7 @@
 @page "/recycle-bin"
 @inject AppLibraryState LibraryState
 @inject ISecureCredentialStore Credentials
+@inject GenerationQueueService Queue
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -40,6 +41,17 @@
             }
             @if (_pendingEntries.Count > 6) { <li>@Strings["AndMoreItems", _pendingEntries.Count - 6]</li> }
         </ul>
+        @if (_pendingAction != RecycleBinAction.Restore)
+        {
+            @if (PendingDeletionQueuedJobTitles().Count is > 0 and var queuedJobImpactCount)
+            {
+                <p class="notice" role="status">@Strings["PermanentDeletionQueuedJobsWarning", queuedJobImpactCount]</p>
+            }
+            @if (PendingDeletionActivelyInUseCount() is > 0 and var activelyInUseCount)
+            {
+                <p class="notice error">@Strings["PermanentDeletionActivelyInUseWarning", activelyInUseCount]</p>
+            }
+        }
         @if (_pendingAction == RecycleBinAction.Restore)
         {
             <div class="restore-review">
@@ -257,6 +269,22 @@ else
         _failures = [];
     }
 
+    private IReadOnlyList<string> PendingDeletionQueuedJobTitles() => _pendingEntries
+        .SelectMany(entry => entry.Reference.Kind switch
+        {
+            RecycleBinItemKind.File => Queue.GetQueuedJobTitlesForFile(entry.Reference.Id),
+            RecycleBinItemKind.Folder => Queue.GetQueuedJobTitlesForFolder(entry.Reference.Id),
+            _ => []
+        })
+        .Distinct(StringComparer.Ordinal).ToArray();
+
+    private int PendingDeletionActivelyInUseCount() => _pendingEntries.Count(entry => entry.Reference.Kind switch
+    {
+        RecycleBinItemKind.File => Queue.IsFileActivelyInUse(entry.Reference.Id),
+        RecycleBinItemKind.Folder => Queue.IsFolderActivelyInUse(entry.Reference.Id),
+        _ => false
+    });
+
     private void CancelPendingAction()
     {
         _pendingAction = null;
@@ -286,12 +314,38 @@ else
                 }
             }
 
+            // plan.md:416 — a file or folder actively being read/uploaded by a running generation
+            // cannot be permanently deleted. This can only happen here (never for Restore, which
+            // never requires the item to be un-pinned) if it was recycled by another means while
+            // this page's data was stale; excluding it here rather than letting the delete succeed
+            // keeps that guarantee even on a race.
+            var deletionTargets = _pendingAction == RecycleBinAction.Restore
+                ? _pendingEntries
+                : _pendingEntries.Where(entry => entry.Reference.Kind switch
+                {
+                    RecycleBinItemKind.File => !Queue.IsFileActivelyInUse(entry.Reference.Id),
+                    RecycleBinItemKind.Folder => !Queue.IsFolderActivelyInUse(entry.Reference.Id),
+                    _ => true
+                }).ToArray();
+            var skippedActivelyInUseCount = _pendingEntries.Count - deletionTargets.Count;
+
             var result = _pendingAction switch
             {
                 RecycleBinAction.Restore => await workspace.RestoreRecycleBinItemsAsync(_restorePreview.Items.Where(item => item.CanRestore).Select(item => item.Entry.Reference).ToArray()),
                 RecycleBinAction.Empty => await workspace.EmptyRecycleBinAsync(),
-                _ => await workspace.PermanentlyDeleteRecycleBinItemsAsync(_pendingEntries.Select(entry => entry.Reference).ToArray())
+                _ => await workspace.PermanentlyDeleteRecycleBinItemsAsync(deletionTargets.Select(entry => entry.Reference).ToArray())
             };
+
+            foreach (var success in result.Items.Where(item => item.Succeeded && item.Reference.Kind == RecycleBinItemKind.File))
+            {
+                if (_pendingAction == RecycleBinAction.Restore) Queue.NotifyFileRestored(success.Reference.Id);
+                else Queue.NotifyFilePermanentlyDeleted(success.Reference.Id);
+            }
+            foreach (var success in result.Items.Where(item => item.Succeeded && item.Reference.Kind == RecycleBinItemKind.Folder))
+            {
+                if (_pendingAction == RecycleBinAction.Restore) Queue.NotifyFolderRestored(success.Reference.Id);
+                else Queue.NotifyFolderPermanentlyDeleted(success.Reference.Id);
+            }
 
             foreach (var success in result.Items.Where(item => item.Succeeded && item.Reference.Kind == RecycleBinItemKind.Connection))
             {
@@ -319,6 +373,7 @@ else
             _message = result.FailedCount == 0
                 ? Strings["ItemsProcessedSuccessfully", result.SucceededCount]
                 : Strings["ItemsProcessedWithFailures", result.SucceededCount, result.FailedCount];
+            if (skippedActivelyInUseCount > 0) _message = Strings["PermanentDeletionSkippedActivelyInUse", skippedActivelyInUseCount];
         }
         finally
         {

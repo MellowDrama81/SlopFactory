@@ -31,8 +31,8 @@ public sealed class GenerationQueueServiceTests
         }
     }
 
-    private static GenerationJobSnapshot Snapshot(string draftId, string modelId, string prompt, string destinationFolderId, GenerationMode mode = GenerationMode.Text, int resultCount = 1) =>
-        new(draftId, "Tab", mode, modelId, prompt, null, null, resultCount, destinationFolderId, null);
+    private static GenerationJobSnapshot Snapshot(string draftId, string modelId, string prompt, string destinationFolderId, GenerationMode mode = GenerationMode.Text, int resultCount = 1, string? sourceFileId = null) =>
+        new(draftId, "Tab", mode, modelId, prompt, null, sourceFileId, resultCount, destinationFolderId, null);
 
     private static async Task<Connection> CreateReadyConnectionAsync(ILibraryWorkspace workspace, string label)
     {
@@ -1060,6 +1060,21 @@ public sealed class GenerationQueueServiceTests
 
     private static readonly byte[] Mp4SignatureBytes = [0, 0, 0, 0x18, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'i', (byte)'s', (byte)'o', (byte)'m', 0, 0, 0, 0];
 
+    // A real PNG signature + IHDR chunk declaring a 1x1 image (no IDAT/IEND needed — matches
+    // LibraryWorkspaceTests.cs's own oversized-image fixture, which reaches the same dimension-aware
+    // validation this needs to pass through rather than reject).
+    private static readonly byte[] PngSignatureBytes = CreateMinimalPngBytes();
+
+    private static byte[] CreateMinimalPngBytes()
+    {
+        var png = new byte[32];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }.CopyTo(png, 0);
+        "IHDR"u8.CopyTo(png.AsSpan(12));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(16, 4), 1);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(20, 4), 1);
+        return png;
+    }
+
     [Fact]
     public async Task VideoGenerationWithMultipleResultsSubmitsOneIndependentJobPerResultAndCommitsAllOfThem()
     {
@@ -1129,6 +1144,192 @@ public sealed class GenerationQueueServiceTests
         Assert.Equal(GenerationResultStatus.Committed, outcome.Record.Results[0].Status);
         var failedEntry = Assert.Single(outcome.Record.Results, entry => entry.Status == GenerationResultStatus.Failed);
         Assert.Equal("Moderation rejected this variation.", failedEntry.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task RecyclingASourceFilePausesAQueuedJobDependingOnItAndRestoringResumesIt()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, PngSignatureBytes);
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        // Notify* only simulates the recycle-bin event; the file stays genuinely active/readable in
+        // the workspace throughout, matching what would actually be true once restored for real.
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId, sourceFileId: sourceFile.Id), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        var job2Id = queue.GetActiveJobIdForDraft("draft-2")!;
+
+        queue.NotifyFileRecycled(sourceFile.Id);
+        Assert.Equal(GenerationJobPhase.DependencyRecycled, queue.GetJobStatus(job2Id)!.Phase);
+        // The queue position is retained across the pause (it is the only job still in this
+        // connection's queue once job1 starts running, so position 1).
+        Assert.Equal(1, queue.GetJobStatus(job2Id)!.QueuePosition);
+
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+        // Still paused even once it would otherwise be next in line.
+        await Task.Delay(50);
+        Assert.DoesNotContain("prompt2", adapter.InvokedPrompts);
+
+        queue.NotifyFileRestored(sourceFile.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt2"));
+        Assert.Equal(GenerationJobPhase.Running, queue.GetJobStatus(job2Id)!.Phase);
+        adapter.Complete("prompt2", new TextGenerationResult(["result2"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-2") is not null);
+    }
+
+    [Fact]
+    public async Task ADependencyRecycledJobDoesNotBlockALaterQueuedJobOnTheSameConnectionFromRunning()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId, sourceFileId: "file-1"), connection.Id);
+        queue.Enqueue(Snapshot("draft-3", model.Id, "prompt3", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+
+        queue.NotifyFileRecycled("file-1");
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+
+        // prompt3 must be picked up around the paused prompt2, not stalled behind it.
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt3"));
+        Assert.DoesNotContain("prompt2", adapter.InvokedPrompts);
+        adapter.Complete("prompt3", new TextGenerationResult(["result3"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-3") is not null);
+    }
+
+    [Fact]
+    public async Task AJobPausedByTwoRecycledDependenciesOnlyResumesOnceBothAreRestored()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, PngSignatureBytes);
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        // A blocking job occupies the connection's only concurrency slot so draft-2 stays Queued
+        // (never dequeued into Running, which would otherwise try to actually read the source file).
+        // The real generated folder is used for the notify calls below too — they are pure in-memory
+        // simulations of a recycle-bin event, independent of the folder's real database state, and
+        // this job is allowed to run to full completion later in this test.
+        var folderId = workspace.Descriptor.GeneratedFolderId;
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", folderId), connection.Id);
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", folderId, sourceFileId: sourceFile.Id), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        var jobId = queue.GetActiveJobIdForDraft("draft-2")!;
+
+        queue.NotifyFileRecycled(sourceFile.Id);
+        queue.NotifyFolderRecycled(folderId);
+        Assert.Equal(GenerationJobPhase.DependencyRecycled, queue.GetJobStatus(jobId)!.Phase);
+
+        queue.NotifyFileRestored(sourceFile.Id);
+        Assert.Equal(GenerationJobPhase.DependencyRecycled, queue.GetJobStatus(jobId)!.Phase);
+
+        queue.NotifyFolderRestored(folderId);
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt2"));
+        adapter.Complete("prompt2", new TextGenerationResult(["result2"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-2") is not null);
+    }
+
+    [Fact]
+    public async Task PermanentlyDeletingADependencyMarksAJobNonRunnableAndRestoringSomethingElseDoesNotClearIt()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId, sourceFileId: "file-1"), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        var jobId = queue.GetActiveJobIdForDraft("draft-2")!;
+
+        queue.NotifyFilePermanentlyDeleted("file-1");
+        var status = queue.GetJobStatus(jobId)!;
+        Assert.Equal(GenerationJobPhase.DependencyRecycled, status.Phase);
+        Assert.True(queue.GetSnapshot().Single(entry => entry.JobId == jobId).NonRunnable);
+
+        // Restoring an unrelated file must never clear a different job's permanent-deletion flag.
+        queue.NotifyFileRestored("some-other-file");
+        Assert.True(queue.GetSnapshot().Single(entry => entry.JobId == jobId).NonRunnable);
+        Assert.Equal(GenerationJobPhase.DependencyRecycled, queue.GetJobStatus(jobId)!.Phase);
+
+        // Cancelling a non-runnable, dependency-recycled job must actually remove it rather than
+        // silently no-op — Cancel() only looked for an active CancellationTokenSource before this
+        // phase existed, which a paused-never-started job never has.
+        queue.Cancel(jobId);
+        Assert.Null(queue.GetJobStatus(jobId));
+        var outcome = queue.GetLastOutcomeForDraft("draft-2");
+        Assert.NotNull(outcome);
+        Assert.True(outcome!.CancelledBeforeSubmission);
+
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+    }
+
+    [Fact]
+    public async Task ActivelyInUseQueriesOnlyReportRunningJobsNotMerelyQueuedOnes()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, PngSignatureBytes);
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId, sourceFileId: sourceFile.Id), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+
+        Assert.True(queue.IsFileActivelyInUse(sourceFile.Id));
+        Assert.True(queue.IsConnectionActivelyInUse(connection.Id));
+        Assert.True(queue.IsModelActivelyInUse(model.Id));
+
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId, sourceFileId: "file-2"), connection.Id);
+        // draft-2 is merely queued (blocked by the connection's default concurrency cap of 1) —
+        // it must never count as "actively in use" the way a running job does.
+        Assert.False(queue.IsFileActivelyInUse("file-2"));
+
+        // draft-2 references a nonexistent file — fine, since it is cancelled here rather than ever
+        // allowed to actually run (this test's assertions about "actively in use" are already made).
+        queue.Cancel(queue.GetActiveJobIdForDraft("draft-2")!);
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+    }
+
+    [Fact]
+    public async Task RecyclingAConnectionCascadeCancelsItsQueuedButNeverSubmittedJobs()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        Assert.Single(queue.GetQueuedJobTitlesForConnection(connection.Id));
+
+        // The running job is untouched by the cascade — only never-submitted work is cancelled.
+        queue.CancelQueuedJobsForConnection(connection.Id);
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-2") is not null);
+        Assert.True(queue.GetLastOutcomeForDraft("draft-2")!.CancelledBeforeSubmission);
+        Assert.DoesNotContain("prompt2", adapter.InvokedPrompts);
+        Assert.Equal(GenerationJobPhase.Running, queue.GetJobStatus(queue.GetActiveJobIdForDraft("draft-1")!)!.Phase);
+
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
     }
 
     private sealed class FakeProviderAdapter : IProviderAdapter

@@ -7,6 +7,7 @@
 @inject IRecentLibraryService RecentLibraries
 @inject ISensitiveMetadataDisclosureService SensitiveDisclosure
 @inject IPlatformFileActionService PlatformFiles
+@inject GenerationQueueService Queue
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -371,6 +372,14 @@ else
                     else if (_bulkAction == BulkAction.Recycle)
                     {
                         <p>@Strings["RecycleSelectedDescription"]</p>
+                        @if (BulkRecycleAffectedQueuedJobTitles().Count is > 0 and var affectedQueuedJobCount)
+                        {
+                            <div class="notice" role="status">@Strings["RecycleQueuedJobsWarning", affectedQueuedJobCount]</div>
+                        }
+                        @if (_selectedFileIds.Count(Queue.IsFileActivelyInUse) is > 0 and var activelyInUseCount)
+                        {
+                            <div class="notice error" role="status">@Strings["BulkRecycleActivelyInUseWarning", activelyInUseCount]</div>
+                        }
                         <div class="actions"><button class="danger" disabled="@_busy" @onclick="ConfirmBulkRecycleAsync">@Strings["ConfirmRecycle"]</button></div>
                     }
                     else
@@ -837,10 +846,27 @@ else
         await RunBulkActionAsync(() => LibraryState.Workspace.MoveFilesAsync(_selectedFileIds.ToArray(), _bulkDestinationFolderId));
     }
 
+    private IReadOnlyList<string> BulkRecycleAffectedQueuedJobTitles() =>
+        _selectedFileIds.SelectMany(Queue.GetQueuedJobTitlesForFile).Distinct(StringComparer.Ordinal).ToArray();
+
     private async Task ConfirmBulkRecycleAsync()
     {
         if (LibraryState.Workspace is null) return;
-        await RunBulkActionAsync(() => LibraryState.Workspace.RecycleFilesAsync(_selectedFileIds.ToArray()));
+        // plan.md:418 — a file actively being read/uploaded by a running generation cannot be
+        // recycled; every other selected file proceeds normally and pauses any queued job that
+        // depends on it (plan.md:413) instead of being blocked.
+        var eligibleIds = _selectedFileIds.Where(id => !Queue.IsFileActivelyInUse(id)).ToArray();
+        var skippedCount = _selectedFileIds.Count - eligibleIds.Length;
+        if (eligibleIds.Length == 0)
+        {
+            _message = Strings["FileActivelyInUse"];
+            return;
+        }
+        await RunBulkActionAsync(() => LibraryState.Workspace.RecycleFilesAsync(eligibleIds), result =>
+        {
+            foreach (var item in result.Items.Where(item => item.Succeeded)) Queue.NotifyFileRecycled(item.FileId);
+        });
+        if (skippedCount > 0) _message = Strings["BulkRecycleSkippedActivelyInUse", skippedCount];
     }
 
     private async Task ConfirmBulkDuplicateAsync()
@@ -892,13 +918,14 @@ else
         await ConfirmBulkMetadataAsync();
     }
 
-    private async Task RunBulkActionAsync(Func<Task<BulkFileOperationResult>> action)
+    private async Task RunBulkActionAsync(Func<Task<BulkFileOperationResult>> action, Action<BulkFileOperationResult>? onSuccess = null)
     {
         if (_contents is null) return;
         _busy = true;
         try
         {
             _bulkResult = await action();
+            onSuccess?.Invoke(_bulkResult);
             _message = Strings["BulkActionComplete", _bulkResult.SucceededCount, _bulkResult.FailedCount];
             _selectedFileIds.Clear();
             CancelBulkAction();
@@ -1376,9 +1403,15 @@ else
     private async Task RecycleFileAsync(string id)
     {
         if (LibraryState.Workspace is null || _contents is null) return;
+        if (Queue.IsFileActivelyInUse(id))
+        {
+            _message = Strings["FileActivelyInUse"];
+            return;
+        }
         try
         {
             await LibraryState.Workspace.RecycleFileAsync(id);
+            Queue.NotifyFileRecycled(id);
             await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
@@ -1387,9 +1420,15 @@ else
     private async Task RecycleFolderAsync(string id)
     {
         if (LibraryState.Workspace is null || _contents is null) return;
+        if (Queue.IsFolderActivelyInUse(id))
+        {
+            _message = Strings["FolderActivelyInUse"];
+            return;
+        }
         try
         {
             await LibraryState.Workspace.RecycleFolderAsync(id);
+            Queue.NotifyFolderRecycled(id);
             await LoadFolderAsync(_contents.Folder.Id, preserveOffset: true);
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }

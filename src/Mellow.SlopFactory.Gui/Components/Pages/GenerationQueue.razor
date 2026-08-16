@@ -53,6 +53,8 @@ else
                             {
                                 GenerationJobPhase.Running => Strings["Generating"],
                                 GenerationJobPhase.Monitoring => Strings["MonitoringAsyncJob"],
+                                GenerationJobPhase.DependencyRecycled when entry.NonRunnable => Strings["DependencyPermanentlyDeletedNotice"],
+                                GenerationJobPhase.DependencyRecycled => Strings["DependencyRecycledNotice"],
                                 _ => Strings["QueuePosition", entry.QueuePosition ?? 0]
                             })</small>
                         </div>

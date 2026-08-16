@@ -1,5 +1,6 @@
 @page "/models"
 @inject AppLibraryState LibraryState
+@inject GenerationQueueService Queue
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -57,7 +58,18 @@ else
                         {
                             <span role="dialog" aria-label="@Strings["ConfirmRecycleModel"]">
                                 <span>@Strings["RecycleModelWarning"]</span>
-                                <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(model.Id)">@Strings["Recycle"]</button>
+                                @if (Queue.IsModelActivelyInUse(model.Id))
+                                {
+                                    <span class="notice error">@Strings["ModelActivelyInUse"]</span>
+                                }
+                                else
+                                {
+                                    @if (Queue.GetQueuedJobTitlesForModel(model.Id).Count is > 0 and var queuedJobCount)
+                                    {
+                                        <span class="notice">@Strings["RecycleModelQueuedJobsWarning", queuedJobCount]</span>
+                                    }
+                                    <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(model.Id)">@Strings["Recycle"]</button>
+                                }
                                 <button class="secondary" disabled="@_busy" @onclick="() => _recycleCandidate = null">@Strings["Cancel"]</button>
                             </span>
                         }
@@ -124,9 +136,11 @@ else
 
     private async Task RecycleAsync(string modelId)
     {
+        if (Queue.IsModelActivelyInUse(modelId)) return;
         _busy = true;
         try
         {
+            Queue.CancelQueuedJobsForModel(modelId);
             await LibraryState.Workspace!.RecycleModelAsync(modelId);
             _recycleCandidate = null;
             _message = Strings["ModelRecycled"];

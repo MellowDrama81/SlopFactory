@@ -1,6 +1,7 @@
 @page "/connections"
 @inject AppLibraryState LibraryState
 @inject IConnectionRateLimitTracker RateLimitTracker
+@inject GenerationQueueService Queue
 @inject IStringLocalizer<UiStrings> Strings
 @using Microsoft.Extensions.Localization
 @using Mellow.SlopFactory.Gui.Resources
@@ -59,7 +60,18 @@ else
                         {
                             <span role="dialog" aria-label="@Strings["ConfirmRecycleConnection"]">
                                 <span>@Strings["RecycleConnectionWarning", DependentModelCount(connection.Id)]</span>
-                                <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(connection.Id)">@Strings["Recycle"]</button>
+                                @if (Queue.IsConnectionActivelyInUse(connection.Id))
+                                {
+                                    <span class="notice error">@Strings["ConnectionActivelyInUse"]</span>
+                                }
+                                else
+                                {
+                                    @if (Queue.GetQueuedJobTitlesForConnection(connection.Id).Count is > 0 and var queuedJobCount)
+                                    {
+                                        <span class="notice">@Strings["RecycleConnectionQueuedJobsWarning", queuedJobCount]</span>
+                                    }
+                                    <button class="danger" disabled="@_busy" @onclick="() => RecycleAsync(connection.Id)">@Strings["Recycle"]</button>
+                                }
                                 <button class="secondary" disabled="@_busy" @onclick="() => _recycleCandidate = null">@Strings["Cancel"]</button>
                             </span>
                         }
@@ -152,9 +164,13 @@ else
 
     private async Task RecycleAsync(string connectionId)
     {
+        if (Queue.IsConnectionActivelyInUse(connectionId)) return;
         _busy = true;
         try
         {
+            // plan.md:419 — recycling cancels every still-queued (never yet submitted) job on this
+            // connection, having already shown their count in the cascade warning above.
+            Queue.CancelQueuedJobsForConnection(connectionId);
             await LibraryState.Workspace!.RecycleConnectionAsync(connectionId);
             _recycleCandidate = null;
             _message = Strings["ConnectionRecycled"];

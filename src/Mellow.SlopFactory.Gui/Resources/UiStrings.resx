@@ -889,4 +889,18 @@
   <data name="BackToGenerationHistory" xml:space="preserve"><value>Back to generation history</value></data>
   <data name="InsecureHttpBaseUrlWarning" xml:space="preserve"><value>This base URL uses unencrypted HTTP. Only loopback or private-network addresses are accepted; credentials and data would otherwise travel in cleartext.</value></data>
   <data name="InsecureConnectionBadge" xml:space="preserve"><value>Unencrypted (HTTP)</value></data>
+  <data name="FileActivelyInUse" xml:space="preserve"><value>This file cannot be recycled while a running generation is actively reading or uploading it. Try again once that generation finishes.</value></data>
+  <data name="FolderActivelyInUse" xml:space="preserve"><value>This folder cannot be recycled while a running generation is actively writing a result into it. Try again once that generation finishes.</value></data>
+  <data name="BulkRecycleActivelyInUseWarning" xml:space="preserve"><value>{0} of the selected files are being actively read or uploaded by a running generation and will be skipped.</value></data>
+  <data name="BulkRecycleSkippedActivelyInUse" xml:space="preserve"><value>{0} file(s) were skipped because a running generation is actively using them.</value></data>
+  <data name="RecycleQueuedJobsWarning" xml:space="preserve"><value>{0} queued (not yet submitted) generation(s) depend on these files and will be paused as Dependency Recycled until restored.</value></data>
+  <data name="PermanentDeletionQueuedJobsWarning" xml:space="preserve"><value>{0} queued generation(s) depend on this content — permanently deleting it means those runs can only be cancelled and resubmitted, not restored.</value></data>
+  <data name="PermanentDeletionActivelyInUseWarning" xml:space="preserve"><value>{0} of these items are being actively read or uploaded by a running generation and will be skipped.</value></data>
+  <data name="PermanentDeletionSkippedActivelyInUse" xml:space="preserve"><value>{0} item(s) were skipped because a running generation is actively using them.</value></data>
+  <data name="ConnectionActivelyInUse" xml:space="preserve"><value>This connection cannot be recycled while a generation is actively submitted or being monitored on it. Cancel or wait for it to finish first.</value></data>
+  <data name="ModelActivelyInUse" xml:space="preserve"><value>This model cannot be recycled while a generation is actively submitted or being monitored on it. Cancel or wait for it to finish first.</value></data>
+  <data name="RecycleConnectionQueuedJobsWarning" xml:space="preserve"><value>{0} queued (not yet submitted) generation(s) on this connection will be cancelled.</value></data>
+  <data name="RecycleModelQueuedJobsWarning" xml:space="preserve"><value>{0} queued (not yet submitted) generation(s) using this model will be cancelled.</value></data>
+  <data name="DependencyRecycledNotice" xml:space="preserve"><value>Paused — a source file or destination folder it needs was recycled. Restore it to resume, or cancel this run.</value></data>
+  <data name="DependencyPermanentlyDeletedNotice" xml:space="preserve"><value>Cannot run — a source file or destination folder it needed was permanently deleted. Cancel this run and resubmit with a replacement.</value></data>
 </root>
