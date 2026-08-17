@@ -186,10 +186,19 @@ misreports OS suspension as a provider failure.
 
 - [ ] Implement `ProviderType.OneMinAi` only after its current official request, response, polling,
       status and error contracts have been confirmed.
-      Confirmed still blocked: the enum value and test/harness scaffolding already exist, but
-      `docs/developer/architecture.md`/`milestone3.md` record that 1min.AI's per-modality
-      request/response shapes could not be confirmed and its docs site could not even be fetched.
-      No adapter body exists; none should be written against unconfirmed shapes.
+      No longer blocked on missing documentation — see `docs/developer/1minai-contract.md`. The docs
+      site is fetchable (superseding the "could not even be fetched" note in `milestone3.md`), and
+      one model per modality is now live-verified end to end: chat (`gpt-4o-mini`), image
+      (`stable-diffusion-xl-1024-v1-0`, after the docs' own `black-forest-labs/flux-schnell` example
+      turned out to be a stale/rejected identifier), audio (`tts-1`), and video
+      (`lucataco/animate-diff:...`, confirmed genuinely synchronous — a non-`async` request blocks
+      the HTTP connection for the full render). Still open before implementation: the enum value and
+      test/harness scaffolding exist but no adapter body does; only one of ~41 image models and one
+      of 10 video models has a live-confirmed `promptObject` shape, and per the doc's own findings a
+      documented model identifier cannot be trusted without a live check, so each additional
+      image/video model the adapter supports needs its own verification pass, not a docs read alone.
+      The `async: true`/Get Result polling path also remains untested (every live call used the
+      synchronous default).
 - [ ] Complete all documented OpenRouter modality operations and close known response-shape gaps.
       Confirmed mostly done: `OpenRouterProviderAdapter` implements all four operations (text, image,
       audio, video submit/poll) with none throwing "not implemented." The one remaining documented
@@ -197,10 +206,19 @@ misreports OS suspension as a provider failure.
       as provisional until confirmed against a live account — left open pending that confirmation
       rather than guessed at further.
 - [ ] Complete DeepInfra audio/video operations only for endpoints with confirmed contracts.
-      Confirmed still blocked for the same reason as OneMinAi: `DeepInfraProviderAdapter`'s audio and
-      video methods each throw a `ProviderAdapterException` with an explicit "not yet verified
-      against confirmed documentation" message rather than guessing. Text/image/model-listing are
-      already implemented and confirmed via `OpenAiCompatibleProtocol` reuse.
+      No longer blocked on missing documentation — see
+      `docs/developer/deepinfra-audio-video-contract.md`. Audio (`POST /v1/audio/speech`) is
+      live-confirmed: raw MP3 bytes in the response body, matching OpenAI's own endpoint exactly.
+      Video is live-confirmed as a real submit-then-poll job API (`POST /v1/videos`, `GET
+      /v1/videos/{id}`, `GET /v1/videos/{id}/content`) with confirmed `status` values (`queued`,
+      `succeeded`) and a completed-job result on a third-party CDN host (needing the same
+      redirect/DNS-rebinding protection already built for OpenRouter) — but **not every DeepInfra
+      video model supports this job API**: the cheapest model tested was rejected outright with a
+      message naming the synchronous `/v1/inference/{model}` path as the only option for it, and that
+      alternate path's real behavior was never independently confirmed. `DeepInfraProviderAdapter`'s
+      audio and video methods currently still throw `ProviderAdapterException`, unchanged since this
+      is a documentation update, not an implementation pass; text/image/model-listing remain
+      implemented and confirmed via `OpenAiCompatibleProtocol` reuse.
 - [x] Define signed adapter snapshot versions and migrations so historical generation and saved
       setting records remain readable after adapter changes.
       "Signed" here means the app ships only built-in, code-signed adapters (plan.md:920-921), not
@@ -371,16 +389,17 @@ silently migrate to unrelated or replaced content.
 - [ ] Preserve the old tombstone and create a new file identity for reacquired bytes.
 - [ ] Warn and record **Provider Output Changed** when reacquired bytes do not match the tombstone.
 - [ ] Generate static audio waveform thumbnails in the regenerable preview cache.
-      Confirmed blocked, same tier as OneMinAi/DeepInfra: `PreviewCacheService` already generates
-      image thumbnails and video posters (via `PlatformImage`/platform-native video-frame APIs) but
-      has zero audio-decoding capability, and neither `Mellow.SlopFactory.Gui` nor
-      `Mellow.SlopFactory.Infrastructure` reference any audio-decoding library. Rendering a real
-      waveform needs compressed-audio-to-PCM decoding (mp3/wav/flac/ogg/aac/m4a are all accepted
-      today), which has no MAUI-provided cross-platform path and would require either a new
-      third-party dependency or hand-rolled per-platform decoders (Android `MediaExtractor`/
-      `MediaCodec`, Windows Media Foundation) — a new dependency/substantial platform-code decision,
-      not a bounded addition. plan.md's only mention is one clause with no format/resolution detail
-      to implement against.
+      Confirmed blocked, but on a different kind of obstacle than OneMinAi/DeepInfra — this isn't a
+      missing-documentation gap a live API call could resolve, it's a missing local capability:
+      `PreviewCacheService` already generates image thumbnails and video posters (via
+      `PlatformImage`/platform-native video-frame APIs) but has zero audio-decoding capability, and
+      neither `Mellow.SlopFactory.Gui` nor `Mellow.SlopFactory.Infrastructure` reference any
+      audio-decoding library. Rendering a real waveform needs compressed-audio-to-PCM decoding
+      (mp3/wav/flac/ogg/aac/m4a are all accepted today), which has no MAUI-provided cross-platform
+      path and would require either a new third-party dependency or hand-rolled per-platform decoders
+      (Android `MediaExtractor`/`MediaCodec`, Windows Media Foundation) — a new dependency/substantial
+      platform-code decision, not a bounded addition. plan.md's only mention is one clause with no
+      format/resolution detail to implement against.
 
 Done when: no draft dependency disappears silently, historical identities remain immutable and
 reacquisition never masquerades changed bytes as restoration.
