@@ -1077,6 +1077,29 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task RepeatedRefreshProviderStatusAttemptsWithinTheThrottleWindowAreRejectedWithoutPolling()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(5));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-job-throttle";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.CompletedDownloadFailed, null, "Downloading the completed video result failed."));
+        queue.Enqueue(Snapshot("draft-video", model.Id, "A cat on a skateboard", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-video") is not null);
+        var asyncJob = Assert.Single(await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id));
+
+        // First attempt consumes the one queued poll result and fails again (registry row untouched);
+        // a second attempt hot on its heels must be rejected locally rather than polling a second time.
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.CompletedDownloadFailed, null, "Downloading the completed video result failed again."));
+        Assert.False(await queue.RetryMissingResultDownloadAsync(asyncJob.Id));
+        var pollCountAfterFirstAttempt = adapter.VideoPollCount;
+
+        Assert.False(await queue.RetryMissingResultDownloadAsync(asyncJob.Id));
+        Assert.Equal(pollCountAfterFirstAttempt, adapter.VideoPollCount);
+    }
+
+    [Fact]
     public async Task RetryMissingResultDownloadLeavesTheRegistryRowUntouchedWhenTheDownloadFailsAgain()
     {
         using var temporary = new TemporaryDirectory();

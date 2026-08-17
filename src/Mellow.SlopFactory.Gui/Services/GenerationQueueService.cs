@@ -1496,6 +1496,12 @@ public sealed class GenerationQueueService
         return (record, stagedForRecovery);
     }
 
+    /// <summary>Minimum time between two **Refresh Provider Status** attempts for the same async job
+    /// — a repeat click inside this window is rejected locally without making a provider request,
+    /// rather than letting rapid repeated clicks hammer the provider.</summary>
+    private static readonly TimeSpan RefreshProviderStatusThrottle = TimeSpan.FromSeconds(5);
+    private readonly Dictionary<string, DateTimeOffset> _lastRefreshAttemptByAsyncJobId = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Retries downloading a result whose provider job completed but whose initial download failed
     /// (<see cref="AsyncRemoteJobPhase.CompletedAwaitingDownload"/>) — the **Refresh Provider
@@ -1509,6 +1515,15 @@ public sealed class GenerationQueueService
     /// </summary>
     public async Task<bool> RetryMissingResultDownloadAsync(string asyncJobId, CancellationToken cancellationToken = default)
     {
+        lock (_gate)
+        {
+            if (_lastRefreshAttemptByAsyncJobId.TryGetValue(asyncJobId, out var lastAttempt) && DateTimeOffset.UtcNow - lastAttempt < RefreshProviderStatusThrottle)
+            {
+                return false;
+            }
+            _lastRefreshAttemptByAsyncJobId[asyncJobId] = DateTimeOffset.UtcNow;
+        }
+
         var workspace = _libraries.Workspace ?? throw new InvalidOperationException("No library is open.");
         var jobs = await workspace.GetPendingAsyncRemoteJobsAsync(cancellationToken).ConfigureAwait(false);
         var asyncJob = jobs.FirstOrDefault(candidate => candidate.Id == asyncJobId);
@@ -1547,6 +1562,7 @@ public sealed class GenerationQueueService
         // the same single-job/single-position assumption the original commit path already makes.
         await workspace.ImportMissingResultAsync(generationRecordId, position, files[0], cancellationToken).ConfigureAwait(false);
         await workspace.DeleteAsyncRemoteJobAsync(asyncJobId, cancellationToken).ConfigureAwait(false);
+        lock (_gate) _lastRefreshAttemptByAsyncJobId.Remove(asyncJobId);
         RaiseChanged();
         return true;
     }
