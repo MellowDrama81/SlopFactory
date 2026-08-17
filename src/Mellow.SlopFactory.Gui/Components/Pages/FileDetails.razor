@@ -29,6 +29,19 @@ else
             {
                 <button class="secondary" disabled="@_fileActionBusy" @onclick="ExportAsync">@Strings["Export"]</button>
                 @if (ContentActionPolicy.GetExternalOpenSafety(_file) is not (ExternalOpenSafety.BlockedActiveContent or ExternalOpenSafety.BlockedUnverifiedContent)) { <button class="secondary" disabled="@_fileActionBusy" @onclick="ReviewExternalOpenAsync">@Strings["OpenInAnotherApp"]</button> }
+                <details>
+                    <summary>@Strings["ExportSidecarOptionsHeading"]</summary>
+                    <label class="check"><input type="checkbox" @bind="_sidecarForm.WriteSidecar" />@Strings["WriteSidecar"]</label>
+                    @if (_sidecarForm.WriteSidecar)
+                    {
+                        <label class="check"><input type="checkbox" @bind="_sidecarForm.IncludePrompt" />@Strings["SidecarIncludePrompt"]</label>
+                        <label class="check"><input type="checkbox" @bind="_sidecarForm.IncludeFilenames" />@Strings["SidecarIncludeFilenames"]</label>
+                        <label class="check"><input type="checkbox" @bind="_sidecarForm.IncludeInternalIdentifiers" />@Strings["SidecarIncludeInternalIdentifiers"]</label>
+                        <label class="check"><input type="checkbox" @bind="_sidecarForm.IncludeUsageAndCost" />@Strings["SidecarIncludeUsageAndCost"]</label>
+                        <label class="check"><input type="checkbox" @bind="_sidecarForm.IncludeAdvancedSettings" />@Strings["SidecarIncludeAdvancedSettings"]</label>
+                        <label class="check" title="@Strings["SidecarSafetyMetadataUnavailableHelp"]"><input type="checkbox" disabled />@Strings["SidecarIncludeSafetyMetadata"]</label>
+                    }
+                </details>
             }
             @if (_file.ContentState == FileContentState.Changed) { <button class="secondary" disabled="@_fileActionBusy" @onclick="ExportChangedBytesAsync">@Strings["ExportChangedBytes"]</button> }
             <button class="secondary" @onclick="Back">@Strings["BackToLibrary"]</button>
@@ -958,18 +971,37 @@ else
         }
     }
 
+    private sealed class SidecarOptionsForm
+    {
+        public bool WriteSidecar { get; set; }
+        public bool IncludePrompt { get; set; }
+        public bool IncludeFilenames { get; set; }
+        public bool IncludeInternalIdentifiers { get; set; }
+        public bool IncludeUsageAndCost { get; set; }
+        public bool IncludeAdvancedSettings { get; set; }
+
+        // plan.md's opt-ins this app has no supporting data for yet — present so the user can see
+        // they're deliberately unavailable rather than silently absent, never selectable.
+        public ExportSidecarOptions ToOptions() => new(WriteSidecar, IncludePrompt, IncludeSensitiveMetadata: false, IncludeFilenames, IncludeInternalIdentifiers, IncludeUsageAndCost, IncludeAdvancedSettings, IncludeSafetyMetadata: false);
+    }
+
+    private readonly SidecarOptionsForm _sidecarForm = new();
+
     private async Task ExportAsync()
     {
         if (_file is null || LibraryState.Workspace is null) return;
         _fileActionBusy = true;
         try
         {
-            var result = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: false);
+            var (result, sidecar) = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: false, _sidecarForm.ToOptions());
             // plan.md:649-652 — a destination read-back mismatch recommends an integrity scan rather
             // than silently retrying or claiming the failure means the source library file is
             // corrupt (nothing about this failure touches its ContentState at all).
             if (result.Outcome == FileExportOutcome.VerificationFailed) ScanRecommendation.Recommend(IntegrityScanRecommendationReason.StorageInconsistency);
-            _message = result.Outcome switch { FileExportOutcome.Exported => Strings["ExportCompleted"], FileExportOutcome.Cancelled => Strings["ExportCancelled"], _ => result.Error ?? Strings["ExportFailed"] };
+            var mediaMessage = result.Outcome switch { FileExportOutcome.Exported => Strings["ExportCompleted"], FileExportOutcome.Cancelled => Strings["ExportCancelled"], _ => result.Error ?? Strings["ExportFailed"] };
+            _message = sidecar is null
+                ? mediaMessage
+                : $"{mediaMessage} {(sidecar.Outcome == FileExportOutcome.Exported ? Strings["SidecarExportCompleted"] : Strings["SidecarExportFailed", sidecar.Error ?? string.Empty])}";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or SlopFactoryException) { _message = exception.Message; }
         finally { _fileActionBusy = false; }
@@ -991,7 +1023,7 @@ else
         _fileActionBusy = true;
         try
         {
-            var result = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: true);
+            var (result, _) = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: true);
             if (result.Outcome == FileExportOutcome.VerificationFailed) ScanRecommendation.Recommend(IntegrityScanRecommendationReason.StorageInconsistency);
             _message = result.Outcome switch { FileExportOutcome.Exported => Strings["ChangedBytesExported"], FileExportOutcome.Cancelled => Strings["ChangedBytesExportCancelled"], _ => result.Error ?? Strings["ChangedBytesExportFailed"] };
         }

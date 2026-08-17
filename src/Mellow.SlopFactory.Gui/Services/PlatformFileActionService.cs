@@ -8,7 +8,12 @@ public interface IPlatformFileActionService
 {
     bool HasPermissionBlock { get; }
     Task PickRecursiveImportFolderAsync(bool includeHiddenFiles, CancellationToken cancellationToken = default);
-    Task<FileExportResult> ExportAsync(ILibraryWorkspace workspace, FileRecord file, bool changedBytes, CancellationToken cancellationToken = default);
+    /// <summary><paramref name="sidecarOptions"/> is honored only on the Windows local-filesystem
+    /// export path; on Android (SAF), <c>Sidecar</c> in the result is always null regardless of what
+    /// was requested — a SAF sidecar would need its own separate document write with its own
+    /// permission/verification handling, deferred (see docs/developer/architecture.md, "External
+    /// export cleanup journal and sidecars").</summary>
+    Task<(FileExportResult Media, SidecarExportResult? Sidecar)> ExportAsync(ILibraryWorkspace workspace, FileRecord file, bool changedBytes, ExportSidecarOptions? sidecarOptions = null, CancellationToken cancellationToken = default);
     /// <summary>Writes arbitrary bytes not owned by any library to a user-chosen destination — used
     /// by recovery staging's **Export Copy** (plan.md:331), which has no <see cref="FileRecord"/> or
     /// <see cref="ILibraryWorkspace"/> to export from. Returns true if the user completed the save,
@@ -18,7 +23,9 @@ public interface IPlatformFileActionService
     void OpenApplicationSettings();
 }
 
-public sealed class PlatformFileActionService(IncomingImportService incoming) : IPlatformFileActionService
+#pragma warning disable CS9113 // exportCleanupJournal is used only in the #elif ANDROID branch below; unread on other target frameworks.
+public sealed class PlatformFileActionService(IncomingImportService incoming, IExportCleanupJournal exportCleanupJournal) : IPlatformFileActionService
+#pragma warning restore CS9113
 {
     public bool HasPermissionBlock { get; private set; }
     public async Task PickRecursiveImportFolderAsync(bool includeHiddenFiles, CancellationToken cancellationToken = default)
@@ -51,7 +58,7 @@ public sealed class PlatformFileActionService(IncomingImportService incoming) : 
 #endif
     }
 
-    public async Task<FileExportResult> ExportAsync(ILibraryWorkspace workspace, FileRecord file, bool changedBytes, CancellationToken cancellationToken = default)
+    public async Task<(FileExportResult Media, SidecarExportResult? Sidecar)> ExportAsync(ILibraryWorkspace workspace, FileRecord file, bool changedBytes, ExportSidecarOptions? sidecarOptions = null, CancellationToken cancellationToken = default)
     {
 #if WINDOWS
         var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedFileName = Path.GetFileNameWithoutExtension(file.DisplayName) };
@@ -60,21 +67,28 @@ public sealed class PlatformFileActionService(IncomingImportService incoming) : 
         picker.FileTypeChoices.Add("Detected file", [extension]);
         InitializeWindowsPicker(picker);
         var destination = await picker.PickSaveFileAsync();
-        if (destination is null) return new FileExportResult(file.Id, string.Empty, FileExportOutcome.Cancelled, 0, null, null);
-        return changedBytes
-            ? await workspace.ExportChangedBytesAsync(file.Id, destination.Path, ExportCollisionChoice.Replace, cancellationToken: cancellationToken)
-            : await workspace.ExportFileAsync(file.Id, destination.Path, ExportCollisionChoice.Replace, cancellationToken: cancellationToken);
+        if (destination is null) return (new FileExportResult(file.Id, string.Empty, FileExportOutcome.Cancelled, 0, null, null), null);
+        if (changedBytes)
+        {
+            return (await workspace.ExportChangedBytesAsync(file.Id, destination.Path, ExportCollisionChoice.Replace, cancellationToken: cancellationToken), null);
+        }
+        return await workspace.ExportFileWithSidecarAsync(file.Id, destination.Path, sidecarOptions ?? ExportSidecarOptions.Default, ExportCollisionChoice.Replace, cancellationToken: cancellationToken);
 #elif ANDROID
         var activity = MainActivity.Current ?? throw new InvalidOperationException("The Android activity is unavailable.");
         var uri = await activity.CreateDocumentAsync(file.DisplayName, file.MediaType, cancellationToken).ConfigureAwait(false);
-        if (uri is null) return new FileExportResult(file.Id, string.Empty, FileExportOutcome.Cancelled, 0, null, null);
+        if (uri is null) return (new FileExportResult(file.Id, string.Empty, FileExportOutcome.Cancelled, 0, null, null), null);
         var temporary = Path.Combine(FileSystem.CacheDirectory, $"export-{Guid.NewGuid():N}-{Path.GetFileName(file.DisplayName)}");
+        // This local cache file (distinct from ExportFileAsync's own internal temp sibling, which
+        // LibraryWorkspace already journals itself) is what could be orphaned if the app crashes
+        // after the workspace export below succeeds but before this method's own finally block runs.
+        var operationId = await exportCleanupJournal.RecordPlannedAsync(ExportCleanupObjectType.LocalTempFile, FileSystem.CacheDirectory, Path.GetFileName(temporary), Path.GetFullPath(temporary), cancellationToken).ConfigureAwait(false);
         try
         {
             var staged = changedBytes
                 ? await workspace.ExportChangedBytesAsync(file.Id, temporary, cancellationToken: cancellationToken).ConfigureAwait(false)
                 : await workspace.ExportFileAsync(file.Id, temporary, cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (staged.Outcome != FileExportOutcome.Exported) return staged;
+            if (staged.Outcome != FileExportOutcome.Exported) return (staged, null);
+            await exportCleanupJournal.ConfirmAsync(operationId, cancellationToken).ConfigureAwait(false);
             await using (var source = new FileStream(temporary, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             await using (var destination = activity.ContentResolver?.OpenOutputStream(uri, "wt") ?? throw new IOException("The selected document destination could not be opened."))
                 await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
@@ -82,22 +96,28 @@ public sealed class PlatformFileActionService(IncomingImportService incoming) : 
             var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(verify, cancellationToken).ConfigureAwait(false));
             if (!string.Equals(hash, staged.ContentHash, StringComparison.Ordinal)) throw new IOException("The exported document failed byte-for-byte verification.");
             HasPermissionBlock = false;
-            return staged with { DestinationPath = "Android document provider" };
+            // Sidecar support does not extend to the Android SAF destination — see this interface's
+            // own remarks. sidecarOptions is intentionally not consulted here.
+            return (staged with { DestinationPath = "Android document provider" }, null);
         }
         catch (Java.Lang.SecurityException)
         {
             try { activity.ContentResolver?.Delete(uri, null, null); } catch (Exception exception) when (exception is Java.Lang.SecurityException or InvalidOperationException) { }
             HasPermissionBlock = true;
-            return new FileExportResult(file.Id, string.Empty, FileExportOutcome.Failed, 0, null, "The document provider denied access. Choose another destination or open system settings if access was permanently denied.");
+            return (new FileExportResult(file.Id, string.Empty, FileExportOutcome.Failed, 0, null, "The document provider denied access. Choose another destination or open system settings if access was permanently denied."), null);
         }
         catch
         {
             try { activity.ContentResolver?.Delete(uri, null, null); } catch (Exception exception) when (exception is Java.Lang.SecurityException or InvalidOperationException) { }
             throw;
         }
-        finally { try { if (File.Exists(temporary)) File.Delete(temporary); } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { } }
+        finally
+        {
+            try { if (File.Exists(temporary)) File.Delete(temporary); } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+            if (!File.Exists(temporary)) await exportCleanupJournal.RemoveAsync(operationId, CancellationToken.None).ConfigureAwait(false);
+        }
 #else
-        return await Task.FromResult(new FileExportResult(file.Id, string.Empty, FileExportOutcome.Failed, 0, null, "Export is unavailable on this platform."));
+        return (await Task.FromResult(new FileExportResult(file.Id, string.Empty, FileExportOutcome.Failed, 0, null, "Export is unavailable on this platform.")), null);
 #endif
     }
 

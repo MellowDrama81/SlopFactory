@@ -19,6 +19,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\LibraryAvailabilityProbe.cs" Link="Services\LibraryAvailabilityProbe.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\ExportCleanupJournalService.cs" Link="Services\ExportCleanupJournalService.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\LibraryVolumeIdentity.cs" Link="Services\LibraryVolumeIdentity.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IAppPreferenceStore.cs" Link="Services\IAppPreferenceStore.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\AppLibraryState.cs" Link="Services\AppLibraryState.cs" />

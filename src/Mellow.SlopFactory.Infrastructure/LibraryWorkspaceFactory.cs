@@ -8,7 +8,18 @@ namespace Mellow.SlopFactory.Infrastructure;
 
 public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
 {
-    public async Task<ILibraryWorkspace> CreateAsync(string rootPath, string displayName = "SlopFactory Library", CancellationToken cancellationToken = default)
+    public Task<ILibraryWorkspace> CreateAsync(string rootPath, string displayName = "SlopFactory Library", IExportCleanupJournal? exportCleanupJournal = null, CancellationToken cancellationToken = default) =>
+        CreateCoreAsync(rootPath, displayName, exportCleanupJournal, exportFaultInjector: null, cancellationToken);
+
+    /// <summary>Test-only seam (internal, reached via <c>InternalsVisibleTo</c>) letting
+    /// <see cref="IExportFaultInjector"/> crash-injection tests construct a workspace whose atomic
+    /// export helper can be made to fail at a specific boundary. Not reachable through the public
+    /// <see cref="ILibraryWorkspaceFactory"/> surface since <see cref="IExportFaultInjector"/> is
+    /// internal.</summary>
+    internal static Task<ILibraryWorkspace> CreateForFaultInjectionTestAsync(string rootPath, IExportCleanupJournal? exportCleanupJournal, IExportFaultInjector exportFaultInjector, CancellationToken cancellationToken = default) =>
+        CreateCoreAsync(rootPath, "SlopFactory Library", exportCleanupJournal, exportFaultInjector, cancellationToken);
+
+    private static async Task<ILibraryWorkspace> CreateCoreAsync(string rootPath, string displayName, IExportCleanupJournal? exportCleanupJournal, IExportFaultInjector? exportFaultInjector, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         var normalizedName = LibraryRules.NormalizeDisplayName(displayName, "Library name");
@@ -44,7 +55,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             layout.ValidateRequiredEntries();
             var database = new SqliteLibraryDatabase(layout.DatabasePath);
             var descriptor = await database.ValidateAndDescribeAsync(manifest, layout.RootPath, cancellationToken).ConfigureAwait(false);
-            return new LibraryWorkspace(layout, descriptor, manifest, database, libraryLock);
+            return new LibraryWorkspace(layout, descriptor, manifest, database, libraryLock, exportCleanupJournal, exportFaultInjector);
         }
         catch
         {
@@ -62,7 +73,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         }
     }
 
-    public async Task<ILibraryWorkspace> OpenAsync(string rootPath, CancellationToken cancellationToken = default)
+    public async Task<ILibraryWorkspace> OpenAsync(string rootPath, IExportCleanupJournal? exportCleanupJournal = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ValidateLocalStoragePath(Path.GetFullPath(rootPath));
@@ -91,7 +102,7 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
             var currentManifest = await UpgradeIfRequiredAsync(layout, lockedManifest, cancellationToken).ConfigureAwait(false);
             var database = new SqliteLibraryDatabase(layout.DatabasePath);
             var descriptor = await database.ValidateAndDescribeAsync(currentManifest, layout.RootPath, cancellationToken).ConfigureAwait(false);
-            return new LibraryWorkspace(layout, descriptor, currentManifest, database, libraryLock);
+            return new LibraryWorkspace(layout, descriptor, currentManifest, database, libraryLock, exportCleanupJournal);
         }
         catch
         {
@@ -100,9 +111,9 @@ public sealed class LibraryWorkspaceFactory : ILibraryWorkspaceFactory
         }
     }
 
-    public async Task<ILibraryWorkspace> AdoptCopyAsync(string rootPath, CancellationToken cancellationToken = default)
+    public async Task<ILibraryWorkspace> AdoptCopyAsync(string rootPath, IExportCleanupJournal? exportCleanupJournal = null, CancellationToken cancellationToken = default)
     {
-        var workspace = await OpenAsync(rootPath, cancellationToken).ConfigureAwait(false);
+        var workspace = await OpenAsync(rootPath, exportCleanupJournal, cancellationToken).ConfigureAwait(false);
         try
         {
             await workspace.AdoptAsIndependentLibraryAsync(cancellationToken).ConfigureAwait(false);

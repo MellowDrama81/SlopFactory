@@ -3062,6 +3062,114 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task SidecarIsNotWrittenWhenWriteSidecarOptionIsFalse()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "original");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var destination = temporary.Child("export.txt");
+
+        var (media, sidecar) = await workspace.ExportFileWithSidecarAsync(file.Id, destination, ExportSidecarOptions.Default);
+
+        Assert.Equal(FileExportOutcome.Exported, media.Outcome);
+        Assert.Null(sidecar);
+        Assert.False(File.Exists(destination + ".slopfactory.json"));
+    }
+
+    [Fact]
+    public async Task SidecarWithNoOptInsContainsOnlyBaseFields()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "original");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var destination = temporary.Child("export.txt");
+
+        var (media, sidecar) = await workspace.ExportFileWithSidecarAsync(file.Id, destination, ExportSidecarOptions.Default with { WriteSidecar = true });
+
+        Assert.Equal(FileExportOutcome.Exported, media.Outcome);
+        Assert.NotNull(sidecar);
+        Assert.Equal(FileExportOutcome.Exported, sidecar!.Outcome);
+        Assert.Equal(destination + ".slopfactory.json", sidecar.SidecarPath);
+        var json = await File.ReadAllTextAsync(sidecar.SidecarPath!);
+        Assert.DoesNotContain("\r\n", json, StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        Assert.Equal("https://slopfactory.app/schema/sidecar/v1.json", root.GetProperty("$schema").GetString());
+        Assert.Equal(1, root.GetProperty("sidecarSchemaVersion").GetInt32());
+        Assert.Equal(file.MediaType, root.GetProperty("mediaType").GetString());
+        Assert.Equal(file.ByteSize, root.GetProperty("byteSize").GetInt64());
+        Assert.Equal(file.ContentHash, root.GetProperty("contentHash").GetString());
+        Assert.False(root.TryGetProperty("displayName", out _));
+        Assert.False(root.TryGetProperty("originalFileName", out _));
+        Assert.False(root.TryGetProperty("fileId", out _));
+        Assert.False(root.TryGetProperty("prompt", out _));
+    }
+
+    [Fact]
+    public async Task SidecarFilenameOptInAddsDisplayAndOriginalFileName()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "original");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var destination = temporary.Child("export.txt");
+
+        var (_, sidecar) = await workspace.ExportFileWithSidecarAsync(file.Id, destination, ExportSidecarOptions.Default with { WriteSidecar = true, IncludeFilenames = true });
+
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(sidecar!.SidecarPath!));
+        Assert.Equal(file.DisplayName, document.RootElement.GetProperty("displayName").GetString());
+        Assert.Equal(file.OriginalFileName, document.RootElement.GetProperty("originalFileName").GetString());
+    }
+
+    [Fact]
+    public async Task SidecarOutputIsByteIdenticalAcrossRepeatedExportsOfTheSameFile()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "original");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var options = ExportSidecarOptions.Default with { WriteSidecar = true, IncludeFilenames = true };
+
+        var (_, first) = await workspace.ExportFileWithSidecarAsync(file.Id, temporary.Child("export-1.txt"), options);
+        var (_, second) = await workspace.ExportFileWithSidecarAsync(file.Id, temporary.Child("export-2.txt"), options);
+
+        var firstBytes = await File.ReadAllBytesAsync(first!.SidecarPath!);
+        var secondBytes = await File.ReadAllBytesAsync(second!.SidecarPath!);
+        Assert.Equal(firstBytes, secondBytes);
+    }
+
+    [Fact]
+    public async Task SidecarFailureDoesNotAffectAlreadyCommittedMediaResult()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "original");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var destination = temporary.Child("export.txt");
+        Directory.CreateDirectory(destination + ".slopfactory.json");
+
+        var (media, sidecar) = await workspace.ExportFileWithSidecarAsync(file.Id, destination, ExportSidecarOptions.Default with { WriteSidecar = true });
+
+        Assert.Equal(FileExportOutcome.Exported, media.Outcome);
+        Assert.Equal("original", await File.ReadAllTextAsync(destination));
+        Assert.NotNull(sidecar);
+        Assert.Equal(FileExportOutcome.Failed, sidecar!.Outcome);
+        Assert.NotNull(sidecar.Error);
+    }
+
+    [Fact]
     public async Task ExternalOpenUsesReadOnlyCopyAndNeverManagedPath()
     {
         using var temporary = new TemporaryDirectory();

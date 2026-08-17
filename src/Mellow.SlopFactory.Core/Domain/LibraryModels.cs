@@ -558,6 +558,62 @@ public sealed record FileExportResult(
     string? ContentHash,
     string? Error);
 
+/// <summary>The kind of external object a <see cref="ExportCleanupEntry"/> tracks. Only
+/// <see cref="LocalTempFile"/> is ever actually cleaned up by <c>IExportCleanupJournal.SweepAsync</c>
+/// today — <see cref="AndroidDocumentUri"/> entries are authenticated and reported but never deleted
+/// automatically, since a real SAF permission-loss/reauthorization cycle needs on-device
+/// verification this app does not attempt yet.</summary>
+public enum ExportCleanupObjectType
+{
+    LocalTempFile = 0,
+    AndroidDocumentUri = 1
+}
+
+/// <summary>Lifecycle of one journal entry, mirroring plan.md's cleanup-journal states: a
+/// <see cref="PlannedTemporary"/> entry is written before the temp object is created (so a crash in
+/// that narrow interval is still visible), <see cref="Confirmed"/> once the object durably exists,
+/// and <see cref="CleanupPending"/> for an entry a sweep found but could not safely act on (identity
+/// mismatch, or an object type this app doesn't clean up automatically).</summary>
+public enum ExportCleanupState
+{
+    PlannedTemporary = 0,
+    Confirmed = 1,
+    CleanupPending = 2
+}
+
+/// <summary>One export cleanup journal entry, tracking a not-yet-committed (or not-yet-cleaned-up)
+/// external temporary object. Persisted with an HMAC (see <c>IExportCleanupJournal</c>) so a
+/// tampered or foreign entry is never trusted for deletion — <c>SweepAsync</c> silently drops any
+/// entry whose HMAC does not verify.</summary>
+public sealed record ExportCleanupEntry(
+    string OperationId,
+    ExportCleanupObjectType ObjectType,
+    string ParentPath,
+    string OpaqueName,
+    string TargetIdentity,
+    ExportCleanupState State,
+    DateTimeOffset CreatedAt);
+
+public sealed record SidecarExportResult(string? SidecarPath, FileExportOutcome Outcome, string? Error);
+
+/// <summary>Disclosure opt-ins for a `.slopfactory.json` sidecar. Every toggle defaults to minimal
+/// disclosure (false) — plan.md:743 "every new export operation begins with privacy-minimal sidecar
+/// defaults... never preselected." <see cref="IncludeSafetyMetadata"/> is accepted but is always a
+/// documented no-op until a persisted, hash-bound safety classification exists (checklist Section
+/// 10, not yet implemented) for the sidecar writer to read.</summary>
+public sealed record ExportSidecarOptions(
+    bool WriteSidecar = false,
+    bool IncludePrompt = false,
+    bool IncludeSensitiveMetadata = false,
+    bool IncludeFilenames = false,
+    bool IncludeInternalIdentifiers = false,
+    bool IncludeUsageAndCost = false,
+    bool IncludeAdvancedSettings = false,
+    bool IncludeSafetyMetadata = false)
+{
+    public static readonly ExportSidecarOptions Default = new();
+}
+
 public sealed record BulkExportPreflightItem(
     string FileId,
     string DisplayName,

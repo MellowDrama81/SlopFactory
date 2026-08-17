@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slopfactory.app/schema/sidecar/v1.json",
+  "title": "SlopFactory export sidecar",
+  "description": "A `.slopfactory.json` sidecar written next to an exported media file (see docs/developer/architecture.md, \"External export sidecars\"). Unsigned documentation, may be modified after export, and is never proof of provider authorship, media authenticity, or an unaltered SlopFactory record. A structural or semantic change to this document always increments sidecarSchemaVersion; published fields are never repurposed.",
+  "type": "object",
+  "required": ["$schema", "sidecarSchemaVersion", "mediaType", "byteSize", "contentHash", "importedAt", "modifiedAt", "origin"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://slopfactory.app/schema/sidecar/v1.json",
+      "description": "Stable schema identity, matching this document's own $id."
+    },
+    "sidecarSchemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Integer sidecar format version. Always present; bumped on any structural or semantic change."
+    },
+    "mediaType": { "type": "string", "description": "The exported file's detected media (MIME) type." },
+    "byteSize": { "type": "integer", "minimum": 0, "description": "The exported file's size in bytes." },
+    "contentHash": { "type": "string", "description": "SHA-256 content hash of the exported file, lowercase hex." },
+    "importedAt": { "type": "string", "format": "date-time", "description": "When the file was imported or generated into the library." },
+    "modifiedAt": { "type": "string", "format": "date-time", "description": "When the file's library record was last modified." },
+    "origin": {
+      "type": "string",
+      "enum": ["Imported", "Generated", "UnverifiedProviderOutput"],
+      "description": "How the file entered the library."
+    },
+    "displayName": { "type": "string", "description": "Present only when the Include Filenames disclosure opt-in was selected." },
+    "originalFileName": { "type": "string", "description": "Present only when the Include Filenames disclosure opt-in was selected." },
+    "fileId": { "type": "string", "description": "The library's internal file identifier. Present only when the Include Internal Identifiers opt-in was selected. Never a provider request ID — this app never persists one." },
+    "generationRecordId": { "type": "string", "description": "The library's internal generation-record identifier. Present only when Include Internal Identifiers was selected and the file has a known originating generation." },
+    "modelId": { "type": "string", "description": "The library's internal model identifier. Present only when Include Internal Identifiers was selected and the file has a known originating generation with an active model." },
+    "providerType": { "type": "string", "description": "The originating generation's provider (a label snapshot, not a live provider identity). Present only when the file has a known originating generation." },
+    "modelLabel": { "type": "string", "description": "The originating generation's model label snapshot. Present only when the file has a known originating generation." },
+    "generationProvenanceState": {
+      "type": "string",
+      "enum": ["current", "nonterminal-snapshot", "history-recycled", "unavailable"],
+      "description": "How reliable/live the attached generation provenance is: current (the terminal record as-is), nonterminal-snapshot (the generation had not reached a terminal status), history-recycled (the generation record has since been recycled), or unavailable (no originating generation could be found)."
+    },
+    "statusObservedAt": { "type": "string", "format": "date-time", "description": "When the originating generation's attached status was last observed. Present only when the file has a known originating generation with a completion timestamp." },
+    "prompt": { "type": "string", "description": "The originating generation's prompt text. Present only when the Include Prompt disclosure opt-in was selected." },
+    "systemInstructions": { "type": "string", "description": "The originating generation's system instructions, if any. Present only when Include Prompt was selected." },
+    "actualCost": { "type": "number", "description": "Provider-reported actual cost for the generation. Present only when the Include Usage and Cost opt-in was selected and a cost was reported." },
+    "actualCostCurrency": { "type": "string", "description": "Currency for actualCost. Present only alongside actualCost." },
+    "promptTokens": { "type": "integer", "minimum": 0, "description": "Present only when Include Usage and Cost was selected and reported by the provider." },
+    "completionTokens": { "type": "integer", "minimum": 0, "description": "Present only when Include Usage and Cost was selected and reported by the provider." },
+    "generationSettings": {
+      "type": "object",
+      "description": "Present only when the Include Advanced Settings opt-in was selected.",
+      "properties": {
+        "temperature": { "type": "number" },
+        "topP": { "type": "number" },
+        "maxTokens": { "type": "integer" },
+        "frequencyPenalty": { "type": "number" },
+        "presencePenalty": { "type": "number" },
+        "advancedJson": { "type": "object", "description": "Redacted advanced-settings JSON (credential-shaped values already stripped)." }
+      },
+      "additionalProperties": false
+    },
+    "sensitiveMetadataUnavailable": { "type": "boolean", "const": true, "description": "Present only when the Include Sensitive Metadata opt-in was selected; this app has no metadata-entries feature yet, so nothing is ever attached under that opt-in." },
+    "safetyMetadataUnavailable": { "type": "boolean", "const": true, "description": "Present only when the Include Provider Safety Metadata opt-in was selected; no persisted, content-hash-bound safety classification exists in this app yet, so nothing is ever attached under that opt-in." }
+  },
+  "additionalProperties": false
+}

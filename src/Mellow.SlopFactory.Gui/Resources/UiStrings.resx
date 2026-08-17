@@ -431,6 +431,17 @@
   <data name="ExportCompleted" xml:space="preserve"><value>Export completed and the destination bytes were verified.</value></data>
   <data name="ExportCancelled" xml:space="preserve"><value>Export cancelled; no partial destination was kept.</value></data>
   <data name="ExportFailed" xml:space="preserve"><value>Export failed.</value></data>
+  <data name="ExportSidecarOptionsHeading" xml:space="preserve"><value>Sidecar options</value></data>
+  <data name="WriteSidecar" xml:space="preserve"><value>Write a .slopfactory.json sidecar</value></data>
+  <data name="SidecarIncludePrompt" xml:space="preserve"><value>Include prompt and system instructions</value></data>
+  <data name="SidecarIncludeFilenames" xml:space="preserve"><value>Include original and display filenames</value></data>
+  <data name="SidecarIncludeInternalIdentifiers" xml:space="preserve"><value>Include internal library identifiers</value></data>
+  <data name="SidecarIncludeUsageAndCost" xml:space="preserve"><value>Include usage and cost</value></data>
+  <data name="SidecarIncludeAdvancedSettings" xml:space="preserve"><value>Include advanced generation settings</value></data>
+  <data name="SidecarIncludeSafetyMetadata" xml:space="preserve"><value>Include provider safety metadata</value></data>
+  <data name="SidecarSafetyMetadataUnavailableHelp" xml:space="preserve"><value>Not available yet — no persisted provider safety classification exists in this app.</value></data>
+  <data name="SidecarExportCompleted" xml:space="preserve"><value>Sidecar written.</value></data>
+  <data name="SidecarExportFailed" xml:space="preserve"><value>Sidecar not written: {0}</value></data>
   <data name="ChangedBytesExported" xml:space="preserve"><value>Changed bytes exported for recovery. The library record and provenance were not changed.</value></data>
   <data name="ChangedBytesExportCancelled" xml:space="preserve"><value>Changed-byte export cancelled.</value></data>
   <data name="ChangedBytesExportFailed" xml:space="preserve"><value>Changed-byte export failed.</value></data>

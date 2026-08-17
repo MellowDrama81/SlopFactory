@@ -10,15 +10,17 @@ public sealed class AppLibraryState : IAsyncDisposable
     private readonly IRecentLibraryService _recentLibraries;
     private readonly ILibraryAvailabilityProbe _availability;
     private readonly IAppPreferenceStore _preferences;
+    private readonly IExportCleanupJournal? _exportCleanupJournal;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public AppLibraryState(ILibraryWorkspaceFactory factory, ILibraryLocationService locations, IRecentLibraryService recentLibraries, ILibraryAvailabilityProbe availability, IAppPreferenceStore preferences)
+    public AppLibraryState(ILibraryWorkspaceFactory factory, ILibraryLocationService locations, IRecentLibraryService recentLibraries, ILibraryAvailabilityProbe availability, IAppPreferenceStore preferences, IExportCleanupJournal? exportCleanupJournal = null)
     {
         _factory = factory;
         _locations = locations;
         _recentLibraries = recentLibraries;
         _availability = availability;
         _preferences = preferences;
+        _exportCleanupJournal = exportCleanupJournal;
     }
 
     public ILibraryWorkspace? Workspace { get; private set; }
@@ -217,7 +219,7 @@ public sealed class AppLibraryState : IAsyncDisposable
                     IsInitialized = true;
                     return;
                 }
-                Workspace = File.Exists(Path.Combine(path, "slopfactory-library.json")) ? await _factory.OpenAsync(path).ConfigureAwait(false) : await _factory.CreateAsync(path).ConfigureAwait(false);
+                Workspace = File.Exists(Path.Combine(path, "slopfactory-library.json")) ? await _factory.OpenAsync(path, _exportCleanupJournal).ConfigureAwait(false) : await _factory.CreateAsync(path, exportCleanupJournal: _exportCleanupJournal).ConfigureAwait(false);
                 ActivePath = Path.GetFullPath(path);
                 _recentLibraries.RecordOpened(Workspace.Descriptor);
                 LoadDirtyDraftIds();
@@ -268,8 +270,8 @@ public sealed class AppLibraryState : IAsyncDisposable
             else
             {
                 replacement = File.Exists(Path.Combine(fullPath, "slopfactory-library.json"))
-                    ? await _factory.OpenAsync(fullPath).ConfigureAwait(false)
-                    : await _factory.CreateAsync(fullPath).ConfigureAwait(false);
+                    ? await _factory.OpenAsync(fullPath, _exportCleanupJournal).ConfigureAwait(false)
+                    : await _factory.CreateAsync(fullPath, exportCleanupJournal: _exportCleanupJournal).ConfigureAwait(false);
                 var duplicate = _recentLibraries.GetAll().FirstOrDefault(item =>
                     string.Equals(item.LibraryId, replacement.Descriptor.LibraryId, StringComparison.Ordinal)
                     && !string.Equals(Path.GetFullPath(item.Path), fullPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
@@ -328,7 +330,7 @@ public sealed class AppLibraryState : IAsyncDisposable
             if (_availability.IsAvailable(remembered.Path, remembered.VolumeIdentity, out _)) throw new LibraryValidationException("A moved library can be relinked only while its original remembered location is unavailable.");
             var fullPath = Path.GetFullPath(replacementPath);
             if (!_locations.IsAllowedPath(fullPath)) throw new LibraryValidationException("That location is not an allowed application library location.");
-            var replacement = await _factory.OpenAsync(fullPath).ConfigureAwait(false);
+            var replacement = await _factory.OpenAsync(fullPath, _exportCleanupJournal).ConfigureAwait(false);
             if (!string.Equals(replacement.Descriptor.LibraryId, libraryId, StringComparison.Ordinal))
             {
                 await replacement.DisposeAsync().ConfigureAwait(false);

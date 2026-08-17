@@ -3152,6 +3152,38 @@ internal sealed class SqliteLibraryDatabase
         return record with { ResultFileIds = fileIds, TombstonedResults = tombstones, Results = entries, SourceSlots = sourceSlots, SourceSlotSnapshots = sourceSlotSnapshots };
     }
 
+    /// <summary>Finds the generation that produced <paramref name="resultFileId"/> as one of its
+    /// committed results, if any — used by the export sidecar writer to attach provenance to an
+    /// arbitrary exported file without the caller already knowing its originating generation. Returns
+    /// null for a file with no such generation (e.g. an imported, not generated, file).</summary>
+    public async Task<GenerationRecord?> GetGenerationRecordForResultFileAsync(string resultFileId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        string? generationId;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT generation_id FROM generation_results WHERE file_id=$file LIMIT 1;";
+            command.Parameters.AddWithValue("$file", resultFileId);
+            generationId = (string?)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (generationId is null) return null;
+        GenerationRecord record;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = GenerationRecordSelect + " WHERE id=$id;";
+            command.Parameters.AddWithValue("$id", generationId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
+            record = ReadGenerationRecord(reader);
+        }
+
+        var (fileIds, tombstones, entries) = await GetGenerationResultsAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
+        var sourceSlots = await LoadSourceSlotsAsync(connection, SourceSlotOwnerTypeGenerationRecord, generationId, cancellationToken).ConfigureAwait(false);
+        var sourceSlotSnapshots = await LoadSourceSlotSnapshotsAsync(connection, generationId, cancellationToken).ConfigureAwait(false);
+        return record with { ResultFileIds = fileIds, TombstonedResults = tombstones, Results = entries, SourceSlots = sourceSlots, SourceSlotSnapshots = sourceSlotSnapshots };
+    }
+
     public async Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);

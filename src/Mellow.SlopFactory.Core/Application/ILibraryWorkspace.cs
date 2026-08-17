@@ -51,6 +51,12 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<FileExportResult> ExportChangedBytesAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
     Task<BulkExportPreflight> BuildBulkExportPreflightAsync(IReadOnlyCollection<string> fileIds, string destinationDirectory, CancellationToken cancellationToken = default);
     Task<BulkExportResult> ExportFilesAsync(BulkExportPreflight preflight, IReadOnlyDictionary<string, ExportCollisionChoice> collisionChoices, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default);
+    /// <summary>Exports the file exactly like <see cref="ExportFileAsync"/>, then — only if that
+    /// succeeded and <paramref name="sidecarOptions"/> requests one (plan.md:752 "commits each media
+    /// object before attempting its sidecar") — writes a `.slopfactory.json` sidecar next to it
+    /// through the same atomic-temp-then-journal path. A sidecar failure never affects the already-
+    /// successful media result and never deletes it.</summary>
+    Task<(FileExportResult Media, SidecarExportResult? Sidecar)> ExportFileWithSidecarAsync(string fileId, string destinationPath, ExportSidecarOptions sidecarOptions, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
     Task<ExternalOpenCopy> CreateExternalOpenCopyAsync(string fileId, string temporaryDirectory, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default);
     Task<MetadataEntry> SetMetadataAsync(string fileId, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default);
@@ -121,6 +127,9 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken = default);
     Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
+    /// <summary>Finds the generation record that produced <paramref name="resultFileId"/>, if any —
+    /// null for a file with no known originating generation (e.g. an imported file).</summary>
+    Task<GenerationRecord?> GetGenerationRecordForResultFileAsync(string resultFileId, CancellationToken cancellationToken = default);
     /// <summary>Every generation record not yet in a terminal <see cref="GenerationStatus"/>, for
     /// restart recovery.</summary>
     Task<IReadOnlyList<GenerationRecord>> GetNonTerminalGenerationRecordsAsync(CancellationToken cancellationToken = default);
@@ -178,7 +187,10 @@ public interface ILibraryWorkspace : IAsyncDisposable
 
 public interface ILibraryWorkspaceFactory
 {
-    Task<ILibraryWorkspace> CreateAsync(string rootPath, string displayName = "SlopFactory Library", CancellationToken cancellationToken = default);
-    Task<ILibraryWorkspace> OpenAsync(string rootPath, CancellationToken cancellationToken = default);
-    Task<ILibraryWorkspace> AdoptCopyAsync(string rootPath, CancellationToken cancellationToken = default);
+    /// <summary><paramref name="exportCleanupJournal"/> is optional (default null, meaning "no
+    /// crash-recovery tracking for this workspace's exports" — the export operations themselves are
+    /// unaffected either way). Every existing caller that omits it keeps working unchanged.</summary>
+    Task<ILibraryWorkspace> CreateAsync(string rootPath, string displayName = "SlopFactory Library", IExportCleanupJournal? exportCleanupJournal = null, CancellationToken cancellationToken = default);
+    Task<ILibraryWorkspace> OpenAsync(string rootPath, IExportCleanupJournal? exportCleanupJournal = null, CancellationToken cancellationToken = default);
+    Task<ILibraryWorkspace> AdoptCopyAsync(string rootPath, IExportCleanupJournal? exportCleanupJournal = null, CancellationToken cancellationToken = default);
 }

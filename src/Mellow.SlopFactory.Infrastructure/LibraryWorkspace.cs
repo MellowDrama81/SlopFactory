@@ -15,16 +15,20 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     private readonly SqliteLibraryDatabase _database;
     private readonly FileStream _libraryLock;
     private readonly SemaphoreSlim _mutationGate = new(1, 1);
+    private readonly IExportCleanupJournal? _exportCleanupJournal;
+    private readonly IExportFaultInjector _exportFaultInjector;
     private LibraryManifest _manifest;
     private bool _disposed;
 
-    public LibraryWorkspace(LibraryLayout layout, LibraryDescriptor descriptor, LibraryManifest manifest, SqliteLibraryDatabase database, FileStream libraryLock)
+    public LibraryWorkspace(LibraryLayout layout, LibraryDescriptor descriptor, LibraryManifest manifest, SqliteLibraryDatabase database, FileStream libraryLock, IExportCleanupJournal? exportCleanupJournal = null, IExportFaultInjector? exportFaultInjector = null)
     {
         _layout = layout;
         Descriptor = descriptor;
         _manifest = manifest;
         _database = database;
         _libraryLock = libraryLock;
+        _exportCleanupJournal = exportCleanupJournal;
+        _exportFaultInjector = exportFaultInjector ?? NullExportFaultInjector.Instance;
     }
 
     public LibraryDescriptor Descriptor { get; private set; }
@@ -1131,6 +1135,100 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     public Task<FileExportResult> ExportChangedBytesAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default) =>
         ExportCoreAsync(fileId, destinationPath, collisionChoice, changedBytes: true, progress, cancellationToken);
 
+    public async Task<(FileExportResult Media, SidecarExportResult? Sidecar)> ExportFileWithSidecarAsync(string fileId, string destinationPath, ExportSidecarOptions sidecarOptions, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(sidecarOptions);
+        var media = await ExportFileAsync(fileId, destinationPath, collisionChoice, progress, cancellationToken).ConfigureAwait(false);
+        if (media.Outcome != FileExportOutcome.Exported || !sidecarOptions.WriteSidecar) return (media, null);
+
+        try
+        {
+            var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+            var generation = await _database.GetGenerationRecordForResultFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+            var json = ExportSidecarWriter.BuildJson(file, generation, sidecarOptions);
+            var sidecarBytes = new UTF8Encoding(false).GetBytes(json);
+            var sidecarPath = media.DestinationPath + ".slopfactory.json";
+            var sidecarResult = await WriteBytesAtomicallyWithJournalAsync(fileId, sidecarBytes, sidecarPath, collisionChoice, cancellationToken).ConfigureAwait(false);
+            var sidecarPathOrNull = sidecarResult.Outcome == FileExportOutcome.Exported ? sidecarResult.DestinationPath : null;
+            return (media, new SidecarExportResult(sidecarPathOrNull, sidecarResult.Outcome, sidecarResult.Error));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException or ArgumentException)
+        {
+            return (media, new SidecarExportResult(null, FileExportOutcome.Failed, exception.Message));
+        }
+    }
+
+    /// <summary>The same atomic temp-then-rename-then-read-back-verify-then-journal machinery
+    /// <see cref="ExportCoreAsync"/> uses, adapted for an in-memory byte source (a sidecar document)
+    /// rather than a copy from an existing managed file. Kept as a distinct helper rather than forcing
+    /// a shared abstraction over two different source shapes (file-to-file copy vs. in-memory bytes).</summary>
+    private async Task<FileExportResult> WriteBytesAtomicallyWithJournalAsync(string fileId, byte[] bytes, string destinationPath, ExportCollisionChoice collisionChoice, CancellationToken cancellationToken)
+    {
+        string? temporary = null;
+        string? operationId = null;
+        try
+        {
+            var destination = Path.GetFullPath(destinationPath);
+            var parent = Path.GetDirectoryName(destination) ?? throw new LibraryValidationException("The export destination must have a parent directory.");
+            Directory.CreateDirectory(parent);
+            if ((new DirectoryInfo(parent).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("A redirected directory cannot be used as an export destination.");
+            if (Directory.Exists(destination)) throw new LibraryValidationException("The export destination is a directory.");
+            if (File.Exists(destination) && collisionChoice == ExportCollisionChoice.Fail) throw new NameConflictException("A file already exists at the export destination.");
+            if (File.Exists(destination) && (new FileInfo(destination).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("A redirected file cannot be replaced during export.");
+            temporary = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.slopfactory-exporting");
+
+            if (_exportCleanupJournal is not null)
+            {
+                operationId = await _exportCleanupJournal.RecordPlannedAsync(ExportCleanupObjectType.LocalTempFile, parent, Path.GetFileName(temporary), Path.GetFullPath(temporary), cancellationToken).ConfigureAwait(false);
+            }
+
+            await _exportFaultInjector.BeforeTempCreationAsync(cancellationToken).ConfigureAwait(false);
+            await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65_536, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+            if (operationId is not null) await _exportCleanupJournal!.ConfirmAsync(operationId, cancellationToken).ConfigureAwait(false);
+            var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+            await _exportFaultInjector.BeforeAtomicCommitAsync(cancellationToken).ConfigureAwait(false);
+            File.Move(temporary, destination, collisionChoice == ExportCollisionChoice.Replace);
+            temporary = null;
+            await _exportFaultInjector.BeforeJournalRemovalAsync(cancellationToken).ConfigureAwait(false);
+            if (operationId is not null) await _exportCleanupJournal!.RemoveAsync(operationId, cancellationToken).ConfigureAwait(false);
+
+            var readBackHash = await Hashing.Sha256Async(destination, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(readBackHash, hash, StringComparison.Ordinal))
+            {
+                bool removed;
+                try { File.Delete(destination); removed = true; }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { removed = false; }
+                var message = removed
+                    ? "The exported sidecar did not match its content after being written and was removed; export did not complete."
+                    : "The exported sidecar did not match its content after being written and could not be removed; the destination may be corrupt.";
+                return new FileExportResult(fileId, destination, FileExportOutcome.VerificationFailed, bytes.LongLength, hash, message);
+            }
+
+            return new FileExportResult(fileId, destination, FileExportOutcome.Exported, bytes.LongLength, hash, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new FileExportResult(fileId, destinationPath, FileExportOutcome.Cancelled, 0, null, null);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException or ArgumentException)
+        {
+            return new FileExportResult(fileId, destinationPath, FileExportOutcome.Failed, 0, null, exception.Message);
+        }
+        finally
+        {
+            TryDelete(temporary);
+            if (operationId is not null && (temporary is null || !File.Exists(temporary)))
+            {
+                await _exportCleanupJournal!.RemoveAsync(operationId, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+    }
+
     public async Task<BulkExportPreflight> BuildBulkExportPreflightAsync(IReadOnlyCollection<string> fileIds, string destinationDirectory, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -1192,6 +1290,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         ThrowIfDisposed();
         string? temporary = null;
+        string? operationId = null;
         try
         {
             var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
@@ -1207,11 +1306,24 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             if (File.Exists(destination) && collisionChoice == ExportCollisionChoice.Fail) throw new NameConflictException("A file already exists at the export destination.");
             if (File.Exists(destination) && (new FileInfo(destination).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("A redirected file cannot be replaced during export.");
             temporary = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.slopfactory-exporting");
+
+            // plan.md:603 — the journal durably records the planned temporary object before it's
+            // created, so a crash in the narrow window before creation is still recoverable.
+            if (_exportCleanupJournal is not null)
+            {
+                operationId = await _exportCleanupJournal.RecordPlannedAsync(ExportCleanupObjectType.LocalTempFile, parent, Path.GetFileName(temporary), Path.GetFullPath(temporary), cancellationToken).ConfigureAwait(false);
+            }
+
+            await _exportFaultInjector.BeforeTempCreationAsync(cancellationToken).ConfigureAwait(false);
             var copied = await Hashing.CopyAndHashAsync(source, temporary, cancellationToken, bytes => progress?.Report(bytes)).ConfigureAwait(false);
+            if (operationId is not null) await _exportCleanupJournal!.ConfirmAsync(operationId, cancellationToken).ConfigureAwait(false);
             var expectedHash = changedBytes ? await Hashing.Sha256Async(source, cancellationToken).ConfigureAwait(false) : file.ContentHash;
             if (!string.Equals(copied.Hash, expectedHash, StringComparison.Ordinal) || copied.Bytes != new FileInfo(source).Length) throw new IOException("Export verification failed; the destination was not committed.");
+            await _exportFaultInjector.BeforeAtomicCommitAsync(cancellationToken).ConfigureAwait(false);
             File.Move(temporary, destination, collisionChoice == ExportCollisionChoice.Replace);
             temporary = null;
+            await _exportFaultInjector.BeforeJournalRemovalAsync(cancellationToken).ConfigureAwait(false);
+            if (operationId is not null) await _exportCleanupJournal!.RemoveAsync(operationId, cancellationToken).ConfigureAwait(false);
 
             // plan.md:649-652 — the outgoing stream above already matched the source, but that only
             // proves what was sent, not what physically landed at the destination (a filesystem quirk
@@ -1242,7 +1354,20 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         {
             return new FileExportResult(fileId, destinationPath, FileExportOutcome.Failed, 0, null, exception.Message);
         }
-        finally { TryDelete(temporary); }
+        finally
+        {
+            TryDelete(temporary);
+            // Best-effort — a live (non-crash) failure still cleans up its own journal entry once the
+            // temp file is confirmed gone. If deletion above silently failed, the entry is
+            // deliberately left for a later IExportCleanupJournal.SweepAsync to find and retry —
+            // exactly the crash-recovery path working as intended, not just for real crashes. Uses
+            // CancellationToken.None since this cleanup must still run even if the operation itself
+            // was cancelled.
+            if (operationId is not null && (temporary is null || !File.Exists(temporary)))
+            {
+                await _exportCleanupJournal!.RemoveAsync(operationId, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
     }
 
     public async Task<ExternalOpenCopy> CreateExternalOpenCopyAsync(string fileId, string temporaryDirectory, CancellationToken cancellationToken = default)
@@ -2070,6 +2195,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         ThrowIfDisposed();
         return _database.GetGenerationRecordAsync(generationId, cancellationToken);
+    }
+
+    public Task<GenerationRecord?> GetGenerationRecordForResultFileAsync(string resultFileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetGenerationRecordForResultFileAsync(resultFileId, cancellationToken);
     }
 
     public Task<IReadOnlyList<GenerationRecord>> GetNonTerminalGenerationRecordsAsync(CancellationToken cancellationToken = default)

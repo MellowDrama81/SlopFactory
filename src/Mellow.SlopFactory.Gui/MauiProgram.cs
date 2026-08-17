@@ -1,3 +1,4 @@
+using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Gui.Services;
 using Mellow.SlopFactory.Infrastructure;
 
@@ -26,6 +27,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IRecoveryStagingPathProvider, MauiRecoveryStagingPathProvider>();
         builder.Services.AddSingleton<IPendingResultRegistryService, PendingResultRegistryService>();
         builder.Services.AddSingleton<IRecoveryStagingService, RecoveryStagingService>();
+        builder.Services.AddSingleton<IExportCleanupJournal>(_ => new ExportCleanupJournalService(new PreferencesExportJournalStorage(), new SecureStorageExportJournalSecretStore()));
         builder.Services.AddSingleton<IDiagnosticsLogger>(services => new DiagnosticsLogger(Path.Combine(FileSystem.Current.AppDataDirectory, "diagnostics"), services.GetRequiredService<IAppPreferenceStore>()));
         builder.Services.AddSingleton<GenerationQueueService>();
         builder.Services.AddSingleton<IntegrityScanRecommendationService>();

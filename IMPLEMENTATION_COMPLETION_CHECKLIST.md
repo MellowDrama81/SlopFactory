@@ -395,26 +395,91 @@ misclassified library commit.
 
 ## 8. Implement the external export and sidecar system
 
-- [ ] Implement atomic external media export with destination identity binding, flush and optional
+- [x] Implement atomic external media export with destination identity binding, flush and optional
       trustworthy read-back verification.
-- [ ] Implement the authenticated, versioned, device-local external-export cleanup journal.
-- [ ] Recover pending cleanup after crashes without deleting an object whose ownership and identity
+      This already existed going into this pass (`LibraryWorkspace.ExportCoreAsync`: unique temp
+      sibling, copy+hash, source-hash comparison, atomic `File.Move`, then a second post-commit
+      read-back hash verification with `VerificationFailed` on mismatch, reparse-point/symlink
+      rejection on both parent and destination). This pass added durable journaling around it (below).
+- [x] Implement the authenticated, versioned, device-local external-export cleanup journal.
+      `IExportCleanupJournal` (Core) / `ExportCleanupJournalService` (Gui) — device-local JSON in
+      `Preferences.Default`, each entry HMAC-SHA256-authenticated with a secret held in
+      `SecureStorage.Default` under its own key namespace, versioned via a `Version` field in the
+      persisted document.
+- [x] Recover pending cleanup after crashes without deleting an object whose ownership and identity
       cannot be verified.
+      `ExportCleanupJournalService.SweepAsync`, run fire-and-forget at startup
+      (`MainLayout.razor.OnInitialized`). An entry whose HMAC fails to verify is left untouched and
+      never acted on. Covered by `ExportCleanupJournalTests` (already-absent, confirmed-and-matching,
+      target-changed, and tampered-entry cases) plus `LibraryWorkspace`-level fault-injection tests
+      proving the existing atomic-write `finally` block self-heals the journal for a live failure at
+      each of the three load-bearing boundaries.
 - [ ] Handle document-provider renames, expired permissions, unavailable providers, target swaps,
       symlink/reparse substitution and already-absent targets.
-- [ ] Implement versioned `.slopfactory.json` sidecars using deterministic encoding, formatting and
+      Local-file cases are fully handled: target-swap/reparse-substitution is detected and reported as
+      `CleanupPending` without deleting anything (a real bug here — `SweepAsync` originally used
+      `File.Exists`, which returns `false` for a directory now sitting at the target path, so a
+      directory swap was silently misreported as "already absent" instead of `CleanupPending`; fixed
+      to `Path.Exists`), and an already-absent target is recognized and cleared. Android SAF document-
+      provider renames/expired-permission reauthorization is explicitly deferred: the local staging
+      temp file for an Android export is journaled and swept normally, but the SAF `Uri` itself is
+      always reported as `CleanupPending` rather than attempting reauthorization or deletion, since a
+      real SAF permission-loss/regrant cycle needs on-device verification unavailable in this
+      environment.
+- [x] Implement versioned `.slopfactory.json` sidecars using deterministic encoding, formatting and
       property ordering.
-- [ ] Publish and bundle the sidecar JSON Schema and implement schema-version handling.
+      `ExportSidecarWriter.BuildJson` — `Utf8JsonWriter`, fixed literal property order (never
+      reflection/dictionary-driven), UTF-8 without BOM, LF line endings enforced by explicit
+      post-processing, `sidecarSchemaVersion` int field. Verified byte-identical output across two
+      exports of the same file with the same options (`SidecarOutputIsByteIdenticalAcrossRepeatedExportsOfTheSameFile`).
+- [x] Publish and bundle the sidecar JSON Schema and implement schema-version handling.
+      `docs/developer/slopfactory-sidecar.schema.json` (draft 2020-12, `$id` matches
+      `ExportSidecarWriter.SchemaId`, `additionalProperties: false`), referenced from
+      `docs/developer/architecture.md`.
 - [ ] Implement privacy-minimal defaults plus disclosure previews and explicit opt-ins for prompts,
       sensitive metadata, filenames, internal identifiers, usage/cost, advanced settings and safety
       metadata.
+      All toggles exist on `ExportSidecarOptions`, default to `false` (never preselected), and are
+      wired into `FileDetails.razor`'s export UI. Not implemented: an actual disclosure **preview**
+      (showing the user the sidecar content before commit) — the UI is checkboxes only. Two of the
+      opt-ins are documented no-ops rather than real implementations:
+      `IncludeSensitiveMetadata` (this app has no metadata-entries feature yet for a sidecar to read)
+      and `IncludeSafetyMetadata` (blocked on Section 10, which is unimplemented — no persisted,
+      hash-bound safety classification exists anywhere to read). Both emit an explicit
+      `"...Unavailable": true` marker rather than silently omitting the toggle's effect.
 - [ ] Revalidate selected metadata, provenance and safety revisions immediately before sidecar
       commit.
-- [ ] Track media and sidecar commits, read-back verification and cleanup independently.
+      Not implemented as a distinct revalidation step — the sidecar writer reads the `FileRecord`/
+      `GenerationRecord` at write time (so it can't be older than the just-completed media export),
+      but there is no explicit "re-check this hasn't changed since the user selected these options"
+      guard. Low-risk in the current single-step export flow (no UI window exists yet between
+      choosing sidecar options and committing where the underlying record could change), but not the
+      same guarantee the bullet describes.
+- [x] Track media and sidecar commits, read-back verification and cleanup independently.
+      `ExportFileWithSidecarAsync` only attempts the sidecar after the media outcome is `Exported`;
+      the sidecar is written through the same atomic-temp-then-journal-then-verify helper as media
+      (`WriteBytesAtomicallyWithJournalAsync`) but as a fully separate operation with its own
+      `SidecarExportResult`. A sidecar failure never touches the already-committed media result or
+      file (`SidecarFailureDoesNotAffectAlreadyCommittedMediaResult`).
 - [ ] Implement bulk-export continuation and per-item reporting when media, sidecar, verification or
       cleanup fails.
+      Bulk media export continuation/per-item reporting already existed
+      (`BuildBulkExportPreflightAsync`/`ExportFilesAsync`/`BulkExportResult`). Sidecar support was
+      **not** extended into that bulk path in this pass — only the single-file
+      `ExportFileWithSidecarAsync` was built. `FileDetails.razor`'s bulk-export UI does not offer
+      sidecar options. A real gap, not a rounding error: closing it means threading
+      `ExportSidecarOptions?` through the bulk preflight/export methods and extending
+      `BulkExportResult` with a parallel per-item sidecar-outcome list.
 - [ ] Add crash injection around every journal flush, object creation, identity binding, content
       flush, verification, atomic commit and journal-removal boundary.
+      Implemented at the three boundaries that are actually load-bearing for correctness —
+      `IExportFaultInjector.BeforeTempCreationAsync`/`BeforeAtomicCommitAsync`/
+      `BeforeJournalRemovalAsync`, exercised by `ExportCleanupJournalTests`' `LiveFault*` tests — not
+      literally every flush/verification point the bullet lists. Note also that because
+      `ExportCoreAsync`'s cleanup runs in a `finally` block, an injected exception at any of these
+      three points is a live-failure self-heal test, not a true crash simulation (a real process
+      crash skips the `finally` entirely); genuine crash-recovery is instead proven by
+      `SweepAsync`-level tests that stage journal/filesystem state directly, bypassing the `finally`.
 
 Done when: no partial or unverified export is reported as successful, no unrelated object can be
 deleted, and sensitive sidecar fields are never included without a fresh explicit review.

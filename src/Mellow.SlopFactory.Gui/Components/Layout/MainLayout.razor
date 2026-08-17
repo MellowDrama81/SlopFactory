@@ -4,6 +4,7 @@
 @inject ManagedContentWatchService ContentWatch
 @inject GenerationQueueService Queue
 @inject IRecoveryStagingService RecoveryStaging
+@inject IExportCleanupJournal ExportCleanupJournal
 @inject IThemePreferenceService Theme
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject CredentialReconciliationService CredentialReconciliation
@@ -145,6 +146,11 @@
         LibraryState.Changed += OnPendingChanged;
         CredentialReconciliation.Start();
         NotificationCoordinator.Start();
+        // Best-effort, fire-and-forget crash recovery for any export temp object left behind by a
+        // prior run — mirrors GenerationQueueService's own startup-recovery pattern
+        // (ResumePendingDownloadsAsync). Never awaited: a slow or failing sweep must not block the
+        // UI from becoming usable.
+        _ = ExportCleanupJournal.SweepAsync();
         NotificationCoordinator.NotifyRequested += OnNotifyRequested;
         Notifications.Tapped += OnNotificationTapped;
         ExitCoordinator.Changed += OnPendingChanged;
