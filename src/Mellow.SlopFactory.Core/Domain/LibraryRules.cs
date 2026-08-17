@@ -8,7 +8,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 36;
+    public const int SchemaVersion = 37;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -20,6 +20,24 @@ public static class LibraryRules
     /// <summary>Largest individual provider result the current in-memory transfer pipeline accepts.
     /// Downloads are rejected while reading, even when the server omits or lies about Content-Length.</summary>
     public const long MaximumProviderResultBytes = 536_870_912;
+
+    /// <summary>
+    /// The current version of the normalized settings snapshot shape (<see
+    /// cref="GenerationSettings"/> plus how a provider adapter interprets it) written into new
+    /// <see cref="GenerationRecord"/> and <see cref="SavedGenerationSetting"/> rows — plan.md:920-921
+    /// / milestone3.md's "signed adapter versioning for normalized snapshot formats," so a record
+    /// stays tagged with the format it was actually written under even after a later signed
+    /// application update changes how that format is produced or interpreted.
+    /// A historical record's own <c>SettingsFormatVersion</c> is never rewritten in place — only a
+    /// freshly created or updated record (including one built from **Use Again**, since that reads
+    /// old values but writes a brand-new request interpreted by whichever adapter version is active
+    /// now) gets the current value. Bump this only when a future adapter change alters how
+    /// <see cref="GenerationSettings"/>/advanced JSON must be interpreted in a way that would make an
+    /// older record misread under the new adapter; add the matching interpretation/migration logic
+    /// at the same time so an older-versioned record remains correctly readable rather than merely
+    /// distinguishable.
+    /// </summary>
+    public const int CurrentGenerationSettingsFormatVersion = 1;
 
     public static string ValidateGenerationTextLength(string value, string fieldName)
     {

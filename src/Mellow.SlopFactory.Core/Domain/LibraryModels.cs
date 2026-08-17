@@ -925,7 +925,11 @@ public sealed record GenerationRecord(
     /// <summary>Meaningful only when <see cref="Status"/> is <see cref="GenerationStatus.Paused"/>.</summary>
     GenerationHoldReason? HoldReason = null,
     /// <summary>Meaningful only when <see cref="Status"/> is <see cref="GenerationStatus.Failed"/>.</summary>
-    GenerationFailureReason? FailureReason = null)
+    GenerationFailureReason? FailureReason = null,
+    /// <summary>See <see cref="LibraryRules.CurrentGenerationSettingsFormatVersion"/>. Set once when
+    /// this record is created/finalized and never rewritten afterward — a stale value on an older
+    /// record is expected and meaningful, not a bug.</summary>
+    int SettingsFormatVersion = LibraryRules.CurrentGenerationSettingsFormatVersion)
 {
     public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
@@ -1026,7 +1030,11 @@ public sealed record SavedGenerationSetting(
     int Revision = 1,
     GenerationSettings Settings = default!,
     string? SecondarySourceFileId = null,
-    string? TertiarySourceFileId = null)
+    string? TertiarySourceFileId = null,
+    /// <summary>See <see cref="LibraryRules.CurrentGenerationSettingsFormatVersion"/>. Set once at
+    /// creation/update time and never rewritten afterward — a stale value on an older record is
+    /// expected and meaningful, not a bug.</summary>
+    int SettingsFormatVersion = LibraryRules.CurrentGenerationSettingsFormatVersion)
 {
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
 }

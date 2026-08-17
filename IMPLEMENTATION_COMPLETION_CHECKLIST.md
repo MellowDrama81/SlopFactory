@@ -204,10 +204,32 @@ misreports OS suspension as a provider failure.
 
 - [ ] Implement `ProviderType.OneMinAi` only after its current official request, response, polling,
       status and error contracts have been confirmed.
+      Confirmed still blocked: the enum value and test/harness scaffolding already exist, but
+      `docs/developer/architecture.md`/`milestone3.md` record that 1min.AI's per-modality
+      request/response shapes could not be confirmed and its docs site could not even be fetched.
+      No adapter body exists; none should be written against unconfirmed shapes.
 - [ ] Complete all documented OpenRouter modality operations and close known response-shape gaps.
+      Confirmed mostly done: `OpenRouterProviderAdapter` implements all four operations (text, image,
+      audio, video submit/poll) with none throwing "not implemented." The one remaining documented
+      gap is `ParseCost`'s hardcoded `"USD"` currency assumption, flagged in the class's own comment
+      as provisional until confirmed against a live account — left open pending that confirmation
+      rather than guessed at further.
 - [ ] Complete DeepInfra audio/video operations only for endpoints with confirmed contracts.
-- [ ] Define signed adapter snapshot versions and migrations so historical generation and saved
+      Confirmed still blocked for the same reason as OneMinAi: `DeepInfraProviderAdapter`'s audio and
+      video methods each throw a `ProviderAdapterException` with an explicit "not yet verified
+      against confirmed documentation" message rather than guessing. Text/image/model-listing are
+      already implemented and confirmed via `OpenAiCompatibleProtocol` reuse.
+- [x] Define signed adapter snapshot versions and migrations so historical generation and saved
       setting records remain readable after adapter changes.
+      "Signed" here means the app ships only built-in, code-signed adapters (plan.md:920-921), not
+      per-record cryptographic signatures. `LibraryRules.CurrentGenerationSettingsFormatVersion`
+      (schema v37) is a new `settings_format_version` column on `generation_records` and
+      `saved_generation_settings`, set once at creation/update time and never rewritten afterward —
+      pre-migration rows are retroactively tagged with the implicit original format (1) rather than
+      losing their version. This is the versioning mechanism the requirement asks for; there is
+      nothing to migrate yet since only one format version has ever existed — a future breaking
+      change to how `GenerationSettings`/advanced JSON is interpreted would add the matching
+      interpretation logic for older versions alongside bumping the constant.
 - [ ] Add provider/model capability schemas for inputs, limits, settings, concurrency and
       instruction-channel behavior.
 - [ ] Generate structured selectors, sliders, toggles, dimensions and voice controls from those
