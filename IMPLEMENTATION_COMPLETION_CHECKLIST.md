@@ -453,8 +453,14 @@ outputs, and recovery exposes no sensitive content outside its library.
 - [ ] Add rendered fixed-viewport coverage for primary phone, tablet and desktop layouts.
 - [ ] Add keyboard-driven coverage for focus visibility, activation, modal focus capture and focus
       restoration.
-- [ ] Add automated manifest verification for Android backup exclusion, permissions and document
+- [x] Add automated manifest verification for Android backup exclusion, permissions and document
       picker declarations.
+      `AndroidManifestBuildVerificationTests` parses the real Android-manifest-merger output from a
+      `net10.0-android` build (locating an existing `obj/{Debug,Release}` build or triggering one) as
+      XML and asserts on parsed elements/attributes — built-artifact coverage, distinct from
+      `UiAssetTests`'s pre-existing source-text assertion. Skips gracefully (matching this codebase's
+      existing environment-dependent-prerequisite convention) if no Android SDK/workload is available
+      to produce a build.
 
 Done when: responsive, keyboard/focus and Android manifest requirements have behavioral or built-
 artifact coverage rather than only source-level markup or CSS assertions.
