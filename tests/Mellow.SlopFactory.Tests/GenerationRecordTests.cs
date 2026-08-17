@@ -753,15 +753,21 @@ public sealed class GenerationRecordTests
         var secondaryImported = Assert.Single(await workspace.ImportAsync([secondarySourcePath], workspace.Descriptor.RootFolderId)).File!;
         var tertiaryImported = Assert.Single(await workspace.ImportAsync([tertiarySourcePath], workspace.Descriptor.RootFolderId)).File!;
 
-        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, ["A red circle."], null, sourceFileId: imported.Id, secondarySourceFileId: secondaryImported.Id, tertiarySourceFileId: tertiaryImported.Id);
+        IReadOnlyList<GenerationSourceSlot> slots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, imported.Id, 0),
+            new(GenerationInputSlotRole.ReferenceImage, secondaryImported.Id, 1),
+            new(GenerationInputSlotRole.ReferenceImage, tertiaryImported.Id, 2),
+        ];
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, ["A red circle."], null, sourceSlots: slots);
 
-        Assert.Equal(imported.Id, record.SourceFileId);
-        Assert.Equal(secondaryImported.Id, record.SecondarySourceFileId);
-        Assert.Equal(tertiaryImported.Id, record.TertiarySourceFileId);
+        Assert.Contains(record.SourceSlots, slot => slot.FileId == imported.Id && slot.Order == 0);
+        Assert.Contains(record.SourceSlots, slot => slot.FileId == secondaryImported.Id && slot.Order == 1);
+        Assert.Contains(record.SourceSlots, slot => slot.FileId == tertiaryImported.Id && slot.Order == 2);
         var reloaded = await workspace.GetGenerationRecordAsync(record.Id);
-        Assert.Equal(imported.Id, reloaded.SourceFileId);
-        Assert.Equal(secondaryImported.Id, reloaded.SecondarySourceFileId);
-        Assert.Equal(tertiaryImported.Id, reloaded.TertiarySourceFileId);
+        Assert.Contains(reloaded.SourceSlots, slot => slot.FileId == imported.Id && slot.Order == 0);
+        Assert.Contains(reloaded.SourceSlots, slot => slot.FileId == secondaryImported.Id && slot.Order == 1);
+        Assert.Contains(reloaded.SourceSlots, slot => slot.FileId == tertiaryImported.Id && slot.Order == 2);
 
         await workspace.RecycleFileAsync(imported.Id);
         await workspace.PermanentlyDeleteFileAsync(imported.Id);
@@ -771,23 +777,25 @@ public sealed class GenerationRecordTests
         await workspace.PermanentlyDeleteFileAsync(tertiaryImported.Id);
 
         var afterDeletion = await workspace.GetGenerationRecordAsync(record.Id);
-        Assert.Null(afterDeletion.SourceFileId);
-        Assert.NotNull(afterDeletion.SourceFileTombstone);
-        Assert.Equal(imported.DisplayName, afterDeletion.SourceFileTombstone!.DisplayName);
-        Assert.Equal(imported.MediaType, afterDeletion.SourceFileTombstone.MediaType);
-        Assert.Equal(imported.ContentHash, afterDeletion.SourceFileTombstone.ContentHash);
+        Assert.Empty(afterDeletion.SourceSlots);
 
-        Assert.Null(afterDeletion.SecondarySourceFileId);
-        Assert.NotNull(afterDeletion.SecondarySourceFileTombstone);
-        Assert.Equal(secondaryImported.DisplayName, afterDeletion.SecondarySourceFileTombstone!.DisplayName);
-        Assert.Equal(secondaryImported.MediaType, afterDeletion.SecondarySourceFileTombstone.MediaType);
-        Assert.Equal(secondaryImported.ContentHash, afterDeletion.SecondarySourceFileTombstone.ContentHash);
+        var primarySnapshot = Assert.Single(afterDeletion.SourceSlotSnapshots, snapshot => snapshot.Order == 0);
+        Assert.Null(primarySnapshot.FileId);
+        Assert.Equal(imported.DisplayName, primarySnapshot.Identity.DisplayName);
+        Assert.Equal(imported.MediaType, primarySnapshot.Identity.MediaType);
+        Assert.Equal(imported.ContentHash, primarySnapshot.Identity.ContentHash);
 
-        Assert.Null(afterDeletion.TertiarySourceFileId);
-        Assert.NotNull(afterDeletion.TertiarySourceFileTombstone);
-        Assert.Equal(tertiaryImported.DisplayName, afterDeletion.TertiarySourceFileTombstone!.DisplayName);
-        Assert.Equal(tertiaryImported.MediaType, afterDeletion.TertiarySourceFileTombstone.MediaType);
-        Assert.Equal(tertiaryImported.ContentHash, afterDeletion.TertiarySourceFileTombstone.ContentHash);
+        var secondarySnapshot = Assert.Single(afterDeletion.SourceSlotSnapshots, snapshot => snapshot.Order == 1);
+        Assert.Null(secondarySnapshot.FileId);
+        Assert.Equal(secondaryImported.DisplayName, secondarySnapshot.Identity.DisplayName);
+        Assert.Equal(secondaryImported.MediaType, secondarySnapshot.Identity.MediaType);
+        Assert.Equal(secondaryImported.ContentHash, secondarySnapshot.Identity.ContentHash);
+
+        var tertiarySnapshot = Assert.Single(afterDeletion.SourceSlotSnapshots, snapshot => snapshot.Order == 2);
+        Assert.Null(tertiarySnapshot.FileId);
+        Assert.Equal(tertiaryImported.DisplayName, tertiarySnapshot.Identity.DisplayName);
+        Assert.Equal(tertiaryImported.MediaType, tertiarySnapshot.Identity.MediaType);
+        Assert.Equal(tertiaryImported.ContentHash, tertiarySnapshot.Identity.ContentHash);
     }
 
     [Fact]
@@ -803,8 +811,13 @@ public sealed class GenerationRecordTests
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
         var imported = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
 
+        IReadOnlyList<GenerationSourceSlot> duplicateSlots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, imported.Id, 0),
+            new(GenerationInputSlotRole.ReferenceImage, imported.Id, 2),
+        ];
         await Assert.ThrowsAsync<LibraryValidationException>(() =>
-            workspace.RecordTextGenerationResultAsync(model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, ["A red circle."], null, sourceFileId: imported.Id, tertiarySourceFileId: imported.Id));
+            workspace.RecordTextGenerationResultAsync(model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, ["A red circle."], null, sourceSlots: duplicateSlots));
     }
 
     [Fact]

@@ -275,19 +275,76 @@ unknown behavior is rejected clearly rather than guessed.
 
 ## 6. Complete source inputs and provider file transfer
 
-- [ ] Replace the three generic source-file fields with capability-defined named slots such as
+- [x] Replace the three generic source-file fields with capability-defined named slots such as
       reference image, mask, first frame, last frame, source audio and source video.
-- [ ] Persist slot role, order and immutable sent snapshots through drafts, saved settings, prompt
+      Replaced `SourceFileId`/`SecondarySourceFileId`/`TertiarySourceFileId` everywhere (`GenerationDraft`,
+      `SavedGenerationSetting`, `GenerationRecord`, `GenerationJobSnapshot`, `IProviderAdapter.GenerateTextAsync`)
+      with a single `IReadOnlyList<GenerationSourceSlot>` (role + file ID + order) and a new
+      `GenerationInputSlotRole` enum (`ReferenceImage`, `Mask`, `FirstFrame`, `LastFrame`,
+      `SourceAudio`, `SourceVideo`). `LibraryRules.GetInputSlotCapabilities(providerType, mode)` is
+      the capability schema — deliberately a small switch, not a stored schema, since only two
+      capabilities are actually confirmed by any adapter: Text mode's up-to-3 `ReferenceImage` slots
+      (any provider — identical to the old 3-slot behavior, just represented as data) and DeepInfra
+      video's optional `FirstFrame` slot (newly wired: `DeepInfraProviderAdapter.SubmitVideoGenerationAsync`
+      now sends it as a `data:` URI via `IProviderAdapter`'s new `firstFrame` parameter — the one
+      concrete capability beyond text that was actually confirmed and previously unwired, per
+      `docs/developer/deepinfra-audio-video-contract.md`). `Mask`/`LastFrame`/`SourceAudio`/`SourceVideo`
+      exist in the vocabulary for forward compatibility only — no adapter documents them, so none are
+      assignable to any model today; adding a real one later is one more `GetInputSlotCapabilities`
+      arm plus adapter wiring, not a schema rework, mirroring this session's `GenerationStatus` work.
+      `Generate.razor`'s three reference-image pickers are unchanged UI-wise (still just three
+      dropdowns); a dedicated first-frame picker was **not** added to the GUI in this pass — DeepInfra
+      video's first-frame capability is reachable through the adapter and persistence layer but has no
+      form control yet, an explicit scope cut given this item's size.
+- [x] Persist slot role, order and immutable sent snapshots through drafts, saved settings, prompt
       improvement, history and **Use Again**.
+      New normalized `generation_source_slots` table (schema v38, replacing three parallel FK columns
+      per table) stores role/order/file ID for `generation_drafts`, `saved_generation_settings` and
+      `generation_records`, plus a `snapshot_display_name/media_type/content_hash` triple per row.
+      For `generation_records` specifically, that snapshot is captured once at write time (queued
+      creation, then re-captured at actual finalize) — genuinely new "immutable sent snapshot"
+      behavior; previously only a since-deleted source's identity was captured (in `Read*` at
+      permanent-deletion time), never at submission. `FileIdentitySnapshot`'s own delete-time
+      writer path was removed (the old `tombstone_source_*` columns are now dead — left in place
+      unused, per this file's own additive-migration convention — the `file_id` column's
+      `ON DELETE SET NULL` FK plus the already-captured snapshot now do that job together).
+      `GenerationHistoryDetail.razor`'s source-slot display now reads
+      `GenerationRecord.SourceSlotSnapshots` (survives file deletion) instead of the old fixed
+      three-tombstone fields. Prompt improvement remains text-only and untouched — it never took
+      source images as input before this change either, so there's nothing to persist there.
+      **Use Again** (`Generate.razor`'s `ConsumeRouteDraftAsync`) carries the full slot list forward,
+      still silently dropping a slot whose file is no longer active (unchanged behavior, just
+      generalized from 3 fixed checks to the whole list via a new `FilterActiveSourceSlots` helper) —
+      it does not yet show the surviving tombstone identity for a dropped slot or check the new
+      model's capabilities before dropping (see the two explicitly-still-open items below).
 - [ ] Implement per-slot media-type, count, byte, dimension, duration and token validation using a
       documented provider formula or a clearly labelled estimate.
+      `LibraryRules.ValidateSourceSlots` enforces role membership and per-role `MaxCount`/`Required`
+      against `GetInputSlotCapabilities`, plus the pre-existing duplicate-file-across-slots check
+      (`ValidateNoDuplicateSourceSlotFiles`, still applied even with no model selected yet). No new
+      byte/dimension/duration/token limit was invented beyond the pre-existing
+      `MaximumInlineImageBytes` cap — no provider documents a per-slot formula for any of the two
+      confirmed capabilities, and guessing one was avoided as usual.
 - [ ] Block known-invalid submissions and label partial or approximate validation accurately.
+      Role/count validation blocks known-invalid submissions (see above); no partial/approximate
+      validation UI labeling was added.
 - [ ] Implement provider-issued signed upload destinations for adapters that require out-of-band
       upload, including safe host, redirect and credential handling.
+      Still deferred — no adapter is confirmed to need one (every current image/first-frame input is
+      sent inline as a base64 data URI); see "Future work" at the end of this file.
 - [ ] Add generic/aliased transport filenames and reliability metadata only where an adapter sends a
       filename.
+      Still deferred — no adapter is confirmed to need generic/aliased upload filenames
+      (`milestone3.md`'s own note on this was never contradicted by later adapter work).
 - [ ] Keep aliases stable between prompt improvement and the final generation submission.
+      Moot: prompt improvement is still text-only, so there is no alias to keep stable.
 - [ ] Add source/model-incompatibility and instruction-channel-mismatch review to **Use Again**.
+      Not implemented in this pass. `SupportsSystemInstructions` is still a single bool with no
+      channel concept (falls through to the existing generic model-unavailable-style warning, per
+      `milestone2.md`'s own scoping note — not a regression). Source/model-incompatibility review
+      (recomputing a reused slot list against the newly selected model's capabilities, rather than
+      only checking file liveness) is now straightforward to add given `GetInputSlotCapabilities`
+      and `ValidateSourceSlots` exist, but wasn't done here.
 
 Done when: source data cannot be silently dropped or assigned to an ambiguous role, and every
 provider-bound file follows a documented and tested transfer path.

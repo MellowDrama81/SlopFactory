@@ -267,10 +267,10 @@ internal static class OpenAiCompatibleProtocol
         }
     }
 
-    public static string BuildChatCompletionRequestBody(string providerModelId, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null)
+    public static string BuildChatCompletionRequestBody(string providerModelId, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null)
     {
         var normalizedSettings = LibraryRules.ValidateGenerationSettings(settings ?? GenerationSettings.Empty);
-        TextGenerationSourceImage?[] sourceImages = [sourceImage, secondarySourceImage, tertiarySourceImage];
+        sourceImages ??= [];
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
@@ -301,7 +301,7 @@ internal static class OpenAiCompatibleProtocol
             }
             writer.WriteStartObject();
             writer.WriteString("role", "user");
-            if (sourceImages.All(image => image is null))
+            if (sourceImages.Count == 0)
             {
                 writer.WriteString("content", prompt);
             }
@@ -314,7 +314,6 @@ internal static class OpenAiCompatibleProtocol
                 writer.WriteEndObject();
                 foreach (var image in sourceImages)
                 {
-                    if (image is null) continue;
                     writer.WriteStartObject();
                     writer.WriteString("type", "image_url");
                     writer.WriteStartObject("image_url");

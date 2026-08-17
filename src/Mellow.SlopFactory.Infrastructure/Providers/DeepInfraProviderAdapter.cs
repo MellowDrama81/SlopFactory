@@ -73,12 +73,12 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseModelList(body);
     }
 
-    public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null, CancellationToken cancellationToken = default)
+    public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "chat/completions"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = new StringContent(OpenAiCompatibleProtocol.BuildChatCompletionRequestBody(model.ProviderModelId, prompt, resultCount, systemInstructions, sourceImage, settings, secondarySourceImage, tertiarySourceImage), Encoding.UTF8, "application/json");
+        request.Content = new StringContent(OpenAiCompatibleProtocol.BuildChatCompletionRequestBody(model.ProviderModelId, prompt, resultCount, systemInstructions, sourceImages, settings), Encoding.UTF8, "application/json");
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseChatCompletionResult(body);
@@ -114,12 +114,12 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         return results;
     }
 
-    public async Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default)
+    public async Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, BuildAbsoluteUri(connection.BaseUrl, "/v1/videos"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = new StringContent(BuildVideoSubmissionRequestBody(model.ProviderModelId, prompt), Encoding.UTF8, "application/json");
+        request.Content = new StringContent(BuildVideoSubmissionRequestBody(model.ProviderModelId, prompt, firstFrame), Encoding.UTF8, "application/json");
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(DescribeDeepInfraFailure(body, statusCode));
 
@@ -265,7 +265,12 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private static string BuildVideoSubmissionRequestBody(string providerModelId, string prompt)
+    /// <summary><paramref name="firstFrame"/> maps to DeepInfra's documented optional
+    /// <c>image_url</c> submit field (image-to-video), written as a <c>data:</c> URI — confirmed by
+    /// docs/developer/deepinfra-audio-video-contract.md to accept either an <c>http(s)</c> URL or a
+    /// <c>data:</c> URI, and matching the inline-data-URI convention this codebase already uses for
+    /// chat image conditioning.</summary>
+    private static string BuildVideoSubmissionRequestBody(string providerModelId, string prompt, TextGenerationSourceImage? firstFrame)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -273,6 +278,10 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
             writer.WriteStartObject();
             writer.WriteString("model", providerModelId);
             writer.WriteString("prompt", prompt);
+            if (firstFrame is not null)
+            {
+                writer.WriteString("image_url", $"data:{firstFrame.MediaType};base64,{Convert.ToBase64String(firstFrame.Bytes)}");
+            }
             writer.WriteEndObject();
         }
 

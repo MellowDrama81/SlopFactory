@@ -84,7 +84,7 @@ public sealed class GenerationNotificationCoordinatorTests
         var notified = new List<GenerationRecord>();
         coordinator.NotifyRequested += (_, record) => notified.Add(record);
 
-        queue.Enqueue(new GenerationJobSnapshot("draft-1", "Tab", GenerationMode.Text, model.Id, "prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
+        queue.Enqueue(new GenerationJobSnapshot("draft-1", "Tab", GenerationMode.Text, model.Id, "prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
         await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt"));
         adapter.Complete("prompt", new TextGenerationResult(["result"], null, null));
 
@@ -102,7 +102,7 @@ public sealed class GenerationNotificationCoordinatorTests
         var notified = new List<GenerationRecord>();
         coordinator.NotifyRequested += (_, record) => notified.Add(record);
 
-        queue.Enqueue(new GenerationJobSnapshot("draft-1", "Tab", GenerationMode.Text, model.Id, "prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
+        queue.Enqueue(new GenerationJobSnapshot("draft-1", "Tab", GenerationMode.Text, model.Id, "prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
         await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt"));
         adapter.Complete("prompt", new TextGenerationResult(["result"], null, null));
 
@@ -121,7 +121,7 @@ public sealed class GenerationNotificationCoordinatorTests
         var notified = new List<GenerationRecord>();
         coordinator.NotifyRequested += (_, record) => notified.Add(record);
 
-        queue.Enqueue(new GenerationJobSnapshot("draft-1", "Tab", GenerationMode.Text, model.Id, "prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
+        queue.Enqueue(new GenerationJobSnapshot("draft-1", "Tab", GenerationMode.Text, model.Id, "prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
         await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt"));
         adapter.Complete("prompt", new TextGenerationResult(["result"], null, null));
 
@@ -146,7 +146,7 @@ public sealed class GenerationNotificationCoordinatorTests
         queue.JobCompleted += (_, outcome) => coordinator.VisibleGenerationRecordId = outcome.Record?.Id;
         coordinator.Start();
 
-        queue.Enqueue(new GenerationJobSnapshot("draft-1", "Tab", GenerationMode.Text, model.Id, "prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
+        queue.Enqueue(new GenerationJobSnapshot("draft-1", "Tab", GenerationMode.Text, model.Id, "prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
         await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt"));
         adapter.Complete("prompt", new TextGenerationResult(["result"], null, null));
 
@@ -167,7 +167,7 @@ public sealed class GenerationNotificationCoordinatorTests
 
         await workspace.RecycleModelAsync(model.Id);
         await workspace.PermanentlyDeleteModelAsync(model.Id);
-        queue.Enqueue(new GenerationJobSnapshot("draft-doomed", "Tab", GenerationMode.Text, model.Id, "doomed", null, null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
+        queue.Enqueue(new GenerationJobSnapshot("draft-doomed", "Tab", GenerationMode.Text, model.Id, "doomed", null, 1, workspace.Descriptor.GeneratedFolderId, null), connection.Id);
 
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-doomed") is not null);
         await Task.Delay(50);
@@ -210,10 +210,10 @@ public sealed class GenerationNotificationCoordinatorTests
         public Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null, CancellationToken cancellationToken = default)
+        public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default)
         {
             TaskCompletionSource<TextGenerationResult> tcs;
             lock (_gate)

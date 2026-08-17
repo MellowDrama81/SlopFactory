@@ -52,10 +52,10 @@ internal sealed class OneMinAiProviderAdapter : IProviderAdapter
     public Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default) =>
         throw new ProviderAdapterException("Model discovery is not available for 1min.ai: no model-listing endpoint is documented. The connection can still be saved and used manually.");
 
-    public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null, CancellationToken cancellationToken = default)
+    public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default)
     {
         if (resultCount < 1) throw new ProviderAdapterException("At least one text result must be requested.");
-        if (sourceImage is not null || secondarySourceImage is not null || tertiarySourceImage is not null)
+        if (sourceImages is { Count: > 0 })
         {
             throw new ProviderAdapterException("Image-conditioned text generation is not supported for 1min.ai: its attachment upload format was not confirmed by live testing.");
         }
@@ -116,7 +116,7 @@ internal sealed class OneMinAiProviderAdapter : IProviderAdapter
         return results;
     }
 
-    public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default) =>
+    public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default) =>
         throw new ProviderAdapterException("Video generation is not yet implemented for 1min.ai: its default behavior is a synchronous request that blocks for the full render, which does not fit this app's submit-then-poll job model, and the alternative asynchronous path was never confirmed against a live call.");
 
     public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default) =>

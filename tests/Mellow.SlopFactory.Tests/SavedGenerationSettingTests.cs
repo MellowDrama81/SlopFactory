@@ -71,14 +71,15 @@ public sealed class SavedGenerationSettingTests
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
         var imported = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
 
-        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, null, imported.Id);
-        Assert.Equal(imported.Id, saved.SourceFileId);
+        IReadOnlyList<GenerationSourceSlot> slots = [new(GenerationInputSlotRole.ReferenceImage, imported.Id, 0)];
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, null, sourceSlots: slots);
+        Assert.Contains(saved.SourceSlots, slot => slot.FileId == imported.Id && slot.Order == 0);
 
         var reloaded = await workspace.GetSavedSettingAsync(saved.Id);
-        Assert.Equal(imported.Id, reloaded.SourceFileId);
+        Assert.Contains(reloaded.SourceSlots, slot => slot.FileId == imported.Id && slot.Order == 0);
 
         var cleared = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, saved.Prompt, saved.ResultCount, saved.DestinationFolderId);
-        Assert.Null(cleared.SourceFileId);
+        Assert.Empty(cleared.SourceSlots);
     }
 
     [Fact]
@@ -118,17 +119,21 @@ public sealed class SavedGenerationSettingTests
         var secondarySource = Assert.Single(await workspace.ImportAsync([secondarySourcePath], workspace.Descriptor.RootFolderId)).File!;
         var tertiarySource = Assert.Single(await workspace.ImportAsync([tertiarySourcePath], workspace.Descriptor.RootFolderId)).File!;
 
-        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Describe these images", 1, workspace.Descriptor.GeneratedFolderId, secondarySourceFileId: secondarySource.Id, tertiarySourceFileId: tertiarySource.Id);
-        Assert.Equal(secondarySource.Id, saved.SecondarySourceFileId);
-        Assert.Equal(tertiarySource.Id, saved.TertiarySourceFileId);
+        IReadOnlyList<GenerationSourceSlot> slots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, secondarySource.Id, 1),
+            new(GenerationInputSlotRole.ReferenceImage, tertiarySource.Id, 2),
+        ];
+        var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Describe these images", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: slots);
+        Assert.Contains(saved.SourceSlots, slot => slot.FileId == secondarySource.Id && slot.Order == 1);
+        Assert.Contains(saved.SourceSlots, slot => slot.FileId == tertiarySource.Id && slot.Order == 2);
 
         var reloaded = await workspace.GetSavedSettingAsync(saved.Id);
-        Assert.Equal(secondarySource.Id, reloaded.SecondarySourceFileId);
-        Assert.Equal(tertiarySource.Id, reloaded.TertiarySourceFileId);
+        Assert.Contains(reloaded.SourceSlots, slot => slot.FileId == secondarySource.Id && slot.Order == 1);
+        Assert.Contains(reloaded.SourceSlots, slot => slot.FileId == tertiarySource.Id && slot.Order == 2);
 
         var cleared = await workspace.UpdateSavedSettingAsync(saved.Id, saved.Revision, saved.Title, model.Id, saved.Prompt, saved.ResultCount, saved.DestinationFolderId);
-        Assert.Null(cleared.SecondarySourceFileId);
-        Assert.Null(cleared.TertiarySourceFileId);
+        Assert.Empty(cleared.SourceSlots);
     }
 
     [Fact]
@@ -144,8 +149,13 @@ public sealed class SavedGenerationSettingTests
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
         var imported = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
 
+        IReadOnlyList<GenerationSourceSlot> duplicateSlots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, imported.Id, 0),
+            new(GenerationInputSlotRole.ReferenceImage, imported.Id, 1),
+        ];
         await Assert.ThrowsAsync<LibraryValidationException>(() =>
-            workspace.CreateSavedSettingAsync("My Preset", model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, sourceFileId: imported.Id, secondarySourceFileId: imported.Id));
+            workspace.CreateSavedSettingAsync("My Preset", model.Id, "Describe this image", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: duplicateSlots));
     }
 
     [Theory]

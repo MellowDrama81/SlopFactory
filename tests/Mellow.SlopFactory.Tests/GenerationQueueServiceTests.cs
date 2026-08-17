@@ -32,7 +32,7 @@ public sealed class GenerationQueueServiceTests
     }
 
     private static GenerationJobSnapshot Snapshot(string draftId, string modelId, string prompt, string destinationFolderId, GenerationMode mode = GenerationMode.Text, int resultCount = 1, string? sourceFileId = null) =>
-        new(draftId, "Tab", mode, modelId, prompt, null, sourceFileId, resultCount, destinationFolderId, null);
+        new(draftId, "Tab", mode, modelId, prompt, null, resultCount, destinationFolderId, null, SourceSlots: sourceFileId is null ? null : [new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, sourceFileId, 0)]);
 
     private static async Task<Connection> CreateReadyConnectionAsync(ILibraryWorkspace workspace, string label)
     {
@@ -1929,7 +1929,7 @@ public sealed class GenerationQueueServiceTests
         public int VideoPollCount { get; private set; }
         public void EnqueueVideoPollResult(AsyncGenerationPollResult result) { lock (_gate) _videoPollResults.Enqueue(result); }
 
-        public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default)
+        public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default)
         {
             lock (_gate)
             {
@@ -1949,7 +1949,7 @@ public sealed class GenerationQueueServiceTests
             }
         }
 
-        public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null, CancellationToken cancellationToken = default)
+        public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default)
         {
             TaskCompletionSource<TextGenerationResult> tcs;
             lock (_gate)

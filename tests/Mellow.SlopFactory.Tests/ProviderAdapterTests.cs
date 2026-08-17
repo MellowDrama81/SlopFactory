@@ -192,7 +192,7 @@ public sealed class ProviderAdapterTests
         var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
         var model = CreateModel();
 
-        await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this image", 1, null, new TextGenerationSourceImage("image/png", imageBytes));
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this image", 1, null, [new TextGenerationSourceImage("image/png", imageBytes)]);
 
         using var document = System.Text.Json.JsonDocument.Parse(capturedBody!);
         var userMessage = document.RootElement.GetProperty("messages")[0];
@@ -225,8 +225,7 @@ public sealed class ProviderAdapterTests
         var model = CreateModel();
 
         await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe these images", 1, null,
-            new TextGenerationSourceImage("image/png", primaryBytes), null,
-            new TextGenerationSourceImage("image/png", secondaryBytes), new TextGenerationSourceImage("image/png", tertiaryBytes));
+            [new TextGenerationSourceImage("image/png", primaryBytes), new TextGenerationSourceImage("image/png", secondaryBytes), new TextGenerationSourceImage("image/png", tertiaryBytes)]);
 
         using (var document = System.Text.Json.JsonDocument.Parse(capturedBody!))
         {
@@ -238,7 +237,7 @@ public sealed class ProviderAdapterTests
             Assert.Equal($"data:image/png;base64,{Convert.ToBase64String(tertiaryBytes)}", contentParts[3].GetProperty("image_url").GetProperty("url").GetString());
         }
 
-        await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this image", 1, null, null, null, new TextGenerationSourceImage("image/png", secondaryBytes));
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this image", 1, null, [new TextGenerationSourceImage("image/png", secondaryBytes)]);
         using (var document = System.Text.Json.JsonDocument.Parse(capturedBody!))
         {
             var contentParts = document.RootElement.GetProperty("messages")[0].GetProperty("content");

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 
@@ -8,7 +9,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 37;
+    public const int SchemaVersion = 38;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -200,18 +201,66 @@ public static class LibraryRules
         }
     }
 
-    public static void ValidateSourceFileIds(string? primary, string? secondary, string? tertiary)
+    /// <summary>
+    /// Which named source-input slot roles a model accepts, and how many. Deliberately a small
+    /// switch, not a stored/persisted schema: only two capabilities are actually confirmed today
+    /// (text generation's up-to-3 reference images, any provider; DeepInfra video's optional
+    /// first-frame image), so there is nothing else to represent. Adding a third confirmed provider
+    /// capability later is one more arm here, not a data migration — see
+    /// <see cref="GenerationInputSlotRole"/>'s own remarks.
+    /// </summary>
+    public static IReadOnlyList<GenerationInputSlotCapability> GetInputSlotCapabilities(ProviderType providerType, GenerationMode mode) => mode switch
     {
-        Span<string?> ids = [primary, secondary, tertiary];
-        for (var i = 0; i < ids.Length; i++)
+        GenerationMode.Text => [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 3, Required: false)],
+        GenerationMode.Video when providerType == ProviderType.DeepInfra => [new GenerationInputSlotCapability(GenerationInputSlotRole.FirstFrame, 0, 1, Required: false)],
+        _ => []
+    };
+
+    /// <summary>The same file selected in more than one source slot is always rejected, independent
+    /// of any model's capabilities — this still applies even when no model is selected yet (e.g. a
+    /// draft with no model chosen), unlike the role/count checks in <see cref="ValidateSourceSlots"/>
+    /// which need a model's capabilities to mean anything.</summary>
+    public static void ValidateNoDuplicateSourceSlotFiles(IReadOnlyList<GenerationSourceSlot> slots)
+    {
+        var seenFileIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var slot in slots)
         {
-            if (ids[i] is null) continue;
-            for (var j = i + 1; j < ids.Length; j++)
+            if (!seenFileIds.Add(slot.FileId))
             {
-                if (string.Equals(ids[i], ids[j], StringComparison.Ordinal))
-                {
-                    throw new LibraryValidationException("The same source file cannot be selected in more than one source slot.");
-                }
+                throw new LibraryValidationException("The same source file cannot be selected in more than one source slot.");
+            }
+        }
+    }
+
+    /// <summary>Validates a proposed source-slot assignment against a model's capabilities: rejects
+    /// a role the model doesn't declare, a role assigned more files than its
+    /// <see cref="GenerationInputSlotCapability.MaxCount"/>, a <see cref="GenerationInputSlotCapability.Required"/>
+    /// role with no assignment, and (via <see cref="ValidateNoDuplicateSourceSlotFiles"/>) the same
+    /// file selected in more than one slot.</summary>
+    public static void ValidateSourceSlots(IReadOnlyList<GenerationSourceSlot> slots, IReadOnlyList<GenerationInputSlotCapability> capabilities)
+    {
+        ValidateNoDuplicateSourceSlotFiles(slots);
+
+        foreach (var group in slots.GroupBy(slot => slot.Role))
+        {
+            var capability = capabilities.FirstOrDefault(candidate => candidate.Role == group.Key);
+            if (capability is null)
+            {
+                throw new LibraryValidationException($"The selected model does not accept a '{group.Key}' source input.");
+            }
+
+            var count = group.Count();
+            if (count > capability.MaxCount)
+            {
+                throw new LibraryValidationException($"The selected model accepts at most {capability.MaxCount} '{group.Key}' source file(s).");
+            }
+        }
+
+        foreach (var capability in capabilities.Where(candidate => candidate.Required))
+        {
+            if (!slots.Any(slot => slot.Role == capability.Role))
+            {
+                throw new LibraryValidationException($"The selected model requires a '{capability.Role}' source input.");
             }
         }
     }

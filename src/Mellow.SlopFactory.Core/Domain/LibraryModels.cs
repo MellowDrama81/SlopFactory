@@ -208,6 +208,40 @@ public sealed record FileDerivationProvenance(
 
 public sealed record FileIdentitySnapshot(string DisplayName, string MediaType, string ContentHash);
 
+/// <summary>
+/// Named source-input slot roles. Only <see cref="ReferenceImage"/> (text generation, up to 3, any
+/// provider) and <see cref="FirstFrame"/> (DeepInfra video only) are ever assignable to a model
+/// today — see <see cref="LibraryRules.GetInputSlotCapabilities"/>. The remaining values exist so a
+/// future confirmed provider capability is additive (one more capability entry and adapter wiring),
+/// not a schema rework; no adapter documents them today.
+/// </summary>
+public enum GenerationInputSlotRole
+{
+    ReferenceImage = 0,
+    Mask = 1,
+    FirstFrame = 2,
+    LastFrame = 3,
+    SourceAudio = 4,
+    SourceVideo = 5
+}
+
+/// <summary>One source-file assignment within a draft, saved setting or generation record.
+/// <paramref name="Order"/> is the position within its role (0-based) for roles that allow more than
+/// one file (e.g. multiple reference images).</summary>
+public sealed record GenerationSourceSlot(GenerationInputSlotRole Role, string FileId, int Order);
+
+/// <summary>An immutable identity snapshot of a source slot as it was at generation-submission time,
+/// captured once on <see cref="GenerationRecord"/> and never rewritten. Identity only (display
+/// name/media type/hash via <see cref="FileIdentitySnapshot"/>) — not a byte-level copy; the source
+/// file remains a library <see cref="FileRecord"/> referenced by <paramref name="FileId"/>, which
+/// becomes null if that file is later permanently deleted (the snapshot itself survives).</summary>
+public sealed record GenerationSourceSlotSnapshot(GenerationInputSlotRole Role, int Order, string? FileId, FileIdentitySnapshot Identity);
+
+/// <summary>Describes how many files of a given role a model accepts. See
+/// <see cref="LibraryRules.GetInputSlotCapabilities"/> for the (currently very small) set of
+/// confirmed provider capabilities this can return.</summary>
+public sealed record GenerationInputSlotCapability(GenerationInputSlotRole Role, int MinCount, int MaxCount, bool Required);
+
 public sealed record FileDerivationChainEntry(
     FileRecord File,
     FileOrigin? DerivedBy);
@@ -906,18 +940,12 @@ public sealed record GenerationRecord(
     IReadOnlyList<string> ResultFileIds,
     int? PromptTokens = null,
     int? CompletionTokens = null,
-    string? SourceFileId = null,
     string? PromptImprovementRecordId = null,
     TextResultFormat? TextFormat = null,
     LibraryRecordState State = LibraryRecordState.Active,
     DateTimeOffset? RecycledAt = null,
-    FileIdentitySnapshot? SourceFileTombstone = null,
     IReadOnlyList<FileIdentitySnapshot> TombstonedResults = default!,
     GenerationSettings Settings = default!,
-    string? SecondarySourceFileId = null,
-    FileIdentitySnapshot? SecondarySourceFileTombstone = null,
-    string? TertiarySourceFileId = null,
-    FileIdentitySnapshot? TertiarySourceFileTombstone = null,
     int SafetyBlockedCount = 0,
     double? ActualCost = null,
     string? ActualCostCurrency = null,
@@ -929,11 +957,19 @@ public sealed record GenerationRecord(
     /// <summary>See <see cref="LibraryRules.CurrentGenerationSettingsFormatVersion"/>. Set once when
     /// this record is created/finalized and never rewritten afterward — a stale value on an older
     /// record is expected and meaningful, not a bug.</summary>
-    int SettingsFormatVersion = LibraryRules.CurrentGenerationSettingsFormatVersion)
+    int SettingsFormatVersion = LibraryRules.CurrentGenerationSettingsFormatVersion,
+    /// <summary>Replaces the former fixed source-file/tombstone triple — see
+    /// <see cref="GenerationInputSlotRole"/>.</summary>
+    IReadOnlyList<GenerationSourceSlot> SourceSlots = default!,
+    /// <summary>Immutable identity snapshot of <see cref="SourceSlots"/> as they were at submission
+    /// time — see <see cref="GenerationSourceSlotSnapshot"/>.</summary>
+    IReadOnlyList<GenerationSourceSlotSnapshot> SourceSlotSnapshots = default!)
 {
     public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
     public IReadOnlyList<GenerationResultEntry> Results { get; init; } = Results ?? [];
+    public IReadOnlyList<GenerationSourceSlot> SourceSlots { get; init; } = SourceSlots ?? [];
+    public IReadOnlyList<GenerationSourceSlotSnapshot> SourceSlotSnapshots { get; init; } = SourceSlotSnapshots ?? [];
 }
 
 public sealed record PromptImprovementRecord(
@@ -1025,18 +1061,17 @@ public sealed record SavedGenerationSetting(
     DateTimeOffset CreatedAt,
     DateTimeOffset ModifiedAt,
     DateTimeOffset? RecycledAt,
-    string? SourceFileId = null,
     bool NeedsReview = false,
     int Revision = 1,
     GenerationSettings Settings = default!,
-    string? SecondarySourceFileId = null,
-    string? TertiarySourceFileId = null,
     /// <summary>See <see cref="LibraryRules.CurrentGenerationSettingsFormatVersion"/>. Set once at
     /// creation/update time and never rewritten afterward — a stale value on an older record is
     /// expected and meaningful, not a bug.</summary>
-    int SettingsFormatVersion = LibraryRules.CurrentGenerationSettingsFormatVersion)
+    int SettingsFormatVersion = LibraryRules.CurrentGenerationSettingsFormatVersion,
+    IReadOnlyList<GenerationSourceSlot> SourceSlots = default!)
 {
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
+    public IReadOnlyList<GenerationSourceSlot> SourceSlots { get; init; } = SourceSlots ?? [];
 }
 
 public sealed record GenerationDraft(
@@ -1046,7 +1081,6 @@ public sealed record GenerationDraft(
     string? ModelId,
     string Prompt,
     string? SystemInstructions,
-    string? SourceFileId,
     int ResultCount,
     string DestinationFolderId,
     string? ImprovementModelId,
@@ -1054,8 +1088,8 @@ public sealed record GenerationDraft(
     DateTimeOffset CreatedAt,
     DateTimeOffset ModifiedAt,
     GenerationSettings Settings = default!,
-    string? SecondarySourceFileId = null,
-    string? TertiarySourceFileId = null)
+    IReadOnlyList<GenerationSourceSlot> SourceSlots = default!)
 {
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;
+    public IReadOnlyList<GenerationSourceSlot> SourceSlots { get; init; } = SourceSlots ?? [];
 }

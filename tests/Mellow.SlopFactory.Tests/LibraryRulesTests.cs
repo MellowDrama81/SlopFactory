@@ -49,4 +49,90 @@ public sealed class LibraryRulesTests
         Assert.DoesNotContain("another-secret", preview, StringComparison.Ordinal);
         Assert.Equal(2, preview!.Split("[redacted]", StringSplitOptions.None).Length - 1);
     }
+
+    [Theory]
+    [InlineData(ProviderType.OpenAi, GenerationMode.Text)]
+    [InlineData(ProviderType.DeepInfra, GenerationMode.Text)]
+    [InlineData(ProviderType.OpenRouter, GenerationMode.Text)]
+    [InlineData(ProviderType.OneMinAi, GenerationMode.Text)]
+    public void GetInputSlotCapabilitiesReturnsUpToThreeReferenceImagesForTextModeOnAnyProvider(ProviderType providerType, GenerationMode mode)
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(providerType, mode);
+
+        var capability = Assert.Single(capabilities);
+        Assert.Equal(GenerationInputSlotRole.ReferenceImage, capability.Role);
+        Assert.Equal(0, capability.MinCount);
+        Assert.Equal(3, capability.MaxCount);
+        Assert.False(capability.Required);
+    }
+
+    [Fact]
+    public void GetInputSlotCapabilitiesReturnsFirstFrameOnlyForDeepInfraVideo()
+    {
+        var deepInfraCapabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.DeepInfra, GenerationMode.Video);
+        var capability = Assert.Single(deepInfraCapabilities);
+        Assert.Equal(GenerationInputSlotRole.FirstFrame, capability.Role);
+        Assert.Equal(0, capability.MinCount);
+        Assert.Equal(1, capability.MaxCount);
+
+        Assert.Empty(LibraryRules.GetInputSlotCapabilities(ProviderType.OpenRouter, GenerationMode.Video));
+    }
+
+    [Theory]
+    [InlineData(ProviderType.OpenAi, GenerationMode.Image)]
+    [InlineData(ProviderType.OpenAi, GenerationMode.Audio)]
+    [InlineData(ProviderType.DeepInfra, GenerationMode.Image)]
+    [InlineData(ProviderType.OneMinAi, GenerationMode.Video)]
+    public void GetInputSlotCapabilitiesReturnsNoneForEveryOtherModeProviderCombination(ProviderType providerType, GenerationMode mode)
+    {
+        Assert.Empty(LibraryRules.GetInputSlotCapabilities(providerType, mode));
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsAcceptsAssignmentsWithinDeclaredCapabilities()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Text);
+        GenerationSourceSlot[] slots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, "file-1", 0),
+            new(GenerationInputSlotRole.ReferenceImage, "file-2", 1),
+        ];
+
+        LibraryRules.ValidateSourceSlots(slots, capabilities);
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsRejectsARoleTheModelDoesNotAccept()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Image);
+        GenerationSourceSlot[] slots = [new(GenerationInputSlotRole.ReferenceImage, "file-1", 0)];
+
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsRejectsExceedingARolesMaxCount()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.DeepInfra, GenerationMode.Video);
+        GenerationSourceSlot[] slots =
+        [
+            new(GenerationInputSlotRole.FirstFrame, "file-1", 0),
+            new(GenerationInputSlotRole.FirstFrame, "file-2", 1),
+        ];
+
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsRejectsTheSameFileSelectedInMoreThanOneSlot()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Text);
+        GenerationSourceSlot[] slots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, "file-1", 0),
+            new(GenerationInputSlotRole.ReferenceImage, "file-1", 1),
+        ];
+
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
 }

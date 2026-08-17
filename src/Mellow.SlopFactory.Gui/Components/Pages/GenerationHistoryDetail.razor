@@ -259,13 +259,11 @@ else if (_record is not null)
                 ModelId: model.Id,
                 Prompt: _record.Prompt,
                 SystemInstructions: _record.SystemInstructions,
-                SourceFileId: _record.SourceFileId,
                 ResultCount: failedCount,
                 DestinationFolderId: _record.DestinationFolderId,
                 AcceptedImprovementRecordId: null,
                 Settings: _record.Settings,
-                SecondarySourceFileId: _record.SecondarySourceFileId,
-                TertiarySourceFileId: _record.TertiarySourceFileId);
+                SourceSlots: _record.SourceSlots);
             Queue.Enqueue(snapshot, connection.Id);
             Navigation.NavigateTo("/queue");
         }
@@ -379,15 +377,18 @@ else if (_record is not null)
 
     private sealed record SourceSlotView(int Position, string? FileId, FileIdentitySnapshot? Tombstone);
 
+    /// <summary>Built from <see cref="GenerationRecord.SourceSlotSnapshots"/> — the immutable
+    /// identity captured at submission time — rather than the live <see cref="GenerationRecord.SourceSlots"/>,
+    /// since this history view needs to keep showing a slot whose file was later permanently
+    /// deleted (via its surviving <see cref="FileIdentitySnapshot"/>), which the live list alone
+    /// can't do. <c>Position</c> here is a 1-based display ordinal across every captured slot
+    /// (role, then order), not tied to a specific role.</summary>
     private IReadOnlyList<SourceSlotView> SourceSlots()
     {
         if (_record is null) return [];
-        SourceSlotView[] slots =
-        [
-            new(1, _record.SourceFileId, _record.SourceFileId is null ? _record.SourceFileTombstone : null),
-            new(2, _record.SecondarySourceFileId, _record.SecondarySourceFileId is null ? _record.SecondarySourceFileTombstone : null),
-            new(3, _record.TertiarySourceFileId, _record.TertiarySourceFileId is null ? _record.TertiarySourceFileTombstone : null)
-        ];
-        return slots.Where(slot => slot.FileId is not null || slot.Tombstone is not null).ToList();
+        return _record.SourceSlotSnapshots
+            .OrderBy(slot => slot.Role).ThenBy(slot => slot.Order)
+            .Select((slot, index) => new SourceSlotView(index + 1, slot.FileId, slot.FileId is null ? slot.Identity : null))
+            .ToList();
     }
 }

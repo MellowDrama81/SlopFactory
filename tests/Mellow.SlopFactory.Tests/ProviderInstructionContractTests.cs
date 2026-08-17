@@ -59,7 +59,7 @@ public sealed class ProviderInstructionContractTests
             "fixture-model",
             "user instruction",
             1,
-            sourceImage: source);
+            sourceImages: [source]);
         sourceBytes[0] = 255;
 
         Assert.Contains("data:image/png;base64,AQID", snapshot, StringComparison.Ordinal);

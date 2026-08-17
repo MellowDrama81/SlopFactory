@@ -474,17 +474,9 @@ else
                     {
                         <p class="muted">@Strings["TokenUsage", record.PromptTokens?.ToString() ?? Strings["Unknown"], record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
                     }
-                    @if (record.SourceFileId is not null)
+                    @foreach (var slot in record.SourceSlots.Where(slot => slot.Role == GenerationInputSlotRole.ReferenceImage).OrderBy(slot => slot.Order))
                     {
-                        <p class="muted">@Strings["SourceImageSlotUsed", 1] <a href="@($"/file/{record.SourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
-                    }
-                    @if (record.SecondarySourceFileId is not null)
-                    {
-                        <p class="muted">@Strings["SourceImageSlotUsed", 2] <a href="@($"/file/{record.SecondarySourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
-                    }
-                    @if (record.TertiarySourceFileId is not null)
-                    {
-                        <p class="muted">@Strings["SourceImageSlotUsed", 3] <a href="@($"/file/{record.TertiarySourceFileId}")">@Strings["OpenGeneratedFile"]</a></p>
+                        <p class="muted">@Strings["SourceImageSlotUsed", slot.Order + 1] <a href="@($"/file/{slot.FileId}")">@Strings["OpenGeneratedFile"]</a></p>
                     }
                     @if (record.ResultFileIds.Count > 0)
                     {
@@ -615,11 +607,9 @@ else
                 await FlushPendingAutosaveAsync();
                 var model = saved.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == saved.ModelId) : null;
                 var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
-                var sourceFileId = saved.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == saved.SourceFileId) ? saved.SourceFileId : null;
-                var secondarySourceFileId = saved.SecondarySourceFileId is not null && _activeImageFiles.Any(file => file.Id == saved.SecondarySourceFileId) ? saved.SecondarySourceFileId : null;
-                var tertiarySourceFileId = saved.TertiarySourceFileId is not null && _activeImageFiles.Any(file => file.Id == saved.TertiarySourceFileId) ? saved.TertiarySourceFileId : null;
+                var sourceSlots = FilterActiveSourceSlots(saved.SourceSlots);
                 var draft = await workspace.CreateDraftAsync();
-                draft = await workspace.ReplaceDraftStateAsync(draft.Id, saved.Title, modelId, saved.Prompt, saved.SystemInstructions, sourceFileId, saved.ResultCount, saved.DestinationFolderId, null, null, saved.Settings, secondarySourceFileId, tertiarySourceFileId);
+                draft = await workspace.ReplaceDraftStateAsync(draft.Id, saved.Title, modelId, saved.Prompt, saved.SystemInstructions, saved.ResultCount, saved.DestinationFolderId, null, null, saved.Settings, sourceSlots);
                 _drafts = [.. _drafts, draft];
                 await LoadDraftIntoFormAsync(draft.Id);
                 _loadedSettingsId = saved.Id;
@@ -646,11 +636,9 @@ else
                 await FlushPendingAutosaveAsync();
                 var model = history.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == history.ModelId) : null;
                 var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
-                var sourceFileId = history.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == history.SourceFileId) ? history.SourceFileId : null;
-                var secondarySourceFileId = history.SecondarySourceFileId is not null && _activeImageFiles.Any(file => file.Id == history.SecondarySourceFileId) ? history.SecondarySourceFileId : null;
-                var tertiarySourceFileId = history.TertiarySourceFileId is not null && _activeImageFiles.Any(file => file.Id == history.TertiarySourceFileId) ? history.TertiarySourceFileId : null;
+                var sourceSlots = FilterActiveSourceSlots(history.SourceSlots);
                 var draft = await workspace.CreateDraftAsync();
-                draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, modelId, history.Prompt, history.SystemInstructions, sourceFileId, history.ResultCount, history.DestinationFolderId, null, null, history.Settings, secondarySourceFileId, tertiarySourceFileId);
+                draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, modelId, history.Prompt, history.SystemInstructions, history.ResultCount, history.DestinationFolderId, null, null, history.Settings, sourceSlots);
                 _drafts = [.. _drafts, draft];
                 await LoadDraftIntoFormAsync(draft.Id);
                 if (model is null && history.ModelId is not null && _models.Count > 0)
@@ -713,14 +701,15 @@ else
             }
         }
 
+        var draftFormActiveSlots = ExtractSourceFileIds(FilterActiveSourceSlots(draft.SourceSlots));
         _form = new GenerateForm
         {
             ModelId = resolvedModelId,
             Prompt = draft.Prompt,
             SystemInstructions = draft.SystemInstructions ?? string.Empty,
-            SourceFileId = draft.SourceFileId is not null && _activeImageFiles.Any(file => file.Id == draft.SourceFileId) ? draft.SourceFileId : string.Empty,
-            SecondarySourceFileId = draft.SecondarySourceFileId is not null && _activeImageFiles.Any(file => file.Id == draft.SecondarySourceFileId) ? draft.SecondarySourceFileId : string.Empty,
-            TertiarySourceFileId = draft.TertiarySourceFileId is not null && _activeImageFiles.Any(file => file.Id == draft.TertiarySourceFileId) ? draft.TertiarySourceFileId : string.Empty,
+            SourceFileId = draftFormActiveSlots.Primary ?? string.Empty,
+            SecondarySourceFileId = draftFormActiveSlots.Secondary ?? string.Empty,
+            TertiarySourceFileId = draftFormActiveSlots.Tertiary ?? string.Empty,
             ResultCount = draft.ResultCount,
             DestinationFolderId = draft.DestinationFolderId,
             Temperature = draft.Settings.Temperature,
@@ -818,7 +807,7 @@ else
         var workspace = LibraryState.Workspace;
         var draft = _drafts.FirstOrDefault(candidate => candidate.Id == draftId);
         if (workspace is null || draft is null || string.IsNullOrWhiteSpace(_switcherRenameTitle)) return;
-        var updated = await workspace.ReplaceDraftStateAsync(draftId, _switcherRenameTitle, draft.ModelId, draft.Prompt, draft.SystemInstructions, draft.SourceFileId, draft.ResultCount, draft.DestinationFolderId, draft.ImprovementModelId, draft.ImprovementGuidance, draft.Settings, draft.SecondarySourceFileId, draft.TertiarySourceFileId);
+        var updated = await workspace.ReplaceDraftStateAsync(draftId, _switcherRenameTitle, draft.ModelId, draft.Prompt, draft.SystemInstructions, draft.ResultCount, draft.DestinationFolderId, draft.ImprovementModelId, draft.ImprovementGuidance, draft.Settings, draft.SourceSlots);
         _drafts = _drafts.Select(candidate => candidate.Id == draftId ? updated : candidate).ToArray();
         if (draftId == _activeDraftId) _tabTitleInput = updated.CustomTitle ?? string.Empty;
         _switcherRenamingDraftId = null;
@@ -886,7 +875,7 @@ else
         if (draft is null) return;
         try
         {
-            await workspace.CreateSavedSettingAsync(_closeSaveTitle, draft.ModelId, draft.Prompt, draft.ResultCount, draft.DestinationFolderId, draft.SystemInstructions, draft.SourceFileId, draft.Settings, draft.SecondarySourceFileId, draft.TertiarySourceFileId);
+            await workspace.CreateSavedSettingAsync(_closeSaveTitle, draft.ModelId, draft.Prompt, draft.ResultCount, draft.DestinationFolderId, draft.SystemInstructions, draft.Settings, draft.SourceSlots);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException)
         {
@@ -969,12 +958,10 @@ else
         {
             _saveStatus = SaveStatus.Saving;
             var systemInstructions = SelectedModel?.SupportsSystemInstructions == true && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
-            var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
-            var secondarySourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SecondarySourceFileId) ? _form.SecondarySourceFileId : null;
-            var tertiarySourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.TertiarySourceFileId) ? _form.TertiarySourceFileId : null;
+            var sourceSlots = SelectedModelMode == GenerationMode.Text ? BuildSourceSlots() : [];
             var improvementModelId = string.IsNullOrEmpty(_improvementModelId) ? null : _improvementModelId;
             var improvementGuidance = string.IsNullOrWhiteSpace(_improvementGuidance) ? null : _improvementGuidance;
-            var updated = await workspace.ReplaceDraftStateAsync(draftId, _tabTitleInput, string.IsNullOrEmpty(_form.ModelId) ? null : _form.ModelId, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, improvementModelId, improvementGuidance, CurrentGenerationSettings(), secondarySourceFileId, tertiarySourceFileId);
+            var updated = await workspace.ReplaceDraftStateAsync(draftId, _tabTitleInput, string.IsNullOrEmpty(_form.ModelId) ? null : _form.ModelId, _form.Prompt, systemInstructions, _form.ResultCount, _form.DestinationFolderId, improvementModelId, improvementGuidance, CurrentGenerationSettings(), sourceSlots);
             _drafts = _drafts.Select(existing => existing.Id == updated.Id ? updated : existing).ToArray();
             _saveError = null;
             _saveStatus = SaveStatus.Saved;
@@ -1076,16 +1063,18 @@ else
     private IReadOnlyList<(string Field, string Mine, string Theirs)> BuildConflictDiffRows()
     {
         if (_settingsConflict is not { } conflict) return [];
-        var (systemInstructions, sourceFileId, secondarySourceFileId, tertiarySourceFileId) = CurrentSavedSettingFields();
+        var (systemInstructions, sourceSlots) = CurrentSavedSettingFields();
+        var (sourceFileId, secondarySourceFileId, tertiarySourceFileId) = ExtractSourceFileIds(sourceSlots);
+        var (conflictSourceFileId, conflictSecondarySourceFileId, conflictTertiarySourceFileId) = ExtractSourceFileIds(conflict.SourceSlots);
         var settings = CurrentGenerationSettings();
         var rows = new List<(string Field, string Mine, string Theirs)>
         {
             (Strings["ReviewChangesModelField"], SelectedModel?.Label ?? Strings["Unavailable"], conflict.ModelLabel),
             (Strings["ReviewChangesPromptField"], _form.Prompt, conflict.Prompt),
             (Strings["ReviewChangesSystemInstructionsField"], systemInstructions ?? Strings["ReviewChangesNoValue"], conflict.SystemInstructions ?? Strings["ReviewChangesNoValue"]),
-            (Strings["ReviewChangesSourceFileField"], ResolveSourceFileName(sourceFileId), ResolveSourceFileName(conflict.SourceFileId)),
-            (Strings["ReviewChangesSecondarySourceFileField"], ResolveSourceFileName(secondarySourceFileId), ResolveSourceFileName(conflict.SecondarySourceFileId)),
-            (Strings["ReviewChangesTertiarySourceFileField"], ResolveSourceFileName(tertiarySourceFileId), ResolveSourceFileName(conflict.TertiarySourceFileId)),
+            (Strings["ReviewChangesSourceFileField"], ResolveSourceFileName(sourceFileId), ResolveSourceFileName(conflictSourceFileId)),
+            (Strings["ReviewChangesSecondarySourceFileField"], ResolveSourceFileName(secondarySourceFileId), ResolveSourceFileName(conflictSecondarySourceFileId)),
+            (Strings["ReviewChangesTertiarySourceFileField"], ResolveSourceFileName(tertiarySourceFileId), ResolveSourceFileName(conflictTertiarySourceFileId)),
             (Strings["ReviewChangesDestinationField"], FolderPath(_form.DestinationFolderId), FolderPath(conflict.DestinationFolderId)),
             (Strings["ReviewChangesResultCountField"], _form.ResultCount.ToString(), conflict.ResultCount.ToString()),
             (Strings["ReviewChangesTemperatureField"], ResolveSettingValue(settings.Temperature), ResolveSettingValue(conflict.Settings.Temperature)),
@@ -1133,8 +1122,8 @@ else
                 return;
             }
 
-            var (systemInstructions, sourceFileId, secondarySourceFileId, tertiarySourceFileId) = CurrentSavedSettingFields();
-            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _loadedRevision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId, CurrentGenerationSettings(), secondarySourceFileId, tertiarySourceFileId);
+            var (systemInstructions, sourceSlots) = CurrentSavedSettingFields();
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _loadedRevision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, CurrentGenerationSettings(), sourceSlots);
             ApplySavedSettingsResult(saved);
         }
         catch (SavedSettingRevisionConflictException exception)
@@ -1157,8 +1146,8 @@ else
         try
         {
             await workspace.RestoreSavedSettingAsync(_loadedSettingsId);
-            var (systemInstructions, sourceFileId, secondarySourceFileId, tertiarySourceFileId) = CurrentSavedSettingFields();
-            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsRecycledConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId, CurrentGenerationSettings(), secondarySourceFileId, tertiarySourceFileId);
+            var (systemInstructions, sourceSlots) = CurrentSavedSettingFields();
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsRecycledConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, CurrentGenerationSettings(), sourceSlots);
             ApplySavedSettingsResult(saved);
             _settingsRecycledConflict = null;
         }
@@ -1182,8 +1171,8 @@ else
         _busy = true;
         try
         {
-            var (systemInstructions, sourceFileId, secondarySourceFileId, tertiarySourceFileId) = CurrentSavedSettingFields();
-            var saved = await workspace.CreateSavedSettingAsync(_settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId, CurrentGenerationSettings(), secondarySourceFileId, tertiarySourceFileId);
+            var (systemInstructions, sourceSlots) = CurrentSavedSettingFields();
+            var saved = await workspace.CreateSavedSettingAsync(_settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, CurrentGenerationSettings(), sourceSlots);
             ApplySavedSettingsResult(saved);
             _settingsConflict = null;
             _settingsRecycledConflict = null;
@@ -1203,8 +1192,8 @@ else
         _busy = true;
         try
         {
-            var (systemInstructions, sourceFileId, secondarySourceFileId, tertiarySourceFileId) = CurrentSavedSettingFields();
-            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, sourceFileId, CurrentGenerationSettings(), secondarySourceFileId, tertiarySourceFileId);
+            var (systemInstructions, sourceSlots) = CurrentSavedSettingFields();
+            var saved = await workspace.UpdateSavedSettingAsync(_loadedSettingsId, _settingsConflict.Revision, _settingsTitle, _form.ModelId, _form.Prompt, _form.ResultCount, _form.DestinationFolderId, systemInstructions, CurrentGenerationSettings(), sourceSlots);
             ApplySavedSettingsResult(saved);
             _settingsConflict = null;
         }
@@ -1222,13 +1211,40 @@ else
 
     private void CancelSettingsConflict() => _settingsConflict = null;
 
-    private (string? SystemInstructions, string? SourceFileId, string? SecondarySourceFileId, string? TertiarySourceFileId) CurrentSavedSettingFields()
+    private (string? SystemInstructions, IReadOnlyList<GenerationSourceSlot> SourceSlots) CurrentSavedSettingFields()
     {
         var systemInstructions = SelectedModel?.SupportsSystemInstructions == true && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
-        var sourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SourceFileId) ? _form.SourceFileId : null;
-        var secondarySourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.SecondarySourceFileId) ? _form.SecondarySourceFileId : null;
-        var tertiarySourceFileId = SelectedModelMode == GenerationMode.Text && !string.IsNullOrEmpty(_form.TertiarySourceFileId) ? _form.TertiarySourceFileId : null;
-        return (systemInstructions, sourceFileId, secondarySourceFileId, tertiarySourceFileId);
+        var sourceSlots = SelectedModelMode == GenerationMode.Text ? BuildSourceSlots() : [];
+        return (systemInstructions, sourceSlots);
+    }
+
+    /// <summary>The three ReferenceImage pickers (<c>SourceImageSlot1/2/3</c>) are today's only
+    /// source-input UI — they map to ordinal <see cref="GenerationInputSlotRole.ReferenceImage"/>
+    /// slots. DeepInfra video's FirstFrame capability (see <c>LibraryRules.GetInputSlotCapabilities</c>)
+    /// has no picker here yet; it's reachable only via a saved setting or history record created
+    /// through some other path, not through this form.</summary>
+    private IReadOnlyList<GenerationSourceSlot> BuildSourceSlots()
+    {
+        var slots = new List<GenerationSourceSlot>();
+        if (!string.IsNullOrEmpty(_form.SourceFileId)) slots.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, _form.SourceFileId, 0));
+        if (!string.IsNullOrEmpty(_form.SecondarySourceFileId)) slots.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, _form.SecondarySourceFileId, 1));
+        if (!string.IsNullOrEmpty(_form.TertiarySourceFileId)) slots.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, _form.TertiarySourceFileId, 2));
+        return slots;
+    }
+
+    /// <summary>Drops any slot whose file is no longer active — mirrors this form's pre-existing
+    /// silent-drop behavior for a single missing source image, just generalized across the whole
+    /// slot list.</summary>
+    private IReadOnlyList<GenerationSourceSlot> FilterActiveSourceSlots(IReadOnlyList<GenerationSourceSlot> slots) =>
+        slots.Where(slot => _activeImageFiles.Any(file => file.Id == slot.FileId)).ToArray();
+
+    /// <summary>Reverses <see cref="BuildSourceSlots"/> — used only for display (e.g. the
+    /// review-changes diff table), where the three ReferenceImage ordinals are still shown as
+    /// separate rows.</summary>
+    private static (string? Primary, string? Secondary, string? Tertiary) ExtractSourceFileIds(IReadOnlyList<GenerationSourceSlot> slots)
+    {
+        var ordered = slots.Where(slot => slot.Role == GenerationInputSlotRole.ReferenceImage).OrderBy(slot => slot.Order).ToArray();
+        return (ordered.Length > 0 ? ordered[0].FileId : null, ordered.Length > 1 ? ordered[1].FileId : null, ordered.Length > 2 ? ordered[2].FileId : null);
     }
 
     private GenerationSettings CurrentGenerationSettings() => SelectedModelMode == GenerationMode.Text
@@ -1279,9 +1295,7 @@ else
             if (HasDuplicateSourceSelection) return;
 
             var systemInstructions = model.SupportsSystemInstructions && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
-            var sourceFileId = string.IsNullOrEmpty(_form.SourceFileId) ? null : _form.SourceFileId;
-            var secondarySourceFileId = string.IsNullOrEmpty(_form.SecondarySourceFileId) ? null : _form.SecondarySourceFileId;
-            var tertiarySourceFileId = string.IsNullOrEmpty(_form.TertiarySourceFileId) ? null : _form.TertiarySourceFileId;
+            var sourceSlots = BuildSourceSlots();
             GenerationSettings settings;
             try { settings = LibraryRules.ValidateGenerationSettings(CurrentGenerationSettings()); }
             catch (LibraryValidationException exception)
@@ -1290,7 +1304,7 @@ else
                 _isError = true;
                 return;
             }
-            var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, settings, secondarySourceFileId, tertiarySourceFileId);
+            var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, settings, sourceSlots);
             Queue.Enqueue(snapshot, model.ConnectionId);
             _message = null;
             _isError = false;

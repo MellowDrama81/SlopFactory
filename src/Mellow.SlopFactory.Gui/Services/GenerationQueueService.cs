@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure.Providers;
@@ -54,13 +55,11 @@ public sealed record GenerationJobSnapshot(
     string ModelId,
     string Prompt,
     string? SystemInstructions,
-    string? SourceFileId,
     int ResultCount,
     string DestinationFolderId,
     string? AcceptedImprovementRecordId,
     GenerationSettings? Settings = null,
-    string? SecondarySourceFileId = null,
-    string? TertiarySourceFileId = null);
+    IReadOnlyList<GenerationSourceSlot>? SourceSlots = null);
 
 public sealed record GenerationJobStatusSnapshot(string JobId, string DraftId, GenerationJobPhase Phase, int? QueuePosition);
 
@@ -432,7 +431,7 @@ public sealed class GenerationQueueService
             files.Add(await _recoveryStaging!.ReadBytesAsync(entry.Id).ConfigureAwait(false));
         }
 
-        await workspace.RecordMediaGenerationResultAsync(model.Id, record.Prompt, record.ResultCount, record.DestinationFolderId, files, null, record.PromptImprovementRecordId, existingGenerationRecordId: record.Id).ConfigureAwait(false);
+        await workspace.RecordMediaGenerationResultAsync(model.Id, record.Prompt, record.ResultCount, record.DestinationFolderId, files, null, record.PromptImprovementRecordId, existingGenerationRecordId: record.Id, sourceSlots: record.SourceSlots).ConfigureAwait(false);
 
         // Only reached once the commit above durably succeeded — plan.md:325's "the staged copy is
         // deleted" only after reconciliation, never before.
@@ -515,13 +514,11 @@ public sealed class GenerationQueueService
             ModelId: record.ModelId,
             Prompt: record.Prompt,
             SystemInstructions: record.SystemInstructions,
-            SourceFileId: record.SourceFileId,
             ResultCount: record.ResultCount,
             DestinationFolderId: record.DestinationFolderId,
             AcceptedImprovementRecordId: record.PromptImprovementRecordId,
             Settings: record.Settings,
-            SecondarySourceFileId: record.SecondarySourceFileId,
-            TertiarySourceFileId: record.TertiarySourceFileId);
+            SourceSlots: record.SourceSlots);
         EnqueueExisting(record, snapshot, model.ConnectionId, workspace);
     }
 
@@ -661,7 +658,7 @@ public sealed class GenerationQueueService
         try
         {
             var snapshot = job.Snapshot;
-            var record = await workspace.CreateQueuedGenerationRecordAsync(snapshot.ModelId, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, snapshot.SystemInstructions, snapshot.SourceFileId, snapshot.SecondarySourceFileId, snapshot.TertiarySourceFileId, snapshot.Settings, snapshot.AcceptedImprovementRecordId).ConfigureAwait(false);
+            var record = await workspace.CreateQueuedGenerationRecordAsync(snapshot.ModelId, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, snapshot.SystemInstructions, snapshot.SourceSlots, snapshot.Settings, snapshot.AcceptedImprovementRecordId).ConfigureAwait(false);
             lock (_gate) job.GenerationRecordId = record.Id;
             return record;
         }
@@ -896,7 +893,7 @@ public sealed class GenerationQueueService
     }
 
     private static bool ReferencesFile(GenerationJobSnapshot snapshot, string fileId) =>
-        snapshot.SourceFileId == fileId || snapshot.SecondarySourceFileId == fileId || snapshot.TertiarySourceFileId == fileId;
+        (snapshot.SourceSlots ?? []).Any(slot => slot.FileId == fileId);
 
     private static bool ReferencesFolder(GenerationJobSnapshot snapshot, string folderId) => snapshot.DestinationFolderId == folderId;
 
@@ -1303,7 +1300,7 @@ public sealed class GenerationQueueService
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, audioFiles, errorMessage, snapshot.AcceptedImprovementRecordId, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, audioFiles, errorMessage, snapshot.AcceptedImprovementRecordId, existingGenerationRecordId: job.GenerationRecordId, sourceSlots: snapshot.SourceSlots, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             else if (snapshot.Mode == GenerationMode.Video)
             {
@@ -1311,23 +1308,12 @@ public sealed class GenerationQueueService
             }
             else
             {
-                TextGenerationSourceImage? sourceImage = null;
-                if (snapshot.SourceFileId is not null)
+                var referenceImageSlots = (snapshot.SourceSlots ?? []).Where(slot => slot.Role == GenerationInputSlotRole.ReferenceImage).OrderBy(slot => slot.Order).ToArray();
+                var sourceImages = new List<TextGenerationSourceImage>(referenceImageSlots.Length);
+                foreach (var slot in referenceImageSlots)
                 {
-                    var sourceContent = await job.Workspace.ReadImageFileAsync(snapshot.SourceFileId, cancellationToken).ConfigureAwait(false);
-                    sourceImage = new TextGenerationSourceImage(sourceContent.MediaType, sourceContent.Bytes);
-                }
-                TextGenerationSourceImage? secondarySourceImage = null;
-                if (snapshot.SecondarySourceFileId is not null)
-                {
-                    var secondarySourceContent = await job.Workspace.ReadImageFileAsync(snapshot.SecondarySourceFileId, cancellationToken).ConfigureAwait(false);
-                    secondarySourceImage = new TextGenerationSourceImage(secondarySourceContent.MediaType, secondarySourceContent.Bytes);
-                }
-                TextGenerationSourceImage? tertiarySourceImage = null;
-                if (snapshot.TertiarySourceFileId is not null)
-                {
-                    var tertiarySourceContent = await job.Workspace.ReadImageFileAsync(snapshot.TertiarySourceFileId, cancellationToken).ConfigureAwait(false);
-                    tertiarySourceImage = new TextGenerationSourceImage(tertiarySourceContent.MediaType, tertiarySourceContent.Bytes);
+                    var sourceContent = await job.Workspace.ReadImageFileAsync(slot.FileId, cancellationToken).ConfigureAwait(false);
+                    sourceImages.Add(new TextGenerationSourceImage(sourceContent.MediaType, sourceContent.Bytes));
                 }
 
                 TextGenerationResult? result = null;
@@ -1336,14 +1322,14 @@ public sealed class GenerationQueueService
                 {
                     AdvanceLocked(job, GenerationStatus.Submitting);
                     job.SubmissionAttempted = true;
-                    result = await adapter.GenerateTextAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, snapshot.SystemInstructions, sourceImage, snapshot.Settings, secondarySourceImage, tertiarySourceImage, cancellationToken).ConfigureAwait(false);
+                    result = await adapter.GenerateTextAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, snapshot.SystemInstructions, sourceImages, snapshot.Settings, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
                 {
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceFileId, snapshot.AcceptedImprovementRecordId, snapshot.Settings, snapshot.SecondarySourceFileId, snapshot.TertiarySourceFileId, result?.SafetyBlockedCount ?? 0, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceSlots, snapshot.AcceptedImprovementRecordId, snapshot.Settings, result?.SafetyBlockedCount ?? 0, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
 
             return new GenerationJobOutcome(job.JobId, job.DraftId, record, null, false, DateTimeOffset.UtcNow, stagedForRecovery);
@@ -1430,6 +1416,14 @@ public sealed class GenerationQueueService
         double? totalCost = null;
         string? costCurrency = null;
 
+        var firstFrameSlot = (snapshot.SourceSlots ?? []).FirstOrDefault(slot => slot.Role == GenerationInputSlotRole.FirstFrame);
+        TextGenerationSourceImage? firstFrame = null;
+        if (firstFrameSlot is not null)
+        {
+            var firstFrameContent = await job.Workspace.ReadImageFileAsync(firstFrameSlot.FileId, cancellationToken).ConfigureAwait(false);
+            firstFrame = new TextGenerationSourceImage(firstFrameContent.MediaType, firstFrameContent.Bytes);
+        }
+
         try
         {
             AdvanceLocked(job, GenerationStatus.Submitting);
@@ -1438,7 +1432,7 @@ public sealed class GenerationQueueService
             {
                 try
                 {
-                    var submission = await adapter.SubmitVideoGenerationAsync(connection, model, apiKey, snapshot.Prompt, cancellationToken).ConfigureAwait(false);
+                    var submission = await adapter.SubmitVideoGenerationAsync(connection, model, apiKey, snapshot.Prompt, firstFrame, cancellationToken).ConfigureAwait(false);
                     var asyncJob = await job.Workspace.CreateAsyncRemoteJobAsync(job.DraftId, connection.ProviderType, connection.Id, submission.ProviderJobId, null, submission.MonitoringDeadline, cancellationToken).ConfigureAwait(false);
                     submitted.Add((submission.ProviderJobId, asyncJob.Id));
                 }
@@ -1535,7 +1529,7 @@ public sealed class GenerationQueueService
             // CancellationToken.None for the commit itself (no further network calls happen here,
             // so there is nothing left to usefully cancel) rather than letting the cancellation
             // that already fired abort this bounded, local-only step too.
-            var cancelledRecord = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, wasCancelled: true, childErrorMessages: childErrorMessages, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            var cancelledRecord = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, wasCancelled: true, childErrorMessages: childErrorMessages, existingGenerationRecordId: job.GenerationRecordId, sourceSlots: snapshot.SourceSlots, cancellationToken: CancellationToken.None).ConfigureAwait(false);
             foreach (var entry in submitted)
             {
                 try
@@ -1553,7 +1547,7 @@ public sealed class GenerationQueueService
         var stagedForRecovery = false;
         try
         {
-            record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, childErrorMessages: childErrorMessages, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
+            record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, childErrorMessages: childErrorMessages, existingGenerationRecordId: job.GenerationRecordId, sourceSlots: snapshot.SourceSlots, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (files.Count > 0 && _recoveryStaging is not null && _availabilityProbe is not null
             && exception is IOException or Microsoft.Data.Sqlite.SqliteException

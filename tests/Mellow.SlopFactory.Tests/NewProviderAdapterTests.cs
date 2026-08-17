@@ -509,6 +509,43 @@ public sealed class NewProviderAdapterTests
     }
 
     [Fact]
+    public async Task DeepInfraAdapterSubmitVideoGenerationWritesTheFirstFrameAsADataUriWhenSupplied()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"id":"videos_abc123","object":"video.generation.job","created_at":1786947130,"status":"queued","model":"PrunaAI/p-video","data":null,"error":null}""");
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+        byte[] frameBytes = [1, 2, 3];
+
+        await adapter.SubmitVideoGenerationAsync(connection, CreateModel("PrunaAI/p-video"), "secret-key", "A cat riding a skateboard", new TextGenerationSourceImage("image/png", frameBytes));
+
+        Assert.Contains($"\"image_url\":\"data:image/png;base64,{Convert.ToBase64String(frameBytes)}\"", capturedBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterSubmitVideoGenerationOmitsImageUrlWhenNoFirstFrameIsSupplied()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"id":"videos_abc123","object":"video.generation.job","created_at":1786947130,"status":"queued","model":"PrunaAI/p-video","data":null,"error":null}""");
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+
+        await adapter.SubmitVideoGenerationAsync(connection, CreateModel("PrunaAI/p-video"), "secret-key", "A cat riding a skateboard");
+
+        Assert.DoesNotContain("image_url", capturedBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DeepInfraAdapterSubmitVideoGenerationSurfacesTheProviderErrorMessageWhenAModelDoesNotSupportAsyncJobs()
     {
         var handler = new FakeHttpMessageHandler(_ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.BadRequest,
@@ -612,7 +649,7 @@ public sealed class NewProviderAdapterTests
         var model = CreateModel("gpt-4o-mini");
 
         await Assert.ThrowsAsync<ProviderAdapterException>(() =>
-            adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this", 1, sourceImage: new TextGenerationSourceImage("image/png", [1, 2, 3])));
+            adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this", 1, sourceImages: [new TextGenerationSourceImage("image/png", [1, 2, 3])]));
     }
 
     [Fact]

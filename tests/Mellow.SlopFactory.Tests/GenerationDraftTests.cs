@@ -8,6 +8,15 @@ public sealed class GenerationDraftTests
 {
     private static readonly byte[] PngSignatureBytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
 
+    private static List<GenerationSourceSlot> Slots(string? primary = null, string? secondary = null, string? tertiary = null)
+    {
+        var list = new List<GenerationSourceSlot>();
+        if (primary is not null) list.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, primary, 0));
+        if (secondary is not null) list.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, secondary, 1));
+        if (tertiary is not null) list.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, tertiary, 2));
+        return list;
+    }
+
     [Fact]
     public async Task CreateDraftAsyncDefaultsDestinationFolderAndResultCount()
     {
@@ -22,7 +31,7 @@ public sealed class GenerationDraftTests
         Assert.Null(draft.ModelId);
         Assert.Equal(string.Empty, draft.Prompt);
         Assert.Null(draft.SystemInstructions);
-        Assert.Null(draft.SourceFileId);
+        Assert.Empty(draft.SourceSlots);
         Assert.Equal(1, draft.ResultCount);
         Assert.Equal(workspace.Descriptor.GeneratedFolderId, draft.DestinationFolderId);
         Assert.Null(draft.ImprovementModelId);
@@ -53,7 +62,7 @@ public sealed class GenerationDraftTests
         var tertiarySource = Assert.Single(await workspace.ImportAsync([tertiarySourcePath], workspace.Descriptor.RootFolderId)).File!;
 
         var settings = new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5, "{\"response_format\":{\"type\":\"json_object\"}}");
-        var updated = await workspace.ReplaceDraftStateAsync(draft.Id, "My Tab", model.Id, "Write a haiku", "Respond in French.", null, 3, workspace.Descriptor.GeneratedFolderId, model.Id, "Be concise.", settings, secondarySource.Id, tertiarySource.Id);
+        var updated = await workspace.ReplaceDraftStateAsync(draft.Id, "My Tab", model.Id, "Write a haiku", "Respond in French.", 3, workspace.Descriptor.GeneratedFolderId, model.Id, "Be concise.", settings, Slots(secondary: secondarySource.Id, tertiary: tertiarySource.Id));
 
         Assert.Equal("My Tab", updated.CustomTitle);
         Assert.Equal(model.Id, updated.ModelId);
@@ -63,23 +72,22 @@ public sealed class GenerationDraftTests
         Assert.Equal(model.Id, updated.ImprovementModelId);
         Assert.Equal("Be concise.", updated.ImprovementGuidance);
         Assert.Equal(settings, updated.Settings);
-        Assert.Equal(secondarySource.Id, updated.SecondarySourceFileId);
-        Assert.Equal(tertiarySource.Id, updated.TertiarySourceFileId);
+        Assert.Contains(updated.SourceSlots, slot => slot.FileId == secondarySource.Id && slot.Order == 1);
+        Assert.Contains(updated.SourceSlots, slot => slot.FileId == tertiarySource.Id && slot.Order == 2);
 
         var reloaded = await workspace.GetDraftAsync(draft.Id);
         Assert.Equal("My Tab", reloaded.CustomTitle);
         Assert.Equal(settings, reloaded.Settings);
-        Assert.Equal(secondarySource.Id, reloaded.SecondarySourceFileId);
-        Assert.Equal(tertiarySource.Id, reloaded.TertiarySourceFileId);
+        Assert.Contains(reloaded.SourceSlots, slot => slot.FileId == secondarySource.Id && slot.Order == 1);
+        Assert.Contains(reloaded.SourceSlots, slot => slot.FileId == tertiarySource.Id && slot.Order == 2);
 
-        var resetToAutomaticTitle = await workspace.ReplaceDraftStateAsync(draft.Id, null, model.Id, "Write a haiku", null, null, 3, workspace.Descriptor.GeneratedFolderId, null, null);
+        var resetToAutomaticTitle = await workspace.ReplaceDraftStateAsync(draft.Id, null, model.Id, "Write a haiku", null, 3, workspace.Descriptor.GeneratedFolderId, null, null);
         Assert.Null(resetToAutomaticTitle.CustomTitle);
         Assert.Null(resetToAutomaticTitle.SystemInstructions);
         Assert.Null(resetToAutomaticTitle.ImprovementModelId);
         Assert.Null(resetToAutomaticTitle.ImprovementGuidance);
         Assert.Equal(GenerationSettings.Empty, resetToAutomaticTitle.Settings);
-        Assert.Null(resetToAutomaticTitle.SecondarySourceFileId);
-        Assert.Null(resetToAutomaticTitle.TertiarySourceFileId);
+        Assert.Empty(resetToAutomaticTitle.SourceSlots);
     }
 
     [Fact]
@@ -95,9 +103,9 @@ public sealed class GenerationDraftTests
         var draft = await workspace.CreateDraftAsync();
 
         await Assert.ThrowsAsync<LibraryValidationException>(() =>
-            workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, imported.Id, 1, workspace.Descriptor.GeneratedFolderId, null, null, null, imported.Id));
+            workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null, null, null, Slots(imported.Id, imported.Id)));
         await Assert.ThrowsAsync<LibraryValidationException>(() =>
-            workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null, null, null, imported.Id, imported.Id));
+            workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null, null, null, Slots(secondary: imported.Id, tertiary: imported.Id)));
     }
 
     [Fact]
@@ -117,7 +125,7 @@ public sealed class GenerationDraftTests
         await File.WriteAllBytesAsync(tertiarySourcePath, [.. PngSignatureBytes, 2]);
         var secondarySource = Assert.Single(await workspace.ImportAsync([secondarySourcePath], workspace.Descriptor.RootFolderId)).File!;
         var tertiarySource = Assert.Single(await workspace.ImportAsync([tertiarySourcePath], workspace.Descriptor.RootFolderId)).File!;
-        draft = await workspace.ReplaceDraftStateAsync(draft.Id, "Original", model.Id, "Write a haiku", null, null, 2, workspace.Descriptor.GeneratedFolderId, null, null, settings, secondarySource.Id, tertiarySource.Id);
+        draft = await workspace.ReplaceDraftStateAsync(draft.Id, "Original", model.Id, "Write a haiku", null, 2, workspace.Descriptor.GeneratedFolderId, null, null, settings, Slots(secondary: secondarySource.Id, tertiary: tertiarySource.Id));
         var trailing = await workspace.CreateDraftAsync();
 
         var duplicate = await workspace.DuplicateDraftAsync(draft.Id);
@@ -128,8 +136,8 @@ public sealed class GenerationDraftTests
         Assert.Equal(2, duplicate.ResultCount);
         Assert.Equal(draft.TabOrder + 1, duplicate.TabOrder);
         Assert.Equal(settings, duplicate.Settings);
-        Assert.Equal(secondarySource.Id, duplicate.SecondarySourceFileId);
-        Assert.Equal(tertiarySource.Id, duplicate.TertiarySourceFileId);
+        Assert.Contains(duplicate.SourceSlots, slot => slot.FileId == secondarySource.Id && slot.Order == 1);
+        Assert.Contains(duplicate.SourceSlots, slot => slot.FileId == tertiarySource.Id && slot.Order == 2);
 
         var reloadedTrailing = await workspace.GetDraftAsync(trailing.Id);
         Assert.Equal(trailing.TabOrder + 1, reloadedTrailing.TabOrder);
@@ -164,7 +172,7 @@ public sealed class GenerationDraftTests
         var improvementModel = await workspace.CreateModelAsync("Improver", connection.Id, "gpt-4o-mini", GenerationMode.Text, true);
         var imported = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
         var draft = await workspace.CreateDraftAsync();
-        draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, model.Id, "Describe this image", null, imported.Id, 1, workspace.Descriptor.GeneratedFolderId, improvementModel.Id, "Be vivid.");
+        draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, model.Id, "Describe this image", null, 1, workspace.Descriptor.GeneratedFolderId, improvementModel.Id, "Be vivid.", null, Slots(imported.Id));
 
         await workspace.RecycleModelAsync(model.Id);
         await workspace.PermanentlyDeleteModelAsync(model.Id);
@@ -176,7 +184,7 @@ public sealed class GenerationDraftTests
         var reloaded = await workspace.GetDraftAsync(draft.Id);
         Assert.Null(reloaded.ModelId);
         Assert.Null(reloaded.ImprovementModelId);
-        Assert.Null(reloaded.SourceFileId);
+        Assert.Empty(reloaded.SourceSlots);
     }
 
     [Fact]
@@ -211,9 +219,9 @@ public sealed class GenerationDraftTests
         var draft = await workspace.CreateDraftAsync();
         var oversized = new string('a', LibraryRules.MaximumGenerationTextUtf8Bytes + 1);
 
-        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, oversized, null, null, 1, workspace.Descriptor.GeneratedFolderId, null, null));
-        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", oversized, null, 1, workspace.Descriptor.GeneratedFolderId, null, null));
-        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null, oversized));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, oversized, null, 1, workspace.Descriptor.GeneratedFolderId, null, null));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", oversized, 1, workspace.Descriptor.GeneratedFolderId, null, null));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null, oversized));
     }
 
     [Theory]
@@ -235,6 +243,6 @@ public sealed class GenerationDraftTests
         var draft = await workspace.CreateDraftAsync();
         var settings = new GenerationSettings(temperature, topP, maxTokens, frequencyPenalty, presencePenalty);
 
-        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, null, 1, workspace.Descriptor.GeneratedFolderId, null, null, settings));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReplaceDraftStateAsync(draft.Id, null, null, "a prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null, null, settings));
     }
 }

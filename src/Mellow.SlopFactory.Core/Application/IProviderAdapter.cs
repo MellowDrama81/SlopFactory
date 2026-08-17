@@ -10,7 +10,10 @@ public interface IProviderAdapter
 
     Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default);
 
-    Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null, CancellationToken cancellationToken = default);
+    /// <summary><paramref name="sourceImages"/> is an ordered list of reference images (the
+    /// <see cref="Domain.GenerationInputSlotRole.ReferenceImage"/> slot) — any length, not fixed at
+    /// three.</summary>
+    Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default);
 
@@ -21,9 +24,12 @@ public interface IProviderAdapter
     /// Submits one asynchronous video generation job (never more than one per call — a caller wanting
     /// several results submits several independent jobs). Throws
     /// <see cref="Infrastructure.Providers.ProviderAdapterException"/> for a provider adapter with no
-    /// verified video generation API.
+    /// verified video generation API. <paramref name="firstFrame"/> is the
+    /// <see cref="Domain.GenerationInputSlotRole.FirstFrame"/> slot (image-to-video); only adapters
+    /// that declare that capability via <see cref="Domain.LibraryRules.GetInputSlotCapabilities"/>
+    /// use it — others ignore it since no non-null value should ever reach them.
     /// </summary>
-    Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, CancellationToken cancellationToken = default);
+    Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default);
 
     /// <summary>One poll step for a job previously returned by <see cref="SubmitVideoGenerationAsync"/>.</summary>
     Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default);

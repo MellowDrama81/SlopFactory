@@ -2078,17 +2078,17 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetNonTerminalGenerationRecordsAsync(cancellationToken);
     }
 
-    public Task<GenerationRecord> CreateQueuedGenerationRecordAsync(string modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, GenerationSettings? settings = null, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default)
+    public Task<GenerationRecord> CreateQueuedGenerationRecordAsync(string modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, GenerationSettings? settings = null, string? promptImprovementRecordId = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => CreateQueuedGenerationRecordCoreAsync(modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceFileId, secondarySourceFileId, tertiarySourceFileId, settings, promptImprovementRecordId, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => CreateQueuedGenerationRecordCoreAsync(modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceSlots, settings, promptImprovementRecordId, cancellationToken), cancellationToken);
     }
 
-    private async Task<GenerationRecord> CreateQueuedGenerationRecordCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions, string? sourceFileId, string? secondarySourceFileId, string? tertiarySourceFileId, GenerationSettings? settings, string? promptImprovementRecordId, CancellationToken cancellationToken)
+    private async Task<GenerationRecord> CreateQueuedGenerationRecordCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions, IReadOnlyList<GenerationSourceSlot>? sourceSlots, GenerationSettings? settings, string? promptImprovementRecordId, CancellationToken cancellationToken)
     {
         var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
         var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
-        return await _database.CreateQueuedGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, destinationFolderId, sourceFileId, secondarySourceFileId, tertiarySourceFileId, settings, promptImprovementRecordId, cancellationToken).ConfigureAwait(false);
+        return await _database.CreateQueuedGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, destinationFolderId, sourceSlots, settings, promptImprovementRecordId, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<GenerationRecord> AdvanceGenerationStatusAsync(string generationRecordId, GenerationStatus status, GenerationHoldReason? holdReason = null, GenerationFailureReason? failureReason = null, int? position = null, CancellationToken cancellationToken = default)
@@ -2155,10 +2155,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.PermanentlyDeleteGenerationRecordAsync(generationId, cancellationToken), cancellationToken);
     }
 
-    public Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, string? sourceFileId = null, string? promptImprovementRecordId = null, GenerationSettings? settings = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, int safetyBlockedCount = 0, string? existingGenerationRecordId = null, CancellationToken cancellationToken = default)
+    public Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, string? promptImprovementRecordId = null, GenerationSettings? settings = null, int safetyBlockedCount = 0, string? existingGenerationRecordId = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => RecordTextGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultTexts, errorMessage, systemInstructions, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, settings, secondarySourceFileId, tertiarySourceFileId, safetyBlockedCount, existingGenerationRecordId, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => RecordTextGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultTexts, errorMessage, systemInstructions, promptTokens, completionTokens, sourceSlots, promptImprovementRecordId, settings, safetyBlockedCount, existingGenerationRecordId, cancellationToken), cancellationToken);
     }
 
     public Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId = null, string? existingGenerationRecordId = null, CancellationToken cancellationToken = default)
@@ -2175,10 +2175,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     /// determines whether the resulting <see cref="GenerationRecord"/> is Audio or Video — nothing
     /// mode-specific happens in the commit path itself.
     /// </summary>
-    public Task<GenerationRecord> RecordMediaGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultFiles, string? errorMessage, string? promptImprovementRecordId = null, double? actualCost = null, string? actualCostCurrency = null, bool wasCancelled = false, IReadOnlyList<string>? childErrorMessages = null, string? existingGenerationRecordId = null, CancellationToken cancellationToken = default)
+    public Task<GenerationRecord> RecordMediaGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultFiles, string? errorMessage, string? promptImprovementRecordId = null, double? actualCost = null, string? actualCostCurrency = null, bool wasCancelled = false, IReadOnlyList<string>? childErrorMessages = null, string? existingGenerationRecordId = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => RecordImageGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultFiles, errorMessage, promptImprovementRecordId, cancellationToken, actualCost, actualCostCurrency, wasCancelled, childErrorMessages, existingGenerationRecordId), cancellationToken);
+        return RunMutationAsync(() => RecordImageGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultFiles, errorMessage, promptImprovementRecordId, cancellationToken, actualCost, actualCostCurrency, wasCancelled, childErrorMessages, existingGenerationRecordId, sourceSlots), cancellationToken);
     }
 
     public Task<IReadOnlyList<PromptImprovementRecord>> GetPromptImprovementHistoryAsync(CancellationToken cancellationToken = default)
@@ -2211,16 +2211,16 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetSavedSettingAsync(savedSettingId, cancellationToken);
     }
 
-    public Task<SavedGenerationSetting> CreateSavedSettingAsync(string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, GenerationSettings? settings = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, CancellationToken cancellationToken = default)
+    public Task<SavedGenerationSetting> CreateSavedSettingAsync(string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, GenerationSettings? settings = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => _database.CreateSavedSettingAsync(title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceFileId, settings, secondarySourceFileId, tertiarySourceFileId, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => _database.CreateSavedSettingAsync(title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, settings, sourceSlots, cancellationToken), cancellationToken);
     }
 
-    public Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, int expectedRevision, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, string? sourceFileId = null, GenerationSettings? settings = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, CancellationToken cancellationToken = default)
+    public Task<SavedGenerationSetting> UpdateSavedSettingAsync(string savedSettingId, int expectedRevision, string title, string? modelId, string prompt, int resultCount, string destinationFolderId, string? systemInstructions = null, GenerationSettings? settings = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => _database.UpdateSavedSettingAsync(savedSettingId, expectedRevision, title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, sourceFileId, settings, secondarySourceFileId, tertiarySourceFileId, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => _database.UpdateSavedSettingAsync(savedSettingId, expectedRevision, title, modelId, prompt, resultCount, destinationFolderId, systemInstructions, settings, sourceSlots, cancellationToken), cancellationToken);
     }
 
     public Task RecycleSavedSettingAsync(string savedSettingId, CancellationToken cancellationToken = default)
@@ -2259,10 +2259,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.CreateDraftAsync(Descriptor.GeneratedFolderId, cancellationToken), cancellationToken);
     }
 
-    public Task<GenerationDraft> ReplaceDraftStateAsync(string draftId, string? customTitle, string? modelId, string prompt, string? systemInstructions, string? sourceFileId, int resultCount, string destinationFolderId, string? improvementModelId, string? improvementGuidance, GenerationSettings? settings = null, string? secondarySourceFileId = null, string? tertiarySourceFileId = null, CancellationToken cancellationToken = default)
+    public Task<GenerationDraft> ReplaceDraftStateAsync(string draftId, string? customTitle, string? modelId, string prompt, string? systemInstructions, int resultCount, string destinationFolderId, string? improvementModelId, string? improvementGuidance, GenerationSettings? settings = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => _database.ReplaceDraftStateAsync(draftId, customTitle, modelId, prompt, systemInstructions, sourceFileId, resultCount, destinationFolderId, improvementModelId, improvementGuidance, settings, secondarySourceFileId, tertiarySourceFileId, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => _database.ReplaceDraftStateAsync(draftId, customTitle, modelId, prompt, systemInstructions, resultCount, destinationFolderId, improvementModelId, improvementGuidance, settings, sourceSlots, cancellationToken), cancellationToken);
     }
 
     public Task<GenerationDraft> DuplicateDraftAsync(string draftId, CancellationToken cancellationToken = default)
@@ -2462,7 +2462,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
     }
 
-    private async Task<GenerationRecord> RecordTextGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, string? existingGenerationRecordId, CancellationToken cancellationToken)
+    private async Task<GenerationRecord> RecordTextGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions, int? promptTokens, int? completionTokens, IReadOnlyList<GenerationSourceSlot>? sourceSlots, string? promptImprovementRecordId, GenerationSettings? settings, int safetyBlockedCount, string? existingGenerationRecordId, CancellationToken cancellationToken)
     {
         var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
         var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
@@ -2521,7 +2521,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
 
         var status = DetermineGenerationStatus(resultFileIds.Count, resultCount);
-        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, resultFileIds, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, model.TextFormat, settings, secondarySourceFileId, tertiarySourceFileId, safetyBlockedCount, cancellationToken, existingGenerationRecordId: existingGenerationRecordId).ConfigureAwait(false);
+        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, resultFileIds, promptTokens, completionTokens, sourceSlots, promptImprovementRecordId, model.TextFormat, settings, safetyBlockedCount, cancellationToken, existingGenerationRecordId: existingGenerationRecordId).ConfigureAwait(false);
     }
 
     /// <summary>The top-level media-type prefix a mode's results must match to be committed, or
@@ -2541,7 +2541,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return committedCount < requestedCount ? GenerationStatus.PartiallyCompleted : GenerationStatus.Completed;
     }
 
-    private async Task<GenerationRecord> RecordImageGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId, CancellationToken cancellationToken, double? actualCost = null, string? actualCostCurrency = null, bool wasCancelled = false, IReadOnlyList<string>? childErrorMessages = null, string? existingGenerationRecordId = null)
+    private async Task<GenerationRecord> RecordImageGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId, CancellationToken cancellationToken, double? actualCost = null, string? actualCostCurrency = null, bool wasCancelled = false, IReadOnlyList<string>? childErrorMessages = null, string? existingGenerationRecordId = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null)
     {
         var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
         var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
@@ -2655,7 +2655,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         GenerationRecord generationRecord;
         try
         {
-            generationRecord = await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, null, promptImprovementRecordId, null, null, null, null, 0, cancellationToken, actualCost, actualCostCurrency, resultEntries, committedFiles, pendingReviewCandidates, existingGenerationRecordId).ConfigureAwait(false);
+            generationRecord = await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, sourceSlots, promptImprovementRecordId, null, null, 0, cancellationToken, actualCost, actualCostCurrency, resultEntries, committedFiles, pendingReviewCandidates, existingGenerationRecordId).ConfigureAwait(false);
         }
         catch
         {
