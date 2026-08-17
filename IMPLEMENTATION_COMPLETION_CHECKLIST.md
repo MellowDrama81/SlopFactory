@@ -106,8 +106,12 @@ credentialed developer can run bounded live smoke tests deliberately.
       losing or silently resubmitting it. Per-child transition persistence remains unused.
 - [ ] Implement **Submission Outcome Unknown** when transmission may have reached the provider but
       acceptance cannot be proven.
-      The status is reachable (restart recovery lands ambiguous non-video records there), but no
-      reconciliation, UI surface or connection-revision gating against it exists yet.
+      Reachable both from restart recovery (ambiguous non-video records with no linked async-job row)
+      and immediately when a Text/Image/Audio job is cancelled after its request may have already been
+      transmitted (`GenerationQueueService`'s `SubmissionAttempted` flag distinguishes this from a
+      cancellation that landed before anything was sent, which finalizes to
+      `CancelledBeforeSubmission` instead). No reconciliation, UI surface or connection-revision
+      gating against it exists yet.
 - [ ] Add **Attempt Reconciliation** for adapters with a documented lookup mechanism.
 - [ ] Add **Abandon Recovery and Apply Changes**, retaining sanitized non-actionable history while
       removing identifiers that could still drive provider actions.
@@ -115,6 +119,12 @@ credentialed developer can run bounded live smoke tests deliberately.
       cleanup or reconciliation depends on the current connection revision.
 - [ ] Complete cancellation behavior before submission, during upload, after provider acceptance,
       during polling and during result download.
+      Before-submission and mid-flight-with-unknown-outcome (Text/Image/Audio) now both finalize their
+      durable record immediately (`CancelledBeforeSubmission`/`SubmissionOutcomeUnknown`) rather than
+      one of them being left stranded until restart. Video's after-acceptance cancellation already
+      committed a real `Cancelled`/`CancelledWithResults` record. "During upload" remains not
+      applicable — no adapter has a distinct asset-upload call yet (see section 6) — and cancellation
+      during result download is unhandled.
 - [ ] Retain temporary remote-asset associations and dependency pins until terminal resolution or
       explicit abandonment.
 - [ ] Implement **Monitoring Paused**, **Check Now** and **Resume Monitoring** when an adapter

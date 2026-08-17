@@ -128,6 +128,10 @@ public sealed class GenerationQueueService
         /// execution starts so <see cref="GenerationRecordId"/> is populated (or confirmed
         /// unavailable) first.</summary>
         public Task<GenerationRecord?>? RecordCreation;
+        /// <summary>True once a request may have actually been transmitted to a provider (the
+        /// <see cref="GenerationStatus.Submitting"/> transition was reached) — distinguishes, on
+        /// cancellation, "nothing was ever sent" from "acceptance can no longer be confirmed."</summary>
+        public bool SubmissionAttempted;
         /// <summary>Set once <see cref="RecordCreation"/> completes successfully. Null if creation
         /// failed (a transient storage failure) — status transitions are then skipped and the job
         /// runs exactly as it did before this durable record existed.</summary>
@@ -1171,6 +1175,7 @@ public sealed class GenerationQueueService
                 try
                 {
                     AdvanceLocked(job, GenerationStatus.Submitting);
+                    job.SubmissionAttempted = true;
                     images = await adapter.GenerateImageAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
@@ -1187,6 +1192,7 @@ public sealed class GenerationQueueService
                 try
                 {
                     AdvanceLocked(job, GenerationStatus.Submitting);
+                    job.SubmissionAttempted = true;
                     audioFiles = await adapter.GenerateAudioAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
@@ -1226,6 +1232,7 @@ public sealed class GenerationQueueService
                 try
                 {
                     AdvanceLocked(job, GenerationStatus.Submitting);
+                    job.SubmissionAttempted = true;
                     result = await adapter.GenerateTextAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, snapshot.SystemInstructions, sourceImage, snapshot.Settings, secondarySourceImage, tertiarySourceImage, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
@@ -1240,6 +1247,11 @@ public sealed class GenerationQueueService
         }
         catch (OperationCanceledException)
         {
+            // Whether transmission reached the provider is genuinely unknown once a request is
+            // already in flight — finalize immediately to SubmissionOutcomeUnknown rather than
+            // leaving the durable record stranded non-terminal until a restart happens to sweep it
+            // up; nothing was ever sent if cancellation landed before Submitting was even reached.
+            AdvanceLocked(job, job.SubmissionAttempted ? GenerationStatus.SubmissionOutcomeUnknown : GenerationStatus.CancelledBeforeSubmission);
             return new GenerationJobOutcome(job.JobId, job.DraftId, null, null, CancelledBeforeSubmission: false, DateTimeOffset.UtcNow);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException or ObjectDisposedException or Microsoft.Data.Sqlite.SqliteException)
@@ -1308,6 +1320,7 @@ public sealed class GenerationQueueService
         try
         {
             AdvanceLocked(job, GenerationStatus.Submitting);
+            job.SubmissionAttempted = true;
             for (var index = 0; index < resultCount; index++)
             {
                 try

@@ -630,7 +630,7 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
-    public async Task CancellingARunningJobTriggersItsTokenAndProducesNoImmediateGenerationRecord()
+    public async Task CancellingARunningJobTriggersItsTokenAndFinalizesItsRecordAsSubmissionOutcomeUnknown()
     {
         using var temporary = new TemporaryDirectory();
         var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
@@ -647,13 +647,13 @@ public sealed class GenerationQueueServiceTests
         Assert.Null(outcome.Record);
         Assert.False(outcome.CancelledBeforeSubmission);
         // Whether the request reached the provider before the cancellation fired is genuinely
-        // unknown — the durable record created when the job entered the queue is deliberately left
-        // at its last reported nonterminal status rather than being silently discarded or guessed at
-        // as a terminal outcome (full Submission Outcome Unknown reconciliation is a later phase).
-        var history = await workspace.GetGenerationHistoryAsync();
-        var record = Assert.Single(history);
-        Assert.Equal("prompt", record.Prompt);
-        Assert.False(LibraryRules.IsTerminalGenerationStatus(record.Status));
+        // unknown — the durable record created when the job entered the queue is finalized to
+        // SubmissionOutcomeUnknown immediately rather than being silently discarded, guessed at as a
+        // terminal outcome, or left stranded until a restart happens to sweep it up (full Attempt
+        // Reconciliation against this status is a later phase).
+        GenerationRecord? record = null;
+        await WaitUntilAsync(() => (record = workspace.GetGenerationHistoryAsync().GetAwaiter().GetResult().SingleOrDefault(entry => entry.Prompt == "prompt")) is { Status: GenerationStatus.SubmissionOutcomeUnknown });
+        Assert.NotNull(record);
     }
 
     [Fact]
