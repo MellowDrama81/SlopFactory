@@ -110,6 +110,7 @@ in parallel. Both milestones must be complete before the first public release.
   code guarding a condition that can never be true, or fabricating a fake pending-job concept just
   to have something to gate — neither is worth doing. Revisit once a genuinely asynchronous
   provider is integrated (Milestone 3+), alongside the async-job group.
+  Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3.
 - [x] Add connection-label-change independence from dependent models (already true by construction —
       `Model` stores only a `ConnectionId` foreign key, never a cached connection label, so renaming
       a connection needs no propagation; covered by the existing
@@ -270,6 +271,8 @@ in parallel. Both milestones must be complete before the first public release.
       be confirmed. This remains owned by `IMPLEMENTATION_COMPLETION_CHECKLIST.md` section 5.
 - [ ] Add signed adapter versioning for normalized snapshot formats so older history remains
       readable across adapter updates.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 5,
+      where `LibraryRules.CurrentGenerationSettingsFormatVersion` now implements this.
 
 ## Generation workspace (tabs and drafts)
 
@@ -463,6 +466,7 @@ in parallel. Both milestones must be complete before the first public release.
   no effect on any actual request, the same "don't fabricate a control that does nothing real" concern
   already applied elsewhere this milestone. Revisit once an adapter using multipart or asset-upload
   transport (where a real filename is actually transmitted) is integrated.
+  Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 6.
 
 ## Generation submission, queues and lifecycle
 
@@ -488,6 +492,8 @@ in parallel. Both milestones must be complete before the first public release.
   send the requested result count as the provider's own native `n` parameter in a single request —
   neither adapter ever needs to loop child requests to satisfy a result count, so there is no
   per-child state to track. Revisit only if a future adapter's provider lacks a native count parameter.
+  Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3,
+  where a later pass added the full normalized status/transition-history table this item anticipated.
 - [x] Add per-connection FIFO queues, a device-wide submission cap with fair round-robin slot
       allocation, scoped to what's real and buildable without fabricating provider behavior: neither
       the OpenAI nor the generic OpenAI-compatible adapter exposes an actual asynchronous
@@ -612,6 +618,10 @@ in parallel. Both milestones must be complete before the first public release.
   one already implemented (model listing, below). Building any of this now would be speculative
   infrastructure with nothing real to exercise it. Revisit once a genuinely asynchronous provider is
   actually integrated (Milestone 3+).
+  Cancellation-per-stage, async-job polling/Monitoring Paused and idempotency-key reuse are owned by
+  [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3 (Monitoring
+  Paused and idempotency keys are also tracked there under "Future work," pending an adapter that
+  documents the mechanism). Offline/metered-network handling is now implemented and owned by section 4.
 - [x] Add bounded automatic retry with `Retry-After`/rate-limit honoring and exponential backoff
       with jitter, scoped to the one operation the plan explicitly documents as idempotent and
       safe to retry without provider-confirmed idempotency support: model listing.
@@ -666,6 +676,8 @@ in parallel. Both milestones must be complete before the first public release.
   trusting the provider's stated format, exactly the same distrust principle this item asks for, just
   applied to already-inline bytes instead of a downloaded stream. Revisit once an adapter returns
   results by URL rather than inline bytes.
+  Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 7,
+  where the OpenRouter/DeepInfra adapters that do return results by URL are already covered.
 - [x] Add text-result formatting: `.md` remains the default, and a per-model **Text result
       format** setting (schema v21: `models.text_format`, `TextResultFormat.Markdown`/`PlainText`)
       lets a Text-mode model commit its results as `.txt`/`text/plain` instead. `GenerationRecord`
@@ -744,6 +756,9 @@ in parallel. Both milestones must be complete before the first public release.
       model-unavailable-style warning rather than a dedicated dialog); those remain open below.
 - [ ] Add the source/model-incompatibility and system-instruction-channel-mismatch confirmations for
       **Use Again**, once named source-input slots and capability-based validation exist.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 6 —
+      named source-input slots and `ValidateSourceSlots` now exist, but this confirmation itself is not
+      yet built on top of them.
 - [x] Add generation-history recycle/restore/permanent-delete integrated with the unified recycle
       bin, plus file/source tombstoning. Schema v26 adds `generation_records.state`/`recycled_at`
       (the same shape every other entity already has) and, per plan.md's explicit rules, recycling or
@@ -923,6 +938,7 @@ in parallel. Both milestones must be complete before the first public release.
   decision already rejected. A summary view over provider-reported actual cost would have nothing real
   to aggregate — every row would be blank. Revisit only alongside the Cost-unknown notice itself, if
   an adapter ever gains a real cost-reporting or estimate API.
+  Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 9.
 - [x] Add OS generation-completion/failure notifications, disabled by default, toggled from
       `/library-settings`. `Plugin.LocalNotification` (the community-standard MAUI local-notification
       package) was evaluated and rejected: its own README states "Only support **iOS** and **Android**
@@ -996,6 +1012,7 @@ in parallel. Both milestones must be complete before the first public release.
 - [x] Run the full shared test suite, Windows MAUI build, and Android MAUI build with zero errors.
 - [ ] Execute a Milestone-2 manual acceptance pass on supported Windows and Android devices and
       record it in `manual_tests.md`.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [x] Update `plan.md` by removing only verified completed requirements and keep user/developer
       documentation and `README.md` aligned with the finished behavior. A dedicated audit pass
       cross-referenced every plan.md bullet against this document's `[x]` bullets and, where needed,

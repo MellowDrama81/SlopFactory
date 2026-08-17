@@ -162,6 +162,7 @@ there.
       predating this milestone), which is the opposite of "stable unavailable reference." That is a
       larger tab-state-model change, not a bounded follow-on to the queue-side work above, so it
       stays open rather than being force-fit into this pass.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 11.
 
   **Scope note**: `plan.md`'s Milestone 4 one-line summary names only "multi-library background
   work," not this section by name — these bullets share the same Work Queues area of `plan.md`
@@ -208,6 +209,9 @@ there.
       **not** get a chance to run on this path). This is a real, narrow gap worth flagging
       precisely: `CancelWorkAndExit`'s cancellation of queue jobs is unconditional and immediate,
       with no draft-save attempt first. Left open rather than silently claimed as handled.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 4,
+      where "Save or resolve draft edits before Windows Cancel Work and Exit..." is checked — verify
+      this narrow `Environment.Exit` gap is actually covered before treating this item as fully closed.
 - [x] Add a notification-area icon showing aggregate status with reopen/exit actions
       (`plan.md:444`). `ITrayIconService`/`WindowsTrayIconService` implements this directly against
       the classic Win32 `Shell_NotifyIcon` API (a dedicated invisible native window receives the
@@ -304,6 +308,9 @@ there.
       failure be attributed to the provider the same way an ordinary network error is today. Left
       open as a real, scoped gap rather than force-built without being able to verify the
       OS-suspension signal actually fires as expected on a real device.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 4,
+      where `IBackgroundExecutionService.Suspended` now distinguishes this case; the on-device
+      verification piece remains open under section 15.
 
   **Not independently verified beyond compiling**: like the Windows-specific interop in the previous
   two sections, this is real Android platform code (a foreground service, manifest permissions,
@@ -409,6 +416,9 @@ there.
       "Not done this pass" note above for why this needs new design (a provenance-preserving import
       path that doesn't depend on the prompt/settings context the device-wide registry deliberately
       never retains) rather than being an extension of what shipped in this phase.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 12,
+      where automatic reconciliation and proactive notification are now both implemented; only the
+      insufficient-storage retry case remains open there.
 
 ## Crash and session recovery
 
@@ -559,6 +569,7 @@ there.
       that means deciding whether to retain a provider job ID indefinitely post-commit (with its own
       privacy/staleness tradeoffs) purely to support a rarely-used recovery path, which is a real
       design decision, not a bounded implementation task. Left open rather than built on a guess.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 11.
 - [ ] Add the provider-safety-classification/content-replacement integrity rules for a **Missing**
       or **Content Changed** record: a classification received in that state attaches only to the
       immutable provenance of the record's original bytes (`plan.md:549`); restoring
@@ -573,6 +584,7 @@ there.
       codebase, there is nothing to reactivate. This stays blocked on the same adapter-signal gap
       `milestone3.md`'s own "Possible future work" section already tracks (Provider Safety
       Responses), not new debt introduced here.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 10.
 - [ ] The content-replacement mechanics this needs already exist and are unaffected by the two items
       above: a content-replaced file keeps its original provenance for historical context but
       clearly states its current bytes aren't the original content (`plan.md:551`), and generation
@@ -591,6 +603,7 @@ there.
       larger, dedicated UI/data-model change bundled with (not separable from) the tab-reference
       redesign already left open in Work Queue Resilience, rather than a bounded addition to this
       phase.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 11.
 
 ## Accessibility
 
@@ -790,6 +803,7 @@ there.
       than persisted into any project file or build log. With no such environment variables set
       (the normal case for this repo and for any contributor's machine), builds are unaffected and
       remain unsigned/dev-signed exactly as before.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [x] Show the installed distribution channel, semantic version and platform build number in
       **About** and diagnostics (`plan.md:40`), with **About** providing a user-activated link to
       the official download page (`plan.md:45`). New `IAppBuildInfo`/`AppBuildInfo`
@@ -821,6 +835,7 @@ there.
       the official download pages (`plan.md:48`). **Not done — blocked.** This is entirely
       the responsibility of the (not-yet-existing) official project website, not application code;
       nothing in this repo can implement it.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [x] Share stable application/package identity and signing lineage between store and direct
       production builds (`plan.md:49`); reject side-by-side production variants and version
       downgrades (`plan.md:51`), and stop installation without replacing the existing application or
@@ -909,20 +924,26 @@ there.
       volume-disconnect-mid-commit, second-instance-launch forwarding, and dependency-recycled
       queue-pause edge cases, following the same discipline `milestone3.md`'s Final Verification
       pass used (real gaps closed, not just happy-path coverage restated).
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 14.
 - [ ] Run the full automated test suite and verify clean Windows and Android builds (Debug and
       Release) with zero errors, matching the standard established in milestones 1–3.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 14,
+      where this is now checked.
 - [ ] Execute a manual acceptance pass on supported Windows and Android devices per
       `manual_tests.md`, extended with new entries for this milestone's resilience scenarios:
       simulated crash/unclean-exit recovery, removable-volume disconnect during an active commit,
       Android background-transfer notification/permission flows, Windows notification-area
       keep-running behavior, second-instance launch forwarding, and a screen-reader
       (Narrator/TalkBack) pass over the core generate/library/queue screens.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [ ] Run a performance-profiling pass across large libraries, long queues and low-end/minimum-
       supported devices (`plan.md`'s Milestone 4 summary names "performance" but defines no
       dedicated requirements section — this is verification against the existing acceptance-test
       discipline applied to scale/hardware conditions, not a new feature set) and record findings.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [ ] Update `plan.md` by removing only verified completed requirements, and keep `docs/user/`,
       `docs/developer/` and `README.md` aligned with finished Milestone 4 behavior.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 1.
 
 ## Possible future work
 

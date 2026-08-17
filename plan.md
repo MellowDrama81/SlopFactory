@@ -268,8 +268,6 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - When permission or platform restrictions prevent reliable background execution, the application warns that leaving SlopFactory may interrupt the operation.
 - Background execution is used for active transfers rather than indefinite provider-status polling.
 - Asynchronous provider job IDs are persisted, with polling resumed through scheduled work or when the application becomes active.
-- A generation is never started automatically during device boot.
-- Android execution suspension and timeout are recorded separately from provider failure.
 
 ## Session Recovery
 
@@ -437,15 +435,8 @@ A MAUI Blazor Hybrid application for using AI media generation APIs. It maintain
 - The exit warning lists every affected library and tab title.
 - **Exit and Lose Unsaved Edits** requires explicit confirmation and loses only changes newer than each tab's last persisted draft.
 - **Return to App** leaves the process, libraries, tabs and in-memory edits unchanged.
-- With active local work, closing presents **Keep Running**, **Cancel Work and Exit** and **Return to App**.
-- **Keep Running** places SlopFactory in the Windows notification area and preserves active work.
-- **Keep Running** is not an exit and retains failed draft edits in memory with retry still available when the window is reopened.
 - If **Cancel Work and Exit** would also lose unsaved draft edits, the draft exit gate is completed before cancellation or process termination begins.
-- The notification-area icon displays aggregate status and can reopen or exit the application.
-- Exiting attempts provider cancellation where supported and applies the normal cancellation rules.
 - Submitted asynchronous remote jobs remain persisted and can resume reconciliation on the next launch.
-- The user can remember the **Keep Running** choice and change it later in settings.
-- The application does not hide in the notification area without first explaining that it remains active.
 
 ## Library Storage
 

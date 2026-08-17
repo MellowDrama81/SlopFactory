@@ -64,6 +64,7 @@ mean writing adapter-specific fakes three times over instead of once.
       transcript field name and DeepInfra's dual OpenAI-compatible/native base-URL split were never
       fully confirmed by research), but it is out of this milestone's adapter-specific scope the
       same way those two items are.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) sections 2 and 15.
 
 ## Asynchronous remote jobs and reconciliation
 
@@ -88,6 +89,9 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       `Monitoring Paused`/`Downloading Results`/`Awaiting Library`/`Cancellation Requested` value —
       none of those has a real driver yet (see **Monitoring Paused** specifically under Possible
       future work below).
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3,
+      where the full 18-value vocabulary now exists in the schema even though most values still lack
+      a producing transition.
 - [x] Add the queue-scheduler change so an asynchronous job releases its submission slot after
       durable provider acceptance rather than holding it for the entire poll duration — the one
       architectural limitation flagged repeatedly throughout this milestone.
@@ -128,13 +132,20 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       keys, and the exact key is dropped after terminal resolution (retaining only a non-reusable
       fingerprint for diagnostics). **Moved to Possible future work below**: no currently supported
       adapter documents idempotency-key support.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3,
+      also tracked under that section's "Future work" list pending an adapter that documents support.
 - [ ] Add **Submission Outcome Unknown**: when transmission began but SlopFactory cannot confirm
       provider acceptance, record this indeterminate (not locally active) state instead of ordinary
       `Failed`, releasing queue slots/dependency pins and retaining only the minimum provider
       request ID/idempotency context needed for a documented reconciliation operation.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3,
+      where `SubmissionOutcomeUnknown` is now a reachable status for Text/Image/Audio jobs.
 - [ ] Add **Attempt Reconciliation**, exposed on the affected history/activity record, and the
       **Abandon Recovery and Apply Changes** path that removes actionable request IDs/idempotency
       context while retaining sanitized non-actionable history.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3 —
+      **Abandon Recovery and Apply Changes** is implemented there; **Attempt Reconciliation** is tracked
+      under that section's "Future work" list as not implementable for any current adapter.
 - [x] Add the unresolved-async-job gate before a base URL, credential header name or auth prefix
       change takes effect (`ConnectionEdit.razor`'s `AuthStructureChanged()`), scoped to a reduced,
       honest 2-way choice: **Stop Tracking and Apply Changes** (deletes the connection's unresolved
@@ -158,6 +169,7 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       no adapter implemented this pass uploads a separate asset before submitting (video/audio
       requests are single JSON bodies), so there's no upload phase to distinguish cancellation
       during.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3.
 - [x] Add offline/metered-network queue handling: **Paused — Connection Lost**, manual **Resume
       Queue**/**Resume All for This Connection** with per-job revalidation, and the device-wide
       metered-network transfer setting (**Allow**/**Ask**/**Wi-Fi/Unmetered Only**).
@@ -210,6 +222,9 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       future work below), so there's nothing to recover from yet on that path.
 - [ ] Add the required temporary asset association lifecycle for an in-flight async job (kept until
       the job reaches a terminal or explicitly discarded state) and its dependency-pin release.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3 —
+      already largely satisfied there ("Retain temporary remote-asset associations and dependency pins
+      until terminal resolution or explicit abandonment" is checked), verify nothing further remains.
 
 ## Provider adapters
 
@@ -244,6 +259,8 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
 - [ ] Add signed adapter versioning for normalized snapshot formats, so generation-history and
       saved-setting records created by an earlier adapter version remain readable after that
       adapter is updated.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 5,
+      now implemented there via `LibraryRules.CurrentGenerationSettingsFormatVersion`.
 - [x] Extend connection testing, transport-security validation, TLS/redirect rules and the
       **Unverified**/**Authentication Failed**/**Credentials Required** connection states to
       OpenRouter and DeepInfra — both reuse the exact same `Connection`/base-URL/header validation
@@ -257,6 +274,7 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       concurrency-limit declarations where a provider has no safe parallel-submission behavior.
       (OpenRouter/DeepInfra models can be added and used manually today via the existing
       manually-entered-model path; the generated-controls schema layer itself is still open.)
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 5.
 
 ## Audio and video generation
 
@@ -293,6 +311,8 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       first — there is no equivalently simple "get me a waveform" platform API to lean on, and doing
       this without a new dependency (matching this project's established zero-new-package
       preference) would mean writing or invoking a real audio decoder, not a bounded follow-on.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 11,
+      where waveform rendering was later formally descoped in favor of a type-icon badge.
 
 ## Multi-result workflows
 
@@ -365,6 +385,7 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       .SafetyBlockedCount`) to have real per-child identity now that `GenerationResultEntry` exists,
       rather than only an aggregate blocked count. Deliberately not done in the same pass as
       per-child status itself — see that item's note on why Text keeps the aggregate signal for now.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 10.
 
 ## File-transfer variations and result validation
 
@@ -448,6 +469,7 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       completed OpenRouter video generation (real cost is now shown), but the notice itself wasn't
       updated to conditionally suppress for that case, and there's no "known estimate" to compare
       against yet regardless.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 9.
 - [x] Add the local cost-summary view aggregating provider-reported actual cost. `CostSummaryCalculator`
       (new, `Core/Domain/CostSummaryCalculator.cs`) is a pure, unit-tested aggregator — filtering and
       grouping logic lives there rather than in `CostSummary.razor`'s code-behind specifically so it's
@@ -467,9 +489,15 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       milestone's stated scope and has no implementation today; only the slice that would otherwise
       be dead weight without this milestone's cost/provenance data is included here; a dedicated
       pass to build the rest of the sidecar spec remains unscoped.
+      The sidecar system now exists; owned by
+      [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) sections 8 (the
+      sidecar system itself) and 9 (usage/cost content, still open there).
 - [ ] Add the provider/model snapshot and generation-provenance fields to that same sidecar slice
       for the three new adapters and the Audio/Video modes, so a sidecar written for their results
       is not silently missing provenance that Text/Image results already have once sidecars exist.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 8,
+      where `ExportSidecarWriter` now writes `providerType`/`modelLabel`/`generationProvenanceState`
+      for every adapter and mode uniformly (not adapter-specific), which appears to satisfy this item.
 
 ## Rate-limit behavior
 
@@ -517,6 +545,8 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       limit in testing, so there's nothing concrete yet to verify that interaction against.
 - [ ] Add rate-limiting to explicit provider-status refresh/reconciliation actions (distinct
       per-request throttling that disables repeated activation while a lookup is in progress).
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3,
+      now implemented there for **Refresh Provider Status**/**Import Missing Results**.
 
 ## Provider-specific capabilities and safety responses
 
@@ -530,6 +560,10 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       preview, saved settings and generation history — not something scoped to just the three new
       adapters — so it remains out of scope for this milestone's adapter-specific work, same as the
       provider/model capability settings-schema UI noted above.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 5,
+      where the bounded advanced JSON editor and its reserved-key/size/nesting/conflict enforcement are
+      now implemented and adapter-agnostic (satisfying this item for every adapter, not just the three
+      named here).
 
 ## Final Milestone 3 verification
 
@@ -557,6 +591,7 @@ need a real submit-then-poll model that does not exist today (`GenerationJobPhas
       in `manual_tests.md`. **Not done by this session**: this needs a physical/emulated device, a
       real OpenRouter and DeepInfra API key, and an approved cost budget for live billable calls —
       none of which an autonomous coding session can provide or authorize on its own.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [x] Update `plan.md` by removing only verified completed requirements, and keep user/developer
       documentation and `README.md` aligned with the finished behavior. Removed 8 fully-satisfied
       `plan.md` bullets (fake-HTTP-provider streaming/async-job/rate-limit coverage, provider
@@ -605,6 +640,9 @@ capability.
   unconfirmed. Shipping this now would mean fabricating a wire format rather than following one.
   Revisit once the user (or a future session) can access `docs.1min.ai` directly or test against a
   live account/API key.
+  Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 5.
+  Now implemented for text/image/audio against a later-confirmed contract; video and model discovery
+  remain deliberately unimplemented there for the same unconfirmed-contract reasons as here.
 - [ ] Add **Monitoring Paused**: when an async job exceeds its adapter-defined maximum monitoring
       lifetime while the provider still reports it running, stop automatic polling and expose
       **Check Now**/**Resume Monitoring** rather than treating it as failed or cancelled. Blocked on
@@ -615,12 +653,16 @@ capability.
       signal already handled today, not a client-side polling-lifetime cutoff). Building this against
       a self-imposed default cap instead of a real adapter-declared one would mean inventing a
       threshold `plan.md` explicitly scopes to the adapter, not the application.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3,
+      also tracked under that section's "Future work" list.
 - [ ] Add idempotency-key generation and persistence, scoped only to adapters with documented
       idempotency support, generated and durably stored before any bytes are sent; separate runs,
       multi-result children, prompt-improvement attempts and **Use Again** each receive distinct
       keys, and the exact key is dropped after terminal resolution (retaining only a non-reusable
       fingerprint for diagnostics). No currently supported adapter documents idempotency-key
       support to build this against.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 3,
+      also tracked under that section's "Future work" list.
 - [ ] Replace the current 3 generic source-file slots (`SourceFileId`/`SecondarySourceFileId`/
       `TertiarySourceFileId`) with a named input-slot capability model — reference image, mask,
       first frame, last frame, source audio, source video — each with its own required media
@@ -628,29 +670,38 @@ capability.
       generation ship with no source inputs at all (matching image generation's existing behavior),
       since neither `OpenRouterProviderAdapter.GenerateAudioAsync`/`SubmitVideoGenerationAsync`
       accept one yet.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 6,
+      now implemented via `GenerationInputSlotRole`/`GenerationSourceSlot`.
 - [ ] Add per-slot source-input token/byte/dimension/duration accounting using each adapter's
       documented formula where one exists, and documented count/byte/dimension/duration limits
       otherwise. Depends on the named input-slot model above existing first.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 6.
 - [ ] Add provider-issued signed upload destinations for adapters that require out-of-band asset
       upload before generation (rather than inline request-body bytes), following the same host/
       redirect/credential rules as result downloads. No currently supported adapter requires
       out-of-band upload.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 6.
 - [ ] Add transport filename handling for adapters that require or benefit from generic/aliased
       upload names, including alias binding that stays consistent across a prompt-improvement
       attempt and its final generation submission. No currently supported adapter is confirmed to
       need generic/aliased upload names.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 6.
 - [ ] Add incremental text display for adapters that support streaming, writing to a temporary file
       until the response completes. No currently supported adapter's streaming support is confirmed
       and integrated.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 7.
 - [ ] Add the remaining Provider Safety Responses machinery deferred from Milestone 2:
       concealment/reveal session state, per-file persistent override preferences, external-open
       re-authorization for concealed content, and cross-duplicate shared classification events keyed
       by content hash. No currently supported adapter exposes a "permitted but flagged" response to
       drive this.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 10.
 - [ ] Add **Provider Blocked After Delivery** late reclassification, using the async-job monitoring
       infrastructure above to detect a status change after initial delivery. No currently supported
       adapter provides a post-delivery reclassification signal.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 10.
 - [ ] Extend provider safety/moderation handling to the new adapters' actual signals (each may
       differ from OpenAI's `finish_reason: content_filter`-only model), including image, audio and
       video modality moderation where a provider documents it. Unresearched/unconfirmed for
       OpenRouter and DeepInfra this pass.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 10.

@@ -12,12 +12,30 @@ until it has been verified against real documentation, credentials, devices or s
 ## 1. Reconcile the source of truth
 
 - [x] Map every remaining requirement in `plan.md` to exactly one checklist item below.
-- [ ] Remove requirements from `plan.md` only after their implementation and verification are
+- [x] Remove requirements from `plan.md` only after their implementation and verification are
       complete, in keeping with the file's stated purpose.
+      An ongoing policy, not a one-shot task — most `plan.md` topics still map to at least one
+      still-open checklist section (including section 15's manual/release gate, which stays open
+      until actual release), so most of `plan.md` cannot honestly be pruned yet. This pass removed 9
+      individual bullets from `plan.md`'s "Android Background Work" and "Windows Background Work"
+      sections that are each fully implemented and verified with no remaining sub-clause (Android
+      execution-suspension distinction and the no-boot-receiver guarantee; Windows's Keep
+      Running/Cancel Work and Exit/Return to App dialog, tray icon, remembered choice, provider
+      cancellation on exit, and the "never hides without explaining" guarantee) — matching the exact
+      per-bullet granularity `milestone2.md`/`milestone3.md`/`milestone4.md`'s own prior pruning
+      passes used, never removing a bullet that still mixes a done and an undone clause (e.g. the
+      Retry Save draft-exit dialog, and async-job-polling resumption on restart, both stay since
+      neither is actually built yet).
 - [x] Update stale Milestone 2 entries that were completed by Milestone 3, including Audio/Video
       modes and the OpenRouter and DeepInfra adapters.
 - [x] Retire or merge `Milestone1_Remaining_Plan.md` so Milestone 1 has one checklist.
-- [ ] Add links from each still-open milestone entry to its owning item in this checklist.
+- [x] Add links from each still-open milestone entry to its owning item in this checklist.
+      Every unchecked (`- [ ]`) item across `milestone1.md`–`milestone4.md` (65 items total) now
+      carries an explicit "Owned by `IMPLEMENTATION_COMPLETION_CHECKLIST.md` section N" link. Several
+      of these links also surfaced items that are now actually satisfied by later work but were never
+      marked done in their own milestone file (e.g. `milestone3.md`'s per-slot source-input model and
+      `milestone2.md`'s generation-history record model) — left as-is in the milestone files
+      themselves (they're retained history, not live status) rather than retroactively rewritten.
 - [x] Reconcile `README.md`, `docs/user/` and `docs/developer/` with the resulting source of truth.
 
 Done when: every incomplete first-release requirement has one owner and one status, with no

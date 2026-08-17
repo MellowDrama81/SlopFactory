@@ -17,6 +17,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
       level. This item stays unchecked only because it also requires the
       [MT-01](manual_tests.md#mt-01--theme-persistence-and-windows-high-contrast) device pass per
       this checklist's rule that platform-labelled items need the applicable device check too.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [ ] Make all primary library workflows usable at phone width, tablet width, and desktop width
       without clipped controls; verify with fixed viewport UI tests and
       [MT-02](manual_tests.md#mt-02--responsive-layout-and-touch-interaction). `app.css` already has
@@ -27,6 +28,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
       fixed viewport UI tests" is not actually satisfied yet; that would mean adopting a new test
       technology, which is a real scope/dependency decision this checklist item cannot resolve on
       its own.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) sections 13 and 15.
 - [ ] Add visible keyboard focus, keyboard activation, and focus restoration for primary
       library/recycle-bin controls. Keyboard focus/activation was already covered (every interactive
       control across the app is a real `<button>`/`<a>`, so the existing `:focus-visible` outline and
@@ -45,6 +47,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
       and because "verify with keyboard-driven UI tests" implies the same rendered-UI test
       capability gap noted above — the current tests are source-level guards, not live keyboard
       interaction tests.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) sections 13 and 15.
 - [x] Move application-owned UI strings into localizable resources without changing rendered English text; verify a resource-coverage test that rejects newly hard-coded UI strings in target components.
 
 ## Library location, availability, and recovery
@@ -71,6 +74,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
       target exists), so the `#if ANDROID` branch is never compiled or exercised by any automated
       test, and because [MT-04](manual_tests.md#mt-04--android-app-specific-and-removable-storage)
       still requires an actual device/emulator pass.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) sections 14 and 15.
 - [ ] Add Android uninstall/app-specific-storage warnings and exclude SlopFactory application data
       from Android backup. Already implemented: `Platforms/Android/AndroidManifest.xml` sets
       `android:allowBackup="false"` and `android:fullBackupContent="false"`, and
@@ -79,6 +83,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
       already asserts both manifest flags and the warning strings at the source level. This stays
       unchecked only because [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions)
       still requires the device pass.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [ ] Use Android system document pickers for both import and export, request only
       operation-specific permissions, and declare no broad-storage/camera/microphone/contact/location/media-library
       permissions. Already implemented: the manifest declares only `android.permission.INTERNET`;
@@ -92,6 +97,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
       merged/compiled manifest (not just the source file) and because
       [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions)
       still requires the device pass.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) sections 13 and 15.
 - [ ] Provide a contextual system-settings shortcut when a permanently denied permission blocks the
       requested action. `PlatformFileActionService`'s Android import path already catches
       `Java.Lang.SecurityException`, sets `HasPermissionBlock = true`, and `Home.razor` conditionally
@@ -107,6 +113,7 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
       code isn't compiled by the `net10.0`-only test project, same limitation as the volume-identity
       item above), and [MT-05](manual_tests.md#mt-05--android-uninstall-backup-document-pickers-and-permissions)
       still requires the device pass.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) sections 14 and 15.
 
 ## Import preflight and source safety
 
@@ -160,6 +167,9 @@ This checklist replaces broad remaining Milestone 1 themes with independently co
 ## Final Milestone 1 verification
 
 - [ ] Add automated coverage for every new Milestone 1 behavior above, including cancellation, failed I/O, reparse substitution, and cross-library isolation cases.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 14.
 - [x] Run the full shared test suite, Windows MAUI build, and Android MAUI build with zero errors.
 - [ ] Execute [MT-06](manual_tests.md#mt-06--cross-platform-acceptance-workflow) on supported Windows and Android devices.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 15.
 - [ ] Update `plan.md` by removing only verified completed requirements and keep user/developer documentation and `README.md` aligned with the finished behavior.
+      Owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md) section 1.
