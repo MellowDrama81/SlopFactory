@@ -19,7 +19,29 @@ dotnet restore SlopFactory.slnx --configfile NuGet.Config
 dotnet test tests\Mellow.SlopFactory.Tests\Mellow.SlopFactory.Tests.csproj --no-restore
 ```
 
-The current 476 tests cover platform-version policy, initialization, manifest/database creation, copied-library adoption, local-storage path rejection, hard-link rejection, and open-library identity revalidation, exclusive locking, invalid library entries, recursive import inventory and frozen-source revalidation, primary-stream and zone handling, verified single/bulk/recovery export, external-open isolation, resumable integrity checkpoints, cross-library review isolation, safe managed import, hashing, progress, cancellation cleanup, single and bulk duplicate handling with direct provenance chains and deletion snapshots, folder/file organization, reviewed multi-file operations, bulk metadata sensitivity and type normalization, typed metadata ownership and filtering, redacted JSON validation, bounded media probing, privacy-minimised integrity-report serialization, responsive/focus UI assets, dialog focus restoration (including that every appear/disappear confirmation panel across `FileDetails`, `RecycleBin`, `Home`, `LibrarySettings`, `Connections`, `Models`, `SavedSettings`, `Generate`, `GenerationHistory` and `GenerationHistoryDetail` actually uses `role="dialog"` rather than `role="group"`, so the shared `ui.js` focus-restoration helper fires for all of them, not just the two pages it was originally added for), and localization-resource wiring.
+## Live provider smoke tests
+
+Live smoke tests are opt-in discovery calls only: they never submit prompts, source files or media
+generation requests. The test remains a no-op unless all required variables are configured outside
+the repository: set SLOPFACTORY_LIVE_PROVIDER_TESTS to true, set
+SLOPFACTORY_LIVE_TEST_BUDGET_USD to a positive amount, and supply at least one of
+SLOPFACTORY_LIVE_OPENAI_API_KEY, SLOPFACTORY_LIVE_OPENROUTER_API_KEY,
+SLOPFACTORY_LIVE_DEEPINFRA_API_KEY, or the SLOPFACTORY_LIVE_GENERIC_BASE_URL /
+SLOPFACTORY_LIVE_GENERIC_API_KEY pair. Run only that category with:
+
+    dotnet test tests\Mellow.SlopFactory.Tests\Mellow.SlopFactory.Tests.csproj --no-restore --filter Category=LiveProvider
+
+The positive budget is mandatory before a live test is permitted. A future billable test must call
+the same guard with its maximum cost and is not allowed to send a request whose declared maximum
+exceeds that budget. Never commit keys, budgets, raw provider responses or prompt content.
+
+The current 556 tests cover platform-version policy, initialization, manifest/database creation, copied-library adoption, local-storage path rejection, hard-link rejection, and open-library identity revalidation, exclusive locking, invalid library entries, recursive import inventory and frozen-source revalidation, primary-stream and zone handling, verified single/bulk/recovery export, external-open isolation, resumable integrity checkpoints, cross-library review isolation, safe managed import, hashing, progress, cancellation cleanup, single and bulk duplicate handling with direct provenance chains and deletion snapshots, folder/file organization, reviewed multi-file operations, bulk metadata sensitivity and type normalization, typed metadata ownership and filtering, redacted JSON validation, bounded media probing, privacy-minimised integrity-report serialization, responsive/focus UI assets, dialog focus restoration (including that every appear/disappear confirmation panel across `FileDetails`, `RecycleBin`, `Home`, `LibrarySettings`, `Connections`, `Models`, `SavedSettings`, `Generate`, `GenerationHistory` and `GenerationHistoryDetail` actually uses `role="dialog"` rather than `role="group"`, so the shared `ui.js` focus-restoration helper fires for all of them, not just the two pages it was originally added for), and localization-resource wiring.
+
+Provider tests share two complementary fixtures. `FakeHttpMessageHandler` supplies focused canned or
+sequenced responses. `FakeProviderServer` supplies a stateful in-memory provider surface covering
+credential rejection, discovery, synchronous and streaming responses, async submit/poll/download,
+moderation, rate limiting, redirects, malformed JSON and representative provider errors. Neither
+fixture opens a listener or contacts the network.
 
 They also cover detected-media-type viewer allow-listing and preview-unavailable handling, bounded text, Markdown, raster-image (including temporary JPEG EXIF orientation with unchanged managed bytes and hash), SVG and media viewing; managed-content health, safe changed-byte inspection, and replacement; editable links; aggregate recycling, restoration and retryable permanent deletion; coherent integrity scans; culture-specific UI-resource fixtures; and version 1 through version 5, and version 14 through version 24, upgrades to the current schema (v28) with rollback cleanup. Preview-cache rebuilding is verified through the Windows and Android application builds.
 

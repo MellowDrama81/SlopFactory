@@ -25,10 +25,8 @@ public sealed class ProviderAdapterTests
         {
             Assert.Equal("https://api.openai.com/v1/models", request.RequestUri!.ToString());
             Assert.Equal("Bearer secret-key", request.Headers.GetValues("Authorization").Single());
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("""{"data":[{"id":"gpt-4o","name":"GPT-4o"},{"id":"gpt-4o-mini"}]}""", Encoding.UTF8, "application/json")
-            };
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"data":[{"id":"gpt-4o","name":"GPT-4o"},{"id":"gpt-4o-mini"}]}""");
         });
         var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
@@ -104,10 +102,14 @@ public sealed class ProviderAdapterTests
         {
             Assert.Equal("https://api.openai.com/v1/chat/completions", request.RequestUri!.ToString());
             Assert.Equal("Bearer secret-key", request.Headers.GetValues("Authorization").Single());
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("""{"choices":[{"message":{"content":"First candidate"}},{"message":{"content":"Second candidate"}}]}""", Encoding.UTF8, "application/json")
-            };
+            Assert.Equal(
+                ProviderContractFixtures.OpenAiCompatibleChatCompletionRequestV1
+                    .Replace("__MODEL_ID__", "gpt-4o")
+                    .Replace("__RESULT_COUNT__", "2")
+                    .Replace("__PROMPT__", "Write a haiku"),
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"choices":[{"message":{"content":"First candidate"}},{"message":{"content":"Second candidate"}}]}""");
         });
         var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
@@ -307,6 +309,12 @@ public sealed class ProviderAdapterTests
             Assert.Equal(-0.5, root.GetProperty("presence_penalty").GetDouble());
         }
 
+        await adapter.GenerateTextAsync(connection, model, "secret-key", "Write a haiku", 1, settings: new GenerationSettings(AdvancedJson: "{\"response_format\":{\"type\":\"json_object\"}}"));
+        using (var document = System.Text.Json.JsonDocument.Parse(capturedBody!))
+        {
+            Assert.Equal("json_object", document.RootElement.GetProperty("response_format").GetProperty("type").GetString());
+        }
+
         await adapter.GenerateTextAsync(connection, model, "secret-key", "Write a haiku", 1);
         using (var document = System.Text.Json.JsonDocument.Parse(capturedBody!))
         {
@@ -356,10 +364,14 @@ public sealed class ProviderAdapterTests
         var handler = new FakeHttpMessageHandler(request =>
         {
             Assert.Equal("https://api.openai.com/v1/images/generations", request.RequestUri!.ToString());
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent($$"""{"data":[{"b64_json":"{{encoded}}"}]}""", Encoding.UTF8, "application/json")
-            };
+            Assert.Equal(
+                ProviderContractFixtures.OpenAiCompatibleImageGenerationRequestV1
+                    .Replace("__MODEL_ID__", "gpt-image-1")
+                    .Replace("__PROMPT__", "A watercolor fox")
+                    .Replace("__RESULT_COUNT__", "1"),
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                ProviderContractFixtures.OpenAiCompatibleImageGenerationResponseV1.Replace("__BASE64__", encoded));
         });
         var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");

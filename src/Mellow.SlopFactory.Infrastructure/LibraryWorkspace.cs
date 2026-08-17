@@ -2488,6 +2488,8 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
         var resultFileIds = new List<string>();
         var resultEntries = new List<GenerationResultEntry>();
+        var committedFiles = new List<FileRecord>();
+        var reservedResultNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pendingReviewCandidates = new List<(int Position, string StagedFileName, long ByteSize, string ContentHash, string DetectedMediaType)>();
 
         if (resultImages is { Count: > 0 })
@@ -2496,8 +2498,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             var baseName = $"{safeLabel} {DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}";
             var position = 0;
 
-            foreach (var bytes in resultImages)
+            try
             {
+                foreach (var bytes in resultImages)
+                {
                 var currentPosition = position++;
                 var fileId = LibraryRules.NewId();
                 var stagingPath = _layout.StagingFilePath(fileId + ".generating");
@@ -2542,18 +2546,22 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                     File.Move(stagingPath, managedPath, false);
                     stagingPath = string.Empty;
                     var resolvedName = await _database.ResolveAvailableFileNameAsync(destinationFolderId, baseName + extension, cancellationToken).ConfigureAwait(false);
+                    if (!reservedResultNames.Add(resolvedName))
+                    {
+                        for (var suffix = 2; ; suffix++)
+                        {
+                            var candidateName = $"{baseName} ({suffix}){extension}";
+                            if (reservedResultNames.Add(candidateName))
+                            {
+                                resolvedName = candidateName;
+                                break;
+                            }
+                        }
+                    }
                     var now = DateTimeOffset.UtcNow;
                     var record = new FileRecord(fileId, destinationFolderId, resolvedName, resolvedName, managedName, hash, bytes.LongLength, mediaType,
                         FileOrigin.Generated, LibraryRecordState.Active, now, now, null, null);
-                    try
-                    {
-                        await _database.InsertImportedFileAsync(record, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        TryDelete(managedPath);
-                        throw;
-                    }
+                    committedFiles.Add(record);
                     managedPath = string.Empty;
                     resultFileIds.Add(fileId);
                     resultEntries.Add(new GenerationResultEntry(currentPosition, GenerationResultStatus.Committed, fileId, null));
@@ -2563,6 +2571,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                     TryDelete(stagingPath);
                     TryDelete(managedPath);
                 }
+                }
+            }
+            catch
+            {
+                foreach (var file in committedFiles) TryDelete(_layout.ManagedFilePath(file.ManagedName));
+                throw;
             }
         }
 
@@ -2579,10 +2593,16 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
 
         var status = DetermineGenerationStatus(resultFileIds.Count, resultCount, wasCancelled);
-        var generationRecord = await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, null, promptImprovementRecordId, null, null, null, null, 0, cancellationToken, actualCost, actualCostCurrency, resultEntries).ConfigureAwait(false);
-        foreach (var candidate in pendingReviewCandidates)
+        GenerationRecord generationRecord;
+        try
         {
-            await _database.CreatePendingUnverifiedResultAsync(generationRecord.Id, candidate.Position, candidate.StagedFileName, candidate.ByteSize, candidate.ContentHash, candidate.DetectedMediaType, cancellationToken).ConfigureAwait(false);
+            generationRecord = await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, null, resultCount, status, errorMessage, destinationFolderId, resultFileIds, null, null, null, promptImprovementRecordId, null, null, null, null, 0, cancellationToken, actualCost, actualCostCurrency, resultEntries, committedFiles, pendingReviewCandidates).ConfigureAwait(false);
+        }
+        catch
+        {
+            foreach (var file in committedFiles) TryDelete(_layout.ManagedFilePath(file.ManagedName));
+            foreach (var pending in pendingReviewCandidates) TryDelete(_layout.PendingReviewFilePath(pending.StagedFileName));
+            throw;
         }
         return generationRecord;
     }

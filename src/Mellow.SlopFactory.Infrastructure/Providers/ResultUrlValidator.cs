@@ -10,10 +10,8 @@ namespace Mellow.SlopFactory.Infrastructure.Providers;
 /// link-local, private, multicast or unspecified network addresses." Host resolution is injected
 /// rather than hardcoded to <see cref="Dns"/> so callers — and this class's own tests — never
 /// perform a real DNS lookup against a literal test hostname.
-/// Known limitation: this validates only the initial URL, not redirect targets — the shared HTTP
-/// pipeline used to download results follows redirects with its default handler configuration, so a
-/// server-side redirect is not re-validated against this same address-class check. Closing that gap
-/// needs a custom non-auto-redirecting handler, tracked as separate follow-up work.
+/// Callers must invoke this validation for the initial URL and each redirect target. OpenRouter's
+/// result-download path does so with automatic redirects disabled.
 /// </summary>
 internal static class ResultUrlValidator
 {

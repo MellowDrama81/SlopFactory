@@ -173,14 +173,12 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
                         {
                             throw new ProviderAdapterException("The provider returned a video result URL that could not be parsed.");
                         }
+                        // Validate the provider-supplied URL outside the retryable download block:
+                        // a malformed or private initial target is a permanent security rejection.
                         await ResultUrlValidator.ValidateHostAsync(resultUri, _resolveHost, cancellationToken).ConfigureAwait(false);
-
-                        using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, resultUri);
-                        OpenAiCompatibleProtocol.ApplyAuthorization(downloadRequest, connection, apiKey);
                         try
                         {
-                            var (downloadSucceeded, downloadStatus, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, downloadRequest, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
-                            if (!downloadSucceeded) throw new ProviderAdapterException($"Downloading the completed video result failed: {OpenAiCompatibleProtocol.DescribeFailure(downloadStatus)}");
+                            var bytes = await DownloadResultAsync(resultUri, connection, apiKey, cancellationToken).ConfigureAwait(false);
                             if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty video result.");
                             files.Add(bytes);
                         }
@@ -224,6 +222,49 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         if (!usage.TryGetProperty("cost", out var costElement) || costElement.ValueKind != JsonValueKind.Number) return null;
         return new AsyncGenerationCost(costElement.GetDouble(), "USD");
     }
+
+    private async Task<byte[]> DownloadResultAsync(Uri initialUri, Connection connection, string? apiKey, CancellationToken cancellationToken)
+    {
+        var currentUri = initialUri;
+        for (var redirectCount = 0; redirectCount <= 5; redirectCount++)
+        {
+            await ResultUrlValidator.ValidateHostAsync(currentUri, _resolveHost, cancellationToken).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
+            if (IsConnectionOrigin(connection.BaseUrl, currentUri))
+            {
+                OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
+                OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
+            }
+            var (succeeded, statusCode, bytes, redirectLocation, mediaType, digestHeaders) = await OpenAiCompatibleProtocol.SendForBytesWithRedirectAsync(_httpClient, request, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
+            if (succeeded)
+            {
+                if (!IsAllowedVideoResultMediaType(mediaType))
+                {
+                    throw new ProviderAdapterException($"The completed video result declared unexpected media type '{mediaType}'.");
+                }
+                OpenAiCompatibleProtocol.VerifySha256Digest(bytes, digestHeaders);
+                return bytes;
+            }
+            if (statusCode is HttpStatusCode.Moved or HttpStatusCode.Found or HttpStatusCode.SeeOther or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect)
+            {
+                if (redirectLocation is null || !Uri.TryCreate(currentUri, redirectLocation, out currentUri)) throw new ProviderAdapterException("The provider result download redirect had no valid target URL.");
+                continue;
+            }
+            throw new ProviderAdapterException($"Downloading the completed video result failed: {OpenAiCompatibleProtocol.DescribeFailure(statusCode)}");
+        }
+        throw new ProviderAdapterException("The provider result download exceeded the maximum redirect count.");
+    }
+
+    private static bool IsConnectionOrigin(string connectionBaseUrl, Uri resultUri) =>
+        Uri.TryCreate(connectionBaseUrl, UriKind.Absolute, out var connectionUri) &&
+        string.Equals(connectionUri.Scheme, resultUri.Scheme, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(connectionUri.Host, resultUri.Host, StringComparison.OrdinalIgnoreCase) &&
+        connectionUri.Port == resultUri.Port;
+
+    private static bool IsAllowedVideoResultMediaType(string? mediaType) =>
+        string.IsNullOrWhiteSpace(mediaType) ||
+        mediaType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(mediaType, "application/octet-stream", StringComparison.OrdinalIgnoreCase);
 
     private static string BuildImageRequestBody(string providerModelId, string prompt, int resultCount)
     {

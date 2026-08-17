@@ -112,7 +112,7 @@
                 <span>@Strings["ExitWithActiveWorkWarning", Queue.RunningCount, Queue.QueuedCount]</span>
                 <label class="check"><input type="checkbox" @bind="_rememberKeepRunning" />@Strings["RememberKeepRunningChoice"]</label>
                 <button @onclick="KeepRunningAsync">@Strings["KeepRunning"]</button>
-                <button class="danger" @onclick="() => ExitCoordinator.CancelWorkAndExit()">@Strings["CancelWorkAndExit"]</button>
+                <button class="danger" @onclick="CancelWorkAndExitAsync">@Strings["CancelWorkAndExit"]</button>
                 <button class="secondary" @onclick="() => ExitCoordinator.ReturnToApp()">@Strings["ReturnToApp"]</button>
             </div>
         }
@@ -149,6 +149,7 @@
         TrayIcon.Show(Strings["TrayIconTooltip", Queue.RunningCount, Queue.QueuedCount]);
         ExitCoordinator.KeepRunning(_rememberKeepRunning);
     }
+    private Task CancelWorkAndExitAsync() => ExitCoordinator.CancelWorkAndExitAsync();
     private void OnNotifyRequested(object? sender, GenerationRecord record) => Notifications.Show(record.Id, record.ModelLabel, StatusLabel(record.Status));
     private void OnNotificationTapped(object? sender, string recordId) => _ = InvokeAsync(() => Navigation.NavigateTo($"/generation-history/{recordId}"));
     private string StatusLabel(GenerationStatus status) => status switch

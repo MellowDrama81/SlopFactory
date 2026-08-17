@@ -1,5 +1,7 @@
 # Milestone 4 completion checklist
 
+> Current release status is owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md). This file is retained as Milestone 4 implementation history.
+
 This checklist breaks the Milestone 4 scope in `plan.md` ("Resilience and release readiness":
 multi-library background work; Windows notification-area behavior; Android background transfers;
 removable-storage loss and recovery staging; crash and session recovery; integrity checks;

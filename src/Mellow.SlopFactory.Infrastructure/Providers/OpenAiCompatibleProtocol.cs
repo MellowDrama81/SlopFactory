@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Linq;
@@ -85,10 +86,42 @@ internal static class OpenAiCompatibleProtocol
 
                 if (!allowRetry || response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxRetryAttempts)
                 {
-                    var bytes = await response.Content.ReadAsByteArrayAsync(linkedCts.Token).ConfigureAwait(false);
+                    var bytes = await ReadResponseBytesAsync(response.Content, linkedCts.Token).ConfigureAwait(false);
                     return (response.IsSuccessStatusCode, response.StatusCode, bytes);
                 }
 
+                await Task.Delay(ComputeRetryDelay(response, attempt), linkedCts.Token).ConfigureAwait(false);
+                currentRequest = await CloneRequestAsync(request).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new ProviderAdapterException($"The request timed out after {timeoutSeconds} seconds.");
+        }
+    }
+
+    /// <summary>Raw-byte variant that preserves an explicit redirect location for callers that must
+    /// validate each target rather than allowing the HTTP handler to follow it implicitly.</summary>
+    public static async Task<(bool IsSuccess, HttpStatusCode StatusCode, byte[] Bytes, Uri? RedirectLocation, string? MediaType, IReadOnlyList<string> DigestHeaders)> SendForBytesWithRedirectAsync(HttpClient httpClient, HttpRequestMessage request, Connection connection, CancellationToken cancellationToken, bool allowRetry = false, IConnectionRateLimitTracker? rateLimitTracker = null)
+    {
+        var timeoutSeconds = connection.TimeoutSeconds ?? LibraryRules.DefaultConnectionTimeoutSeconds;
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        try
+        {
+            var currentRequest = request;
+            for (var attempt = 0; ; attempt++)
+            {
+                using var response = await httpClient.SendAsync(currentRequest, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+                RecordRateLimitObservation(rateLimitTracker, connection, response);
+                if (!allowRetry || response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxRetryAttempts)
+                {
+                    var bytes = await ReadResponseBytesAsync(response.Content, linkedCts.Token).ConfigureAwait(false);
+                    var digests = response.Headers.TryGetValues("Content-Digest", out var contentDigest)
+                        ? contentDigest.Concat(response.Headers.TryGetValues("Digest", out var digest) ? digest : []).ToArray()
+                        : response.Headers.TryGetValues("Digest", out var legacyDigest) ? legacyDigest.ToArray() : [];
+                    return (response.IsSuccessStatusCode, response.StatusCode, bytes, response.Headers.Location, response.Content.Headers.ContentType?.MediaType, digests);
+                }
                 await Task.Delay(ComputeRetryDelay(response, attempt), linkedCts.Token).ConfigureAwait(false);
                 currentRequest = await CloneRequestAsync(request).ConfigureAwait(false);
             }
@@ -109,6 +142,57 @@ internal static class OpenAiCompatibleProtocol
 
         var baseDelay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
         return ClampRetryDelay(baseDelay + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500)));
+    }
+
+    internal static async Task<byte[]> ReadResponseBytesAsync(HttpContent content, CancellationToken cancellationToken, long maximumBytes = LibraryRules.MaximumProviderResultBytes)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumBytes);
+        if (content.Headers.ContentLength is long contentLength && contentLength > maximumBytes)
+        {
+            throw new ProviderAdapterException($"The provider result exceeds the {maximumBytes / 1_048_576:N0} MiB download limit.");
+        }
+
+        await using var source = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var destination = new MemoryStream();
+        var buffer = new byte[81_920];
+        long totalBytes = 0;
+        while (true)
+        {
+            var read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            if (read == 0) break;
+            totalBytes += read;
+            if (totalBytes > maximumBytes)
+            {
+                throw new ProviderAdapterException($"The provider result exceeds the {maximumBytes / 1_048_576:N0} MiB download limit.");
+            }
+            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+        }
+        return destination.ToArray();
+    }
+
+    internal static void VerifySha256Digest(byte[] bytes, IReadOnlyList<string> digestHeaders)
+    {
+        foreach (var value in digestHeaders)
+        {
+            foreach (var item in value.Split(','))
+            {
+                var separator = item.IndexOf('=');
+                if (separator <= 0 || !item[..separator].Trim().Equals("sha-256", StringComparison.OrdinalIgnoreCase)) continue;
+                var encoded = item[(separator + 1)..].Trim();
+                if (encoded.Length < 3 || encoded[0] != ':' || encoded[^1] != ':') throw new ProviderAdapterException("The provider supplied an invalid SHA-256 result digest.");
+                try
+                {
+                    var expected = Convert.FromBase64String(encoded[1..^1]);
+                    if (!CryptographicOperations.FixedTimeEquals(expected, SHA256.HashData(bytes))) throw new ProviderAdapterException("The provider result did not match its SHA-256 digest.");
+                    return;
+                }
+                catch (FormatException)
+                {
+                    throw new ProviderAdapterException("The provider supplied an invalid SHA-256 result digest.");
+                }
+            }
+        }
     }
 
     private static TimeSpan ClampRetryDelay(TimeSpan delay)
@@ -185,6 +269,7 @@ internal static class OpenAiCompatibleProtocol
 
     public static string BuildChatCompletionRequestBody(string providerModelId, string prompt, int resultCount, string? systemInstructions = null, TextGenerationSourceImage? sourceImage = null, GenerationSettings? settings = null, TextGenerationSourceImage? secondarySourceImage = null, TextGenerationSourceImage? tertiarySourceImage = null)
     {
+        var normalizedSettings = LibraryRules.ValidateGenerationSettings(settings ?? GenerationSettings.Empty);
         TextGenerationSourceImage?[] sourceImages = [sourceImage, secondarySourceImage, tertiarySourceImage];
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -192,11 +277,20 @@ internal static class OpenAiCompatibleProtocol
             writer.WriteStartObject();
             writer.WriteString("model", providerModelId);
             writer.WriteNumber("n", resultCount);
-            if (settings?.Temperature is { } temperature) writer.WriteNumber("temperature", temperature);
-            if (settings?.TopP is { } topP) writer.WriteNumber("top_p", topP);
-            if (settings?.MaxTokens is { } maxTokens) writer.WriteNumber("max_tokens", maxTokens);
-            if (settings?.FrequencyPenalty is { } frequencyPenalty) writer.WriteNumber("frequency_penalty", frequencyPenalty);
-            if (settings?.PresencePenalty is { } presencePenalty) writer.WriteNumber("presence_penalty", presencePenalty);
+            if (normalizedSettings.Temperature is { } temperature) writer.WriteNumber("temperature", temperature);
+            if (normalizedSettings.TopP is { } topP) writer.WriteNumber("top_p", topP);
+            if (normalizedSettings.MaxTokens is { } maxTokens) writer.WriteNumber("max_tokens", maxTokens);
+            if (normalizedSettings.FrequencyPenalty is { } frequencyPenalty) writer.WriteNumber("frequency_penalty", frequencyPenalty);
+            if (normalizedSettings.PresencePenalty is { } presencePenalty) writer.WriteNumber("presence_penalty", presencePenalty);
+            if (normalizedSettings.AdvancedJson is { } advancedJson)
+            {
+                using var advanced = JsonDocument.Parse(advancedJson);
+                foreach (var property in advanced.RootElement.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    property.Value.WriteTo(writer);
+                }
+            }
             writer.WriteStartArray("messages");
             if (!string.IsNullOrWhiteSpace(systemInstructions))
             {

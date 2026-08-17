@@ -13,7 +13,31 @@ namespace Mellow.SlopFactory.Tests;
 /// </summary>
 internal static class ProviderContractFixtures
 {
+    public const string OpenAiCompatibleModelsResponseV1 =
+        """{"data":[{"id":"__MODEL_ID__","name":"__MODEL_LABEL__"}]}""";
+
+    public const string OpenAiCompatibleChatCompletionRequestV1 =
+        """{"model":"__MODEL_ID__","n":__RESULT_COUNT__,"messages":[{"role":"user","content":"__PROMPT__"}]}""";
+
+    public const string OpenAiCompatibleChatCompletionResponseV1 =
+        """{"choices":[{"message":{"content":"__CONTENT__"}}],"usage":{"prompt_tokens":__PROMPT_TOKENS__,"completion_tokens":__COMPLETION_TOKENS__}}""";
+
+    public const string OpenAiCompatibleImageGenerationRequestV1 =
+        """{"model":"__MODEL_ID__","prompt":"__PROMPT__","n":__RESULT_COUNT__,"response_format":"b64_json"}""";
+
+    public const string OpenAiCompatibleImageGenerationResponseV1 =
+        """{"data":[{"b64_json":"__BASE64__"}]}""";
+
+    public const string OpenRouterImageRequestV1 =
+        """{"model":"__MODEL_ID__","prompt":"__PROMPT__","n":__RESULT_COUNT__}""";
+
     public const string OpenRouterImageResponseV1 = """{"data":[{"b64_json":"__BASE64__"}]}""";
+
+    public const string OpenRouterAudioSpeechRequestV1 =
+        """{"model":"__MODEL_ID__","input":"__PROMPT__","voice":"alloy","response_format":"mp3"}""";
+
+    public const string OpenRouterVideoSubmitRequestV1 =
+        """{"model":"__MODEL_ID__","prompt":"__PROMPT__"}""";
 
     public const string OpenRouterVideoSubmitResponseV1 = """{"id":"__JOB_ID__","polling_url":"__POLLING_URL__","status":"pending"}""";
 

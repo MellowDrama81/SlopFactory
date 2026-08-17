@@ -389,17 +389,74 @@ public sealed class GenerationQueueServiceTests
         await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
 
         connectivity.IsOffline = true;
-        queue.Enqueue(Snapshot("draft-2", secondModel.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), secondConnection.Id);
+        var pausedJobId = queue.Enqueue(Snapshot("draft-2", secondModel.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), secondConnection.Id);
         await Task.Delay(50);
 
         Assert.True(queue.IsPausedForConnectionLost);
         Assert.DoesNotContain("prompt2", adapter.InvokedPrompts);
         Assert.Equal(1, queue.RunningCount); // the already-running job is unaffected
+        Assert.Equal(GenerationJobPhase.PausedConnectionLost, queue.GetJobStatus(pausedJobId)!.Phase);
 
         adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
         await Task.Delay(50);
         Assert.DoesNotContain("prompt2", adapter.InvokedPrompts); // still paused even though a slot freed up
+    }
+
+    [Fact]
+    public async Task ResumeJobOnlyStartsTheExplicitlyApprovedPausedJob()
+    {
+        using var temporary = new TemporaryDirectory();
+        var connectivity = new FakeDeviceConnectivityStateProvider { IsOffline = true };
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), connectivity: connectivity);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Model", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var firstJobId = queue.Enqueue(Snapshot("draft-1", model.Id, "first", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        var secondJobId = queue.Enqueue(Snapshot("draft-2", model.Id, "second", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await Task.Delay(50);
+        connectivity.IsOffline = false;
+
+        Assert.True(queue.ResumeJob(secondJobId));
+        Assert.False(queue.ResumeJob("missing"));
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("second"));
+        Assert.DoesNotContain("first", adapter.InvokedPrompts);
+        Assert.Equal(GenerationJobPhase.PausedConnectionLost, queue.GetJobStatus(firstJobId)!.Phase);
+
+        adapter.Complete("second", new TextGenerationResult(["result2"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-2") is not null);
+    }
+
+    [Fact]
+    public async Task ResumeQueueForConnectionOnlyStartsTheExplicitlyApprovedConnection()
+    {
+        using var temporary = new TemporaryDirectory();
+        var connectivity = new FakeDeviceConnectivityStateProvider { IsOffline = true };
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), connectivity: connectivity);
+        var firstConnection = await CreateReadyConnectionAsync(workspace, "First");
+        var firstModel = await workspace.CreateModelAsync("First model", firstConnection.Id, "gpt-4o", GenerationMode.Text, true);
+        var secondConnection = await CreateReadyConnectionAsync(workspace, "Second");
+        var secondModel = await workspace.CreateModelAsync("Second model", secondConnection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var firstJobId = queue.Enqueue(Snapshot("draft-1", firstModel.Id, "first", workspace.Descriptor.GeneratedFolderId), firstConnection.Id);
+        var secondJobId = queue.Enqueue(Snapshot("draft-2", secondModel.Id, "second", workspace.Descriptor.GeneratedFolderId), secondConnection.Id);
+        await Task.Delay(50);
+        Assert.Equal(GenerationJobPhase.PausedConnectionLost, queue.GetJobStatus(firstJobId)!.Phase);
+        Assert.Equal(GenerationJobPhase.PausedConnectionLost, queue.GetJobStatus(secondJobId)!.Phase);
+
+        connectivity.IsOffline = false;
+        queue.ResumeQueueForConnection(firstConnection.Id);
+
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("first"));
+        Assert.DoesNotContain("second", adapter.InvokedPrompts);
+        Assert.Equal(GenerationJobPhase.PausedConnectionLost, queue.GetJobStatus(secondJobId)!.Phase);
+
+        adapter.Complete("first", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+        queue.ResumeQueueForConnection(secondConnection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("second"));
+        adapter.Complete("second", new TextGenerationResult(["result2"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-2") is not null);
     }
 
     [Fact]
@@ -411,13 +468,15 @@ public sealed class GenerationQueueServiceTests
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
         connectivity.IsOffline = true;
-        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        var pausedJobId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
         await Task.Delay(50);
         Assert.True(queue.IsPausedForConnectionLost);
+        Assert.Equal(GenerationJobPhase.PausedConnectionLost, queue.GetJobStatus(pausedJobId)!.Phase);
 
         connectivity.IsOffline = false; // connectivity returns, but the pause is manual-resume-only
         await Task.Delay(50);
         Assert.DoesNotContain("prompt1", adapter.InvokedPrompts);
+        Assert.Equal(GenerationJobPhase.PausedConnectionLost, queue.GetJobStatus(pausedJobId)!.Phase);
 
         queue.ResumeQueue();
 
@@ -452,11 +511,12 @@ public sealed class GenerationQueueServiceTests
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
-        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        var pausedJobId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
         await Task.Delay(50);
 
         Assert.True(queue.IsPausedForMeteredNetwork);
         Assert.DoesNotContain("prompt1", adapter.InvokedPrompts);
+        Assert.Equal(GenerationJobPhase.PausedMeteredNetwork, queue.GetJobStatus(pausedJobId)!.Phase);
 
         queue.ResumeQueue();
 
@@ -1308,6 +1368,72 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task RecoveryStagingServiceStreamsBytesToDiskWithoutRegisteringUntilComplete()
+    {
+        using var temporary = new TemporaryDirectory();
+        var registry = new FakePendingResultRegistryService();
+        var service = new RecoveryStagingService(registry, new FakeRecoveryStagingPathProvider(temporary.Child("staging")));
+        await using var source = new MemoryStream([5, 6, 7]);
+
+        var id = await service.StageFromStreamAsync("library-1", "My Library", "draft-1", source, "result.mp4", "video/mp4", declaredLength: 3);
+
+        Assert.Equal(new byte[] { 5, 6, 7 }, await service.ReadBytesAsync(id));
+        Assert.Equal(3, Assert.Single(service.GetAll()).ByteSize);
+
+        await using var staged = await service.OpenReadAsync(id);
+        using var copy = new MemoryStream();
+        await staged.CopyToAsync(copy);
+        Assert.Equal(new byte[] { 5, 6, 7 }, copy.ToArray());
+    }
+
+    [Fact]
+    public async Task RecoveryStagingServiceCleansUpWhenStreamStagingIsCancelled()
+    {
+        using var temporary = new TemporaryDirectory();
+        var stagingDirectory = temporary.Child("staging");
+        var registry = new FakePendingResultRegistryService();
+        var service = new RecoveryStagingService(registry, new FakeRecoveryStagingPathProvider(stagingDirectory));
+        await using var source = new MemoryStream([5, 6, 7]);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.StageFromStreamAsync("library-1", "My Library", "draft-1", source, "result.mp4", "video/mp4", cancellationToken: cancellation.Token));
+
+        Assert.Empty(service.GetAll());
+        Assert.Empty(Directory.EnumerateFiles(stagingDirectory));
+    }
+
+    [Fact]
+    public async Task RecyclingAConnectivityPausedDependencyKeepsItPausedUntilBothConditionsAreResolved()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, PngSignatureBytes);
+        var connectivity = new FakeDeviceConnectivityStateProvider { IsOffline = true };
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), connectivity: connectivity);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        var jobId = queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId, sourceFileId: sourceFile.Id), connection.Id);
+        await Task.Delay(50);
+        Assert.Equal(GenerationJobPhase.PausedConnectionLost, queue.GetJobStatus(jobId)!.Phase);
+
+        queue.NotifyFileRecycled(sourceFile.Id);
+        Assert.Equal(GenerationJobPhase.DependencyRecycled, queue.GetJobStatus(jobId)!.Phase);
+
+        connectivity.IsOffline = false;
+        queue.ResumeQueue();
+        Assert.Equal(GenerationJobPhase.DependencyRecycled, queue.GetJobStatus(jobId)!.Phase);
+        Assert.DoesNotContain("prompt1", adapter.InvokedPrompts);
+
+        queue.NotifyFileRestored(sourceFile.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+        adapter.Complete("prompt1", new TextGenerationResult(["result1"], null, null));
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+    }
+
+    [Fact]
     public async Task RecyclingASourceFilePausesAQueuedJobDependingOnItAndRestoringResumesIt()
     {
         using var temporary = new TemporaryDirectory();
@@ -1497,20 +1623,23 @@ public sealed class GenerationQueueServiceTests
     public async Task CancelWorkAndExitCancelsEveryQueuedJobAndRaisesExitConfirmed()
     {
         using var temporary = new TemporaryDirectory();
-        var (_, workspace, queue, adapter, preferences) = await CreateHarnessAsync(temporary.Child("library"));
+        var (libraries, workspace, queue, adapter, preferences) = await CreateHarnessAsync(temporary.Child("library"));
         var connection = await CreateReadyConnectionAsync(workspace, "Connection");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
         queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
         queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), connection.Id);
         await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
-        var coordinator = new WindowsExitCoordinator(queue, preferences);
+        var flushCount = 0;
+        libraries.Closing += () => { flushCount++; return Task.CompletedTask; };
+        var coordinator = new WindowsExitCoordinator(queue, preferences, libraries);
         var exitConfirmed = false;
         coordinator.ExitConfirmed += (_, _) => exitConfirmed = true;
 
-        coordinator.CancelWorkAndExit();
+        await coordinator.CancelWorkAndExitAsync();
 
         Assert.True(exitConfirmed);
         Assert.False(coordinator.PendingDecision);
+        Assert.Equal(1, flushCount);
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-2") is not null);
         Assert.True(queue.GetLastOutcomeForDraft("draft-2")!.CancelledBeforeSubmission);
     }

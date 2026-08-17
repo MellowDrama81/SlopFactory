@@ -267,6 +267,15 @@ else
                 <label for="generate-presence-penalty">@Strings["PresencePenalty"]</label>
                 <InputNumber id="generate-presence-penalty" @bind-Value="_form.PresencePenalty" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
                 <p class="muted">@Strings["PresencePenaltyHelp", LibraryRules.MinPresencePenalty, LibraryRules.MaxPresencePenalty]</p>
+
+                <label for="generate-advanced-settings">@Strings["AdvancedGenerationSettings"]</label>
+                <textarea id="generate-advanced-settings" rows="5" maxlength="65536" @bind="_form.AdvancedJson" @bind:event="oninput" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
+                <p class="muted">@Strings["AdvancedGenerationSettingsHelp", LibraryRules.MaximumAdvancedGenerationSettingsJsonBytes]</p>
+                @if (AdvancedSettingsPreview is { } preview)
+                {
+                    <p class="muted">@Strings["AdvancedGenerationSettingsPreview"]</p>
+                    <pre class="metadata-list">@preview</pre>
+                }
             </details>
         }
 
@@ -718,7 +727,8 @@ else
             TopP = draft.Settings.TopP,
             MaxTokens = draft.Settings.MaxTokens,
             FrequencyPenalty = draft.Settings.FrequencyPenalty,
-            PresencePenalty = draft.Settings.PresencePenalty
+            PresencePenalty = draft.Settings.PresencePenalty,
+            AdvancedJson = draft.Settings.AdvancedJson ?? string.Empty
         };
         _improvementModelId = draft.ImprovementModelId is not null && _models.Any(candidate => candidate.Id == draft.ImprovementModelId) ? draft.ImprovementModelId : string.Empty;
         _improvementGuidance = draft.ImprovementGuidance ?? string.Empty;
@@ -1055,8 +1065,8 @@ else
         if (_settingsConflict is not { } conflict) return [];
         var (systemInstructions, sourceFileId, secondarySourceFileId, tertiarySourceFileId) = CurrentSavedSettingFields();
         var settings = CurrentGenerationSettings();
-        (string Field, string Mine, string Theirs)[] rows =
-        [
+        var rows = new List<(string Field, string Mine, string Theirs)>
+        {
             (Strings["ReviewChangesModelField"], SelectedModel?.Label ?? Strings["Unavailable"], conflict.ModelLabel),
             (Strings["ReviewChangesPromptField"], _form.Prompt, conflict.Prompt),
             (Strings["ReviewChangesSystemInstructionsField"], systemInstructions ?? Strings["ReviewChangesNoValue"], conflict.SystemInstructions ?? Strings["ReviewChangesNoValue"]),
@@ -1070,7 +1080,11 @@ else
             (Strings["ReviewChangesMaxTokensField"], ResolveSettingValue(settings.MaxTokens), ResolveSettingValue(conflict.Settings.MaxTokens)),
             (Strings["ReviewChangesFrequencyPenaltyField"], ResolveSettingValue(settings.FrequencyPenalty), ResolveSettingValue(conflict.Settings.FrequencyPenalty)),
             (Strings["ReviewChangesPresencePenaltyField"], ResolveSettingValue(settings.PresencePenalty), ResolveSettingValue(conflict.Settings.PresencePenalty))
-        ];
+        };
+        if (!string.Equals(settings.AdvancedJson, conflict.Settings.AdvancedJson, StringComparison.Ordinal))
+        {
+            rows.Add((Strings["ReviewChangesAdvancedGenerationSettingsField"], Strings["AdvancedGenerationSettingsConfigured"], Strings["AdvancedGenerationSettingsChanged"]));
+        }
         return rows.Where(row => !string.Equals(row.Mine, row.Theirs, StringComparison.Ordinal)).ToList();
     }
 
@@ -1205,8 +1219,17 @@ else
     }
 
     private GenerationSettings CurrentGenerationSettings() => SelectedModelMode == GenerationMode.Text
-        ? new GenerationSettings(_form.Temperature, _form.TopP, _form.MaxTokens, _form.FrequencyPenalty, _form.PresencePenalty)
+        ? new GenerationSettings(_form.Temperature, _form.TopP, _form.MaxTokens, _form.FrequencyPenalty, _form.PresencePenalty, _form.AdvancedJson)
         : GenerationSettings.Empty;
+
+    private string? AdvancedSettingsPreview
+    {
+        get
+        {
+            try { return LibraryRules.BuildAdvancedGenerationSettingsPreview(CurrentGenerationSettings()); }
+            catch (LibraryValidationException) { return null; }
+        }
+    }
 
     private void ApplySavedSettingsResult(SavedGenerationSetting saved)
     {
@@ -1246,7 +1269,15 @@ else
             var sourceFileId = string.IsNullOrEmpty(_form.SourceFileId) ? null : _form.SourceFileId;
             var secondarySourceFileId = string.IsNullOrEmpty(_form.SecondarySourceFileId) ? null : _form.SecondarySourceFileId;
             var tertiarySourceFileId = string.IsNullOrEmpty(_form.TertiarySourceFileId) ? null : _form.TertiarySourceFileId;
-            var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, CurrentGenerationSettings(), secondarySourceFileId, tertiarySourceFileId);
+            GenerationSettings settings;
+            try { settings = LibraryRules.ValidateGenerationSettings(CurrentGenerationSettings()); }
+            catch (LibraryValidationException exception)
+            {
+                _message = exception.Message;
+                _isError = true;
+                return;
+            }
+            var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, sourceFileId, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, settings, secondarySourceFileId, tertiarySourceFileId);
             Queue.Enqueue(snapshot, model.ConnectionId);
             _message = null;
             _isError = false;
@@ -1350,5 +1381,6 @@ else
         public int? MaxTokens { get; set; }
         public double? FrequencyPenalty { get; set; }
         public double? PresencePenalty { get; set; }
+        public string AdvancedJson { get; set; } = string.Empty;
     }
 }

@@ -39,6 +39,10 @@ else
     {
         <section class="panel">
             <h2>@ConnectionLabel(group.Key)</h2>
+            @if (group.Any(entry => entry.Phase is GenerationJobPhase.PausedConnectionLost or GenerationJobPhase.PausedMeteredNetwork))
+            {
+                <button type="button" class="secondary" @onclick="() => Queue.ResumeQueueForConnection(group.Key)">@Strings["ResumeConnectionQueue"]</button>
+            }
             @if (Queue.IsConnectionAwaitingRateLimitReset(group.Key))
             {
                 <p class="notice" role="status">@Strings["RateLimitAwaitingReset"]</p>
@@ -53,6 +57,8 @@ else
                             {
                                 GenerationJobPhase.Running => Strings["Generating"],
                                 GenerationJobPhase.Monitoring => Strings["MonitoringAsyncJob"],
+                                GenerationJobPhase.PausedConnectionLost => Strings["QueuePausedConnectionLost"],
+                                GenerationJobPhase.PausedMeteredNetwork => Strings["QueuePausedMeteredNetwork"],
                                 GenerationJobPhase.DependencyRecycled when entry.NonRunnable => Strings["DependencyPermanentlyDeletedNotice"],
                                 GenerationJobPhase.DependencyRecycled => Strings["DependencyRecycledNotice"],
                                 _ => Strings["QueuePosition", entry.QueuePosition ?? 0]
@@ -60,6 +66,10 @@ else
                         </div>
                         <p>@entry.Prompt</p>
                         <div class="actions">
+                            @if (entry.Phase is GenerationJobPhase.PausedConnectionLost or GenerationJobPhase.PausedMeteredNetwork)
+                            {
+                                <button type="button" class="secondary" @onclick="() => Queue.ResumeJob(entry.JobId)">@Strings["ResumeGeneration"]</button>
+                            }
                             @if (entry.Phase == GenerationJobPhase.Queued)
                             {
                                 <button type="button" class="secondary" title="@Strings["MoveTabLeft"]" aria-label="@Strings["MoveTabLeft"]" disabled="@IsFirstQueued(entry)" @onclick="() => MoveJob(entry, -1)">‹</button>

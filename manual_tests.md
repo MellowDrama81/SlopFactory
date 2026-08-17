@@ -313,6 +313,57 @@ Perform this sequence once on Windows and once on Android using a fresh disposab
 
 **Pass:** dev and production packages coexist side by side without collision; About/diagnostics show accurate channel/version/build/application-ID values per build; the Windows default library survives a real uninstall/reinstall cycle (or, if it does not, this is filed as a defect rather than assumed fine); Android's app-specific library is removed on uninstall per its documented, intentionally different behavior; and downgrade installs are rejected by the OS on both platforms.
 
+## MT-25 — Removable-storage disconnect during an active commit and recovery staging
+
+1. Open a library on a removable/external drive (a USB stick or an Android external storage location). Start a video generation against it and, at the moment the result is about to commit (immediately after the provider finishes, before the app has finished writing the file into the library), physically disconnect the drive.
+2. Confirm the run is not lost silently: it should show a staged-for-recovery outcome rather than a raw error, and the result is held in `/recovery-staging` with its originating library name/path shown.
+3. Reconnect the drive and reopen the library. Confirm the staged entry offers **Export Copy** (saves the bytes to a location you choose, independent of the library) and **Discard** (with a confirmation warning) — verify both actions work and Discard actually removes the staged bytes from disk after confirming.
+4. With a staged entry still pending for a library, attempt **Forget Library** on that library from Library settings. Confirm it is blocked/warned rather than silently discarding the staged result.
+5. Repeat step 1 for a folder rename and a file export (not just video-generation commit) if time permits, to spot-check whether other write paths handle a mid-write disconnect as gracefully as generation does.
+
+**Pass:** a disconnect during the final write never loses the result outright; the recovery-staging page always shows the truth about what's staged and lets you keep (export) or discard it explicitly; Forget Library cannot silently orphan a staged result.
+
+## MT-26 — Windows notification-area tray icon and close-with-active-work behavior
+
+1. Launch the packaged Windows build, start a generation, and while it is still running, close the main window (X button or Alt+F4).
+2. Confirm a dialog appears offering **Keep Running**, **Cancel Work and Exit**, and **Return to App** — the window must not simply disappear or exit outright while work is active.
+3. Choose **Keep Running**. Confirm the window hides, a tray icon appears in the notification area with a tooltip reflecting the current running/queued counts, and the generation keeps progressing in the background.
+4. Double-click (or use the tray icon's menu) to reopen the window, and separately test the tray menu's exit action while work is still active — confirm it routes through the same decision dialog rather than exiting silently.
+5. Close the window again with active work, this time checking **Remember this choice**, then choose **Keep Running**. Close a third time and confirm the dialog no longer appears — it keeps running immediately. Clear the remembered choice from Library settings and confirm the dialog returns on the next close.
+6. Close the window with no active work at all. Confirm the app exits immediately with no dialog and no tray icon left behind.
+
+**Pass:** closing with active work always offers a real choice via the dialog and never silently exits or silently backgrounds; the tray icon accurately reflects activity; the remembered-choice setting works in both directions; closing with no active work is unaffected and exits cleanly.
+
+## MT-27 — Android background-transfer foreground service and permission flow
+
+1. On Android 13+, with notification permission not yet granted, start a video generation and immediately background the app (Home button, not force-stop).
+2. Confirm a notification-permission prompt appears at this point (not proactively at app launch) and, once granted, an ongoing/ongoing-style notification appears describing the active transfer while the app is backgrounded.
+3. Confirm the generation continues to progress and completes successfully while the app remains backgrounded, and the notification is dismissed/updated appropriately once the work finishes.
+4. Deny the notification permission instead and repeat: confirm the background transfer still completes (permission denial degrades the notification, not the transfer itself) and the app doesn't crash or repeatedly re-prompt.
+5. Force-stop the app from Android's app-info screen while a transfer is active in the background, then reopen the app. Confirm this is treated as an execution suspension on reopen rather than silently reported as a provider failure.
+
+**Pass:** the ongoing-notification permission is requested only when first actually needed; background transfers keep running and complete whether or not the permission was granted; a force-stop mid-transfer is recognized as suspension on the next launch rather than misreported as a provider-side failure.
+
+## MT-28 — Windows second-instance launch forwarding
+
+1. Launch the packaged Windows build normally, then attempt to launch a second instance (double-click the Start-menu tile again, or run the exe directly) while the first is still running.
+2. Confirm no second window/process appears — the existing instance's window is brought to the foreground instead.
+3. From File Explorer, double-click a supported file type associated with SlopFactory's import file-type association while the app is already running. Confirm the file activation is forwarded to the already-running instance (triggering the normal import-confirmation flow) rather than opening a second instance.
+4. Fully close the app (with no active work, so it exits normally), then repeat steps 1-3. Confirm a fresh single instance starts normally when none was already running.
+5. Force-kill the app process via Task Manager (simulating a crash) rather than closing it normally, then relaunch. Confirm the "SlopFactory did not close normally last time" notice appears, with a working link to `/diagnostics`.
+
+**Pass:** only one instance ever runs at a time; a second launch attempt (plain or file-activated) always redirects into the existing instance instead of starting a new one; an unclean previous exit is detected and surfaced on the next launch.
+
+## MT-29 — Accessibility: screen reader pass and contrast/touch-target verification
+
+1. Enable Narrator (Windows) and navigate the primary navigation, `/generate`, `/library`, and the generation queue/history screens using only the keyboard and Narrator's readout. Confirm every interactive control has a meaningful accessible name/role and focus order is logical.
+2. Repeat with TalkBack enabled on Android for the equivalent screens, including the compact tab switcher.
+3. Confirm status/progress indicators (queued, generating, failed, partially completed) are distinguishable without relying on color alone (icon, text, or pattern in addition to color).
+4. Enable Windows high-contrast mode and confirm text and controls remain legible and usable (this overlaps MT-01; specifically re-check any screen touched by Milestone 4 — recovery staging, diagnostics, the exit-decision dialog, the tray menu).
+5. On a touch device, confirm all interactive controls meet the touch-target minimum size, including on screens added in Milestone 4.
+
+**Pass:** every core screen is fully operable and comprehensible via Narrator/TalkBack alone; status is never conveyed by color alone; high-contrast and touch-target requirements hold on Milestone 4's new screens as well as the pre-existing ones.
+
 ## Reporting
 
 For each test case, record:

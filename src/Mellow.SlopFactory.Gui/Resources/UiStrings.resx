@@ -790,6 +790,12 @@
   <data name="FrequencyPenaltyHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be between {0} and {1}.</value></data>
   <data name="PresencePenalty" xml:space="preserve"><value>Presence penalty</value></data>
   <data name="PresencePenaltyHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be between {0} and {1}.</value></data>
+  <data name="AdvancedGenerationSettings" xml:space="preserve"><value>Advanced JSON settings</value></data>
+  <data name="AdvancedGenerationSettingsHelp" xml:space="preserve"><value>Optional JSON object (up to {0:N0} bytes). It cannot override managed request fields.</value></data>
+  <data name="AdvancedGenerationSettingsPreview" xml:space="preserve"><value>Sanitized request preview</value></data>
+  <data name="ReviewChangesAdvancedGenerationSettingsField" xml:space="preserve"><value>Advanced JSON settings</value></data>
+  <data name="AdvancedGenerationSettingsConfigured" xml:space="preserve"><value>Configured</value></data>
+  <data name="AdvancedGenerationSettingsChanged" xml:space="preserve"><value>Changed (values redacted)</value></data>
   <data name="UseProviderDefault" xml:space="preserve"><value>Use provider default</value></data>
   <data name="FilterByStatus" xml:space="preserve"><value>Status</value></data>
   <data name="FilterByMode" xml:space="preserve"><value>Type</value></data>
@@ -806,6 +812,8 @@
   <data name="QueuePausedConnectionLost" xml:space="preserve"><value>Paused — connection lost. New submissions will not be sent until you resume.</value></data>
   <data name="QueuePausedMeteredNetwork" xml:space="preserve"><value>Paused — this connection is metered and the metered-network setting requires confirmation before sending new submissions.</value></data>
   <data name="ResumeQueue" xml:space="preserve"><value>Resume queue</value></data>
+  <data name="ResumeConnectionQueue" xml:space="preserve"><value>Resume this connection's queue</value></data>
+  <data name="ResumeGeneration" xml:space="preserve"><value>Resume this generation</value></data>
   <data name="DirtyDraftsDetected" xml:space="preserve"><value>{0} draft tab(s) may have unsaved edits from a previous session — SlopFactory restored the last version it successfully saved.</value></data>
   <data name="NavQueue" xml:space="preserve"><value>Queue</value></data>
   <data name="QueuePageTitle" xml:space="preserve"><value>Queue · SlopFactory</value></data>

@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Net.Sockets;
 using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Infrastructure.Providers;
 
@@ -15,7 +17,8 @@ public static class DependencyInjection
         // from user-initiated generation cancellation.
         services.AddHttpClient<OpenAiProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddHttpClient<GenericOpenAiCompatibleProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
-        services.AddHttpClient<OpenRouterProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddHttpClient<OpenRouterProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(CreateOpenRouterHttpHandler);
         services.AddHttpClient<DeepInfraProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<OpenAiProviderAdapter>());
         services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<GenericOpenAiCompatibleProviderAdapter>());
@@ -24,5 +27,46 @@ public static class DependencyInjection
         services.AddSingleton<IProviderAdapterResolver, ProviderAdapterResolver>();
         return services;
     }
-}
 
+    // OpenRouter returns provider-hosted result URLs. Resolve each hostname here and connect to the
+    // validated address directly so DNS cannot switch a previously validated public host to a
+    // private address between validation and connection. The original host remains in the request
+    // URI, preserving normal HTTPS SNI and certificate validation.
+    private static SocketsHttpHandler CreateOpenRouterHttpHandler() => CreateOpenRouterHttpHandler(Dns.GetHostAddressesAsync);
+
+    internal static SocketsHttpHandler CreateOpenRouterHttpHandler(Func<string, CancellationToken, Task<IPAddress[]>> resolveHost) => new()
+    {
+        AllowAutoRedirect = false,
+        UseProxy = false,
+        ConnectCallback = (context, cancellationToken) => ConnectToValidatedPublicAddressAsync(context, resolveHost, cancellationToken)
+    };
+
+    private static async ValueTask<Stream> ConnectToValidatedPublicAddressAsync(SocketsHttpConnectionContext context, Func<string, CancellationToken, Task<IPAddress[]>> resolveHost, CancellationToken cancellationToken)
+    {
+        var addresses = await resolveHost(context.DnsEndPoint.Host, cancellationToken).ConfigureAwait(false);
+        var permittedAddresses = addresses.Where(address => !ResultUrlValidator.IsBlockedAddress(address)).ToArray();
+        if (permittedAddresses.Length == 0)
+        {
+            throw new HttpRequestException($"The host '{context.DnsEndPoint.Host}' resolved to a disallowed network address.");
+        }
+
+        Exception? lastFailure = null;
+        foreach (var address in permittedAddresses)
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), cancellationToken).ConfigureAwait(false);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (Exception exception) when (exception is SocketException or OperationCanceledException)
+            {
+                socket.Dispose();
+                if (exception is OperationCanceledException) throw;
+                lastFailure = exception;
+            }
+        }
+
+        throw new HttpRequestException($"Could not connect to the result host '{context.DnsEndPoint.Host}'.", lastFailure);
+    }
+}

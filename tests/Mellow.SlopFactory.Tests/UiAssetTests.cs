@@ -678,8 +678,9 @@ public sealed class UiAssetTests
                      "TabSwitcherCompactLabel", "ManageTabs", "SearchTabs", "CloseTabSwitcher", "RenameTabAction",
                      "SavedSettingsRecycledTitle", "SavedSettingsRecycledMessage", "RestoreAndSaveSettings", "SavedSettingsSourceDeleted",
                      "DraftModelRecycled", "RestoreModelAction", "DraftModelDeleted", "ChooseReplacementModel", "CostUnknownNotice",
-                     "GenerationSettingsHeading", "Temperature", "TemperatureHelp", "TopP", "TopPHelp", "MaxTokens", "MaxTokensHelp",
-                     "FrequencyPenalty", "FrequencyPenaltyHelp", "PresencePenalty", "PresencePenaltyHelp",
+                      "GenerationSettingsHeading", "Temperature", "TemperatureHelp", "TopP", "TopPHelp", "MaxTokens", "MaxTokensHelp",
+                      "FrequencyPenalty", "FrequencyPenaltyHelp", "PresencePenalty", "PresencePenaltyHelp", "AdvancedGenerationSettings", "AdvancedGenerationSettingsHelp", "AdvancedGenerationSettingsPreview",
+                      "ReviewChangesAdvancedGenerationSettingsField", "AdvancedGenerationSettingsConfigured", "AdvancedGenerationSettingsChanged",
                      "ReviewChangesTemperatureField", "ReviewChangesTopPField", "ReviewChangesMaxTokensField",
                      "ReviewChangesFrequencyPenaltyField", "ReviewChangesPresencePenaltyField", "UseProviderDefault"
                  })
@@ -779,7 +780,7 @@ public sealed class UiAssetTests
                  {
                      "QueuePageTitle", "QueueHeading", "QueueDescription", "QueueEmpty", "GenerateEyebrow", "Generating",
                      "QueuePosition", "MoveTabLeft", "MoveTabRight", "CancelGeneration", "NavGenerate", "Unknown",
-                     "EnergySaverCapActive"
+                      "EnergySaverCapActive", "ResumeConnectionQueue", "ResumeGeneration"
                  })
         {
             Assert.Contains($"name=\"{key}\"", resources, StringComparison.Ordinal);

@@ -8,7 +8,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 34;
+    public const int SchemaVersion = 35;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -17,6 +17,9 @@ public static class LibraryRules
     public const int MaximumMetadataValueUtf8Bytes = 1_048_576;
     public const int MaximumEditableTextUtf8Bytes = 4_194_304;
     public const int MaximumGenerationTextUtf8Bytes = 1_048_576;
+    /// <summary>Largest individual provider result the current in-memory transfer pipeline accepts.
+    /// Downloads are rejected while reading, even when the server omits or lies about Content-Length.</summary>
+    public const long MaximumProviderResultBytes = 536_870_912;
 
     public static string ValidateGenerationTextLength(string value, string fieldName)
     {
@@ -54,6 +57,14 @@ public static class LibraryRules
     public const double MaxFrequencyPenalty = 2.0;
     public const double MinPresencePenalty = -2.0;
     public const double MaxPresencePenalty = 2.0;
+    public const int MaximumAdvancedGenerationSettingsJsonBytes = 65_536;
+
+    private static readonly HashSet<string> ReservedAdvancedGenerationSettingKeys = new(StringComparer.Ordinal)
+    {
+        "model", "messages", "n", "stream", "temperature", "top_p", "max_tokens", "frequency_penalty", "presence_penalty"
+    };
+
+    private static readonly string[] SensitiveAdvancedGenerationSettingKeyFragments = ["api_key", "apikey", "authorization", "token", "secret", "password"];
 
     public static GenerationSettings ValidateGenerationSettings(GenerationSettings settings)
     {
@@ -77,7 +88,98 @@ public static class LibraryRules
         {
             throw new LibraryValidationException($"Presence penalty must be between {MinPresencePenalty} and {MaxPresencePenalty}, or left blank to use the provider default.");
         }
-        return settings;
+        if (string.IsNullOrWhiteSpace(settings.AdvancedJson)) return settings with { AdvancedJson = null };
+        if (Encoding.UTF8.GetByteCount(settings.AdvancedJson) > MaximumAdvancedGenerationSettingsJsonBytes)
+        {
+            throw new LibraryValidationException($"Advanced generation settings must not exceed {MaximumAdvancedGenerationSettingsJsonBytes:N0} UTF-8 bytes.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(settings.AdvancedJson, new JsonDocumentOptions { AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow });
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new LibraryValidationException("Advanced generation settings must be a JSON object.");
+            }
+            ValidateJsonElement(document.RootElement, 0, new JsonNodeCounter());
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (ReservedAdvancedGenerationSettingKeys.Contains(property.Name))
+                {
+                    throw new LibraryValidationException($"Advanced generation settings cannot override the managed '{property.Name}' field.");
+                }
+                ValidateKnownAdvancedGenerationSettingType(property);
+            }
+            return settings with { AdvancedJson = document.RootElement.GetRawText() };
+        }
+        catch (JsonException exception)
+        {
+            throw new LibraryValidationException($"Advanced generation settings must be valid JSON: {exception.Message}");
+        }
+    }
+
+    private static void ValidateKnownAdvancedGenerationSettingType(JsonProperty property)
+    {
+        var valid = property.Name switch
+        {
+            "response_format" => property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.String,
+            "seed" or "top_logprobs" => property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetInt64(out _),
+            "logprobs" or "parallel_tool_calls" => property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            "user" => property.Value.ValueKind == JsonValueKind.String,
+            "stop" => property.Value.ValueKind == JsonValueKind.String ||
+                      property.Value.ValueKind == JsonValueKind.Array && property.Value.EnumerateArray().All(value => value.ValueKind == JsonValueKind.String),
+            _ => true
+        };
+        if (!valid)
+        {
+            throw new LibraryValidationException($"Advanced generation setting '{property.Name}' has an invalid JSON type.");
+        }
+    }
+
+    /// <summary>Returns a normalized local preview of advanced request settings, redacting values
+    /// whose key names conventionally contain credentials. Validation intentionally runs first so a
+    /// malformed object never gets presented as a sendable request.</summary>
+    public static string? BuildAdvancedGenerationSettingsPreview(GenerationSettings settings)
+    {
+        var normalized = ValidateGenerationSettings(settings);
+        if (normalized.AdvancedJson is null) return null;
+        using var document = JsonDocument.Parse(normalized.AdvancedJson);
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        {
+            WriteSanitizedJsonElement(writer, document.RootElement, redactValue: false);
+        }
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static void WriteSanitizedJsonElement(Utf8JsonWriter writer, JsonElement element, bool redactValue)
+    {
+        if (redactValue)
+        {
+            writer.WriteStringValue("[redacted]");
+            return;
+        }
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in element.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    var sensitive = SensitiveAdvancedGenerationSettingKeyFragments.Any(fragment => property.Name.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+                    WriteSanitizedJsonElement(writer, property.Value, sensitive);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var child in element.EnumerateArray()) WriteSanitizedJsonElement(writer, child, redactValue: false);
+                writer.WriteEndArray();
+                break;
+            default:
+                element.WriteTo(writer);
+                break;
+        }
     }
 
     public static void ValidateSourceFileIds(string? primary, string? secondary, string? tertiary)

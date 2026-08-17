@@ -868,7 +868,8 @@ public sealed record GenerationSettings(
     double? TopP = null,
     int? MaxTokens = null,
     double? FrequencyPenalty = null,
-    double? PresencePenalty = null)
+    double? PresencePenalty = null,
+    string? AdvancedJson = null)
 {
     public static readonly GenerationSettings Empty = new();
 }

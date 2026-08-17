@@ -22,7 +22,13 @@ public enum GenerationJobPhase
     /// dependency automatically; restoring every paused dependency returns it to <see cref="Queued"/>
     /// (plan.md:414), while a permanently deleted dependency requires the user to cancel and resubmit
     /// from the originating tab (plan.md:415).</summary>
-    DependencyRecycled = 3
+    DependencyRecycled = 3,
+    /// <summary>A never-submitted job held after the device lost connectivity. It keeps its
+    /// position and resumes only after the user explicitly resumes the queue.</summary>
+    PausedConnectionLost = 4,
+    /// <summary>A never-submitted job held by the configured metered-network policy. It keeps its
+    /// position and resumes only after the user explicitly resumes the queue.</summary>
+    PausedMeteredNetwork = 5
 }
 
 /// <summary>Device-wide policy for starting a new submission while the device's current connection
@@ -165,6 +171,8 @@ public sealed class GenerationQueueService
     private const string MeteredNetworkPolicyPreferenceKey = "slopfactory.queue.meterednetworkpolicy";
     private bool _connectionLostLatched;
     private bool _meteredPauseLatched;
+    private readonly HashSet<string> _connectionsWithConnectivityOverride = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _jobsWithConnectivityOverride = new(StringComparer.Ordinal);
     // Set by ResumeQueue() so a manual resume actually lets a job start even while still offline/
     // metered (the whole point of an explicit override) instead of immediately re-latching on the
     // very next Pump() call; cleared the moment a real connectivity transition is observed, since a
@@ -184,10 +192,11 @@ public sealed class GenerationQueueService
     public bool IsPausedForMeteredNetwork { get { lock (_gate) return _meteredPauseLatched; } }
 
     /// <summary>
-    /// Clears both connectivity-driven pause latches and re-pumps immediately. There is no separate
-    /// per-connection "Resume All for This Connection" action: connectivity/metered state is a
-    /// device-wide condition, not a per-connection one, so a second button with the identical effect
+    /// Clears both connectivity-driven pause latches and re-pumps every queue immediately. Callers
+    /// that need narrower approval can instead use <see cref="ResumeQueueForConnection"/> or
+    /// <see cref="ResumeJob"/>.
     /// would be redundant — every connection's queue resumes together.
+    /// This historical assumption is superseded by the narrower actions described above.
     /// </summary>
     public void ResumeQueue()
     {
@@ -196,9 +205,42 @@ public sealed class GenerationQueueService
             _connectionLostLatched = false;
             _meteredPauseLatched = false;
             _connectivityOverrideActive = true;
+            ResumeConnectivityPausedJobsLocked();
         }
         RaiseChanged();
         Pump();
+    }
+
+    /// <summary>Explicitly resumes every pre-submission job for one connection while retaining the
+    /// connectivity pause for other connections. The override is cleared by the next observed network
+    /// transition, so a changed network always requires a fresh user decision.</summary>
+    public void ResumeQueueForConnection(string connectionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+        lock (_gate)
+        {
+            _connectionsWithConnectivityOverride.Add(connectionId);
+            ResumeConnectivityPausedJobsLocked(connectionId);
+        }
+        RaiseChanged();
+        Pump();
+    }
+
+    /// <summary>Explicitly resumes one connectivity-paused job without approving any other job on
+    /// its connection. Returns <see langword="false"/> when the job is not awaiting a connectivity
+    /// decision (for example, it is already running or blocked on a recycled dependency).</summary>
+    public bool ResumeJob(string jobId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
+        lock (_gate)
+        {
+            if (!_jobsById.TryGetValue(jobId, out var job) || !IsConnectivityPaused(job.Phase)) return false;
+            _jobsWithConnectivityOverride.Add(jobId);
+            job.Phase = GenerationJobPhase.Queued;
+        }
+        RaiseChanged();
+        Pump();
+        return true;
     }
 
     public MeteredNetworkTransferPolicy MeteredNetworkPolicy
@@ -272,7 +314,7 @@ public sealed class GenerationQueueService
     public event EventHandler? Changed;
     public event EventHandler<GenerationJobOutcome>? JobCompleted;
 
-    public int QueuedCount { get { lock (_gate) return _jobsById.Values.Count(job => job.Phase == GenerationJobPhase.Queued); } }
+    public int QueuedCount { get { lock (_gate) return _jobsById.Values.Count(job => IsPreSubmissionPhase(job.Phase)); } }
     public int RunningCount { get { lock (_gate) return _runningTotal; } }
 
     public void Start()
@@ -333,8 +375,13 @@ public sealed class GenerationQueueService
     private void OnConnectivityChanged(object? sender, EventArgs args)
     {
         // A genuine network transition deserves a fresh pause decision rather than inheriting
-        // whatever override an earlier ResumeQueue() call left active.
-        lock (_gate) _connectivityOverrideActive = false;
+        // whatever global or per-connection override an earlier resume call left active.
+        lock (_gate)
+        {
+            _connectivityOverrideActive = false;
+            _connectionsWithConnectivityOverride.Clear();
+            _jobsWithConnectivityOverride.Clear();
+        }
         RaiseChanged();
         Pump();
     }
@@ -401,10 +448,11 @@ public sealed class GenerationQueueService
         lock (_gate)
         {
             if (!_jobsById.TryGetValue(jobId, out var job)) return;
-            if (job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled)
+            if (IsPreSubmissionPhase(job.Phase))
             {
                 _queues[job.ConnectionId].Remove(job);
                 _jobsById.Remove(jobId);
+                _jobsWithConnectivityOverride.Remove(jobId);
                 RemoveActiveJobId(job.DraftId, jobId);
                 RecordOutcome(job.DraftId, new GenerationJobOutcome(jobId, job.DraftId, null, null, CancelledBeforeSubmission: true, DateTimeOffset.UtcNow));
                 changed = true;
@@ -502,7 +550,7 @@ public sealed class GenerationQueueService
 
     private int? ComputeQueuePosition(QueuedJob job)
     {
-        if (job.Phase != GenerationJobPhase.Queued && job.Phase != GenerationJobPhase.DependencyRecycled) return null;
+        if (!IsPreSubmissionPhase(job.Phase)) return null;
         var position = 1;
         foreach (var candidate in _queues[job.ConnectionId])
         {
@@ -525,10 +573,11 @@ public sealed class GenerationQueueService
                 // whose workspace was actually disposed (switched away from with no active work, or
                 // now genuinely closed) needs to be torn down here.
                 if (_libraries.IsWorkspaceOpen(job.Workspace)) continue;
-                if (job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled)
+                if (IsPreSubmissionPhase(job.Phase))
                 {
                     _queues[job.ConnectionId].Remove(job);
                     _jobsById.Remove(job.JobId);
+                    _jobsWithConnectivityOverride.Remove(job.JobId);
                     RemoveActiveJobId(job.DraftId, job.JobId);
                 }
                 else if (job.Cancellation is { } cancellation)
@@ -599,26 +648,26 @@ public sealed class GenerationQueueService
     /// in the cascade warning" requirement.</summary>
     public IReadOnlyList<string> GetQueuedJobTitlesForConnection(string connectionId)
     {
-        lock (_gate) return _jobsById.Values.Where(job => job.ConnectionId == connectionId && job.Phase == GenerationJobPhase.Queued).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
+        lock (_gate) return _jobsById.Values.Where(job => job.ConnectionId == connectionId && IsPreSubmissionPhase(job.Phase)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
     }
 
     /// <summary>Same as <see cref="GetQueuedJobTitlesForConnection"/> but for a model.</summary>
     public IReadOnlyList<string> GetQueuedJobTitlesForModel(string modelId)
     {
-        lock (_gate) return _jobsById.Values.Where(job => job.Snapshot.ModelId == modelId && job.Phase == GenerationJobPhase.Queued).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
+        lock (_gate) return _jobsById.Values.Where(job => job.Snapshot.ModelId == modelId && IsPreSubmissionPhase(job.Phase)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
     }
 
     /// <summary>Submitted-tab titles of every job (queued or already dependency-paused) that
     /// references this file, for a recycle/permanent-deletion preview (plan.md:409-410).</summary>
     public IReadOnlyList<string> GetQueuedJobTitlesForFile(string fileId)
     {
-        lock (_gate) return _jobsById.Values.Where(job => job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled && ReferencesFile(job.Snapshot, fileId)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
+        lock (_gate) return _jobsById.Values.Where(job => IsPreSubmissionPhase(job.Phase) && ReferencesFile(job.Snapshot, fileId)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
     }
 
     /// <summary>Same as <see cref="GetQueuedJobTitlesForFile"/> but for a destination folder.</summary>
     public IReadOnlyList<string> GetQueuedJobTitlesForFolder(string folderId)
     {
-        lock (_gate) return _jobsById.Values.Where(job => job.Phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled && ReferencesFolder(job.Snapshot, folderId)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
+        lock (_gate) return _jobsById.Values.Where(job => IsPreSubmissionPhase(job.Phase) && ReferencesFolder(job.Snapshot, folderId)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
     }
 
     /// <summary>Cascade-cancels every still-queued (never yet submitted) job depending on this
@@ -630,7 +679,7 @@ public sealed class GenerationQueueService
     public void CancelQueuedJobsForConnection(string connectionId)
     {
         List<string> toCancel;
-        lock (_gate) toCancel = _jobsById.Values.Where(job => job.ConnectionId == connectionId && job.Phase == GenerationJobPhase.Queued).Select(job => job.JobId).ToList();
+        lock (_gate) toCancel = _jobsById.Values.Where(job => job.ConnectionId == connectionId && IsPreSubmissionPhase(job.Phase)).Select(job => job.JobId).ToList();
         foreach (var jobId in toCancel) Cancel(jobId);
     }
 
@@ -638,7 +687,7 @@ public sealed class GenerationQueueService
     public void CancelQueuedJobsForModel(string modelId)
     {
         List<string> toCancel;
-        lock (_gate) toCancel = _jobsById.Values.Where(job => job.Snapshot.ModelId == modelId && job.Phase == GenerationJobPhase.Queued).Select(job => job.JobId).ToList();
+        lock (_gate) toCancel = _jobsById.Values.Where(job => job.Snapshot.ModelId == modelId && IsPreSubmissionPhase(job.Phase)).Select(job => job.JobId).ToList();
         foreach (var jobId in toCancel) Cancel(jobId);
     }
 
@@ -649,9 +698,9 @@ public sealed class GenerationQueueService
         {
             foreach (var job in _jobsById.Values)
             {
-                if (job.Phase is not (GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled) || !references(job.Snapshot, dependencyId)) continue;
+                if (!IsPreSubmissionPhase(job.Phase) || !references(job.Snapshot, dependencyId)) continue;
                 if (job.RecycledDependencyIds.Add(dependencyId)) changed = true;
-                if (job.Phase == GenerationJobPhase.Queued) { job.Phase = GenerationJobPhase.DependencyRecycled; changed = true; }
+                if (job.Phase != GenerationJobPhase.DependencyRecycled) { job.Phase = GenerationJobPhase.DependencyRecycled; changed = true; }
             }
         }
         if (changed) RaiseChanged();
@@ -666,7 +715,7 @@ public sealed class GenerationQueueService
             {
                 if (job.Phase != GenerationJobPhase.DependencyRecycled || !references(job.Snapshot, dependencyId) || !job.RecycledDependencyIds.Remove(dependencyId)) continue;
                 changed = true;
-                if (job.RecycledDependencyIds.Count == 0 && !job.NonRunnable) job.Phase = GenerationJobPhase.Queued;
+                if (job.RecycledDependencyIds.Count == 0 && !job.NonRunnable) job.Phase = GetConnectivityPhaseLocked();
             }
         }
         if (changed) { RaiseChanged(); Pump(); }
@@ -679,9 +728,9 @@ public sealed class GenerationQueueService
         {
             foreach (var job in _jobsById.Values)
             {
-                if (job.Phase is not (GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled) || !references(job.Snapshot, dependencyId)) continue;
+                if (!IsPreSubmissionPhase(job.Phase) || !references(job.Snapshot, dependencyId)) continue;
                 job.NonRunnable = true;
-                if (job.Phase == GenerationJobPhase.Queued) job.Phase = GenerationJobPhase.DependencyRecycled;
+                if (job.Phase != GenerationJobPhase.DependencyRecycled) job.Phase = GenerationJobPhase.DependencyRecycled;
                 changed = true;
             }
         }
@@ -709,6 +758,41 @@ public sealed class GenerationQueueService
     /// <summary>Same as <see cref="NotifyFilePermanentlyDeleted"/> but for a destination folder.</summary>
     public void NotifyFolderPermanentlyDeleted(string folderId) => MarkDependencyPermanentlyDeleted(folderId, ReferencesFolder);
 
+    private static bool IsConnectivityPaused(GenerationJobPhase phase) =>
+        phase is GenerationJobPhase.PausedConnectionLost or GenerationJobPhase.PausedMeteredNetwork;
+
+    private static bool IsPreSubmissionPhase(GenerationJobPhase phase) =>
+        phase is GenerationJobPhase.Queued or GenerationJobPhase.DependencyRecycled or
+            GenerationJobPhase.PausedConnectionLost or GenerationJobPhase.PausedMeteredNetwork;
+
+    private GenerationJobPhase GetConnectivityPhaseLocked() =>
+        _connectionLostLatched ? GenerationJobPhase.PausedConnectionLost :
+        _meteredPauseLatched ? GenerationJobPhase.PausedMeteredNetwork :
+        GenerationJobPhase.Queued;
+
+    private bool IsConnectivityPauseOverriddenLocked(QueuedJob job) =>
+        _connectivityOverrideActive || _connectionsWithConnectivityOverride.Contains(job.ConnectionId) ||
+        _jobsWithConnectivityOverride.Contains(job.JobId);
+
+    private void ApplyConnectivityPauseLocked()
+    {
+        var phase = GetConnectivityPhaseLocked();
+        foreach (var job in _jobsById.Values)
+        {
+            if (!IsConnectivityPauseOverriddenLocked(job) &&
+                (job.Phase == GenerationJobPhase.Queued || IsConnectivityPaused(job.Phase))) job.Phase = phase;
+        }
+    }
+
+    private void ResumeConnectivityPausedJobsLocked(string? connectionId = null)
+    {
+        if (connectionId is null && (_connectionLostLatched || _meteredPauseLatched)) return;
+        foreach (var job in _jobsById.Values)
+        {
+            if ((connectionId is null || job.ConnectionId == connectionId) && IsConnectivityPaused(job.Phase)) job.Phase = GenerationJobPhase.Queued;
+        }
+    }
+
     private void Pump()
     {
         while (true)
@@ -730,7 +814,8 @@ public sealed class GenerationQueueService
                         if (policy is MeteredNetworkTransferPolicy.WifiOnly or MeteredNetworkTransferPolicy.Ask) _meteredPauseLatched = true;
                     }
                 }
-                if (_connectionLostLatched || _meteredPauseLatched) break;
+                if (_connectionLostLatched || _meteredPauseLatched) ApplyConnectivityPauseLocked();
+                ResumeConnectivityPausedJobsLocked();
 
                 if (_runningTotal >= EffectiveDeviceCap) break;
                 var count = _connectionOrder.Count;
@@ -814,6 +899,7 @@ public sealed class GenerationQueueService
         lock (_gate)
         {
             _jobsById.Remove(job.JobId);
+            _jobsWithConnectivityOverride.Remove(job.JobId);
             RemoveActiveJobId(job.DraftId, job.JobId);
             RecordOutcome(job.DraftId, outcome);
             if (!job.SlotReleased)

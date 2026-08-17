@@ -1,5 +1,7 @@
 # Milestone 2 completion checklist
 
+> Current release status is owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md). This file is retained as Milestone 2 implementation history.
+
 This checklist breaks the Milestone 2 scope in `plan.md` ("Core generation workflow") into
 independently completable units, following the same convention as `milestone1.md`. An item is
 complete only when its stated automated verification passes; platform-labelled items also require
@@ -163,8 +165,8 @@ in parallel. Both milestones must be complete before the first public release.
 - [x] Add a Models list page and add/edit form (label, connection, mode, provider model ID) with a
       **Load Models** action calling the connection's adapter and a manual-entry fallback; verify
       the localization guard and manual add/edit/delete flow.
-- [ ] Add Audio and Video to `GenerationMode` when their generation workflows are implemented in a
-      later milestone slice (kept out of this slice's UI since no adapter yet produces them).
+- [x] Add Audio and Video to `GenerationMode`. Completed by Milestone 3 together with the shared
+      result-commit pipeline and asynchronous video-job support; retained here as historical scope.
 - [x] Add model catalogue caching with retrieval timestamp, **Stale**/**Possibly Stale** labelling,
       and **Not Currently Listed** handling for a configured model absent from a refreshed
       catalogue (schema v15: `connections.catalogue_retrieved_at`/`catalogue_possibly_stale` and a
@@ -242,8 +244,10 @@ in parallel. Both milestones must be complete before the first public release.
 - [x] Add `IProviderAdapter`/`IProviderAdapterResolver` contracts and implement the OpenAI and
       generic OpenAI-compatible adapters' connection test and model listing; verify against a fake
       `HttpMessageHandler` covering success, authentication failure and unreachable-host cases.
-- [ ] Add the local fake HTTP provider covering authentication, discovery, streaming, asynchronous
+- [x] Add the local fake HTTP provider covering authentication, discovery, streaming, asynchronous
       jobs, rate limits, moderation, redirects, downloads and errors described under Testing.
+      `FakeProviderServer` is the stateful in-memory provider; `FakeHttpMessageHandler` remains the
+      lighter per-response helper for focused adapter tests.
 - [x] Add per-modality relative-path overrides and per-modality enable/disable for the generic
       OpenAI-compatible connection (schema v18: 6 new `connections` columns, all-enabled/no-override
       by default). `LibraryRules.NormalizeGenericModalitySettings`/`NormalizeRelativePathOverride`
@@ -260,8 +264,10 @@ in parallel. Both milestones must be complete before the first public release.
       only the model-listing endpoint is actually called, matching the documented "without issuing
       paid generation requests" rule, but chat/image endpoints are never probed at all (not even
       non-mutating checks); that remains open.
-- [ ] Add the 1min.AI, OpenRouter and DeepInfra adapters (scoped for Milestone 3 alongside audio
-      and video generation).
+- [x] Add the OpenRouter and DeepInfra adapters. Completed by Milestone 3 and retained here as
+      historical scope.
+- [ ] Add the 1min.AI adapter after its current official request, response and polling contracts can
+      be confirmed. This remains owned by `IMPLEMENTATION_COMPLETION_CHECKLIST.md` section 5.
 - [ ] Add signed adapter versioning for normalized snapshot formats so older history remains
       readable across adapter updates.
 
@@ -944,9 +950,9 @@ in parallel. Both milestones must be complete before the first public release.
 - [x] Add adapter unit tests using a fake `HttpMessageHandler` for the OpenAI and generic
       OpenAI-compatible connection-test, model-listing, chat-completion text-generation and
       images/generations paths.
-- [ ] Expand the fake HTTP provider into a shared reusable test fixture covering the full Testing
-      section requirements (streaming, async jobs, rate limits, moderation, redirects, downloads,
-      errors) before Milestone 3 adapters are added.
+- [x] Expand the fake HTTP provider into a shared reusable test fixture covering the full Testing
+      section requirements (streaming, async jobs, rate limits, moderation, redirects, downloads
+      and errors). `FakeProviderServerTests` exercises the complete stateful scenario surface.
 - [x] Add crash-injection coverage for generation-history's multi-result commit pipeline, mirroring
       the Milestone 1 export crash-injection technique (`CancelledExportLeavesNoDestinationOrPartialFile`)
       of forcing an interruption at a specific boundary and asserting the recovery state is safe

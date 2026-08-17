@@ -26,9 +26,9 @@ public interface IWindowsExitCoordinator
     /// by the native handler listening for <see cref="KeptRunning"/>, not by this call.</summary>
     void KeepRunning(bool remember);
 
-    /// <summary>plan.md:445 — cancels every active job, then raises <see cref="ExitConfirmed"/> so
-    /// the native handler can perform the real process exit.</summary>
-    void CancelWorkAndExit();
+    /// <summary>Flushes draft edits, cancels every active job, then raises <see cref="ExitConfirmed"/>
+    /// so the native handler can perform the real process exit.</summary>
+    Task CancelWorkAndExitAsync();
 
     /// <summary>plan.md:439 (semantics reused for the active-work dialog) — leaves everything
     /// unchanged; the window was already prevented from closing.</summary>
@@ -39,7 +39,7 @@ public interface IWindowsExitCoordinator
     event EventHandler? ExitConfirmed;
 }
 
-public sealed class WindowsExitCoordinator(GenerationQueueService queue, IAppPreferenceStore preferences) : IWindowsExitCoordinator
+public sealed class WindowsExitCoordinator(GenerationQueueService queue, IAppPreferenceStore preferences, AppLibraryState? libraryState = null) : IWindowsExitCoordinator
 {
     private const string RememberedKeepRunningKey = "slopfactory.windows.keeprunningremembered";
 
@@ -66,9 +66,16 @@ public sealed class WindowsExitCoordinator(GenerationQueueService queue, IAppPre
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    public void CancelWorkAndExit()
+    public async Task CancelWorkAndExitAsync()
     {
         PendingDecision = false;
+        if (libraryState is not null)
+        {
+            try { await libraryState.FlushForSuspensionAsync().ConfigureAwait(false); }
+            // Process exit must remain available even if a best-effort draft flush fails. The normal
+            // dirty-draft recovery marker preserves the user's ability to review unsaved work later.
+            catch { }
+        }
         foreach (var entry in queue.GetSnapshot()) queue.Cancel(entry.JobId);
         ExitConfirmed?.Invoke(this, EventArgs.Empty);
     }

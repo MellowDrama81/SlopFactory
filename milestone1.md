@@ -1,5 +1,7 @@
 # Milestone 1 completion checklist
 
+> Current release status is owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md). This file is retained as Milestone 1 implementation history.
+
 This checklist replaces broad remaining Milestone 1 themes with independently completable units. An item is complete only when its stated automated verification passes; platform-labelled items also require the applicable device check in [manual_tests.md](manual_tests.md).
 
 ## Platform shell and baseline UI

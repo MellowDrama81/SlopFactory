@@ -1,5 +1,7 @@
 # Milestone 3 completion checklist
 
+> Current release status is owned by [IMPLEMENTATION_COMPLETION_CHECKLIST.md](IMPLEMENTATION_COMPLETION_CHECKLIST.md). This file is retained as Milestone 3 implementation history.
+
 This checklist breaks the Milestone 3 scope in `plan.md` ("Provider and media breadth": 1min.AI,
 OpenRouter and DeepInfra adapters; audio and video generation; provider-specific capabilities;
 asynchronous remote jobs; file-transfer variations; usage and cost handling; rate-limit behavior;

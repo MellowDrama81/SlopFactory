@@ -22,6 +22,12 @@ public sealed class NewProviderAdapterTests
         {
             Assert.Equal("https://openrouter.ai/api/v1/images", request.RequestUri!.ToString());
             Assert.Equal("Bearer secret-key", request.Headers.GetValues("Authorization").Single());
+            Assert.Equal(
+                ProviderContractFixtures.OpenRouterImageRequestV1
+                    .Replace("__MODEL_ID__", "bytedance-seed/seedream-4.5")
+                    .Replace("__PROMPT__", "A watercolor fox")
+                    .Replace("__RESULT_COUNT__", "1"),
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
@@ -41,6 +47,11 @@ public sealed class NewProviderAdapterTests
         {
             callCount++;
             Assert.Equal("https://openrouter.ai/api/v1/audio/speech", request.RequestUri!.ToString());
+            Assert.Equal(
+                ProviderContractFixtures.OpenRouterAudioSpeechRequestV1
+                    .Replace("__MODEL_ID__", "openai/gpt-4o-mini-tts")
+                    .Replace("__PROMPT__", "Hello there"),
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             return FakeHttpMessageHandler.BinaryResponse([1, 2, 3, (byte)callCount], "audio/mpeg");
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
@@ -60,6 +71,11 @@ public sealed class NewProviderAdapterTests
         var handler = new FakeHttpMessageHandler(request =>
         {
             Assert.Equal("https://openrouter.ai/api/v1/videos", request.RequestUri!.ToString());
+            Assert.Equal(
+                ProviderContractFixtures.OpenRouterVideoSubmitRequestV1
+                    .Replace("__MODEL_ID__", "google/veo-3.1")
+                    .Replace("__PROMPT__", "A cat riding a skateboard"),
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.Accepted, ProviderContractFixtures.OpenRouterVideoSubmitResponseV1.Replace("__JOB_ID__", "abc123").Replace("__POLLING_URL__", "https://openrouter.ai/api/v1/videos/abc123"));
         });
         var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
@@ -129,6 +145,95 @@ public sealed class NewProviderAdapterTests
 
         Assert.Equal(AsyncGenerationPollOutcome.Completed, result.Outcome);
         Assert.Equal([firstVideo, secondVideo], result.Files!);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterDoesNotSendProviderCredentialsToACrossOriginResultUrl()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url == "https://openrouter.ai/api/v1/videos/abc123")
+            {
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"id":"abc123","status":"completed","unsigned_urls":["https://cdn.example.test/results/abc123.mp4"]}""");
+            }
+            Assert.Equal("https://cdn.example.test/results/abc123.mp4", url);
+            Assert.False(request.Headers.Contains("Authorization"));
+            return FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "video/mp4");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.Completed, result.Outcome);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterRejectsAPrivateRedirectTargetBeforeFetchingIt()
+    {
+        var privateTargetFetched = false;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url == "https://openrouter.ai/api/v1/videos/abc123")
+            {
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"id":"abc123","status":"completed","unsigned_urls":["https://cdn.example.test/results/abc123.mp4"]}""");
+            }
+            if (url == "https://cdn.example.test/results/abc123.mp4") return FakeHttpMessageHandler.Redirect(HttpStatusCode.TemporaryRedirect, "https://private.example.test/result.mp4");
+            privateTargetFetched = true;
+            return FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "video/mp4");
+        });
+        Task<IPAddress[]> Resolve(string host, CancellationToken _) => Task.FromResult(host == "private.example.test" ? new[] { IPAddress.Loopback } : new[] { IPAddress.Parse("93.184.216.34") });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), Resolve);
+
+        var result = await adapter.PollVideoGenerationAsync(CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1"), "secret-key", "abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.CompletedDownloadFailed, result.Outcome);
+        Assert.False(privateTargetFetched);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterRejectsACompletedVideoWithANonVideoDeclaredMediaType()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+            return url == "https://openrouter.ai/api/v1/videos/abc123"
+                ? FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["https://cdn.example.test/results/abc123"]}""")
+                : FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "text/html");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+
+        var result = await adapter.PollVideoGenerationAsync(CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1"), "secret-key", "abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.CompletedDownloadFailed, result.Outcome);
+        Assert.Contains("unexpected media type", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterRejectsAResultRedirectLoopAfterTheBoundedLimit()
+    {
+        var downloadRequests = 0;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url == "https://openrouter.ai/api/v1/videos/abc123")
+            {
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"abc123","status":"completed","unsigned_urls":["https://cdn.example.test/results/abc123"]}""");
+            }
+            downloadRequests++;
+            return FakeHttpMessageHandler.Redirect(HttpStatusCode.TemporaryRedirect, "https://cdn.example.test/results/abc123");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+
+        var result = await adapter.PollVideoGenerationAsync(CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1"), "secret-key", "abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.CompletedDownloadFailed, result.Outcome);
+        Assert.Equal(6, downloadRequests);
+        Assert.Contains("maximum redirect count", result.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]

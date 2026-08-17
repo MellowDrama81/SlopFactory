@@ -52,7 +52,7 @@ public sealed class GenerationDraftTests
         var secondarySource = Assert.Single(await workspace.ImportAsync([secondarySourcePath], workspace.Descriptor.RootFolderId)).File!;
         var tertiarySource = Assert.Single(await workspace.ImportAsync([tertiarySourcePath], workspace.Descriptor.RootFolderId)).File!;
 
-        var settings = new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5);
+        var settings = new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5, "{\"response_format\":{\"type\":\"json_object\"}}");
         var updated = await workspace.ReplaceDraftStateAsync(draft.Id, "My Tab", model.Id, "Write a haiku", "Respond in French.", null, 3, workspace.Descriptor.GeneratedFolderId, model.Id, "Be concise.", settings, secondarySource.Id, tertiarySource.Id);
 
         Assert.Equal("My Tab", updated.CustomTitle);

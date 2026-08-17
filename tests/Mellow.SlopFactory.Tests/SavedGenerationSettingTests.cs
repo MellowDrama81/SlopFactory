@@ -90,7 +90,7 @@ public sealed class SavedGenerationSettingTests
         await using var workspace = await factory.CreateAsync(root);
         var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
-        var settings = new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5);
+        var settings = new GenerationSettings(0.7, 0.9, 500, 0.5, -0.5, "{\"response_format\":{\"type\":\"json_object\"}}");
 
         var saved = await workspace.CreateSavedSettingAsync("My Preset", model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId, settings: settings);
         Assert.Equal(settings, saved.Settings);

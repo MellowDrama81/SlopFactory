@@ -96,7 +96,7 @@ public partial class App : MauiWinUIApplication
             appWindow.Show();
             window.Activate();
         };
-        trayIcon.ExitRequested += (_, _) => coordinator.CancelWorkAndExit();
+        trayIcon.ExitRequested += async (_, _) => await coordinator.CancelWorkAndExitAsync();
         coordinator.ExitConfirmed += (_, _) => Environment.Exit(0);
     }
 }
