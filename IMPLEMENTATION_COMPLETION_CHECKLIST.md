@@ -389,6 +389,16 @@ silently migrate to unrelated or replaced content.
 - [ ] Preserve the old tombstone and create a new file identity for reacquired bytes.
 - [ ] Warn and record **Provider Output Changed** when reacquired bytes do not match the tombstone.
 - [ ] Generate static audio waveform thumbnails in the regenerable preview cache.
+      Confirmed blocked, same tier as OneMinAi/DeepInfra: `PreviewCacheService` already generates
+      image thumbnails and video posters (via `PlatformImage`/platform-native video-frame APIs) but
+      has zero audio-decoding capability, and neither `Mellow.SlopFactory.Gui` nor
+      `Mellow.SlopFactory.Infrastructure` reference any audio-decoding library. Rendering a real
+      waveform needs compressed-audio-to-PCM decoding (mp3/wav/flac/ogg/aac/m4a are all accepted
+      today), which has no MAUI-provided cross-platform path and would require either a new
+      third-party dependency or hand-rolled per-platform decoders (Android `MediaExtractor`/
+      `MediaCodec`, Windows Media Foundation) — a new dependency/substantial platform-code decision,
+      not a bounded addition. plan.md's only mention is one clause with no format/resolution detail
+      to implement against.
 
 Done when: no draft dependency disappears silently, historical identities remain immutable and
 reacquisition never masquerades changed bytes as restoration.
