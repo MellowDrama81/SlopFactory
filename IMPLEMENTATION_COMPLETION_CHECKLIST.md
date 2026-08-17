@@ -395,15 +395,45 @@ reacquisition never masquerades changed bytes as restoration.
 
 ## 12. Complete removable-storage recovery
 
-- [ ] Automatically reconcile staged results into their intended library after its volume returns.
-- [ ] Delete a staged copy only after the intended library commit succeeds durably.
+- [x] Automatically reconcile staged results into their intended library after its volume returns.
+      `StagedResultEntry` now carries `GenerationRecordId`/`Position` (plan.md:329's "generation
+      identifier"), set when `GenerationQueueService` stages a video result during a volume-unavailable
+      commit failure (also advancing the durable record to `GenerationStatus.AwaitingLibrary`).
+      `GenerationQueueService.ReconcileStagedResultsAsync`, called from `Start()` and on every library
+      switch, commits each staged group into its record via the existing
+      `RecordMediaGenerationResultAsync(..., existingGenerationRecordId:)` path — no adapter call
+      needed, since the bytes and the record's own prompt/model/settings are already durable. Entries
+      staged before this linkage existed (`GenerationRecordId` null) remain manual-only, matching the
+      documented fallback. Only the video/`AsyncGenerationPollOutcome` staging path is covered; image/
+      audio generation doesn't use recovery staging at all today (see section 7's still-open
+      bounded-download-streaming gap).
+- [x] Delete a staged copy only after the intended library commit succeeds durably.
+      `ReconcileStagedResultsAsync` only calls `DiscardAsync` after
+      `RecordMediaGenerationResultAsync` returns successfully; a reconciliation failure (caught per
+      generation-record group so one bad group can't block the rest) leaves the entry staged for a
+      later attempt.
 - [ ] Retry a staged download when internal storage was insufficient and the provider result is
       still available.
-- [ ] Notify the user generically when a staged result is awaiting its library.
-- [ ] Preserve provenance during reconciliation without placing prompts, credentials or sensitive
+      Still unimplemented: no "insufficient internal staging storage" detection or provider-side
+      retry exists — today's staging path only reacts to the *destination* library's volume being
+      unavailable, not to the device's internal staging storage itself running out mid-write.
+- [x] Notify the user generically when a staged result is awaiting its library.
+      `MainLayout.razor` now shows a device-wide count-only banner ("N result(s) are awaiting their
+      library and may expire remotely") linking to Recovery Staging, alongside the pre-existing
+      passive nav link and per-library `LibrarySettings.razor` flag.
+- [x] Preserve provenance during reconciliation without placing prompts, credentials or sensitive
       settings in the device-wide staging registry.
+      `StagedResultEntry`'s new fields are only an opaque record ID and integer position — no prompt,
+      model settings or credential ever entered the registry; reconciliation reads the actual
+      prompt/model/settings from the durable `GenerationRecord` in the library database, never from
+      the staging registry itself.
 - [ ] Add fault-injection tests for volume removal during prepare, commit, post-commit cleanup and
       application restart.
+      Covered: commit-time volume removal (staging occurs) and the reconciliation half (a second
+      "session" against the same staging registry after the volume returns), both driven through a
+      real staged→reconciled round trip. Not covered: removal during prepare, during post-commit
+      cleanup specifically, or while the application is still running (only the restart-driven
+      reconciliation path is tested).
 
 Done when: a missing volume cannot lose a completed provider result or create duplicate committed
 outputs, and recovery exposes no sensitive content outside its library.

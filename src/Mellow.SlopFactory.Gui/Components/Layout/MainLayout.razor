@@ -3,6 +3,7 @@
 @inject IncomingImportService IncomingImports
 @inject ManagedContentWatchService ContentWatch
 @inject GenerationQueueService Queue
+@inject IRecoveryStagingService RecoveryStaging
 @inject IThemePreferenceService Theme
 @inject IntegrityScanRecommendationService ScanRecommendation
 @inject CredentialReconciliationService CredentialReconciliation
@@ -80,6 +81,13 @@
                 @Strings["DirtyDraftsDetected", LibraryState.DirtyDraftIds.Count]
                 <a href="/generate">@Strings["NavGenerate"]</a>
                 <button class="ghost" @onclick="LibraryState.DismissDirtyDrafts">@Strings["Dismiss"]</button>
+            </div>
+        }
+        @if (RecoveryStaging.GetAll().Count is var _stagedCount && _stagedCount > 0)
+        {
+            <div class="notice" role="status">
+                @Strings["StagedResultsAwaitingLibrary", _stagedCount]
+                <a href="/recovery-staging">@Strings["NavRecoveryStaging"]</a>
             </div>
         }
         @if (LibraryState.BackgroundLibraries.Count > 0)

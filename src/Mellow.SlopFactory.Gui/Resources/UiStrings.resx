@@ -945,6 +945,7 @@
   <data name="DiscardStagedResultWarning" xml:space="preserve"><value>This permanently deletes the recovered bytes. Export a copy first if you want to keep them.</value></data>
   <data name="ResultStagedForRecoveryNotice" xml:space="preserve"><value>The provider finished this result, but its destination library was unavailable, so it was staged for recovery instead of being lost.</value></data>
   <data name="NavRecoveryStaging" xml:space="preserve"><value>Recovery staging</value></data>
+  <data name="StagedResultsAwaitingLibrary" xml:space="preserve"><value>{0} result(s) are awaiting their library and may expire remotely.</value></data>
   <data name="LibraryHasRecoveryDataNotice" xml:space="preserve"><value>This library has unreconciled draft edits or staged provider results and cannot be forgotten until they are resolved.</value></data>
   <data name="DeleteRecoveryDataAndForget" xml:space="preserve"><value>Delete Recovery Data and Forget</value></data>
   <data name="ConfirmDeleteRecoveryDataAndForget" xml:space="preserve"><value>Confirm deleting recovery data and forgetting this library</value></data>

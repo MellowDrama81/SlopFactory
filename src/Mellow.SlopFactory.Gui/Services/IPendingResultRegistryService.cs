@@ -8,6 +8,12 @@ namespace Mellow.SlopFactory.Gui.Services;
 /// source-file content — only enough to let the user identify, preview, export or discard the file,
 /// and to link it back to its owning library and draft once that library is available again.
 /// </summary>
+/// <param name="GenerationRecordId">The durable generation record this staged result belongs to —
+/// plan.md:329's "generation identifier." Null for an entry staged before this field existed; such
+/// an entry can still be previewed/exported/discarded manually but is not eligible for automatic
+/// reconciliation, which needs the record to commit into.</param>
+/// <param name="Position">The result position within <paramref name="GenerationRecordId"/> this
+/// staged file belongs to.</param>
 public sealed record StagedResultEntry(
     string Id,
     string LibraryId,
@@ -16,7 +22,9 @@ public sealed record StagedResultEntry(
     string SafeFileName,
     string MediaType,
     long ByteSize,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? GenerationRecordId = null,
+    int? Position = null);
 
 /// <summary>Device-wide index of staged results — deliberately a thin registry of metadata only; the
 /// actual bytes live in <see cref="IRecoveryStagingPathProvider.StagingDirectory"/>, addressed by

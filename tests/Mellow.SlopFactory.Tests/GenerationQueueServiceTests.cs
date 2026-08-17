@@ -1434,6 +1434,58 @@ public sealed class GenerationQueueServiceTests
         Assert.Equal("video/mp4", staged.MediaType);
         Assert.Equal(Mp4SignatureBytes.LongLength, staged.ByteSize);
         Assert.Equal(Mp4SignatureBytes, await recoveryStaging.ReadBytesAsync(staged.Id));
+        Assert.NotNull(staged.GenerationRecordId);
+        Assert.Equal(0, staged.Position);
+        var stagedRecord = await workspace.GetGenerationRecordAsync(staged.GenerationRecordId!);
+        Assert.Equal(GenerationStatus.AwaitingLibrary, stagedRecord.Status);
+    }
+
+    [Fact]
+    public async Task StagedVideoResultsAreAutomaticallyReconciledOnceTheLibraryVolumeReturns()
+    {
+        using var temporary = new TemporaryDirectory();
+        var libraryPath = temporary.Child("library");
+        var stagingDirectory = temporary.Child("staging");
+        var registry = new FakePendingResultRegistryService();
+        var recoveryStaging = new RecoveryStagingService(registry, new FakeRecoveryStagingPathProvider(stagingDirectory));
+        var availabilityProbe = new FakeLibraryAvailabilityProbe();
+        const string draftId = "draft-video-reconcile";
+
+        // "First session": the video result completes but the library volume is unavailable at
+        // commit time, so it's staged (tagged with its generation record/position) instead of
+        // discarded, then the app "closes."
+        {
+            var (libraries, workspace, queue, adapter, _) = await CreateHarnessAsync(libraryPath, videoPollInterval: TimeSpan.FromMilliseconds(200), recoveryStaging: recoveryStaging, availabilityProbe: availabilityProbe);
+            var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+            var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+            adapter.NextVideoJobId = "video-reconcile";
+            adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null));
+
+            queue.Enqueue(Snapshot(draftId, model.Id, "A cat skateboarding", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+            Directory.Delete(Path.Combine(libraryPath, "media"), recursive: true);
+            availabilityProbe.IsAvailableValue = false;
+
+            await WaitUntilAsync(() => queue.GetLastOutcomeForDraft(draftId) is not null, timeoutMs: 5000);
+            Assert.True(queue.GetLastOutcomeForDraft(draftId)!.StagedForRecovery);
+            Assert.Single(registry.GetAll());
+
+            await libraries.DisposeAsync();
+        }
+
+        // The volume returns.
+        Directory.CreateDirectory(Path.Combine(libraryPath, "media"));
+        availabilityProbe.IsAvailableValue = true;
+
+        // "Second session": reopening the library with the same device-wide staging registry
+        // automatically reconciles the staged result into it, without any manual export/discard
+        // action and without ever re-invoking the provider adapter.
+        var (_, workspace2, queue2, _, _) = await CreateHarnessAsync(libraryPath, recoveryStaging: recoveryStaging, availabilityProbe: availabilityProbe, autoStart: false);
+        queue2.Start();
+
+        GenerationRecord? reconciled = null;
+        await WaitUntilAsync(() => (reconciled = workspace2.GetGenerationHistoryAsync().GetAwaiter().GetResult().SingleOrDefault(record => record.Prompt == "A cat skateboarding")) is { Status: GenerationStatus.Completed });
+        Assert.Single(reconciled!.ResultFileIds);
+        Assert.Empty(registry.GetAll());
     }
 
     [Fact]

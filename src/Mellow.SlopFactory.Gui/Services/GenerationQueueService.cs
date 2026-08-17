@@ -360,6 +360,87 @@ public sealed class GenerationQueueService
         if (_connectivity is not null) _connectivity.Changed += OnConnectivityChanged;
         _ = ResumePendingDownloadsAsync();
         _ = ResumeInFlightGenerationsAsync();
+        _ = ReconcileStagedResultsAsync();
+    }
+
+    /// <summary>
+    /// Automatic staged-result reconciliation (plan.md:325: "When the intended library returns, the
+    /// staged result is moved into it atomically and the staged copy is deleted"). Every staged entry
+    /// tagged with a generation record belonging to the now-open library is committed into that
+    /// record; the staged copy is only discarded once that commit durably succeeds. Entries staged
+    /// before generation-record linkage existed (<see cref="StagedResultEntry.GenerationRecordId"/>
+    /// is null) are left for manual export/discard only — there is nothing to reconcile them into.
+    /// Called once when the queue starts and again whenever the active library changes.
+    /// </summary>
+    private async Task ReconcileStagedResultsAsync()
+    {
+        if (_recoveryStaging is null) return;
+        var workspace = _libraries.Workspace;
+        if (workspace is null) return;
+        var libraryId = workspace.Descriptor.LibraryId;
+        IReadOnlyList<StagedResultEntry> staged;
+        try
+        {
+            staged = _recoveryStaging.GetAll();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+        var groups = staged
+            .Where(entry => entry.LibraryId == libraryId && entry.GenerationRecordId is not null)
+            .GroupBy(entry => entry.GenerationRecordId!);
+        foreach (var group in groups)
+        {
+            try
+            {
+                await ReconcileStagedGenerationGroupAsync(workspace, group.Key, group.OrderBy(entry => entry.Position).ToArray()).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException or Microsoft.Data.Sqlite.SqliteException)
+            {
+                // Left staged for a later attempt (next Start()/library switch, or a manual export or
+                // discard) — this loop must never let one bad group stop reconciliation of the rest.
+            }
+        }
+    }
+
+    private async Task ReconcileStagedGenerationGroupAsync(ILibraryWorkspace workspace, string generationRecordId, StagedResultEntry[] entries)
+    {
+        GenerationRecord record;
+        try
+        {
+            record = await workspace.GetGenerationRecordAsync(generationRecordId).ConfigureAwait(false);
+        }
+        catch (RecordNotFoundException)
+        {
+            return;
+        }
+        if (record.ModelId is null) return;
+        Model model;
+        try
+        {
+            model = await workspace.GetModelAsync(record.ModelId).ConfigureAwait(false);
+        }
+        catch (RecordNotFoundException)
+        {
+            return;
+        }
+
+        var files = new List<byte[]>(entries.Length);
+        foreach (var entry in entries)
+        {
+            files.Add(await _recoveryStaging!.ReadBytesAsync(entry.Id).ConfigureAwait(false));
+        }
+
+        await workspace.RecordMediaGenerationResultAsync(model.Id, record.Prompt, record.ResultCount, record.DestinationFolderId, files, null, record.PromptImprovementRecordId, existingGenerationRecordId: record.Id).ConfigureAwait(false);
+
+        // Only reached once the commit above durably succeeded — plan.md:325's "the staged copy is
+        // deleted" only after reconciliation, never before.
+        foreach (var entry in entries)
+        {
+            await _recoveryStaging!.DiscardAsync(entry.Id).ConfigureAwait(false);
+        }
+        RaiseChanged();
     }
 
     /// <summary>
@@ -811,6 +892,7 @@ public sealed class GenerationQueueService
         RaiseChanged();
         _ = ResumePendingDownloadsAsync();
         _ = ResumeInFlightGenerationsAsync();
+        _ = ReconcileStagedResultsAsync();
     }
 
     private static bool ReferencesFile(GenerationJobSnapshot snapshot, string fileId) =>
@@ -1480,11 +1562,14 @@ public sealed class GenerationQueueService
             // The destination volume is gone — not some other storage fault, which is why the
             // availability probe is checked only after catching a storage-shaped exception, never
             // for an ordinary provider/validation failure. Stage every already-downloaded file
-            // instead of silently discarding real, already-completed provider work (plan.md:323).
-            foreach (var file in files)
+            // instead of silently discarding real, already-completed provider work (plan.md:323),
+            // tagged with its intended generation record/position so a later reconciliation pass can
+            // commit it into that exact record once the library returns.
+            for (var position = 0; position < files.Count; position++)
             {
-                await _recoveryStaging.StageAsync(job.Workspace.Descriptor.LibraryId, job.Workspace.Descriptor.DisplayName, job.DraftId, file, $"video-result-{Guid.NewGuid():N}.mp4", "video/mp4", CancellationToken.None).ConfigureAwait(false);
+                await _recoveryStaging.StageAsync(job.Workspace.Descriptor.LibraryId, job.Workspace.Descriptor.DisplayName, job.DraftId, files[position], $"video-result-{Guid.NewGuid():N}.mp4", "video/mp4", job.GenerationRecordId, position, cancellationToken: CancellationToken.None).ConfigureAwait(false);
             }
+            AdvanceLocked(job, GenerationStatus.AwaitingLibrary);
             record = null;
             stagedForRecovery = true;
         }

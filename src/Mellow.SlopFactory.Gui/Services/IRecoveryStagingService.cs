@@ -12,12 +12,15 @@ public interface IRecoveryStagingService
     IReadOnlyList<StagedResultEntry> GetAll();
 
     /// <summary>Writes <paramref name="bytes"/> into the device-wide staging folder and registers a
-    /// new entry for them. Returns the new entry's ID.</summary>
-    Task<string> StageAsync(string libraryId, string libraryDisplayName, string draftId, byte[] bytes, string safeFileName, string mediaType, CancellationToken cancellationToken = default);
+    /// new entry for them. Returns the new entry's ID. <paramref name="generationRecordId"/>/
+    /// <paramref name="position"/> link the entry back to the durable generation record it belongs
+    /// to (plan.md:329's "generation identifier"), enabling automatic reconciliation once the
+    /// intended library returns.</summary>
+    Task<string> StageAsync(string libraryId, string libraryDisplayName, string draftId, byte[] bytes, string safeFileName, string mediaType, string? generationRecordId = null, int? position = null, CancellationToken cancellationToken = default);
 
     /// <summary>Streams a provider result into recovery storage without first materializing it in
     /// memory. The stream is bounded by the shared provider-result limit.</summary>
-    Task<string> StageFromStreamAsync(string libraryId, string libraryDisplayName, string draftId, Stream source, string safeFileName, string mediaType, long? declaredLength = null, CancellationToken cancellationToken = default);
+    Task<string> StageFromStreamAsync(string libraryId, string libraryDisplayName, string draftId, Stream source, string safeFileName, string mediaType, long? declaredLength = null, string? generationRecordId = null, int? position = null, CancellationToken cancellationToken = default);
 
     /// <summary>Reads a staged result's bytes back — used by **Export Copy** (plan.md:331) and by the
     /// sandboxed preview (plan.md:330). Throws if the entry is unknown.</summary>
@@ -35,14 +38,14 @@ public sealed class RecoveryStagingService(IPendingResultRegistryService registr
 {
     public IReadOnlyList<StagedResultEntry> GetAll() => registry.GetAll();
 
-    public async Task<string> StageAsync(string libraryId, string libraryDisplayName, string draftId, byte[] bytes, string safeFileName, string mediaType, CancellationToken cancellationToken = default)
+    public async Task<string> StageAsync(string libraryId, string libraryDisplayName, string draftId, byte[] bytes, string safeFileName, string mediaType, string? generationRecordId = null, int? position = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(bytes);
         await using var source = new MemoryStream(bytes, writable: false);
-        return await StageFromStreamAsync(libraryId, libraryDisplayName, draftId, source, safeFileName, mediaType, bytes.LongLength, cancellationToken).ConfigureAwait(false);
+        return await StageFromStreamAsync(libraryId, libraryDisplayName, draftId, source, safeFileName, mediaType, bytes.LongLength, generationRecordId, position, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<string> StageFromStreamAsync(string libraryId, string libraryDisplayName, string draftId, Stream source, string safeFileName, string mediaType, long? declaredLength = null, CancellationToken cancellationToken = default)
+    public async Task<string> StageFromStreamAsync(string libraryId, string libraryDisplayName, string draftId, Stream source, string safeFileName, string mediaType, long? declaredLength = null, string? generationRecordId = null, int? position = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (declaredLength is > LibraryRules.MaximumProviderResultBytes)
@@ -67,7 +70,7 @@ public sealed class RecoveryStagingService(IPendingResultRegistryService registr
                 await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             }
             await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
-            registry.Add(new StagedResultEntry(id, libraryId, libraryDisplayName, draftId, safeFileName, mediaType, length, DateTimeOffset.UtcNow));
+            registry.Add(new StagedResultEntry(id, libraryId, libraryDisplayName, draftId, safeFileName, mediaType, length, DateTimeOffset.UtcNow, generationRecordId, position));
             return id;
         }
         catch
