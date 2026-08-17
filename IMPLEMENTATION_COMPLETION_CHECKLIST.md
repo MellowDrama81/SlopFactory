@@ -468,12 +468,33 @@ artifact coverage rather than only source-level markup or CSS assertions.
 ## 14. Complete automated release verification
 
 - [ ] Add process-kill/crash tests for queue, draft, export, session and staging recovery.
-- [ ] Add volume-disconnect-mid-commit and dependency-recycled queue-pause tests.
+      Partial: queue (`GenerationQueueServiceTests`'s restart-recovery tests, section 3) and staging
+      (the staged→reconciled round trip added in section 12) both simulate a hard process exit via
+      `libraries.DisposeAsync()` then a fresh harness reopening the same on-disk library. Draft,
+      export and session crash recovery remain untested here.
+- [x] Add volume-disconnect-mid-commit and dependency-recycled queue-pause tests.
+      Volume-disconnect-mid-commit:
+      `AVideoResultIsStagedForRecoveryWhenItsLibraryBecomesUnavailableDuringTheFinalCommit` and
+      `StagedVideoResultsAreAutomaticallyReconciledOnceTheLibraryVolumeReturns` (section 12).
+      Dependency-recycled queue-pause: extensive pre-existing coverage in
+      `GenerationQueueServiceTests` (`ADependencyRecycledJobDoesNotBlockALaterQueuedJobOnTheSameConnectionFromRunning`
+      and others asserting `GenerationJobPhase.DependencyRecycled`).
 - [ ] Add second-instance launch-forwarding tests.
 - [ ] Add Android execution-suspension and notification permission tests where automation permits.
-- [ ] Run the complete unit/integration suite with zero failures.
-- [ ] Produce clean Windows Debug and Release builds.
-- [ ] Produce clean Android Debug and Release builds.
+      Partial: execution suspension is covered by
+      `BackgroundExecutionSuspensionCancelsRunningJobsAndFinalizesTheirRecordsDistinctlyFromAProviderFailure`
+      (section 4). Runtime notification-permission prompting is not automatable from this test
+      harness (it requires a real OS permission dialog) and remains a manual test (section 15).
+- [x] Run the complete unit/integration suite with zero failures.
+      597/597 passing as of this pass (`dotnet test tests/Mellow.SlopFactory.Tests`).
+- [x] Produce clean Windows Debug and Release builds.
+      `dotnet build src/Mellow.SlopFactory.Gui -f net10.0-windows10.0.22621.0 -c Debug` and `-c
+      Release` both succeed with 0 warnings/0 errors as of this pass. Unsigned/development-signed —
+      production Store/sideload signing is section 15's manual gate.
+- [x] Produce clean Android Debug and Release builds.
+      `dotnet build src/Mellow.SlopFactory.Gui -f net10.0-android -c Debug` and `-c Release` both
+      succeed with 0 warnings/0 errors as of this pass. Unsigned/debug-signed — production signing
+      (AAB/APK) is section 15's manual gate.
 - [ ] Verify diagnostic redaction, rolling retention, crash records and exported diagnostics.
 - [ ] Verify every user-visible string remains resource-backed and layouts tolerate longer and RTL
       test strings.
