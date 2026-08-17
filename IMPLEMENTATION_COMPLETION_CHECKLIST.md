@@ -81,7 +81,8 @@ can have multiple owners when implementation and release verification are intent
       absent-credential path is a no-op rather than a dynamically reported skip; it never creates
       an HTTP client or sends a request. A billable media smoke test remains pending an approved
       provider/model/cost selection.
-- [ ] Add 1min.AI to the harness when its adapter is implemented.
+- [x] Add 1min.AI to the harness when its adapter is implemented.
+      `LiveProviderSmokeTests.CreateAdapter` now has a `ProviderType.OneMinAi` case.
 
 Done when: ordinary tests never contact a real provider, all adapters use the shared fixture, and a
 credentialed developer can run bounded live smoke tests deliberately.
@@ -184,21 +185,38 @@ misreports OS suspension as a provider failure.
 
 ## 5. Complete provider adapters and model settings
 
-- [ ] Implement `ProviderType.OneMinAi` only after its current official request, response, polling,
+- [x] Implement `ProviderType.OneMinAi` only after its current official request, response, polling,
       status and error contracts have been confirmed.
-      No longer blocked on missing documentation — see `docs/developer/1minai-contract.md`. The docs
-      site is fetchable (superseding the "could not even be fetched" note in `milestone3.md`), and
-      one model per modality is now live-verified end to end: chat (`gpt-4o-mini`), image
-      (`stable-diffusion-xl-1024-v1-0`, after the docs' own `black-forest-labs/flux-schnell` example
-      turned out to be a stale/rejected identifier), audio (`tts-1`), and video
-      (`lucataco/animate-diff:...`, confirmed genuinely synchronous — a non-`async` request blocks
-      the HTTP connection for the full render). Still open before implementation: the enum value and
-      test/harness scaffolding exist but no adapter body does; only one of ~41 image models and one
-      of 10 video models has a live-confirmed `promptObject` shape, and per the doc's own findings a
-      documented model identifier cannot be trusted without a live check, so each additional
-      image/video model the adapter supports needs its own verification pass, not a docs read alone.
-      The `async: true`/Get Result polling path also remains untested (every live call used the
-      synchronous default).
+      `OneMinAiProviderAdapter` implements text, image and audio against the confirmed contract in
+      `docs/developer/1minai-contract.md`: chat via `POST /api/chat-with-ai`
+      (`type: UNIFY_CHAT_WITH_AI`, text taken from `aiRecord.aiRecordDetail.resultObject[0]`); image
+      and audio via the shared `POST /api/features` envelope (`IMAGE_GENERATOR`/`TEXT_TO_SPEECH`),
+      downloading the completed result from the response's `temporaryUrl` (a third-party S3 host) with
+      the same redirect-bounded, SSRF-validated download path OpenRouter's video downloader uses, plus
+      the same DNS-rebinding-hardened `HttpClient` handler (`DependencyInjection.cs`). Two distinct
+      provider error envelopes are handled: chat's nested `{"error":{"message":...}}` and features'
+      top-level `{"errorCode":...,"message":...}` (confirmed live via the Flux Schnell rejection).
+      Deliberately scoped down from "every documented model" to what's actually confirmed: image
+      generation only encodes the one live-verified `promptObject` shape (Stable Diffusion XL's
+      prompt/samples/size, fixed at `1024x1024`); the other ~40 image models and 9 of 10 video models
+      each use their own undocumented `promptObject` field set per the doc's own findings, so a request
+      to one of those models is expected to surface as a clear provider error rather than being
+      guessed at. Video is **not implemented**: 1min.ai's default video behavior is genuinely
+      synchronous (confirmed live — a non-`async` request blocks the HTTP connection for the full
+      render), which does not fit this app's submit-then-poll `SubmitVideoGenerationAsync`/
+      `PollVideoGenerationAsync` split, and the `async: true` + `GET /api/results/{uuid}` path that
+      would fit it was never live-tested — implementing it would mean guessing at an unconfirmed
+      contract, so both video methods throw a clear explanatory `ProviderAdapterException` instead
+      (same precedent as DeepInfra's original video stub). Model discovery
+      (`ListModelsAsync`/`TestConnectionAsync`) is also not implemented: no models-listing endpoint is
+      documented anywhere in 1min.ai's API reference, so `TestConnectionAsync` reports success without
+      a real connectivity check and `ListModelsAsync` always throws a clear "not available" error.
+      Wired into `DependencyInjection.cs`, the connection-provider dropdown and provider-name display
+      in `ConnectionEdit.razor`/`GenerationHistory.razor`/`CostSummary.razor`/`Connections.razor`, the
+      `ProviderOneMinAi` localization string, and `LiveProviderSmokeTests`. Covered by 7 new tests in
+      `NewProviderAdapterTests.cs` (text, image-conditioning rejection, image+download, feature-error
+      passthrough, audio+download, video not-implemented, model-discovery not-implemented); full suite
+      and Windows/Android builds pass.
 - [ ] Complete all documented OpenRouter modality operations and close known response-shape gaps.
       Confirmed mostly done: `OpenRouterProviderAdapter` implements all four operations (text, image,
       audio, video submit/poll) with none throwing "not implemented." The one remaining documented

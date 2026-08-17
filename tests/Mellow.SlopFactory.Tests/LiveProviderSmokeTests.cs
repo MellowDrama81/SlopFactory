@@ -52,6 +52,7 @@ public sealed class LiveProviderSmokeTests
         ProviderType.GenericOpenAiCompatible => new GenericOpenAiCompatibleProviderAdapter(client),
         ProviderType.OpenRouter => new OpenRouterProviderAdapter(client),
         ProviderType.DeepInfra => new DeepInfraProviderAdapter(client),
+        ProviderType.OneMinAi => new OneMinAiProviderAdapter(client),
         _ => throw new ArgumentOutOfRangeException(nameof(providerType))
     };
 }

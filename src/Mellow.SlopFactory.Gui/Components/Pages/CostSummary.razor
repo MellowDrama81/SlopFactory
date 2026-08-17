@@ -47,6 +47,7 @@ else
                     <option value="@ProviderType.GenericOpenAiCompatible">@Strings["ProviderGenericOpenAiCompatible"]</option>
                     <option value="@ProviderType.OpenRouter">@Strings["ProviderOpenRouter"]</option>
                     <option value="@ProviderType.DeepInfra">@Strings["ProviderDeepInfra"]</option>
+                    <option value="@ProviderType.OneMinAi">@Strings["ProviderOneMinAi"]</option>
                 </select>
             </label>
             <label for="cost-date-from-filter">@Strings["FilterByDateFrom"]
@@ -152,6 +153,7 @@ else
         ProviderType.GenericOpenAiCompatible => Strings["ProviderGenericOpenAiCompatible"],
         ProviderType.OpenRouter => Strings["ProviderOpenRouter"],
         ProviderType.DeepInfra => Strings["ProviderDeepInfra"],
+        ProviderType.OneMinAi => Strings["ProviderOneMinAi"],
         _ => providerTypeName
     };
 }

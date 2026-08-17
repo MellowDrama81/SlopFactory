@@ -578,4 +578,131 @@ public sealed class NewProviderAdapterTests
         Assert.Equal(AsyncGenerationPollOutcome.Failed, result.Outcome);
         Assert.Equal("The job was cancelled.", result.ErrorMessage);
     }
+
+    [Fact]
+    public async Task OneMinAiAdapterGeneratesTextAgainstTheChatWithAiEndpointAndParsesTheResultObject()
+    {
+        var callCount = 0;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            callCount++;
+            Assert.Equal("https://api.1min.ai/api/chat-with-ai", request.RequestUri!.ToString());
+            var requestBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.Contains("\"type\":\"UNIFY_CHAT_WITH_AI\"", requestBody, StringComparison.Ordinal);
+            Assert.Contains("\"model\":\"gpt-4o-mini\"", requestBody, StringComparison.Ordinal);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"aiRecord":{"uuid":"rec-1","status":"SUCCESS","model":"gpt-4o-mini","type":"UNIFY_CHAT_WITH_AI","aiRecordDetail":{"promptObject":{"prompt":"Write a haiku"},"resultObject":["Result"]},"modelDetail":{"name":"gpt-4o-mini","provider":"openai"}}}""");
+        });
+        var adapter = new OneMinAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
+        var model = CreateModel("gpt-4o-mini");
+
+        var result = await adapter.GenerateTextAsync(connection, model, "secret-key", "Write a haiku", 1);
+
+        Assert.Equal(1, callCount);
+        Assert.Equal("Result", Assert.Single(result.Texts));
+    }
+
+    [Fact]
+    public async Task OneMinAiAdapterGenerateTextThrowsWhenImageConditioningIsRequestedSinceTheAttachmentFormatIsUnconfirmed()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent for unsupported image conditioning."));
+        var adapter = new OneMinAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
+        var model = CreateModel("gpt-4o-mini");
+
+        await Assert.ThrowsAsync<ProviderAdapterException>(() =>
+            adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this", 1, sourceImage: new TextGenerationSourceImage("image/png", [1, 2, 3])));
+    }
+
+    [Fact]
+    public async Task OneMinAiAdapterGeneratesImageAgainstTheFeaturesEndpointAndDownloadsTheTemporaryUrl()
+    {
+        byte[] pngBytes = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3];
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url == "https://api.1min.ai/api/features")
+            {
+                var requestBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                Assert.Contains("\"type\":\"IMAGE_GENERATOR\"", requestBody, StringComparison.Ordinal);
+                Assert.Contains("\"size\":\"1024x1024\"", requestBody, StringComparison.Ordinal);
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"aiRecord":{"uuid":"rec-2","status":"SUCCESS","model":"stable-diffusion-xl-1024-v1-0","type":"IMAGE_GENERATOR","aiRecordDetail":{"promptObject":{},"resultObject":["images/result.png"]},"temporaryUrl":"https://s3.us-east-1.amazonaws.com/asset.1min.ai/images/result.png"}}""");
+            }
+            Assert.Equal("https://s3.us-east-1.amazonaws.com/asset.1min.ai/images/result.png", url);
+            Assert.False(request.Headers.Contains("Authorization"));
+            return FakeHttpMessageHandler.BinaryResponse(pngBytes, "image/png");
+        });
+        var adapter = new OneMinAiProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
+
+        var images = await adapter.GenerateImageAsync(connection, CreateModel("stable-diffusion-xl-1024-v1-0"), "secret-key", "A fox", 1);
+
+        Assert.Equal(pngBytes, Assert.Single(images));
+    }
+
+    [Fact]
+    public async Task OneMinAiAdapterSurfacesTheFeatureErrorCodeAndMessageWhenAModelIsRejected()
+    {
+        var handler = new FakeHttpMessageHandler(_ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.BadRequest,
+            """{"errorCode":"UNSUPPORTED_MODEL","message":"Model black-forest-labs/flux-schnell is not supported for feature IMAGE_GENERATOR"}"""));
+        var adapter = new OneMinAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
+
+        var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() =>
+            adapter.GenerateImageAsync(connection, CreateModel("black-forest-labs/flux-schnell"), "secret-key", "A fox", 1));
+
+        Assert.Contains("UNSUPPORTED_MODEL", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("is not supported for feature IMAGE_GENERATOR", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OneMinAiAdapterGeneratesAudioAgainstTheFeaturesEndpointAndDownloadsTheTemporaryUrl()
+    {
+        byte[] mp3Bytes = [1, 2, 3, 4];
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url == "https://api.1min.ai/api/features")
+            {
+                var requestBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                Assert.Contains("\"type\":\"TEXT_TO_SPEECH\"", requestBody, StringComparison.Ordinal);
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"aiRecord":{"uuid":"rec-3","status":"SUCCESS","model":"tts-1","type":"TEXT_TO_SPEECH","aiRecordDetail":{"promptObject":{},"resultObject":["audios/result.mp3"]},"temporaryUrl":"https://s3.us-east-1.amazonaws.com/asset.1min.ai/audios/result.mp3"}}""");
+            }
+            return FakeHttpMessageHandler.BinaryResponse(mp3Bytes, "audio/mpeg");
+        });
+        var adapter = new OneMinAiProviderAdapter(new HttpClient(handler), PublicAddressResolver);
+        var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
+
+        var results = await adapter.GenerateAudioAsync(connection, CreateModel("tts-1"), "secret-key", "Hello there", 1);
+
+        Assert.Equal(mp3Bytes, Assert.Single(results));
+    }
+
+    [Fact]
+    public async Task OneMinAiAdapterThrowsAClearNotYetImplementedErrorForVideoSinceTheDefaultBehaviorIsSynchronous()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent for unimplemented video."));
+        var adapter = new OneMinAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
+        var model = CreateModel("lucataco/animate-diff");
+
+        var submitException = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.SubmitVideoGenerationAsync(connection, model, "secret-key", "prompt"));
+        var pollException = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.PollVideoGenerationAsync(connection, "secret-key", "job-id"));
+
+        Assert.Contains("not yet implemented", submitException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not yet implemented", pollException.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task OneMinAiAdapterListModelsThrowsSinceNoDiscoveryEndpointIsDocumented()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent: no discovery endpoint is documented."));
+        var adapter = new OneMinAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
+
+        await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.ListModelsAsync(connection, "secret-key"));
+    }
 }

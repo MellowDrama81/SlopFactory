@@ -20,10 +20,17 @@ public static class DependencyInjection
         services.AddHttpClient<OpenRouterProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(CreateOpenRouterHttpHandler);
         services.AddHttpClient<DeepInfraProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan);
+        // 1min.ai's image/audio results are fetched from a third-party (S3) temporaryUrl, the same
+        // cross-origin-result-download shape as OpenRouter's video results, so it gets the same
+        // DNS-rebinding-hardened handler rather than relying solely on the request-time
+        // ResultUrlValidator check.
+        services.AddHttpClient<OneMinAiProviderAdapter>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(CreateOpenRouterHttpHandler);
         services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<OpenAiProviderAdapter>());
         services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<GenericOpenAiCompatibleProviderAdapter>());
         services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<OpenRouterProviderAdapter>());
         services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<DeepInfraProviderAdapter>());
+        services.AddTransient<IProviderAdapter>(sp => sp.GetRequiredService<OneMinAiProviderAdapter>());
         services.AddSingleton<IProviderAdapterResolver, ProviderAdapterResolver>();
         return services;
     }
