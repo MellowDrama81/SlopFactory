@@ -128,6 +128,11 @@ public sealed class GenerationQueueService
         /// execution starts so <see cref="GenerationRecordId"/> is populated (or confirmed
         /// unavailable) first.</summary>
         public Task<GenerationRecord?>? RecordCreation;
+        /// <summary>Set before cancelling this job in response to
+        /// <see cref="IBackgroundExecutionService.Suspended"/>, so its
+        /// <see cref="OperationCanceledException"/> handler can record the OS suspending background
+        /// execution as the cause instead of an ordinary cancellation or provider failure.</summary>
+        public bool SuspendedByOperatingSystem;
         /// <summary>True once a request may have actually been transmitted to a provider (the
         /// <see cref="GenerationStatus.Submitting"/> transition was reached) — distinguishes, on
         /// cancellation, "nothing was ever sent" from "acceptance can no longer be confirmed."</summary>
@@ -322,10 +327,26 @@ public sealed class GenerationQueueService
         _availabilityProbe = availabilityProbe;
         _diagnostics = diagnostics;
         _backgroundExecution = backgroundExecution;
+        if (_backgroundExecution is not null) _backgroundExecution.Suspended += OnBackgroundExecutionSuspended;
     }
 
     public event EventHandler? Changed;
     public event EventHandler<GenerationJobOutcome>? JobCompleted;
+
+    /// <summary>Cancels every currently running or monitoring job in response to the OS revoking or
+    /// timing out background execution on its own — see <see cref="IBackgroundExecutionService
+    /// .Suspended"/> — marking each so its cancellation handler records this distinctly from an
+    /// ordinary cancellation or provider failure.</summary>
+    private void OnBackgroundExecutionSuspended(object? sender, EventArgs args)
+    {
+        List<QueuedJob> affected;
+        lock (_gate)
+        {
+            affected = _jobsById.Values.Where(job => job.Phase is GenerationJobPhase.Running or GenerationJobPhase.Monitoring).ToList();
+            foreach (var job in affected) job.SuspendedByOperatingSystem = true;
+        }
+        foreach (var job in affected) job.Cancellation?.Cancel();
+    }
 
     public int QueuedCount { get { lock (_gate) return _jobsById.Values.Count(job => IsPreSubmissionPhase(job.Phase)); } }
     public int RunningCount { get { lock (_gate) return _runningTotal; } }
@@ -575,19 +596,19 @@ public sealed class GenerationQueueService
     /// the terminal outcome write, which stays awaited via <c>existingGenerationRecordId</c> on the
     /// final <c>Record*GenerationResultAsync</c> call, so losing an intermediate transition here never
     /// loses the final one.</summary>
-    private void AdvanceLocked(QueuedJob job, GenerationStatus status, GenerationHoldReason? hold = null)
+    private void AdvanceLocked(QueuedJob job, GenerationStatus status, GenerationHoldReason? hold = null, GenerationFailureReason? failureReason = null)
     {
         string? recordId;
         lock (_gate) recordId = job.GenerationRecordId;
         if (recordId is null) return;
-        _ = AdvanceGenerationStatusSafeAsync(job.Workspace, recordId, status, hold);
+        _ = AdvanceGenerationStatusSafeAsync(job.Workspace, recordId, status, hold, failureReason);
     }
 
-    private static async Task AdvanceGenerationStatusSafeAsync(ILibraryWorkspace workspace, string generationRecordId, GenerationStatus status, GenerationHoldReason? hold)
+    private static async Task AdvanceGenerationStatusSafeAsync(ILibraryWorkspace workspace, string generationRecordId, GenerationStatus status, GenerationHoldReason? hold, GenerationFailureReason? failureReason = null)
     {
         try
         {
-            await workspace.AdvanceGenerationStatusAsync(generationRecordId, status, hold).ConfigureAwait(false);
+            await workspace.AdvanceGenerationStatusAsync(generationRecordId, status, hold, failureReason).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException or Microsoft.Data.Sqlite.SqliteException or LibraryValidationException)
         {
@@ -1247,6 +1268,16 @@ public sealed class GenerationQueueService
         }
         catch (OperationCanceledException)
         {
+            if (job.SuspendedByOperatingSystem)
+            {
+                // The OS suspending background execution is a known, local cause — recorded as a
+                // distinct Failed reason rather than blaming the provider (plan.md: "Android
+                // execution suspension and timeout are recorded separately from provider failure"),
+                // matching how any other local failure (e.g. LocalFailureOutcome) always finalizes to
+                // a terminal state rather than leaving the record stranded non-terminal.
+                AdvanceLocked(job, GenerationStatus.Failed, failureReason: GenerationFailureReason.ExecutionSuspended);
+                return new GenerationJobOutcome(job.JobId, job.DraftId, null, "Background execution was suspended by the operating system.", CancelledBeforeSubmission: false, DateTimeOffset.UtcNow);
+            }
             // Whether transmission reached the provider is genuinely unknown once a request is
             // already in flight — finalize immediately to SubmissionOutcomeUnknown rather than
             // leaving the durable record stranded non-terminal until a restart happens to sweep it

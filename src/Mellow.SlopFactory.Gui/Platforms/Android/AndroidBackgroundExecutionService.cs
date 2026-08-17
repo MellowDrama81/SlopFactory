@@ -7,6 +7,13 @@ internal sealed class AndroidBackgroundExecutionService : IBackgroundExecutionSe
 {
     private bool _running;
 
+    public AndroidBackgroundExecutionService()
+    {
+        GenerationForegroundService.SuspendedByOperatingSystem += (_, _) => Suspended?.Invoke(this, EventArgs.Empty);
+    }
+
+    public event EventHandler? Suspended;
+
     public void EnsureRunning(string statusText)
     {
         var context = global::Android.App.Application.Context;

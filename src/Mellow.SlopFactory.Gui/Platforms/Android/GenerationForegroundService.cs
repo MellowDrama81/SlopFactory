@@ -19,6 +19,21 @@ public sealed class GenerationForegroundService : Service
     private const int NotificationId = 9001;
     private const string StatusExtra = "statusText";
 
+    /// <summary>Set by <see cref="Stop"/> immediately before the app itself requests teardown, so
+    /// <see cref="OnDestroy"/> can tell an app-initiated stop apart from the OS revoking or timing
+    /// out background execution on its own. Static because the service instance is owned and
+    /// recreated by the OS, not by app code, so there is no instance to hold this on ahead of
+    /// creation. Unverified on-device — see manual test coverage in
+    /// IMPLEMENTATION_COMPLETION_CHECKLIST.md section 15.</summary>
+    private static bool _stopRequestedByApp;
+
+    /// <summary>Raised from <see cref="OnDestroy"/> when this service was torn down without a prior
+    /// app-initiated <see cref="Stop"/> call — the OS killed or timed out the foreground service on
+    /// its own. Static for the same reason <see cref="_stopRequestedByApp"/> is:
+    /// <see cref="AndroidBackgroundExecutionService"/> has no direct reference to the OS-owned
+    /// service instance to subscribe to.</summary>
+    public static event EventHandler? SuspendedByOperatingSystem;
+
     public override IBinder? OnBind(Intent? intent) => null;
 
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
@@ -26,6 +41,19 @@ public sealed class GenerationForegroundService : Service
         var statusText = intent?.GetStringExtra(StatusExtra) ?? "SlopFactory is transferring data.";
         StartForeground(NotificationId, BuildNotification(statusText));
         return StartCommandResult.Sticky;
+    }
+
+    public override void OnDestroy()
+    {
+        if (_stopRequestedByApp)
+        {
+            _stopRequestedByApp = false;
+        }
+        else
+        {
+            SuspendedByOperatingSystem?.Invoke(null, EventArgs.Empty);
+        }
+        base.OnDestroy();
     }
 
     private Notification BuildNotification(string statusText)
@@ -56,5 +84,9 @@ public sealed class GenerationForegroundService : Service
         else context.StartService(intent);
     }
 
-    public static void Stop(Context context) => context.StopService(new Intent(context, typeof(GenerationForegroundService)));
+    public static void Stop(Context context)
+    {
+        _stopRequestedByApp = true;
+        context.StopService(new Intent(context, typeof(GenerationForegroundService)));
+    }
 }

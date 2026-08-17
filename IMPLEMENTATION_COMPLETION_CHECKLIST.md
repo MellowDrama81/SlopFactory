@@ -183,7 +183,17 @@ implemented state transition without duplicate submission or untracked provider 
 - [x] Provide an explicit **Resume All for This Connection** action that leaves other paused
       provider queues awaiting their own approval.
 - [x] Provide an explicit selected-job resume action that does not authorize other pending jobs.
-- [ ] Record Android execution suspension and timeout separately from provider failure.
+- [x] Record Android execution suspension and timeout separately from provider failure.
+      `IBackgroundExecutionService.Suspended` is raised from `GenerationForegroundService.OnDestroy`
+      whenever teardown wasn't initiated by the app's own `Stop` call. `GenerationQueueService`
+      cancels every `Running` job on this signal and finalizes its durable record to
+      `Failed`/`GenerationFailureReason.ExecutionSuspended` — distinct from an ordinary provider
+      error message — rather than an ambiguous or generic cancellation outcome. `Monitoring`-phase
+      (video, already-accepted) jobs are cancelled too but still resolve through the existing
+      accurate `Cancelled`/`CancelledWithResults` outcome rather than the new reason, since that path
+      never misattributes the cause to the provider either. Covered by a fake-driven unit test on
+      Windows; real Android foreground-service `OnDestroy` timeout/kill behavior itself is
+      unverified pending the on-device pass in section 15.
 - [x] Save or resolve draft edits before Windows **Cancel Work and Exit** cancels jobs or terminates
       the process.
 

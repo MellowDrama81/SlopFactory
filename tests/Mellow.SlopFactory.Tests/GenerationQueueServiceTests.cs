@@ -1796,6 +1796,30 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task BackgroundExecutionSuspensionCancelsRunningJobsAndFinalizesTheirRecordsDistinctlyFromAProviderFailure()
+    {
+        using var temporary = new TemporaryDirectory();
+        var backgroundExecution = new FakeBackgroundExecutionService();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), backgroundExecution: backgroundExecution);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
+        await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));
+
+        backgroundExecution.RaiseSuspended();
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-1") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-1")!;
+        Assert.Null(outcome.Record);
+        Assert.False(outcome.CancelledBeforeSubmission);
+
+        GenerationRecord? record = null;
+        await WaitUntilAsync(() => (record = workspace.GetGenerationHistoryAsync().GetAwaiter().GetResult().SingleOrDefault(entry => entry.Prompt == "prompt1")) is { Status: GenerationStatus.Failed });
+        Assert.Equal(GenerationFailureReason.ExecutionSuspended, record!.FailureReason);
+    }
+
+    [Fact]
     public async Task BackgroundExecutionDoesNotStartForAMerelyQueuedJob()
     {
         using var temporary = new TemporaryDirectory();
@@ -1989,6 +2013,8 @@ public sealed class GenerationQueueServiceTests
         public bool IsRunning { get; private set; }
         public void EnsureRunning(string statusText) { EnsureRunningCallCount++; IsRunning = true; }
         public void StopRunning() { StopRunningCallCount++; IsRunning = false; }
+        public event EventHandler? Suspended;
+        public void RaiseSuspended() => Suspended?.Invoke(this, EventArgs.Empty);
     }
 
     private sealed class FakeLibraryAvailabilityProbe : ILibraryAvailabilityProbe

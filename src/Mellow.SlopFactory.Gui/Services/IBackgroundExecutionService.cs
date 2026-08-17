@@ -18,4 +18,11 @@ public interface IBackgroundExecutionService
     /// <summary>Stops background execution once no job needs it anymore. Safe to call even if
     /// nothing is running.</summary>
     void StopRunning();
+
+    /// <summary>Raised when the OS revoked or timed out background execution on its own — never
+    /// raised by an app-initiated <see cref="StopRunning"/> call. Lets a caller record this
+    /// distinctly from a provider failure (plan.md's "Android execution suspension and timeout are
+    /// recorded separately from provider failure"). Never raised on platforms with no such
+    /// restriction (e.g. Windows).</summary>
+    event EventHandler? Suspended;
 }

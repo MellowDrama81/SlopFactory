@@ -6,4 +6,6 @@ internal sealed class NullBackgroundExecutionService : IBackgroundExecutionServi
 {
     public void EnsureRunning(string statusText) { }
     public void StopRunning() { }
+    // Never raised: Windows has no OS-level background-execution restriction to be suspended from.
+    public event EventHandler? Suspended { add { } remove { } }
 }

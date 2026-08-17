@@ -827,7 +827,12 @@ public enum GenerationFailureReason
     /// <summary>The user explicitly gave up on resolving a <see cref="GenerationStatus.Paused"/> or
     /// <see cref="GenerationStatus.SubmissionOutcomeUnknown"/> record — Abandon Recovery — rather
     /// than the outcome being confirmed by a reconciliation lookup.</summary>
-    AbandonedByUser = 1
+    AbandonedByUser = 1,
+    /// <summary>The operating system suspended or timed out the background execution this job was
+    /// running under (e.g. Android killed the foreground service) rather than the provider reporting
+    /// a failure — plan.md's "Android execution suspension and timeout are recorded separately from
+    /// provider failure."</summary>
+    ExecutionSuspended = 2
 }
 
 /// <summary>One recorded status change for a <see cref="GenerationRecord"/>, timestamped so restart
