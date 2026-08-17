@@ -79,6 +79,68 @@ public sealed class GenerationStatusTransitionTests
     }
 
     [Fact]
+    public async Task AbandoningASubmissionOutcomeUnknownRecordFinalizesItAsFailedWithTheAbandonedReason()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var record = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        await workspace.AdvanceGenerationStatusAsync(record.Id, GenerationStatus.Submitting);
+        await workspace.AdvanceGenerationStatusAsync(record.Id, GenerationStatus.SubmissionOutcomeUnknown);
+
+        var abandoned = await workspace.AbandonGenerationOutcomeAsync(record.Id);
+
+        Assert.Equal(GenerationStatus.Failed, abandoned.Status);
+        Assert.Equal(GenerationFailureReason.AbandonedByUser, abandoned.FailureReason);
+        Assert.NotNull(abandoned.CompletedAt);
+    }
+
+    [Fact]
+    public async Task AbandoningAPausedRecordFinalizesItAsFailed()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var record = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        await workspace.AdvanceGenerationStatusAsync(record.Id, GenerationStatus.Paused, holdReason: GenerationHoldReason.DependencyChanged);
+
+        var abandoned = await workspace.AbandonGenerationOutcomeAsync(record.Id);
+
+        Assert.Equal(GenerationStatus.Failed, abandoned.Status);
+        Assert.Equal(GenerationFailureReason.AbandonedByUser, abandoned.FailureReason);
+    }
+
+    [Theory]
+    [InlineData(GenerationStatus.Queued)]
+    [InlineData(GenerationStatus.Processing)]
+    [InlineData(GenerationStatus.Completed)]
+    public async Task AbandoningARecordInAnyOtherStatusThrows(GenerationStatus status)
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var record = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        if (status != GenerationStatus.Queued)
+        {
+            await workspace.AdvanceGenerationStatusAsync(record.Id, status);
+        }
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.AbandonGenerationOutcomeAsync(record.Id));
+    }
+
+    [Fact]
     public async Task PausingWithAHoldReasonPersistsItOnTheTransitionRow()
     {
         using var temporary = new TemporaryDirectory();

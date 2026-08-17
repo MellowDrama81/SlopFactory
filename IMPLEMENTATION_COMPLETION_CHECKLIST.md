@@ -113,10 +113,19 @@ credentialed developer can run bounded live smoke tests deliberately.
       `CancelledBeforeSubmission` instead). No reconciliation, UI surface or connection-revision
       gating against it exists yet.
 - [ ] Add **Attempt Reconciliation** for adapters with a documented lookup mechanism.
-- [ ] Add **Abandon Recovery and Apply Changes**, retaining sanitized non-actionable history while
+- [x] Add **Abandon Recovery and Apply Changes**, retaining sanitized non-actionable history while
       removing identifiers that could still drive provider actions.
+      `ILibraryWorkspace.AbandonGenerationOutcomeAsync` finalizes a `SubmissionOutcomeUnknown` or
+      `Paused` record to `Failed`/`AbandonedByUser`, exposed via a confirm-guarded **Abandon** action
+      on the generation history detail page. No further sanitization is needed for the record itself
+      (it carries no actionable provider identifier — only the device-wide async-job registry does,
+      for video, which is scrubbed separately). "Apply Changes" (re-running the connection-revision
+      change the user was blocked on) is not yet wired since the blocking gate below doesn't exist.
 - [ ] Gate connection URL, provider type and authentication-structure changes while unresolved
       cleanup or reconciliation depends on the current connection revision.
+      Still only covers the pending video async-job registry (`ConnectionEdit.razor`), not
+      `SubmissionOutcomeUnknown`/`Paused` generation records, and offers only one resolution path
+      rather than the documented Attempt Reconciliation/Abandon Recovery/Cancel choice.
 - [ ] Complete cancellation behavior before submission, during upload, after provider acceptance,
       during polling and during result download.
       Before-submission and mid-flight-with-unknown-outcome (Text/Image/Audio) now both finalize their

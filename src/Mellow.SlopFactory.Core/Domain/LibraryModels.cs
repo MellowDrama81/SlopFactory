@@ -823,7 +823,11 @@ public enum GenerationFailureReason
 {
     /// <summary>A reconciliation lookup confirmed the provider no longer has this job (e.g.
     /// Not Found/Expired) rather than merely observing a transport error.</summary>
-    RemoteJobUnavailable = 0
+    RemoteJobUnavailable = 0,
+    /// <summary>The user explicitly gave up on resolving a <see cref="GenerationStatus.Paused"/> or
+    /// <see cref="GenerationStatus.SubmissionOutcomeUnknown"/> record — Abandon Recovery — rather
+    /// than the outcome being confirmed by a reconciliation lookup.</summary>
+    AbandonedByUser = 1
 }
 
 /// <summary>One recorded status change for a <see cref="GenerationRecord"/>, timestamped so restart

@@ -716,6 +716,9 @@
   <data name="GenerationRecordSummary" xml:space="preserve"><value>{0} · {1} · {2} result(s)</value></data>
   <data name="ConfirmRecycleGenerationRecord" xml:space="preserve"><value>Confirm recycle generation record</value></data>
   <data name="RecycleGenerationRecordWarning" xml:space="preserve"><value>Recycling this generation record does not recycle its source or result files.</value></data>
+  <data name="AbandonGenerationOutcome" xml:space="preserve"><value>Abandon</value></data>
+  <data name="ConfirmAbandonGenerationOutcome" xml:space="preserve"><value>Confirm abandon generation outcome</value></data>
+  <data name="AbandonGenerationOutcomeWarning" xml:space="preserve"><value>Whether this request reached the provider may never be known. Abandoning marks it Failed and stops waiting for its outcome to resolve.</value></data>
   <data name="GenerationRecordKind" xml:space="preserve"><value>Generation record</value></data>
   <data name="SourceFilePermanentlyDeletedSlot" xml:space="preserve"><value>Source {0}: {1} ({2}) — permanently deleted</value></data>
   <data name="ResultFilePermanentlyDeleted" xml:space="preserve"><value>{0} ({1}) — permanently deleted</value></data>

@@ -117,6 +117,21 @@ else if (_record is not null)
             {
                 <button type="button" class="secondary" disabled="@_busy" @onclick="RetryFailedResultsOnlyAsync">@Strings["RetryFailedResultsOnly", _record.Results.Count(entry => entry.Status == GenerationResultStatus.Failed)]</button>
             }
+            @if (_record.State == LibraryRecordState.Active && _record.Status is GenerationStatus.SubmissionOutcomeUnknown or GenerationStatus.Paused)
+            {
+                @if (_abandonConfirm)
+                {
+                    <span role="dialog" aria-label="@Strings["ConfirmAbandonGenerationOutcome"]">
+                        <span>@Strings["AbandonGenerationOutcomeWarning"]</span>
+                        <button class="danger" disabled="@_busy" @onclick="AbandonOutcomeAsync">@Strings["AbandonGenerationOutcome"]</button>
+                        <button class="secondary" disabled="@_busy" @onclick="() => _abandonConfirm = false">@Strings["Cancel"]</button>
+                    </span>
+                }
+                else
+                {
+                    <button class="ghost danger" disabled="@_busy" @onclick="() => _abandonConfirm = true">@Strings["AbandonGenerationOutcome"]</button>
+                }
+            }
             @if (_record.State == LibraryRecordState.Active)
             {
                 @if (_recycleConfirm)
@@ -155,6 +170,7 @@ else if (_record is not null)
     private GenerationRecord? _record;
     private string? _message;
     private bool _recycleConfirm;
+    private bool _abandonConfirm;
     private bool _busy;
     private Dictionary<int, string> _recoverableAsyncJobIdByPosition = new();
 
@@ -252,6 +268,27 @@ else if (_record is not null)
                 TertiarySourceFileId: _record.TertiarySourceFileId);
             Queue.Enqueue(snapshot, connection.Id);
             Navigation.NavigateTo("/queue");
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    /// <summary>Abandon Recovery: the user gives up on ever learning whether this generation's
+    /// request reached the provider (or on a pause ever resolving) rather than leaving it open
+    /// indefinitely.</summary>
+    private async Task AbandonOutcomeAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || _record is null) return;
+        _busy = true;
+        try
+        {
+            await workspace.AbandonGenerationOutcomeAsync(_record.Id);
+            _abandonConfirm = false;
+            await ReloadAsync();
         }
         catch (SlopFactoryException exception)
         {

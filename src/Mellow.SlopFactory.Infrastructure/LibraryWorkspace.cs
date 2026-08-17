@@ -2103,6 +2103,34 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetGenerationStatusHistoryAsync(generationRecordId, cancellationToken);
     }
 
+    public Task<GenerationRecord> AbandonGenerationOutcomeAsync(string generationRecordId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => AbandonGenerationOutcomeCoreAsync(generationRecordId, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// Abandon Recovery: the user gives up on ever resolving a record whose outcome cannot be
+    /// confirmed, rather than leaving it open indefinitely awaiting reconciliation that may never
+    /// come. Only meaningful for the specific statuses reconciliation would otherwise apply to —
+    /// <see cref="GenerationStatus.SubmissionOutcomeUnknown"/> and <see cref="GenerationStatus.Paused"/>
+    /// — so the record can't be silently discarded from an ordinary in-progress or already-terminal
+    /// state. Finalizes to <see cref="GenerationStatus.Failed"/> with
+    /// <see cref="GenerationFailureReason.AbandonedByUser"/>; the record itself already carries no
+    /// actionable provider identifier (only the device-wide async-job registry does, for video, and
+    /// that registry is scrubbed separately — see <c>DeleteAsyncRemoteJobAsync</c>), so no further
+    /// sanitization is needed here.
+    /// </summary>
+    private async Task<GenerationRecord> AbandonGenerationOutcomeCoreAsync(string generationRecordId, CancellationToken cancellationToken)
+    {
+        var existing = await _database.GetGenerationRecordAsync(generationRecordId, cancellationToken).ConfigureAwait(false);
+        if (existing.Status is not (GenerationStatus.SubmissionOutcomeUnknown or GenerationStatus.Paused))
+        {
+            throw new LibraryValidationException("Only a Submission Outcome Unknown or Paused generation can be abandoned.");
+        }
+        return await _database.AdvanceGenerationStatusAsync(generationRecordId, GenerationStatus.Failed, failureReason: GenerationFailureReason.AbandonedByUser, holdReason: null, position: null, cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
     public Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
