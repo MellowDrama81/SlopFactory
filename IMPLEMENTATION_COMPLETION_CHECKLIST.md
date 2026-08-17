@@ -113,6 +113,13 @@ credentialed developer can run bounded live smoke tests deliberately.
       `CancelledBeforeSubmission` instead). No reconciliation, UI surface or connection-revision
       gating against it exists yet.
 - [ ] Add **Attempt Reconciliation** for adapters with a documented lookup mechanism.
+      Confirmed not currently actionable: no integrated adapter (OpenAI, DeepInfra, OpenRouter,
+      generic OpenAI-compatible) captures a provider request ID for its synchronous Text/Image/Audio
+      calls or documents idempotency-key replay or a status-lookup endpoint. `milestone2.md` and
+      `milestone4.md` already record this as deliberately deferred pending provider documentation
+      that does not exist today — implementing this now would mean guessing at an undocumented
+      contract, which the release gate explicitly disallows. Revisit only once such a mechanism is
+      confirmed for a specific adapter.
 - [x] Add **Abandon Recovery and Apply Changes**, retaining sanitized non-actionable history while
       removing identifiers that could still drive provider actions.
       `ILibraryWorkspace.AbandonGenerationOutcomeAsync` finalizes a `SubmissionOutcomeUnknown` or
@@ -123,9 +130,12 @@ credentialed developer can run bounded live smoke tests deliberately.
       change the user was blocked on) is not yet wired since the blocking gate below doesn't exist.
 - [ ] Gate connection URL, provider type and authentication-structure changes while unresolved
       cleanup or reconciliation depends on the current connection revision.
-      Still only covers the pending video async-job registry (`ConnectionEdit.razor`), not
-      `SubmissionOutcomeUnknown`/`Paused` generation records, and offers only one resolution path
-      rather than the documented Attempt Reconciliation/Abandon Recovery/Cancel choice.
+      `ConnectionEdit.razor` now also blocks an auth-structure change on `SubmissionOutcomeUnknown`/
+      `Paused` generation records tied to a model on the connection, offering **Abandon and Apply
+      Changes** (bulk `AbandonGenerationOutcomeAsync`) or **Cancel** — alongside the pre-existing
+      pending-async-job-registry check with its own **Stop Tracking and Apply Changes**/**Cancel**
+      pair. Still only two resolution paths rather than the documented three: **Attempt
+      Reconciliation** is omitted because it isn't implementable for any adapter today (see above).
 - [ ] Complete cancellation behavior before submission, during upload, after provider acceptance,
       during polling and during result download.
       Before-submission and mid-flight-with-unknown-outcome (Text/Image/Audio) now both finalize their
@@ -140,6 +150,9 @@ credentialed developer can run bounded live smoke tests deliberately.
       declares a maximum monitoring lifetime.
 - [ ] Implement idempotency-key creation, durable pre-send persistence, scoped reuse and terminal
       disposal for each adapter that documents idempotency support.
+      Confirmed not currently actionable, same finding as Attempt Reconciliation above: no integrated
+      adapter documents idempotency-key support. `AsyncRemoteJobRecord.IdempotencyKey` and
+      `async_remote_jobs.idempotency_key` remain as schema placeholders for when one does.
 - [ ] Apply in-progress throttling to explicit provider-status refresh and reconciliation actions.
 
 Done when: crash/restart, uncertain submission, cancellation and reconciliation tests cover every

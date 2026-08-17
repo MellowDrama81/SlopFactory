@@ -46,6 +46,17 @@ else if (_awaitingUnresolvedAsyncJobsDecision)
         <p class="muted">@Strings["StopTrackingAndApplyChangesWarning"]</p>
     </div>
 }
+else if (_awaitingUnresolvedGenerationOutcomesDecision)
+{
+    <div class="notice error" role="dialog" aria-label="@Strings["UnresolvedGenerationOutcomesBlockChange", _unresolvedGenerationOutcomeCount]">
+        <p>@Strings["UnresolvedGenerationOutcomesBlockChange", _unresolvedGenerationOutcomeCount]</p>
+        <div class="actions">
+            <button type="button" class="secondary" disabled="@_busy" @onclick="CancelUnresolvedGenerationOutcomesDecision">@Strings["Cancel"]</button>
+            <button type="button" class="danger" disabled="@_busy" @onclick="AbandonUnresolvedGenerationOutcomesAndApplyChangesAsync">@Strings["AbandonAndApplyChanges"]</button>
+        </div>
+        <p class="muted">@Strings["AbandonAndApplyChangesWarning"]</p>
+    </div>
+}
 else
 {
     <EditForm Model="_form" OnValidSubmit="SaveAsync" class="stack-form">
@@ -183,6 +194,9 @@ else
     private bool _awaitingUnresolvedAsyncJobsDecision;
     private int _unresolvedAsyncJobCount;
     private bool _confirmedStopTrackingUnresolvedJobs;
+    private bool _awaitingUnresolvedGenerationOutcomesDecision;
+    private int _unresolvedGenerationOutcomeCount;
+    private bool _confirmedAbandonedUnresolvedGenerationOutcomes;
 
     protected override async Task OnInitializedAsync()
     {
@@ -287,6 +301,18 @@ else
                 }
             }
 
+            if (AuthStructureChanged() && !_confirmedAbandonedUnresolvedGenerationOutcomes)
+            {
+                var unresolvedOutcomes = await GetUnresolvedGenerationOutcomesAsync(workspace);
+                if (unresolvedOutcomes.Count > 0)
+                {
+                    _awaitingUnresolvedGenerationOutcomesDecision = true;
+                    _unresolvedGenerationOutcomeCount = unresolvedOutcomes.Count;
+                    _busy = false;
+                    return;
+                }
+            }
+
             var headers = ParseHeaderLines(_form.AdditionalHeadersText);
             var modalitySettings = BuildModalitySettings();
             var connection = IsNew
@@ -384,6 +410,49 @@ else
             Navigation.NavigateTo("/connections");
         }
         finally { _busy = false; }
+    }
+
+    /// <summary>Generation records submitted through models on this connection whose outcome was
+    /// never confirmed — distinct from the device-wide async-job registry above, which only tracks
+    /// video's submit-then-poll jobs. Gates the same auth-structure changes for the same reason:
+    /// changing the connection's base URL, credential header or auth prefix could make it impossible
+    /// to ever resolve them.</summary>
+    private async Task<IReadOnlyList<GenerationRecord>> GetUnresolvedGenerationOutcomesAsync(ILibraryWorkspace workspace)
+    {
+        var modelIds = (await workspace.GetActiveModelsAsync())
+            .Where(model => model.ConnectionId == Id)
+            .Select(model => model.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        if (modelIds.Count == 0) return [];
+        return (await workspace.GetNonTerminalGenerationRecordsAsync())
+            .Where(record => record.ModelId is not null && modelIds.Contains(record.ModelId) && record.Status is GenerationStatus.SubmissionOutcomeUnknown or GenerationStatus.Paused)
+            .ToArray();
+    }
+
+    private void CancelUnresolvedGenerationOutcomesDecision()
+    {
+        _awaitingUnresolvedGenerationOutcomesDecision = false;
+    }
+
+    private async Task AbandonUnresolvedGenerationOutcomesAndApplyChangesAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        _busy = true;
+        try
+        {
+            var unresolvedOutcomes = await GetUnresolvedGenerationOutcomesAsync(workspace);
+            foreach (var record in unresolvedOutcomes)
+            {
+                await workspace.AbandonGenerationOutcomeAsync(record.Id);
+            }
+
+            _confirmedAbandonedUnresolvedGenerationOutcomes = true;
+            _awaitingUnresolvedGenerationOutcomesDecision = false;
+        }
+        finally { _busy = false; }
+
+        await SaveAsync();
     }
 
     private void CancelUnresolvedAsyncJobsDecision()

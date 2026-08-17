@@ -631,6 +631,9 @@
   <data name="UnresolvedAsyncJobsBlockChange" xml:space="preserve"><value>{0} video generation(s) submitted through this connection are still being monitored. Changing the base URL, credential header or authentication prefix could prevent SlopFactory from checking their status.</value></data>
   <data name="StopTrackingAndApplyChanges" xml:space="preserve"><value>Stop tracking and apply changes</value></data>
   <data name="StopTrackingAndApplyChangesWarning" xml:space="preserve"><value>SlopFactory will stop checking the status of those jobs. The provider may still be processing them and any related charges are unaffected.</value></data>
+  <data name="UnresolvedGenerationOutcomesBlockChange" xml:space="preserve"><value>{0} generation(s) submitted through this connection have an outcome that was never confirmed. Changing the base URL, credential header or authentication prefix could make it impossible to ever resolve them.</value></data>
+  <data name="AbandonAndApplyChanges" xml:space="preserve"><value>Abandon and apply changes</value></data>
+  <data name="AbandonAndApplyChangesWarning" xml:space="preserve"><value>Each of those generations will be marked Failed and abandoned. The provider may still have processed them and any related charges are unaffected.</value></data>
   <data name="ModelsPageTitle" xml:space="preserve"><value>Models · SlopFactory</value></data>
   <data name="ModelsEyebrow" xml:space="preserve"><value>AI providers</value></data>
   <data name="ModelsHeading" xml:space="preserve"><value>Models</value></data>
