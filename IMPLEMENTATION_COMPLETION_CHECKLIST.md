@@ -205,20 +205,32 @@ misreports OS suspension as a provider failure.
       gap is `ParseCost`'s hardcoded `"USD"` currency assumption, flagged in the class's own comment
       as provisional until confirmed against a live account — left open pending that confirmation
       rather than guessed at further.
-- [ ] Complete DeepInfra audio/video operations only for endpoints with confirmed contracts.
-      No longer blocked on missing documentation — see
-      `docs/developer/deepinfra-audio-video-contract.md`. Audio (`POST /v1/audio/speech`) is
-      live-confirmed: raw MP3 bytes in the response body, matching OpenAI's own endpoint exactly.
-      Video is live-confirmed as a real submit-then-poll job API (`POST /v1/videos`, `GET
-      /v1/videos/{id}`, `GET /v1/videos/{id}/content`) with confirmed `status` values (`queued`,
-      `succeeded`) and a completed-job result on a third-party CDN host (needing the same
-      redirect/DNS-rebinding protection already built for OpenRouter) — but **not every DeepInfra
-      video model supports this job API**: the cheapest model tested was rejected outright with a
-      message naming the synchronous `/v1/inference/{model}` path as the only option for it, and that
-      alternate path's real behavior was never independently confirmed. `DeepInfraProviderAdapter`'s
-      audio and video methods currently still throw `ProviderAdapterException`, unchanged since this
-      is a documentation update, not an implementation pass; text/image/model-listing remain
-      implemented and confirmed via `OpenAiCompatibleProtocol` reuse.
+- [x] Complete DeepInfra audio/video operations only for endpoints with confirmed contracts.
+      Implemented against the confirmed contract in
+      `docs/developer/deepinfra-audio-video-contract.md`. `DeepInfraProviderAdapter.GenerateAudioAsync`
+      posts to the absolute `POST /v1/audio/speech` path (a different path root than the
+      `/v1/openai/...` base used for chat/image, so it builds the request URI from the connection's
+      scheme/host/port rather than reusing `OpenAiCompatibleProtocol.CombineUrl`) and returns the raw
+      MP3 bytes. `SubmitVideoGenerationAsync`/`PollVideoGenerationAsync` implement the
+      submit-then-poll job API (`POST /v1/videos`, `GET /v1/videos/{id}`), treating `succeeded` as
+      the only success status and `queued`/`processing` as in-progress; any other status (including
+      an unconfirmed/unknown one) is treated as a terminal failure rather than risking an infinite
+      poll, since DeepInfra never documented an exhaustive status enum. On success, results are
+      fetched from DeepInfra's own same-host `GET /v1/videos/{id}/content?variant=video` endpoint
+      rather than the third-party CDN URL the poll response also reports (`data[].url`), which avoids
+      needing the OpenRouter adapter's redirect/DNS-rebinding validation machinery entirely — the
+      content endpoint returns bytes directly with no redirect. A provider-rejected model (confirmed
+      live: a video model that doesn't support the async job API) surfaces its
+      `{"error":{"message":...}}` body text as the thrown exception message via a new
+      `DescribeDeepInfraFailure` helper, rather than a generic HTTP-status-only message. Covered by
+      six new tests in `NewProviderAdapterTests.cs` (audio multi-result, submit success, submit
+      provider-error passthrough, poll processing, poll completed via same-host content endpoint,
+      poll unrecognized-status-as-failure); full suite (602 tests) and Windows build pass. The
+      alternate synchronous `/v1/inference/{model}` path some models require instead was not
+      implemented — its real response contract (synchronous body vs. webhook callback) was never
+      independently confirmed, so DeepInfra video support is scoped to models that work through
+      `/v1/videos`; an unsupported model fails clearly rather than silently guessing at the other
+      endpoint's shape.
 - [x] Define signed adapter snapshot versions and migrations so historical generation and saved
       setting records remain readable after adapter changes.
       "Signed" here means the app ships only built-in, code-signed adapters (plan.md:920-921), not

@@ -470,19 +470,112 @@ public sealed class NewProviderAdapterTests
     }
 
     [Fact]
-    public async Task DeepInfraAdapterThrowsAClearNotYetImplementedErrorForAudioAndVideo()
+    public async Task DeepInfraAdapterGeneratesAudioAgainstTheAbsoluteAudioSpeechPathNotTheOpenAiCompatibleBase()
     {
-        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent for an unimplemented modality."));
+        var callCount = 0;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            callCount++;
+            Assert.Equal("https://api.deepinfra.com/v1/audio/speech", request.RequestUri!.ToString());
+            Assert.Equal("Bearer secret-key", request.Headers.GetValues("Authorization").Single());
+            return FakeHttpMessageHandler.BinaryResponse([1, 2, 3, callCount == 1 ? (byte)4 : (byte)5], "audio/mpeg");
+        });
         var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
-        var model = CreateModel("some-model");
+        var model = CreateModel("hexgrad/Kokoro-82M");
 
-        var audioException = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.GenerateAudioAsync(connection, model, "secret-key", "text", 1));
-        var submitException = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.SubmitVideoGenerationAsync(connection, model, "secret-key", "prompt"));
-        var pollException = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.PollVideoGenerationAsync(connection, "secret-key", "job-id"));
+        var results = await adapter.GenerateAudioAsync(connection, model, "secret-key", "Hello there", 2);
 
-        Assert.Contains("not yet implemented", audioException.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("not yet implemented", submitException.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("not yet implemented", pollException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, callCount);
+        Assert.Equal(2, results.Count);
+        Assert.NotEqual(results[0], results[1]);
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterSubmitVideoGenerationReturnsTheProviderJobId()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.deepinfra.com/v1/videos", request.RequestUri!.ToString());
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"id":"videos_abc123","object":"video.generation.job","created_at":1786947130,"status":"queued","model":"PrunaAI/p-video","data":null,"error":null}""");
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+
+        var submission = await adapter.SubmitVideoGenerationAsync(connection, CreateModel("PrunaAI/p-video"), "secret-key", "A cat riding a skateboard");
+
+        Assert.Equal("videos_abc123", submission.ProviderJobId);
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterSubmitVideoGenerationSurfacesTheProviderErrorMessageWhenAModelDoesNotSupportAsyncJobs()
+    {
+        var handler = new FakeHttpMessageHandler(_ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.BadRequest,
+            """{"error":{"message":"FastVideo/FastWan-QAD-FP8-1.3B does not support asynchronous video jobs. Use POST /v1/inference/FastVideo/FastWan-QAD-FP8-1.3B, which returns the video in the response.","type":"invalid_request_error","param":"model","code":null}}"""));
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+
+        var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() =>
+            adapter.SubmitVideoGenerationAsync(connection, CreateModel("FastVideo/FastWan-QAD-FP8-1.3B"), "secret-key", "A cat"));
+
+        Assert.Contains("does not support asynchronous video jobs", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterPollingReturnsProcessingWhileQueued()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.deepinfra.com/v1/videos/videos_abc123", request.RequestUri!.ToString());
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"id":"videos_abc123","object":"video.generation.job","created_at":1786947130,"status":"queued","model":"PrunaAI/p-video","data":null,"error":null}""");
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "videos_abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.Processing, result.Outcome);
+        Assert.Null(result.Files);
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterPollingDownloadsFromTheSameHostContentEndpointRatherThanTheThirdPartyCdnUrlWhenSucceeded()
+    {
+        byte[] video = [1, 2, 3];
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url == "https://api.deepinfra.com/v1/videos/videos_abc123")
+            {
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"id":"videos_abc123","object":"video.generation.job","created_at":1786947130,"status":"succeeded","model":"PrunaAI/p-video","data":[{"url":"https://api.pruna.ai/v1/predictions/delivery/xezq/output.mp4"}],"error":null}""");
+            }
+            Assert.Equal("https://api.deepinfra.com/v1/videos/videos_abc123/content?variant=video", url);
+            Assert.Equal("Bearer secret-key", request.Headers.GetValues("Authorization").Single());
+            return FakeHttpMessageHandler.BinaryResponse(video, "video/mp4");
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "videos_abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.Completed, result.Outcome);
+        Assert.Equal([video], result.Files!);
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterPollingTreatsAnUnrecognizedStatusAsAFailureRatherThanHangingForever()
+    {
+        var handler = new FakeHttpMessageHandler(_ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+            """{"id":"videos_abc123","object":"video.generation.job","created_at":1786947130,"status":"cancelled","model":"PrunaAI/p-video","data":null,"error":"The job was cancelled."}"""));
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+
+        var result = await adapter.PollVideoGenerationAsync(connection, "secret-key", "videos_abc123");
+
+        Assert.Equal(AsyncGenerationPollOutcome.Failed, result.Outcome);
+        Assert.Equal("The job was cancelled.", result.ErrorMessage);
     }
 }
