@@ -12,6 +12,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mellow.SlopFactory.Core\Mellow.SlopFactory.Core.csproj" />

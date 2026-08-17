@@ -11,12 +11,11 @@ namespace Mellow.SlopFactory.Tests;
 /// </summary>
 public sealed class LiveProviderSmokeTests
 {
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "LiveProvider")]
     public async Task RunsDiscoveryOnlyWhenExplicitlyEnabledAndCredentialed()
     {
         var settings = LiveProviderTestSettings.FromEnvironment();
-        if (!settings.CanRunDiscovery) return;
         settings.RequireDiscoveryRun();
 
         foreach (var (providerType, configured) in settings.ConfiguredConnections)

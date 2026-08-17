@@ -28,8 +28,6 @@ internal sealed class LiveProviderTestSettings
 
     public IEnumerable<KeyValuePair<ProviderType, LiveProviderConnection>> ConfiguredConnections => _connections;
 
-    public bool CanRunDiscovery => Enabled && BudgetUsd is > 0 && _connections.Count > 0;
-
     public static LiveProviderTestSettings FromEnvironment(Func<string, string?>? readEnvironment = null)
     {
         readEnvironment ??= Environment.GetEnvironmentVariable;
@@ -59,9 +57,9 @@ internal sealed class LiveProviderTestSettings
 
     public void RequireDiscoveryRun()
     {
-        if (!Enabled) throw Xunit.Sdk.SkipException.ForSkip($"Set {EnableVariable}=true to run live-provider tests.");
-        if (BudgetUsd is not > 0) throw Xunit.Sdk.SkipException.ForSkip($"Set {BudgetVariable} to a positive USD budget before running live-provider tests.");
-        if (_connections.Count == 0) throw Xunit.Sdk.SkipException.ForSkip("No live-provider credentials are configured; no live request was sent.");
+        if (!Enabled) throw new Xunit.SkipException($"Set {EnableVariable}=true to run live-provider tests.");
+        if (BudgetUsd is not > 0) throw new Xunit.SkipException($"Set {BudgetVariable} to a positive USD budget before running live-provider tests.");
+        if (_connections.Count == 0) throw new Xunit.SkipException("No live-provider credentials are configured; no live request was sent.");
     }
 
     public void RequireBillableRun(decimal maximumCostUsd)
@@ -70,7 +68,7 @@ internal sealed class LiveProviderTestSettings
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCostUsd);
         if (BudgetUsd < maximumCostUsd)
         {
-            throw Xunit.Sdk.SkipException.ForSkip(
+            throw new Xunit.SkipException(
                 $"The configured {BudgetVariable} is lower than the required maximum of {maximumCostUsd.ToString(CultureInfo.InvariantCulture)} USD; no billable request was sent.");
         }
     }

@@ -10,7 +10,7 @@ public sealed class LiveProviderTestSettingsTests
     {
         var settings = LiveProviderTestSettings.FromEnvironment(_ => null);
 
-        var exception = Assert.Throws<Xunit.Sdk.SkipException>(() => settings.RequireDiscoveryRun());
+        var exception = Assert.Throws<Xunit.SkipException>(() => settings.RequireDiscoveryRun());
 
         Assert.Contains(LiveProviderTestSettings.EnableVariable, exception.Message, StringComparison.Ordinal);
     }
@@ -26,7 +26,7 @@ public sealed class LiveProviderTestSettingsTests
         };
         var settings = LiveProviderTestSettings.FromEnvironment(name => values.TryGetValue(name, out var value) ? value : null);
 
-        var exception = Assert.Throws<Xunit.Sdk.SkipException>(() => settings.RequireDiscoveryRun());
+        var exception = Assert.Throws<Xunit.SkipException>(() => settings.RequireDiscoveryRun());
 
         Assert.Contains(LiveProviderTestSettings.BudgetVariable, exception.Message, StringComparison.Ordinal);
     }
@@ -60,7 +60,7 @@ public sealed class LiveProviderTestSettingsTests
         };
         var settings = LiveProviderTestSettings.FromEnvironment(name => values.TryGetValue(name, out var value) ? value : null);
 
-        var exception = Assert.Throws<Xunit.Sdk.SkipException>(() => settings.RequireBillableRun(0.11m));
+        var exception = Assert.Throws<Xunit.SkipException>(() => settings.RequireBillableRun(0.11m));
 
         Assert.Contains("no billable request was sent", exception.Message, StringComparison.Ordinal);
     }

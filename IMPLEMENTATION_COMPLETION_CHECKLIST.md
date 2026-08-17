@@ -93,12 +93,25 @@ can have multiple owners when implementation and release verification are intent
       partial-result fixtures are now covered. Redirect-target revalidation is covered for
       OpenRouter result downloads, including a bounded redirect loop. The OpenRouter HTTP handler
       also rejects a private address before connecting, covering DNS rebinding.
-- [ ] Create an explicitly enabled live-provider harness that skips without credentials, enforces a
+- [x] Create an explicitly enabled live-provider harness that skips without credentials, enforces a
       caller-approved cost budget and sanitizes every retained artifact.
-      The discovery harness and budget guard are implemented. With the current xUnit runner the
-      absent-credential path is a no-op rather than a dynamically reported skip; it never creates
-      an HTTP client or sends a request. A billable media smoke test remains pending an approved
-      provider/model/cost selection.
+      The discovery harness and budget guard are implemented; nothing is retained (discovery-only,
+      no logging to disk), so "sanitizes every retained artifact" is satisfied by having nothing to
+      sanitize. Fixed the previously-flagged gap: `LiveProviderSmokeTests`'s test method called
+      `settings.RequireDiscoveryRun()` (which already threw a skip exception with a clear reason for
+      each unmet precondition) only after an earlier `if (!settings.CanRunDiscovery) return;` early
+      exit had already silently no-op'd the absent-credential case, so the skip path was never
+      actually reached. Removed that early-return, and switched the underlying exception from
+      `Xunit.Sdk.SkipException` to `Xunit.SkipException` (added the `Xunit.SkippableFact` package,
+      test-project-only) with the test marked `[SkippableFact]` — verified plain xUnit v2 + the
+      current `xunit.runner.visualstudio` combination does not recognize a thrown
+      `Xunit.Sdk.SkipException` as anything but a hard `Failed` result (confirmed by reproducing it),
+      so the fix genuinely needed a runner-recognized mechanism, not just a differently-worded
+      exception. `dotnet test` now reports this test as `Skipped` with a reason, not a silent `Passed`
+      or a false `Failed`, when no live credentials are configured (the normal case for every
+      contributor). A billable media smoke test itself remains pending an approved provider/model/
+      cost selection and real credentials — that execution step is section 15's manual gate, not
+      something this automated harness can complete on its own.
 - [x] Add 1min.AI to the harness when its adapter is implemented.
       `LiveProviderSmokeTests.CreateAdapter` now has a `ProviderType.OneMinAi` case.
 
