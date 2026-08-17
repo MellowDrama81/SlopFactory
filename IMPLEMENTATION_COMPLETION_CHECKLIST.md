@@ -266,13 +266,31 @@ provider-bound file follows a documented and tested transfer path.
 
 - [ ] Display text incrementally for adapters that support streaming while writing incomplete output
       only to temporary managed storage.
+      Confirmed not partially wired: no adapter opens a streaming (SSE) request today —
+      `IProviderAdapter.GenerateTextAsync` returns one awaited `TextGenerationResult`, and the shared
+      `OpenAiCompatibleProtocol` helper every adapter funnels through only has non-streaming
+      buffered-response methods. Closing this requires a new adapter contract (e.g. an
+      `IAsyncEnumerable`/callback-based streaming overload), real per-provider SSE parsing, and new
+      `Generate.razor` incremental-render/temp-file-until-complete UI state — a genuine multi-file
+      architecture change, not a bounded edit.
 - [ ] Retain an interrupted partial response as a clearly labelled incomplete result when required
       by the plan.
+      Blocked on the same missing streaming infrastructure as above (plan.md:1716's "Interrupted"/
+      "Incomplete Response" only applies once a streamed response can be disconnected mid-stream).
 - [ ] Stream large result downloads into bounded temporary storage rather than buffering the complete
       response in memory.
-      Recovery staging now supports bounded, write-through stream ingestion with cleanup on failure;
-      provider adapters and the generation queue still return in-memory byte arrays and remain to be
-      migrated to this path.
+      Recovery staging's `StageFromStreamAsync` already does real bounded write-through streaming
+      with cleanup on failure and is reusable. Closing the gap end-to-end still requires changing
+      `IProviderAdapter.GenerateImageAsync`/`GenerateAudioAsync`/the video poll result shape from
+      `byte[]`/`IReadOnlyList<byte[]>` to a stream-based contract, the shared `OpenAiCompatibleProtocol`
+      HTTP layer that buffers into a `MemoryStream`, `GenerationQueueService`'s per-modality handling,
+      and `ILibraryWorkspace`'s `Record*GenerationResultAsync` commit paths — roughly 6-8 call sites
+      across Core/Infrastructure/Gui. A narrower version (only the OpenRouter video-download path,
+      already singled out by this section's other redirect/DNS/checksum bullets) still touches the
+      same shared `AsyncGenerationPollResult.Files` type and commit path, so it isn't cleanly
+      separable from the larger migration either. Left open rather than attempting a partial refactor
+      that could subtly break the existing checksum/media-type verification, which currently runs
+      against fully-buffered bytes.
 - [x] Revalidate every redirect target before following it for OpenRouter result downloads.
 - [x] Prevent DNS rebinding by binding validation to the addresses used for the actual connection
       on the OpenRouter HTTP client.
