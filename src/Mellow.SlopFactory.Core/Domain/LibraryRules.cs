@@ -8,7 +8,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 35;
+    public const int SchemaVersion = 36;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -200,6 +200,21 @@ public static class LibraryRules
 
     public static int EstimateTokenCount(string? text) =>
         string.IsNullOrEmpty(text) ? 0 : Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
+
+    /// <summary>Whether a <see cref="GenerationStatus"/> never returns to an active state — a
+    /// terminal generation cannot be advanced further (plan.md: "a terminal status cannot return to
+    /// an active state").</summary>
+    public static bool IsTerminalGenerationStatus(GenerationStatus status) => status switch
+    {
+        GenerationStatus.Completed => true,
+        GenerationStatus.Failed => true,
+        GenerationStatus.PartiallyCompleted => true,
+        GenerationStatus.Cancelled => true,
+        GenerationStatus.CancelledWithResults => true,
+        GenerationStatus.CompletedBeforeCancellation => true,
+        GenerationStatus.CancelledBeforeSubmission => true,
+        _ => false
+    };
 
     public const int MaximumAdditionalConnectionHeaders = 10;
     public const int MaximumConnectionHeaderValueScalars = 500;

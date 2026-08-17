@@ -696,6 +696,18 @@
   <data name="GenerationFailed" xml:space="preserve"><value>Generation failed</value></data>
   <data name="GenerationCancelled" xml:space="preserve"><value>Cancelled</value></data>
   <data name="GenerationCancelledWithResults" xml:space="preserve"><value>Cancelled — partial results kept</value></data>
+  <data name="GenerationQueued" xml:space="preserve"><value>Queued</value></data>
+  <data name="GenerationPaused" xml:space="preserve"><value>Paused</value></data>
+  <data name="GenerationPreparing" xml:space="preserve"><value>Preparing</value></data>
+  <data name="GenerationUploading" xml:space="preserve"><value>Uploading</value></data>
+  <data name="GenerationSubmitting" xml:space="preserve"><value>Submitting</value></data>
+  <data name="GenerationSubmissionOutcomeUnknown" xml:space="preserve"><value>Submission outcome unknown</value></data>
+  <data name="GenerationProcessing" xml:space="preserve"><value>Processing</value></data>
+  <data name="GenerationMonitoringPaused" xml:space="preserve"><value>Monitoring paused</value></data>
+  <data name="GenerationDownloadingResults" xml:space="preserve"><value>Downloading results</value></data>
+  <data name="GenerationAwaitingLibrary" xml:space="preserve"><value>Awaiting library</value></data>
+  <data name="GenerationCancellationRequested" xml:space="preserve"><value>Cancellation requested</value></data>
+  <data name="GenerationCompletedBeforeCancellation" xml:space="preserve"><value>Completed before cancellation</value></data>
   <data name="OpenGeneratedFile" xml:space="preserve"><value>Open generated file</value></data>
   <data name="GenerationHistoryPageTitle" xml:space="preserve"><value>Generation history · SlopFactory</value></data>
   <data name="GenerationHistoryHeading" xml:space="preserve"><value>Generation history</value></data>

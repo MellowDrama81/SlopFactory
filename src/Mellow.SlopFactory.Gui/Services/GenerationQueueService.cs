@@ -123,6 +123,15 @@ public sealed class GenerationQueueService
         /// not <see cref="NonRunnable"/>, so two independently recycled dependencies both have to be
         /// restored before the job resumes.</summary>
         public readonly HashSet<string> RecycledDependencyIds = new(StringComparer.Ordinal);
+        /// <summary>The task creating this job's durable <see cref="GenerationStatus.Queued"/> record
+        /// (see <see cref="CreateQueuedRecordAsync"/>). Awaited by <see cref="RunJobAsync"/> before
+        /// execution starts so <see cref="GenerationRecordId"/> is populated (or confirmed
+        /// unavailable) first.</summary>
+        public Task<GenerationRecord?>? RecordCreation;
+        /// <summary>Set once <see cref="RecordCreation"/> completes successfully. Null if creation
+        /// failed (a transient storage failure) — status transitions are then skipped and the job
+        /// runs exactly as it did before this durable record existed.</summary>
+        public string? GenerationRecordId;
     }
 
     private readonly Dictionary<string, LinkedList<QueuedJob>> _queues = new(StringComparer.Ordinal);
@@ -325,6 +334,120 @@ public sealed class GenerationQueueService
         _energy.Changed += OnEnergyStateChanged;
         if (_connectivity is not null) _connectivity.Changed += OnConnectivityChanged;
         _ = ResumePendingDownloadsAsync();
+        _ = ResumeInFlightGenerationsAsync();
+    }
+
+    /// <summary>
+    /// Restores generation records left non-terminal by a crash or restart (plan.md: restart
+    /// recovery must not infer state from transient UI data). A record still at
+    /// <see cref="GenerationStatus.Queued"/> or <see cref="GenerationStatus.Preparing"/> never reached
+    /// a provider, so it is safe to silently re-enter the queue from the durable record itself (which
+    /// already carries the full request shape). Every other nonterminal status may have already
+    /// reached the provider, so it is never auto-resubmitted: a video job with a still-tracked
+    /// <see cref="AsyncRemoteJobRecord"/> is left exactly as <see cref="ResumePendingDownloadsAsync"/>
+    /// already leaves a <see cref="AsyncRemoteJobPhase.CompletedAwaitingDownload"/> job — visible,
+    /// discardable, unresolved — while anything else with no polling handle at all (the synchronous
+    /// Text/Image/Audio case, or a video submission that crashed before its registry row was written)
+    /// advances to <see cref="GenerationStatus.SubmissionOutcomeUnknown"/> instead of being silently
+    /// lost or silently resubmitted. Called once when the queue starts and again whenever the active
+    /// library changes.
+    /// </summary>
+    private async Task ResumeInFlightGenerationsAsync()
+    {
+        var workspace = _libraries.Workspace;
+        if (workspace is null) return;
+        IReadOnlyList<GenerationRecord> pending;
+        try
+        {
+            pending = await workspace.GetNonTerminalGenerationRecordsAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)
+        {
+            return;
+        }
+        foreach (var record in pending)
+        {
+            try
+            {
+                if (record.Status is GenerationStatus.Queued or GenerationStatus.Preparing)
+                {
+                    await ResumeSafeRecordAsync(workspace, record).ConfigureAwait(false);
+                }
+                else if (record.Status != GenerationStatus.SubmissionOutcomeUnknown)
+                {
+                    var linkedJobs = await workspace.GetAsyncRemoteJobsForGenerationRecordAsync(record.Id).ConfigureAwait(false);
+                    if (linkedJobs.Count == 0)
+                    {
+                        await workspace.AdvanceGenerationStatusAsync(record.Id, GenerationStatus.SubmissionOutcomeUnknown).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException or Microsoft.Data.Sqlite.SqliteException)
+            {
+                // Left for a later manual pass — this loop must never let one bad record stop
+                // recovery of the rest.
+            }
+        }
+    }
+
+    private async Task ResumeSafeRecordAsync(ILibraryWorkspace workspace, GenerationRecord record)
+    {
+        if (record.ModelId is null) return;
+        Model model;
+        try
+        {
+            model = await workspace.GetModelAsync(record.ModelId).ConfigureAwait(false);
+        }
+        catch (RecordNotFoundException)
+        {
+            return;
+        }
+        var snapshot = new GenerationJobSnapshot(
+            DraftId: record.Id,
+            SubmittedTabTitle: record.Prompt,
+            Mode: record.Mode,
+            ModelId: record.ModelId,
+            Prompt: record.Prompt,
+            SystemInstructions: record.SystemInstructions,
+            SourceFileId: record.SourceFileId,
+            ResultCount: record.ResultCount,
+            DestinationFolderId: record.DestinationFolderId,
+            AcceptedImprovementRecordId: record.PromptImprovementRecordId,
+            Settings: record.Settings,
+            SecondarySourceFileId: record.SecondarySourceFileId,
+            TertiarySourceFileId: record.TertiarySourceFileId);
+        EnqueueExisting(record, snapshot, model.ConnectionId, workspace);
+    }
+
+    /// <summary>Re-enters the queue for a generation record that already durably exists (restart
+    /// recovery) instead of creating a new one, unlike <see cref="Enqueue"/>.</summary>
+    private void EnqueueExisting(GenerationRecord record, GenerationJobSnapshot snapshot, string connectionId, ILibraryWorkspace workspace)
+    {
+        lock (_gate)
+        {
+            var job = new QueuedJob
+            {
+                JobId = LibraryRules.NewId(),
+                DraftId = snapshot.DraftId,
+                ConnectionId = connectionId,
+                Snapshot = snapshot,
+                Workspace = workspace,
+                Phase = GenerationJobPhase.Queued,
+                GenerationRecordId = record.Id,
+                RecordCreation = Task.FromResult<GenerationRecord?>(record)
+            };
+            if (!_queues.TryGetValue(connectionId, out var queue))
+            {
+                queue = new LinkedList<QueuedJob>();
+                _queues[connectionId] = queue;
+                _connectionOrder.Add(connectionId);
+            }
+            queue.AddLast(job);
+            _jobsById[job.JobId] = job;
+            AddActiveJobId(job.DraftId, job.JobId);
+            RaiseChanged();
+            Pump();
+        }
     }
 
     /// <summary>
@@ -389,9 +512,10 @@ public sealed class GenerationQueueService
     public string Enqueue(GenerationJobSnapshot snapshot, string connectionId)
     {
         var workspace = _libraries.Workspace ?? throw new InvalidOperationException("No library is open.");
+        QueuedJob job;
         lock (_gate)
         {
-            var job = new QueuedJob
+            job = new QueuedJob
             {
                 JobId = LibraryRules.NewId(),
                 DraftId = snapshot.DraftId,
@@ -400,6 +524,12 @@ public sealed class GenerationQueueService
                 Workspace = workspace,
                 Phase = GenerationJobPhase.Queued
             };
+            // Kicked off while still holding _gate, and before Pump() below can schedule this job
+            // onto another thread: starting an async method only runs synchronously up to its first
+            // await (issuing the database write, not waiting on it), so this doesn't block Enqueue or
+            // hold the lock across I/O — but it does guarantee RecordCreation is populated before
+            // RunJobAsync could ever observe this job and check it.
+            job.RecordCreation = CreateQueuedRecordAsync(job, workspace);
             if (!_queues.TryGetValue(connectionId, out var queue))
             {
                 queue = new LinkedList<QueuedJob>();
@@ -411,8 +541,71 @@ public sealed class GenerationQueueService
             AddActiveJobId(job.DraftId, job.JobId);
             RaiseChanged();
             Pump();
-            return job.JobId;
         }
+        return job.JobId;
+    }
+
+    /// <summary>Creates this job's durable <see cref="GenerationStatus.Queued"/> record so it exists
+    /// from the moment it enters the queue, not only once it starts running. A transient storage
+    /// failure here degrades to the pre-existing in-memory-only behavior (logged, not thrown) rather
+    /// than dropping the job — <see cref="RunJobAsync"/> still runs it normally, just without status
+    /// persistence.</summary>
+    private async Task<GenerationRecord?> CreateQueuedRecordAsync(QueuedJob job, ILibraryWorkspace workspace)
+    {
+        try
+        {
+            var snapshot = job.Snapshot;
+            var record = await workspace.CreateQueuedGenerationRecordAsync(snapshot.ModelId, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, snapshot.SystemInstructions, snapshot.SourceFileId, snapshot.SecondarySourceFileId, snapshot.TertiarySourceFileId, snapshot.Settings, snapshot.AcceptedImprovementRecordId).ConfigureAwait(false);
+            lock (_gate) job.GenerationRecordId = record.Id;
+            return record;
+        }
+        catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            _diagnostics?.Log(new DiagnosticLogEntry(DateTimeOffset.UtcNow, OperationType: "Generation.QueuedRecordCreationFailed", LocalRecordId: null, SanitizedError: exception.Message, IsVerbose: _diagnostics.VerboseEnabled));
+            return null;
+        }
+    }
+
+    /// <summary>Best-effort status advance for a queued job's durable record — a no-op if record
+    /// creation hasn't completed (or failed). Fire-and-forget: this is intermediate telemetry, not
+    /// the terminal outcome write, which stays awaited via <c>existingGenerationRecordId</c> on the
+    /// final <c>Record*GenerationResultAsync</c> call, so losing an intermediate transition here never
+    /// loses the final one.</summary>
+    private void AdvanceLocked(QueuedJob job, GenerationStatus status, GenerationHoldReason? hold = null)
+    {
+        string? recordId;
+        lock (_gate) recordId = job.GenerationRecordId;
+        if (recordId is null) return;
+        _ = AdvanceGenerationStatusSafeAsync(job.Workspace, recordId, status, hold);
+    }
+
+    private static async Task AdvanceGenerationStatusSafeAsync(ILibraryWorkspace workspace, string generationRecordId, GenerationStatus status, GenerationHoldReason? hold)
+    {
+        try
+        {
+            await workspace.AdvanceGenerationStatusAsync(generationRecordId, status, hold).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException or Microsoft.Data.Sqlite.SqliteException or LibraryValidationException)
+        {
+        }
+    }
+
+    /// <summary>Same as <see cref="AdvanceLocked"/>, but for a job that may still be mid-creation of
+    /// its durable record (e.g. cancelled the instant it was enqueued) — waits for
+    /// <see cref="QueuedJob.RecordCreation"/> first instead of silently skipping the transition when
+    /// <see cref="QueuedJob.GenerationRecordId"/> isn't populated yet.</summary>
+    private static void AdvanceAfterCreationLocked(QueuedJob job, GenerationStatus status, GenerationHoldReason? hold = null) => _ = AdvanceAfterCreationAsync(job, status, hold);
+
+    private static async Task AdvanceAfterCreationAsync(QueuedJob job, GenerationStatus status, GenerationHoldReason? hold)
+    {
+        if (job.RecordCreation is not null)
+        {
+            try { await job.RecordCreation.ConfigureAwait(false); }
+            catch { return; }
+        }
+        var recordId = job.GenerationRecordId;
+        if (recordId is null) return;
+        await AdvanceGenerationStatusSafeAsync(job.Workspace, recordId, status, hold).ConfigureAwait(false);
     }
 
     private void AddActiveJobId(string draftId, string jobId)
@@ -444,6 +637,7 @@ public sealed class GenerationQueueService
     public void Cancel(string jobId)
     {
         CancellationTokenSource? toCancel = null;
+        QueuedJob? cancelledBeforeSubmission = null;
         var changed = false;
         lock (_gate)
         {
@@ -456,6 +650,7 @@ public sealed class GenerationQueueService
                 RemoveActiveJobId(job.DraftId, jobId);
                 RecordOutcome(job.DraftId, new GenerationJobOutcome(jobId, job.DraftId, null, null, CancelledBeforeSubmission: true, DateTimeOffset.UtcNow));
                 changed = true;
+                cancelledBeforeSubmission = job;
             }
             else
             {
@@ -463,6 +658,7 @@ public sealed class GenerationQueueService
             }
         }
         toCancel?.Cancel();
+        if (cancelledBeforeSubmission is not null) AdvanceAfterCreationLocked(cancelledBeforeSubmission, GenerationStatus.CancelledBeforeSubmission);
         if (changed) RaiseChanged();
     }
 
@@ -589,6 +785,7 @@ public sealed class GenerationQueueService
         foreach (var cancellation in toCancel) cancellation.Cancel();
         RaiseChanged();
         _ = ResumePendingDownloadsAsync();
+        _ = ResumeInFlightGenerationsAsync();
     }
 
     private static bool ReferencesFile(GenerationJobSnapshot snapshot, string fileId) =>
@@ -894,6 +1091,12 @@ public sealed class GenerationQueueService
         lock (_gate) job.Cancellation = cancellation;
         RaiseChanged();
 
+        if (job.RecordCreation is not null)
+        {
+            try { await job.RecordCreation.ConfigureAwait(false); }
+            catch { /* already logged in CreateQueuedRecordAsync */ }
+        }
+
         var outcome = await ExecuteAsync(job, cancellation.Token).ConfigureAwait(false);
 
         lock (_gate)
@@ -946,6 +1149,7 @@ public sealed class GenerationQueueService
     private async Task<GenerationJobOutcome> ExecuteAsync(QueuedJob job, CancellationToken cancellationToken)
     {
         var snapshot = job.Snapshot;
+        AdvanceLocked(job, GenerationStatus.Preparing);
         try
         {
             var models = await job.Workspace.GetActiveModelsAsync(cancellationToken).ConfigureAwait(false);
@@ -966,6 +1170,7 @@ public sealed class GenerationQueueService
                 string? errorMessage = null;
                 try
                 {
+                    AdvanceLocked(job, GenerationStatus.Submitting);
                     images = await adapter.GenerateImageAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
@@ -973,7 +1178,7 @@ public sealed class GenerationQueueService
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordImageGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, images, errorMessage, snapshot.AcceptedImprovementRecordId, cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordImageGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, images, errorMessage, snapshot.AcceptedImprovementRecordId, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             else if (snapshot.Mode == GenerationMode.Audio)
             {
@@ -981,6 +1186,7 @@ public sealed class GenerationQueueService
                 string? errorMessage = null;
                 try
                 {
+                    AdvanceLocked(job, GenerationStatus.Submitting);
                     audioFiles = await adapter.GenerateAudioAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
@@ -988,7 +1194,7 @@ public sealed class GenerationQueueService
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, audioFiles, errorMessage, snapshot.AcceptedImprovementRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, audioFiles, errorMessage, snapshot.AcceptedImprovementRecordId, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             else if (snapshot.Mode == GenerationMode.Video)
             {
@@ -1019,6 +1225,7 @@ public sealed class GenerationQueueService
                 string? errorMessage = null;
                 try
                 {
+                    AdvanceLocked(job, GenerationStatus.Submitting);
                     result = await adapter.GenerateTextAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, snapshot.SystemInstructions, sourceImage, snapshot.Settings, secondarySourceImage, tertiarySourceImage, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
@@ -1026,7 +1233,7 @@ public sealed class GenerationQueueService
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceFileId, snapshot.AcceptedImprovementRecordId, snapshot.Settings, snapshot.SecondarySourceFileId, snapshot.TertiarySourceFileId, result?.SafetyBlockedCount ?? 0, cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordTextGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, result?.Texts, errorMessage, snapshot.SystemInstructions, result?.PromptTokens, result?.CompletionTokens, snapshot.SourceFileId, snapshot.AcceptedImprovementRecordId, snapshot.Settings, snapshot.SecondarySourceFileId, snapshot.TertiarySourceFileId, result?.SafetyBlockedCount ?? 0, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
 
             return new GenerationJobOutcome(job.JobId, job.DraftId, record, null, false, DateTimeOffset.UtcNow, stagedForRecovery);
@@ -1100,6 +1307,7 @@ public sealed class GenerationQueueService
 
         try
         {
+            AdvanceLocked(job, GenerationStatus.Submitting);
             for (var index = 0; index < resultCount; index++)
             {
                 try
@@ -1126,6 +1334,7 @@ public sealed class GenerationQueueService
                 // At least one job was durably accepted by the provider — release this connection's
                 // submission slot now instead of holding it through the whole poll duration below.
                 ReleaseSubmissionSlotEarly(job);
+                AdvanceLocked(job, GenerationStatus.Processing);
             }
 
             var pending = new List<(string ProviderJobId, string AsyncRecordId)>(submitted);
@@ -1200,7 +1409,7 @@ public sealed class GenerationQueueService
             // CancellationToken.None for the commit itself (no further network calls happen here,
             // so there is nothing left to usefully cancel) rather than letting the cancellation
             // that already fired abort this bounded, local-only step too.
-            var cancelledRecord = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, wasCancelled: true, childErrorMessages: childErrorMessages, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            var cancelledRecord = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, wasCancelled: true, childErrorMessages: childErrorMessages, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: CancellationToken.None).ConfigureAwait(false);
             foreach (var entry in submitted)
             {
                 try
@@ -1218,7 +1427,7 @@ public sealed class GenerationQueueService
         var stagedForRecovery = false;
         try
         {
-            record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, childErrorMessages: childErrorMessages, cancellationToken: cancellationToken).ConfigureAwait(false);
+            record = await job.Workspace.RecordMediaGenerationResultAsync(model.Id, snapshot.Prompt, resultCount, snapshot.DestinationFolderId, files.Count > 0 ? files : null, files.Count == 0 ? errorMessage : null, snapshot.AcceptedImprovementRecordId, totalCost, costCurrency, childErrorMessages: childErrorMessages, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (files.Count > 0 && _recoveryStaging is not null && _availabilityProbe is not null
             && exception is IOException or Microsoft.Data.Sqlite.SqliteException
@@ -1329,8 +1538,14 @@ public sealed class GenerationQueueService
         return true;
     }
 
-    private static GenerationJobOutcome LocalFailureOutcome(QueuedJob job, string message) =>
-        new(job.JobId, job.DraftId, null, message, false, DateTimeOffset.UtcNow);
+    /// <summary>A local failure never reaches a provider, so it finalizes this job's durable record
+    /// to <see cref="GenerationStatus.Failed"/> directly rather than leaving it stranded at whatever
+    /// nonterminal status it last reached (e.g. <see cref="GenerationStatus.Preparing"/>).</summary>
+    private GenerationJobOutcome LocalFailureOutcome(QueuedJob job, string message)
+    {
+        AdvanceLocked(job, GenerationStatus.Failed);
+        return new(job.JobId, job.DraftId, null, message, false, DateTimeOffset.UtcNow);
+    }
 
     private void RaiseChanged()
     {

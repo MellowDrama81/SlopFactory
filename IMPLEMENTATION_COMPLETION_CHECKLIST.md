@@ -91,10 +91,23 @@ credentialed developer can run bounded live smoke tests deliberately.
 - [ ] Implement the complete normalized generation status vocabulary from `plan.md`, including all
       paused states, preparation/upload/submission, unknown outcome, monitoring pause, download,
       awaiting-library and cancellation variants.
+      `GenerationStatus` now carries the full 18-value vocabulary (schema v36), with
+      `GenerationHoldReason`/`GenerationFailureReason` sub-detail and a `generation_status_transitions`
+      history table. `GenerationQueueService` advances Preparing/Submitting/Processing/
+      CancelledBeforeSubmission/Failed for Text/Image/Audio/Video; per-child (position-scoped)
+      transitions are schema-ready but unused; Uploading/Monitoring Paused/Downloading Results/
+      Awaiting Library/Cancellation Requested are reachable values with no producing transition yet.
 - [ ] Persist status transitions and per-child transitions so restart recovery does not infer state
       from transient UI data.
+      Every generation now gets a durable `Queued` record at `Enqueue` time, advances through the
+      transition-history table, and `GenerationQueueService.ResumeInFlightGenerationsAsync` (called
+      from `Start()` and on library switch) auto-requeues Queued/Preparing records and advances
+      anything else with no linked async-job registry row to `SubmissionOutcomeUnknown` rather than
+      losing or silently resubmitting it. Per-child transition persistence remains unused.
 - [ ] Implement **Submission Outcome Unknown** when transmission may have reached the provider but
       acceptance cannot be proven.
+      The status is reachable (restart recovery lands ambiguous non-video records there), but no
+      reconciliation, UI surface or connection-revision gating against it exists yet.
 - [ ] Add **Attempt Reconciliation** for adapters with a documented lookup mechanism.
 - [ ] Add **Abandon Recovery and Apply Changes**, retaining sanitized non-actionable history while
       removing identifiers that could still drive provider actions.

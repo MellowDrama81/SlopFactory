@@ -752,6 +752,11 @@ public sealed record AsyncGenerationPollResult(
     string? ErrorMessage,
     AsyncGenerationCost? Cost = null);
 
+/// <summary>
+/// The normalized generation status vocabulary. Numeric codes for existing values are frozen
+/// because <see cref="GenerationRecord.Status"/> is persisted as a raw integer — new values are
+/// only ever appended, never renumbered.
+/// </summary>
 public enum GenerationStatus
 {
     Completed = 0,
@@ -763,8 +768,76 @@ public enum GenerationStatus
     Cancelled = 3,
     /// <summary>Cancelled after at least one child provider job was submitted, with one or more
     /// already completed and committed before cancellation took effect.</summary>
-    CancelledWithResults = 4
+    CancelledWithResults = 4,
+    /// <summary>Waiting for a queue slot; nothing has been sent to a provider yet.</summary>
+    Queued = 5,
+    /// <summary>Held for a nonterminal reason recorded in <see cref="GenerationRecord.HoldReason"/>.
+    /// Resumes to <see cref="Queued"/> once the hold is explicitly resolved.</summary>
+    Paused = 6,
+    /// <summary>Resolving local inputs (model/connection lookup, reading local source files) before
+    /// anything is transmitted to a provider.</summary>
+    Preparing = 7,
+    /// <summary>Transferring source data to a provider ahead of a separate submission call.</summary>
+    Uploading = 8,
+    /// <summary>The generation request is in flight to the provider.</summary>
+    Submitting = 9,
+    /// <summary>Transmission may have reached the provider, but acceptance cannot be confirmed —
+    /// never automatically resubmitted or polled unless an adapter documents a reconciliation
+    /// lookup.</summary>
+    SubmissionOutcomeUnknown = 10,
+    /// <summary>The provider accepted the request and is working on it.</summary>
+    Processing = 11,
+    /// <summary>An adapter-declared maximum monitoring lifetime was exceeded while the job was still
+    /// reported as running; distinct from <see cref="Paused"/>. Resumes to <see cref="Processing"/>
+    /// only via an explicit Resume Monitoring action.</summary>
+    MonitoringPaused = 12,
+    /// <summary>The provider completed the job and its result bytes are being downloaded.</summary>
+    DownloadingResults = 13,
+    /// <summary>Results are downloaded but not yet committed to the library (e.g. its removable-
+    /// storage volume is unavailable).</summary>
+    AwaitingLibrary = 14,
+    /// <summary>Cancellation was requested for a provider that does not support cancelling accepted
+    /// work; the provider may continue processing (and billing) despite the request.</summary>
+    CancellationRequested = 15,
+    /// <summary>Cancelled after every child result had already completed and committed — distinct
+    /// from <see cref="CancelledWithResults"/>, where only some children completed.</summary>
+    CompletedBeforeCancellation = 16,
+    /// <summary>Cancelled before any child provider job was ever submitted.</summary>
+    CancelledBeforeSubmission = 17
 }
+
+/// <summary>The reason a <see cref="GenerationStatus.Paused"/> generation is held. Meaningful only
+/// when <see cref="GenerationRecord.Status"/> is <see cref="GenerationStatus.Paused"/>.</summary>
+public enum GenerationHoldReason
+{
+    ConnectionLost = 0,
+    RestartConfirmation = 1,
+    MeteredNetwork = 2,
+    DependencyChanged = 3,
+    Other = 4
+}
+
+/// <summary>Additional detail on a <see cref="GenerationStatus.Failed"/> generation. Meaningful only
+/// when <see cref="GenerationRecord.Status"/> is <see cref="GenerationStatus.Failed"/>.</summary>
+public enum GenerationFailureReason
+{
+    /// <summary>A reconciliation lookup confirmed the provider no longer has this job (e.g.
+    /// Not Found/Expired) rather than merely observing a transport error.</summary>
+    RemoteJobUnavailable = 0
+}
+
+/// <summary>One recorded status change for a <see cref="GenerationRecord"/>, timestamped so restart
+/// recovery and history views never need to infer state from transient data.
+/// <paramref name="Position"/> is null for an aggregate-level transition and set for a transition
+/// scoped to one child result.</summary>
+public sealed record GenerationStatusTransition(
+    string Id,
+    string GenerationRecordId,
+    int? Position,
+    GenerationStatus Status,
+    GenerationHoldReason? HoldReason,
+    GenerationFailureReason? FailureReason,
+    DateTimeOffset OccurredAt);
 
 public enum GenerationResultStatus
 {
@@ -839,7 +912,11 @@ public sealed record GenerationRecord(
     int SafetyBlockedCount = 0,
     double? ActualCost = null,
     string? ActualCostCurrency = null,
-    IReadOnlyList<GenerationResultEntry> Results = default!)
+    IReadOnlyList<GenerationResultEntry> Results = default!,
+    /// <summary>Meaningful only when <see cref="Status"/> is <see cref="GenerationStatus.Paused"/>.</summary>
+    GenerationHoldReason? HoldReason = null,
+    /// <summary>Meaningful only when <see cref="Status"/> is <see cref="GenerationStatus.Failed"/>.</summary>
+    GenerationFailureReason? FailureReason = null)
 {
     public IReadOnlyList<FileIdentitySnapshot> TombstonedResults { get; init; } = TombstonedResults ?? [];
     public GenerationSettings Settings { get; init; } = Settings ?? GenerationSettings.Empty;

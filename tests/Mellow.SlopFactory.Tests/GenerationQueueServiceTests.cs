@@ -599,7 +599,7 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
-    public async Task CancellingAQueuedJobNeverInvokesTheAdapterAndRecordsNoGenerationHistory()
+    public async Task CancellingAQueuedJobNeverInvokesTheAdapterButFinalizesItsDurableRecord()
     {
         using var temporary = new TemporaryDirectory();
         var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
@@ -615,17 +615,22 @@ public sealed class GenerationQueueServiceTests
         var queuedOutcome = queue.GetLastOutcomeForDraft("draft-queued");
         Assert.NotNull(queuedOutcome);
         Assert.True(queuedOutcome!.CancelledBeforeSubmission);
+        // The immediate in-memory outcome still never fabricates a GenerationRecord — nothing was
+        // ever sent to a provider — but the durable Queued row created when the job entered the
+        // queue is finalized to CancelledBeforeSubmission instead of being left stranded.
         Assert.Null(queuedOutcome.Record);
 
         adapter.Complete("running", new TextGenerationResult(["r"], null, null));
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-running") is not null);
-        var history = await workspace.GetGenerationHistoryAsync();
-        Assert.Single(history);
+        IReadOnlyList<GenerationRecord> history = [];
+        await WaitUntilAsync(() => (history = workspace.GetGenerationHistoryAsync().GetAwaiter().GetResult()).Count == 2);
+        var queuedRecord = Assert.Single(history, record => record.Prompt == "queued");
+        Assert.Equal(GenerationStatus.CancelledBeforeSubmission, queuedRecord.Status);
         _ = runningJobId;
     }
 
     [Fact]
-    public async Task CancellingARunningJobTriggersItsTokenAndProducesNoGenerationRecord()
+    public async Task CancellingARunningJobTriggersItsTokenAndProducesNoImmediateGenerationRecord()
     {
         using var temporary = new TemporaryDirectory();
         var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
@@ -641,7 +646,14 @@ public sealed class GenerationQueueServiceTests
         var outcome = queue.GetLastOutcomeForDraft("draft-1")!;
         Assert.Null(outcome.Record);
         Assert.False(outcome.CancelledBeforeSubmission);
-        Assert.Empty(await workspace.GetGenerationHistoryAsync());
+        // Whether the request reached the provider before the cancellation fired is genuinely
+        // unknown — the durable record created when the job entered the queue is deliberately left
+        // at its last reported nonterminal status rather than being silently discarded or guessed at
+        // as a terminal outcome (full Submission Outcome Unknown reconciliation is a later phase).
+        var history = await workspace.GetGenerationHistoryAsync();
+        var record = Assert.Single(history);
+        Assert.Equal("prompt", record.Prompt);
+        Assert.False(LibraryRules.IsTerminalGenerationStatus(record.Status));
     }
 
     [Fact]
@@ -742,7 +754,7 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
-    public async Task AJobWhoseModelBecameUnavailableWhileQueuedFailsLocallyWithoutFabricatingARecord()
+    public async Task AJobWhoseModelBecameUnavailableWhileQueuedFailsLocallyWithoutInvokingTheAdapter()
     {
         using var temporary = new TemporaryDirectory();
         var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
@@ -761,11 +773,15 @@ public sealed class GenerationQueueServiceTests
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-doomed") is not null);
 
         var outcome = queue.GetLastOutcomeForDraft("draft-doomed")!;
+        // The immediate in-memory outcome never fabricates a GenerationRecord for a local failure —
+        // no provider call was ever made — but the durable Queued row created when the job entered
+        // the queue is finalized to Failed rather than left stranded at a nonterminal status.
         Assert.Null(outcome.Record);
         Assert.NotNull(outcome.LocalErrorMessage);
         Assert.DoesNotContain("doomed", adapter.InvokedPrompts);
-        var history = await workspace.GetGenerationHistoryAsync();
-        Assert.DoesNotContain(history, record => record.Prompt == "doomed");
+        GenerationRecord? doomedRecord = null;
+        await WaitUntilAsync(() => (doomedRecord = workspace.GetGenerationHistoryAsync().GetAwaiter().GetResult().SingleOrDefault(record => record.Prompt == "doomed")) is not null);
+        Assert.Equal(GenerationStatus.Failed, doomedRecord!.Status);
     }
 
     [Fact]
@@ -1119,6 +1135,58 @@ public sealed class GenerationQueueServiceTests
         }
         var record = Assert.Single(await workspace2.GetGenerationHistoryAsync());
         Assert.Single(record.ResultFileIds);
+    }
+
+    [Fact]
+    public async Task StartingTheQueueAgainstAnAlreadyOpenLibraryAutomaticallyResumesAQueuedTextJobAfterARestartWithoutResubmittingAnInFlightOne()
+    {
+        using var temporary = new TemporaryDirectory();
+        var libraryPath = temporary.Child("library");
+
+        // "First session": one job is left running (blocked mid-call on the adapter) and a second
+        // job on the same connection is left genuinely Queued behind it (the default per-connection
+        // cap is 1), then the app "closes" mid-flight without either job ever completing.
+        {
+            var (libraries, workspace, queue, adapter, _) = await CreateHarnessAsync(libraryPath);
+            var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+            var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+            queue.Enqueue(Snapshot("draft-blocked", model.Id, "blocked", workspace.Descriptor.GeneratedFolderId), connection.Id);
+            queue.Enqueue(Snapshot("draft-queued-restart", model.Id, "queued-restart", workspace.Descriptor.GeneratedFolderId), connection.Id);
+            await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("blocked"));
+
+            // The Submitting transition for "blocked" is written fire-and-forget (best-effort
+            // telemetry, not the terminal write), so wait for it to actually land before disposing —
+            // otherwise this test would race it and could observe "blocked" still durably Queued.
+            var deadline = DateTime.UtcNow.AddSeconds(3);
+            while (true)
+            {
+                var history = await workspace.GetGenerationHistoryAsync();
+                var blockedStatus = history.SingleOrDefault(record => record.Prompt == "blocked")?.Status;
+                var queuedStatus = history.SingleOrDefault(record => record.Prompt == "queued-restart")?.Status;
+                if (blockedStatus == GenerationStatus.Submitting && queuedStatus == GenerationStatus.Queued) break;
+                if (DateTime.UtcNow > deadline) throw new TimeoutException($"The expected pre-restart durable statuses were never reached. blocked={blockedStatus} queued={queuedStatus} historyCount={history.Count}");
+                await Task.Delay(10);
+            }
+            await libraries.DisposeAsync();
+        }
+
+        // "Second session": reopening resumes the still-Queued job on its own and runs it to
+        // completion, while the job that was left mid-flight is never resubmitted (no polling
+        // handle exists for a synchronous Text/Image/Audio adapter call once the process dies).
+        var (_, workspace2, queue2, adapter2, _) = await CreateHarnessAsync(libraryPath, autoStart: false);
+        queue2.Start();
+        await WaitUntilAsync(() => adapter2.InvokedPrompts.Contains("queued-restart"), timeoutMs: 4000);
+        Assert.DoesNotContain("blocked", adapter2.InvokedPrompts);
+        adapter2.Complete("queued-restart", new TextGenerationResult(["resumed result"], null, null));
+
+        GenerationRecord? resumedRecord = null;
+        await WaitUntilAsync(() => (resumedRecord = workspace2.GetGenerationHistoryAsync().GetAwaiter().GetResult().SingleOrDefault(record => record.Prompt == "queued-restart")) is { Status: GenerationStatus.Completed });
+        Assert.Equal(GenerationStatus.Completed, resumedRecord!.Status);
+
+        GenerationRecord? blockedRecord = null;
+        await WaitUntilAsync(() => (blockedRecord = workspace2.GetGenerationHistoryAsync().GetAwaiter().GetResult().SingleOrDefault(record => record.Prompt == "blocked")) is not null
+            && blockedRecord.Status == GenerationStatus.SubmissionOutcomeUnknown);
     }
 
     [Fact]

@@ -250,9 +250,12 @@ internal sealed class SqliteLibraryDatabase
                 tertiary_tombstone_content_hash TEXT NULL,
                 safety_blocked_count INTEGER NOT NULL DEFAULT 0,
                 actual_cost REAL NULL,
-                actual_cost_currency TEXT NULL
+                actual_cost_currency TEXT NULL,
+                hold_reason INTEGER NULL,
+                failure_reason INTEGER NULL
             );
             CREATE INDEX ix_generation_records_created ON generation_records(created_at);
+            CREATE INDEX ix_generation_records_status ON generation_records(status);
 
             CREATE TABLE prompt_improvement_records (
                 id TEXT PRIMARY KEY,
@@ -370,6 +373,17 @@ internal sealed class SqliteLibraryDatabase
                 created_at TEXT NOT NULL
             );
             CREATE INDEX ix_pending_unverified_results_generation ON pending_unverified_results(generation_id);
+
+            CREATE TABLE generation_status_transitions (
+                id TEXT PRIMARY KEY,
+                generation_record_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,
+                position INTEGER NULL,
+                status INTEGER NOT NULL,
+                hold_reason INTEGER NULL,
+                failure_reason INTEGER NULL,
+                occurred_at TEXT NOT NULL
+            );
+            CREATE INDEX ix_generation_status_transitions_record ON generation_status_transitions(generation_record_id, occurred_at);
             """;
         await ExecuteNonQueryAsync(connection, schema, cancellationToken, transaction).ConfigureAwait(false);
 
@@ -652,6 +666,26 @@ internal sealed class SqliteLibraryDatabase
             {
                 await AddColumnIfMissingAsync(connection, transaction, table, "settings_advanced_json", "TEXT NULL", cancellationToken).ConfigureAwait(false);
             }
+        }
+        if (fromVersion < 36)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "hold_reason", "INTEGER NULL", cancellationToken).ConfigureAwait(false);
+            await AddColumnIfMissingAsync(connection, transaction, "generation_records", "failure_reason", "INTEGER NULL", cancellationToken).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection,
+                """
+                CREATE TABLE IF NOT EXISTS generation_status_transitions (
+                    id TEXT PRIMARY KEY,
+                    generation_record_id TEXT NOT NULL REFERENCES generation_records(id) ON DELETE CASCADE,
+                    position INTEGER NULL,
+                    status INTEGER NOT NULL,
+                    hold_reason INTEGER NULL,
+                    failure_reason INTEGER NULL,
+                    occurred_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_generation_status_transitions_record ON generation_status_transitions(generation_record_id, occurred_at);
+                CREATE INDEX IF NOT EXISTS ix_generation_records_status ON generation_records(status);
+                """,
+                cancellationToken, transaction).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -2876,7 +2910,7 @@ internal sealed class SqliteLibraryDatabase
         reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3),
         reader.GetInt64(4), reader.GetString(5), reader.GetString(6), Parse(reader.GetString(7)));
 
-    private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,state,recycled_at,tombstone_source_display_name,tombstone_source_media_type,tombstone_source_content_hash,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,settings_advanced_json,secondary_source_file_id,secondary_tombstone_display_name,secondary_tombstone_media_type,secondary_tombstone_content_hash,tertiary_source_file_id,tertiary_tombstone_display_name,tertiary_tombstone_media_type,tertiary_tombstone_content_hash,safety_blocked_count,actual_cost,actual_cost_currency FROM generation_records";
+    private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,state,recycled_at,tombstone_source_display_name,tombstone_source_media_type,tombstone_source_content_hash,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,settings_advanced_json,secondary_source_file_id,secondary_tombstone_display_name,secondary_tombstone_media_type,secondary_tombstone_content_hash,tertiary_source_file_id,tertiary_tombstone_display_name,tertiary_tombstone_media_type,tertiary_tombstone_content_hash,safety_blocked_count,actual_cost,actual_cost_currency,hold_reason,failure_reason FROM generation_records";
 
     public async Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken)
     {
@@ -2968,7 +3002,7 @@ internal sealed class SqliteLibraryDatabase
         if (deleted == 0) throw new RecordNotFoundException("Generation record not found.");
     }
 
-    public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, TextResultFormat? textFormat, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, CancellationToken cancellationToken, double? actualCost = null, string? actualCostCurrency = null, IReadOnlyList<GenerationResultEntry>? results = null, IReadOnlyList<FileRecord>? committedFiles = null, IReadOnlyList<(int Position, string StagedFileName, long ByteSize, string ContentHash, string DetectedMediaType)>? pendingResults = null)
+    public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, string? sourceFileId, string? promptImprovementRecordId, TextResultFormat? textFormat, GenerationSettings? settings, string? secondarySourceFileId, string? tertiarySourceFileId, int safetyBlockedCount, CancellationToken cancellationToken, double? actualCost = null, string? actualCostCurrency = null, IReadOnlyList<GenerationResultEntry>? results = null, IReadOnlyList<FileRecord>? committedFiles = null, IReadOnlyList<(int Position, string StagedFileName, long ByteSize, string ContentHash, string DetectedMediaType)>? pendingResults = null, string? existingGenerationRecordId = null)
     {
         // Callers that don't track per-position outcomes (Text generation) get a simple Committed
         // entry per successfully committed file and nothing for a shortfall — that shortfall is
@@ -2980,8 +3014,9 @@ internal sealed class SqliteLibraryDatabase
         if (systemInstructions is not null) LibraryRules.ValidateGenerationTextLength(systemInstructions, "System instructions");
         var normalizedSettings = LibraryRules.ValidateGenerationSettings(settings ?? GenerationSettings.Empty);
         LibraryRules.ValidateSourceFileIds(sourceFileId, secondarySourceFileId, tertiarySourceFileId);
-        var id = LibraryRules.NewId();
+        var id = existingGenerationRecordId ?? LibraryRules.NewId();
         var now = DateTimeOffset.UtcNow;
+        var createdAt = now;
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         foreach (var file in committedFiles ?? [])
@@ -2994,20 +3029,45 @@ internal sealed class SqliteLibraryDatabase
                 ("$origin", (int)file.Origin), ("$state", (int)file.State), ("$imported", Format(file.ImportedAt)), ("$modified", Format(file.ModifiedAt)),
                 ("$source", file.SourceLastModified is null ? DBNull.Value : Format(file.SourceLastModified.Value)), ("$recycled", DBNull.Value)).ConfigureAwait(false);
         }
-        await ExecuteNonQueryAsync(connection,
-            "INSERT INTO generation_records(id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,settings_advanced_json,secondary_source_file_id,tertiary_source_file_id,safety_blocked_count,actual_cost,actual_cost_currency) VALUES($id,$model,$label,$providerModel,$provider,$mode,$prompt,$sysInstr,$count,$status,$error,$folder,$created,$completed,$promptTokens,$completionTokens,$source,$improvement,$textFormat,$settingsTemperature,$settingsTopP,$settingsMaxTokens,$settingsFrequencyPenalty,$settingsPresencePenalty,$settingsAdvancedJson,$secondarySource,$tertiarySource,$safetyBlocked,$actualCost,$actualCostCurrency);",
-            cancellationToken, transaction,
-            [("$id", id), ("$model", model.Id), ("$label", model.Label), ("$providerModel", model.ProviderModelId), ("$provider", (int)providerType),
-            ("$mode", (int)model.Mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions), ("$count", resultCount), ("$status", (int)status),
-            ("$error", errorMessage is null ? DBNull.Value : errorMessage), ("$folder", destinationFolderId), ("$created", Format(now)), ("$completed", Format(now)),
-            ("$promptTokens", promptTokens is null ? DBNull.Value : promptTokens.Value), ("$completionTokens", completionTokens is null ? DBNull.Value : completionTokens.Value),
-            ("$source", sourceFileId is null ? DBNull.Value : sourceFileId),
-            ("$improvement", promptImprovementRecordId is null ? DBNull.Value : promptImprovementRecordId),
-            ("$textFormat", textFormat is null ? DBNull.Value : (int)textFormat.Value),
-            ("$secondarySource", secondarySourceFileId is null ? DBNull.Value : secondarySourceFileId), ("$tertiarySource", tertiarySourceFileId is null ? DBNull.Value : tertiarySourceFileId),
-            ("$safetyBlocked", safetyBlockedCount),
-            ("$actualCost", actualCost is null ? DBNull.Value : actualCost.Value), ("$actualCostCurrency", actualCostCurrency is null ? DBNull.Value : actualCostCurrency),
-            .. GenerationSettingsParameters(normalizedSettings)]).ConfigureAwait(false);
+
+        if (existingGenerationRecordId is null)
+        {
+            await ExecuteNonQueryAsync(connection,
+                "INSERT INTO generation_records(id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,settings_advanced_json,secondary_source_file_id,tertiary_source_file_id,safety_blocked_count,actual_cost,actual_cost_currency) VALUES($id,$model,$label,$providerModel,$provider,$mode,$prompt,$sysInstr,$count,$status,$error,$folder,$created,$completed,$promptTokens,$completionTokens,$source,$improvement,$textFormat,$settingsTemperature,$settingsTopP,$settingsMaxTokens,$settingsFrequencyPenalty,$settingsPresencePenalty,$settingsAdvancedJson,$secondarySource,$tertiarySource,$safetyBlocked,$actualCost,$actualCostCurrency);",
+                cancellationToken, transaction,
+                [("$id", id), ("$model", model.Id), ("$label", model.Label), ("$providerModel", model.ProviderModelId), ("$provider", (int)providerType),
+                ("$mode", (int)model.Mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions), ("$count", resultCount), ("$status", (int)status),
+                ("$error", errorMessage is null ? DBNull.Value : errorMessage), ("$folder", destinationFolderId), ("$created", Format(now)), ("$completed", Format(now)),
+                ("$promptTokens", promptTokens is null ? DBNull.Value : promptTokens.Value), ("$completionTokens", completionTokens is null ? DBNull.Value : completionTokens.Value),
+                ("$source", sourceFileId is null ? DBNull.Value : sourceFileId),
+                ("$improvement", promptImprovementRecordId is null ? DBNull.Value : promptImprovementRecordId),
+                ("$textFormat", textFormat is null ? DBNull.Value : (int)textFormat.Value),
+                ("$secondarySource", secondarySourceFileId is null ? DBNull.Value : secondarySourceFileId), ("$tertiarySource", tertiarySourceFileId is null ? DBNull.Value : tertiarySourceFileId),
+                ("$safetyBlocked", safetyBlockedCount),
+                ("$actualCost", actualCost is null ? DBNull.Value : actualCost.Value), ("$actualCostCurrency", actualCostCurrency is null ? DBNull.Value : actualCostCurrency),
+                .. GenerationSettingsParameters(normalizedSettings)]).ConfigureAwait(false);
+        }
+        else
+        {
+            var existing = await GetGenerationRecordAsync(connection, existingGenerationRecordId, cancellationToken).ConfigureAwait(false);
+            createdAt = existing.CreatedAt;
+            await ExecuteNonQueryAsync(connection,
+                "UPDATE generation_records SET model_id=$model,model_label=$label,provider_model_id=$providerModel,provider_type=$provider,mode=$mode,prompt=$prompt,system_instructions=$sysInstr,result_count=$count,status=$status,error_message=$error,destination_folder_id=$folder,completed_at=$completed,prompt_tokens=$promptTokens,completion_tokens=$completionTokens,source_file_id=$source,prompt_improvement_record_id=$improvement,text_format=$textFormat,settings_temperature=$settingsTemperature,settings_top_p=$settingsTopP,settings_max_tokens=$settingsMaxTokens,settings_frequency_penalty=$settingsFrequencyPenalty,settings_presence_penalty=$settingsPresencePenalty,settings_advanced_json=$settingsAdvancedJson,secondary_source_file_id=$secondarySource,tertiary_source_file_id=$tertiarySource,safety_blocked_count=$safetyBlocked,actual_cost=$actualCost,actual_cost_currency=$actualCostCurrency WHERE id=$id;",
+                cancellationToken, transaction,
+                [("$id", id), ("$model", model.Id), ("$label", model.Label), ("$providerModel", model.ProviderModelId), ("$provider", (int)providerType),
+                ("$mode", (int)model.Mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions), ("$count", resultCount), ("$status", (int)status),
+                ("$error", errorMessage is null ? DBNull.Value : errorMessage), ("$folder", destinationFolderId), ("$completed", Format(now)),
+                ("$promptTokens", promptTokens is null ? DBNull.Value : promptTokens.Value), ("$completionTokens", completionTokens is null ? DBNull.Value : completionTokens.Value),
+                ("$source", sourceFileId is null ? DBNull.Value : sourceFileId),
+                ("$improvement", promptImprovementRecordId is null ? DBNull.Value : promptImprovementRecordId),
+                ("$textFormat", textFormat is null ? DBNull.Value : (int)textFormat.Value),
+                ("$secondarySource", secondarySourceFileId is null ? DBNull.Value : secondarySourceFileId), ("$tertiarySource", tertiarySourceFileId is null ? DBNull.Value : tertiarySourceFileId),
+                ("$safetyBlocked", safetyBlockedCount),
+                ("$actualCost", actualCost is null ? DBNull.Value : actualCost.Value), ("$actualCostCurrency", actualCostCurrency is null ? DBNull.Value : actualCostCurrency),
+                .. GenerationSettingsParameters(normalizedSettings)]).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection, "DELETE FROM generation_results WHERE generation_id=$id;", cancellationToken, transaction, ("$id", id)).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection, "DELETE FROM pending_unverified_results WHERE generation_id=$id;", cancellationToken, transaction, ("$id", id)).ConfigureAwait(false);
+        }
 
         foreach (var entry in resolvedResults)
         {
@@ -3026,8 +3086,130 @@ internal sealed class SqliteLibraryDatabase
                 ("$size", pending.ByteSize), ("$hash", pending.ContentHash), ("$media", pending.DetectedMediaType), ("$now", Format(now))).ConfigureAwait(false);
         }
 
+        if (existingGenerationRecordId is null)
+        {
+            // A one-shot commit never goes through CreateQueuedGenerationRecordAsync, so log the
+            // implied Queued->terminal transition pair here instead, keeping every generation record's
+            // status history complete regardless of which commit path created it.
+            await InsertGenerationStatusTransitionAsync(connection, transaction, id, null, GenerationStatus.Queued, null, null, now, cancellationToken).ConfigureAwait(false);
+            if (status != GenerationStatus.Queued)
+            {
+                await InsertGenerationStatusTransitionAsync(connection, transaction, id, null, status, null, null, now, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            await InsertGenerationStatusTransitionAsync(connection, transaction, id, null, status, null, null, now, cancellationToken).ConfigureAwait(false);
+        }
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new GenerationRecord(id, model.Id, model.Label, model.ProviderModelId, providerType, model.Mode, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, now, now, resultFileIds, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, textFormat, Settings: normalizedSettings, SecondarySourceFileId: secondarySourceFileId, TertiarySourceFileId: tertiarySourceFileId, SafetyBlockedCount: safetyBlockedCount, ActualCost: actualCost, ActualCostCurrency: actualCostCurrency, Results: resolvedResults);
+        return new GenerationRecord(id, model.Id, model.Label, model.ProviderModelId, providerType, model.Mode, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, createdAt, now, resultFileIds, promptTokens, completionTokens, sourceFileId, promptImprovementRecordId, textFormat, Settings: normalizedSettings, SecondarySourceFileId: secondarySourceFileId, TertiarySourceFileId: tertiarySourceFileId, SafetyBlockedCount: safetyBlockedCount, ActualCost: actualCost, ActualCostCurrency: actualCostCurrency, Results: resolvedResults);
+    }
+
+    /// <summary>Inserts a <c>generation_records</c> row in <see cref="GenerationStatus.Queued"/> with
+    /// no results yet, so a job durably exists from the moment it enters the queue — the row this
+    /// creates is itself the durable snapshot restart recovery reads back, since it carries the full
+    /// request shape (model, prompt, settings, sources).</summary>
+    public async Task<GenerationRecord> CreateQueuedGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, string destinationFolderId, string? sourceFileId, string? secondarySourceFileId, string? tertiarySourceFileId, GenerationSettings? settings, string? promptImprovementRecordId, CancellationToken cancellationToken)
+    {
+        LibraryRules.ValidateGenerationTextLength(prompt, "Prompt");
+        if (systemInstructions is not null) LibraryRules.ValidateGenerationTextLength(systemInstructions, "System instructions");
+        var normalizedSettings = LibraryRules.ValidateGenerationSettings(settings ?? GenerationSettings.Empty);
+        LibraryRules.ValidateSourceFileIds(sourceFileId, secondarySourceFileId, tertiarySourceFileId);
+        var textFormat = model.Mode == GenerationMode.Text ? model.TextFormat : (TextResultFormat?)null;
+        var id = LibraryRules.NewId();
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO generation_records(id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,source_file_id,prompt_improvement_record_id,text_format,secondary_source_file_id,tertiary_source_file_id,safety_blocked_count,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,settings_advanced_json) VALUES($id,$model,$label,$providerModel,$provider,$mode,$prompt,$sysInstr,$count,$status,NULL,$folder,$created,NULL,$source,$improvement,$textFormat,$secondarySource,$tertiarySource,0,$settingsTemperature,$settingsTopP,$settingsMaxTokens,$settingsFrequencyPenalty,$settingsPresencePenalty,$settingsAdvancedJson);",
+            cancellationToken, transaction,
+            [("$id", id), ("$model", model.Id), ("$label", model.Label), ("$providerModel", model.ProviderModelId), ("$provider", (int)providerType),
+            ("$mode", (int)model.Mode), ("$prompt", prompt), ("$sysInstr", systemInstructions is null ? DBNull.Value : systemInstructions),
+            ("$count", resultCount), ("$status", (int)GenerationStatus.Queued), ("$folder", destinationFolderId), ("$created", Format(now)),
+            ("$source", sourceFileId is null ? DBNull.Value : sourceFileId),
+            ("$improvement", promptImprovementRecordId is null ? DBNull.Value : promptImprovementRecordId),
+            ("$textFormat", textFormat is null ? DBNull.Value : (int)textFormat.Value),
+            ("$secondarySource", secondarySourceFileId is null ? DBNull.Value : secondarySourceFileId), ("$tertiarySource", tertiarySourceFileId is null ? DBNull.Value : tertiarySourceFileId),
+            .. GenerationSettingsParameters(normalizedSettings)]).ConfigureAwait(false);
+        await InsertGenerationStatusTransitionAsync(connection, transaction, id, null, GenerationStatus.Queued, null, null, now, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new GenerationRecord(id, model.Id, model.Label, model.ProviderModelId, providerType, model.Mode, prompt, systemInstructions, resultCount, GenerationStatus.Queued, null, destinationFolderId, now, null, [], null, null, sourceFileId, promptImprovementRecordId, textFormat, Settings: normalizedSettings, SecondarySourceFileId: secondarySourceFileId, TertiarySourceFileId: tertiarySourceFileId);
+    }
+
+    /// <summary>Single choke point for every status change after a record's initial creation: updates
+    /// the current status (and completion timestamp, once terminal) and logs a timestamped transition
+    /// row, in one transaction. Throws once the record is already terminal — plan.md: a terminal
+    /// status never returns to an active state.</summary>
+    public async Task<GenerationRecord> AdvanceGenerationStatusAsync(string generationRecordId, GenerationStatus status, GenerationHoldReason? holdReason, GenerationFailureReason? failureReason, int? position, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await GetGenerationRecordAsync(connection, generationRecordId, cancellationToken).ConfigureAwait(false);
+        if (LibraryRules.IsTerminalGenerationStatus(existing.Status))
+        {
+            throw new LibraryValidationException("A terminal generation status cannot be advanced further.");
+        }
+        var completedAt = LibraryRules.IsTerminalGenerationStatus(status) ? now : (DateTimeOffset?)null;
+        await ExecuteNonQueryAsync(connection,
+            "UPDATE generation_records SET status=$status,hold_reason=$hold,failure_reason=$failure,completed_at=$completed WHERE id=$id;",
+            cancellationToken, transaction,
+            ("$status", (int)status), ("$hold", holdReason is null ? DBNull.Value : (int)holdReason.Value), ("$failure", failureReason is null ? DBNull.Value : (int)failureReason.Value),
+            ("$completed", completedAt is null ? DBNull.Value : Format(completedAt.Value)), ("$id", generationRecordId)).ConfigureAwait(false);
+        await InsertGenerationStatusTransitionAsync(connection, transaction, generationRecordId, position, status, holdReason, failureReason, now, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return await GetGenerationRecordAsync(generationRecordId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<GenerationStatusTransition>> GetGenerationStatusHistoryAsync(string generationRecordId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id,generation_record_id,position,status,hold_reason,failure_reason,occurred_at FROM generation_status_transitions WHERE generation_record_id=$id ORDER BY rowid;";
+        command.Parameters.AddWithValue("$id", generationRecordId);
+        var results = new List<GenerationStatusTransition>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            results.Add(new GenerationStatusTransition(
+                reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                (GenerationStatus)reader.GetInt32(3), reader.IsDBNull(4) ? null : (GenerationHoldReason)reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : (GenerationFailureReason)reader.GetInt32(5), Parse(reader.GetString(6))));
+        }
+        return results;
+    }
+
+    /// <summary>Every generation record not yet in a terminal status, for restart recovery — a
+    /// dedicated indexed query rather than filtering <see cref="GetGenerationHistoryAsync"/> so
+    /// startup cost doesn't grow with a library's full completed history.</summary>
+    public async Task<IReadOnlyList<GenerationRecord>> GetNonTerminalGenerationRecordsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var records = new List<GenerationRecord>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = GenerationRecordSelect + " WHERE state=0 AND status IN (5,6,7,8,9,10,11,12,13,14,15) ORDER BY created_at;";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadGenerationRecord(reader));
+        }
+        var results = new List<GenerationRecord>(records.Count);
+        foreach (var record in records)
+        {
+            var (fileIds, tombstones, entries) = await GetGenerationResultsAsync(connection, record.Id, cancellationToken).ConfigureAwait(false);
+            results.Add(record with { ResultFileIds = fileIds, TombstonedResults = tombstones, Results = entries });
+        }
+        return results;
+    }
+
+    private static async Task InsertGenerationStatusTransitionAsync(SqliteConnection connection, SqliteTransaction transaction, string generationRecordId, int? position, GenerationStatus status, GenerationHoldReason? holdReason, GenerationFailureReason? failureReason, DateTimeOffset occurredAt, CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO generation_status_transitions(id,generation_record_id,position,status,hold_reason,failure_reason,occurred_at) VALUES($id,$gen,$pos,$status,$hold,$failure,$occurred);",
+            cancellationToken, transaction,
+            ("$id", LibraryRules.NewId()), ("$gen", generationRecordId), ("$pos", position is null ? DBNull.Value : position.Value),
+            ("$status", (int)status), ("$hold", holdReason is null ? DBNull.Value : (int)holdReason.Value), ("$failure", failureReason is null ? DBNull.Value : (int)failureReason.Value),
+            ("$occurred", Format(occurredAt))).ConfigureAwait(false);
     }
 
     private const string PromptImprovementRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,raw_prompt,guidance,template_version,status,error_message,candidates_json,prompt_tokens,completion_tokens,created_at,completed_at FROM prompt_improvement_records";
@@ -3119,7 +3301,9 @@ internal sealed class SqliteLibraryDatabase
             TertiarySourceFileId: tertiarySourceFileId, TertiarySourceFileTombstone: tertiarySourceTombstone,
             SafetyBlockedCount: reader.GetInt32(38),
             ActualCost: reader.IsDBNull(39) ? null : reader.GetDouble(39),
-            ActualCostCurrency: reader.IsDBNull(40) ? null : reader.GetString(40));
+            ActualCostCurrency: reader.IsDBNull(40) ? null : reader.GetString(40),
+            HoldReason: reader.IsDBNull(41) ? null : (GenerationHoldReason)reader.GetInt32(41),
+            FailureReason: reader.IsDBNull(42) ? null : (GenerationFailureReason)reader.GetInt32(42));
     }
 
     private async Task SetFileStateAndLinksAsync(string fileId, LibraryRecordState state, CancellationToken cancellationToken)

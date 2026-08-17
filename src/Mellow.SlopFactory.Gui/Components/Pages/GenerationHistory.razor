@@ -30,6 +30,12 @@ else
                     <option value="@GenerationStatus.PartiallyCompleted">@Strings["GenerationPartiallyCompleted"]</option>
                     <option value="@GenerationStatus.Cancelled">@Strings["GenerationCancelled"]</option>
                     <option value="@GenerationStatus.CancelledWithResults">@Strings["GenerationCancelledWithResults"]</option>
+                    <option value="@GenerationStatus.CompletedBeforeCancellation">@Strings["GenerationCompletedBeforeCancellation"]</option>
+                    <option value="@GenerationStatus.CancelledBeforeSubmission">@Strings["GenerationCancelledBeforeSubmission"]</option>
+                    <option value="@GenerationStatus.Queued">@Strings["GenerationQueued"]</option>
+                    <option value="@GenerationStatus.Paused">@Strings["GenerationPaused"]</option>
+                    <option value="@GenerationStatus.Processing">@Strings["GenerationProcessing"]</option>
+                    <option value="@GenerationStatus.SubmissionOutcomeUnknown">@Strings["GenerationSubmissionOutcomeUnknown"]</option>
                 </select>
             </label>
             <label for="history-mode-filter">@Strings["FilterByMode"]
@@ -213,6 +219,19 @@ else
         GenerationStatus.PartiallyCompleted => Strings["GenerationPartiallyCompleted"],
         GenerationStatus.Cancelled => Strings["GenerationCancelled"],
         GenerationStatus.CancelledWithResults => Strings["GenerationCancelledWithResults"],
+        GenerationStatus.Queued => Strings["GenerationQueued"],
+        GenerationStatus.Paused => Strings["GenerationPaused"],
+        GenerationStatus.Preparing => Strings["GenerationPreparing"],
+        GenerationStatus.Uploading => Strings["GenerationUploading"],
+        GenerationStatus.Submitting => Strings["GenerationSubmitting"],
+        GenerationStatus.SubmissionOutcomeUnknown => Strings["GenerationSubmissionOutcomeUnknown"],
+        GenerationStatus.Processing => Strings["GenerationProcessing"],
+        GenerationStatus.MonitoringPaused => Strings["GenerationMonitoringPaused"],
+        GenerationStatus.DownloadingResults => Strings["GenerationDownloadingResults"],
+        GenerationStatus.AwaitingLibrary => Strings["GenerationAwaitingLibrary"],
+        GenerationStatus.CancellationRequested => Strings["GenerationCancellationRequested"],
+        GenerationStatus.CompletedBeforeCancellation => Strings["GenerationCompletedBeforeCancellation"],
+        GenerationStatus.CancelledBeforeSubmission => Strings["GenerationCancelledBeforeSubmission"],
         _ => status.ToString()
     };
 }

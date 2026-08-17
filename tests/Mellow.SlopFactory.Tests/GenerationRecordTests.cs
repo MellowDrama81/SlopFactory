@@ -8,6 +8,81 @@ namespace Mellow.SlopFactory.Tests;
 public sealed class GenerationRecordTests
 {
     [Fact]
+    public async Task RecordingAOneShotTextGenerationLogsAQueuedThenTerminalTransitionPair()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "Write a haiku", 1, workspace.Descriptor.GeneratedFolderId, ["result"], null);
+
+        var history = await workspace.GetGenerationStatusHistoryAsync(record.Id);
+        Assert.Equal(2, history.Count);
+        Assert.Equal(GenerationStatus.Queued, history[0].Status);
+        Assert.Equal(GenerationStatus.Completed, history[1].Status);
+        Assert.True(history[1].OccurredAt >= history[0].OccurredAt);
+    }
+
+    [Fact]
+    public async Task AdvancingAGenerationStatusPersistsHoldAndFailureReasonsThroughReload()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var created = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        Assert.Equal(GenerationStatus.Queued, created.Status);
+
+        var paused = await workspace.AdvanceGenerationStatusAsync(created.Id, GenerationStatus.Paused, holdReason: GenerationHoldReason.ConnectionLost);
+        Assert.Equal(GenerationStatus.Paused, paused.Status);
+        Assert.Equal(GenerationHoldReason.ConnectionLost, paused.HoldReason);
+        Assert.Null(paused.CompletedAt);
+
+        var failed = await workspace.AdvanceGenerationStatusAsync(created.Id, GenerationStatus.Failed, failureReason: GenerationFailureReason.RemoteJobUnavailable);
+        Assert.Equal(GenerationStatus.Failed, failed.Status);
+        Assert.Equal(GenerationFailureReason.RemoteJobUnavailable, failed.FailureReason);
+        Assert.NotNull(failed.CompletedAt);
+
+        var reloaded = await workspace.GetGenerationRecordAsync(created.Id);
+        Assert.Equal(GenerationStatus.Failed, reloaded.Status);
+        Assert.Equal(GenerationFailureReason.RemoteJobUnavailable, reloaded.FailureReason);
+
+        var history = await workspace.GetGenerationStatusHistoryAsync(created.Id);
+        Assert.Equal([GenerationStatus.Queued, GenerationStatus.Paused, GenerationStatus.Failed], history.Select(entry => entry.Status).ToArray());
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.AdvanceGenerationStatusAsync(created.Id, GenerationStatus.Processing));
+    }
+
+    [Fact]
+    public async Task FinalizingAQueuedGenerationRecordUpdatesTheSameRowInsteadOfCreatingASecondOne()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        var queued = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "prompt", 1, workspace.Descriptor.GeneratedFolderId);
+        var finalized = await workspace.RecordTextGenerationResultAsync(model.Id, "prompt", 1, workspace.Descriptor.GeneratedFolderId, ["result"], null, existingGenerationRecordId: queued.Id);
+
+        Assert.Equal(queued.Id, finalized.Id);
+        Assert.Equal(GenerationStatus.Completed, finalized.Status);
+        Assert.Equal(queued.CreatedAt, finalized.CreatedAt);
+
+        var history = await workspace.GetGenerationHistoryAsync();
+        Assert.Single(history);
+        var statusHistory = await workspace.GetGenerationStatusHistoryAsync(queued.Id);
+        Assert.Equal([GenerationStatus.Queued, GenerationStatus.Completed], statusHistory.Select(entry => entry.Status).ToArray());
+    }
+
+    [Fact]
     public async Task RecordingASuccessfulTextGenerationCommitsFilesAndHistory()
     {
         using var temporary = new TemporaryDirectory();
@@ -595,7 +670,7 @@ public sealed class GenerationRecordTests
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            workspace.RecordImageGenerationResultAsync(model.Id, "A watercolor fox", 1, workspace.Descriptor.GeneratedFolderId, [PngSignatureBytes], null, null, cancellation.Token));
+            workspace.RecordImageGenerationResultAsync(model.Id, "A watercolor fox", 1, workspace.Descriptor.GeneratedFolderId, [PngSignatureBytes], null, null, cancellationToken: cancellation.Token));
 
         Assert.Empty(await workspace.GetActiveFilesAsync());
         Assert.Empty(await workspace.GetGenerationHistoryAsync());
@@ -615,7 +690,7 @@ public sealed class GenerationRecordTests
         var images = new CancelAfterFirstItem<byte[]>([PngSignatureBytes, PngSignatureBytes], cancellation);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            workspace.RecordImageGenerationResultAsync(model.Id, "Two watercolor foxes", 2, workspace.Descriptor.GeneratedFolderId, images, null, null, cancellation.Token));
+            workspace.RecordImageGenerationResultAsync(model.Id, "Two watercolor foxes", 2, workspace.Descriptor.GeneratedFolderId, images, null, null, cancellationToken: cancellation.Token));
 
         Assert.Empty(await workspace.GetActiveFilesAsync());
         Assert.Empty(await workspace.GetGenerationHistoryAsync());
