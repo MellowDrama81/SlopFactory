@@ -1,14 +1,18 @@
 # 1min.AI API contract notes
 
-Confirmed 2026-08-17 against 1min.AI's published documentation (<https://docs.1min.ai/docs/api/intro>).
-**Documentation-only** — unlike the DeepInfra contract notes in this same directory, none of this has
-been verified with a live API call yet (no 1min.AI API key/budget was provided). Treat the shapes
-below as a strong starting point for implementation, not a guarantee; a short live-verification pass
-(one cheap chat call, one cheap image call, one TTS call) is recommended before shipping the adapter,
-the same way the DeepInfra contract was confirmed.
+Confirmed 2026-08-17 against 1min.AI's published documentation (<https://docs.1min.ai/docs/api/intro>)
+**and** live API calls made with an explicit user-approved budget (well under the 100,000-credit
+ceiling given — see "Live verification results" below for what was actually spent). This supersedes
+the "docs site could not be fetched at all" status recorded in `docs/developer/architecture.md` and
+`milestone3.md` — the documentation exists, is fetchable, and one representative model per modality
+(chat, image, audio, video) has now been exercised end to end.
 
-This supersedes the "docs site could not be fetched at all" status recorded in
-`docs/developer/architecture.md` and `milestone3.md` — the documentation exists and is fetchable now.
+**Caveat that still applies:** only one model was live-tested per modality. The other 40 image models
+and 9 other video models each have their own `promptObject` field set on their own docs page, unverified
+by a live call. The stale-model-identifier problem found below (see Live verification results) means
+none of those unverified per-model docs pages should be trusted at face value either — each one needs
+its own live check before the adapter special-cases it, the same way Flux Schnell's documented
+identifier turned out to be wrong.
 
 Base URL: `https://api.1min.ai`. Authentication: `API-KEY: <api-key>` header (not `Authorization:
 Bearer`) plus `Content-Type: application/json`.
@@ -67,11 +71,14 @@ request parameters." One unified endpoint and response envelope for every featur
 - **Sync vs async is caller-chosen, not fixed per model** (matches plan.md's "long-running feature
   requests **can** use its asynchronous result polling" — optional, not mandatory):
   - Default (`async` omitted or `false`): the HTTP call itself blocks until the result is ready and
-    returns `status: "SUCCESS"` directly in the response body — including for video models, per the
-    Kling and Veo3 example requests below, both of which show a synchronous response shape with no
-    `PROCESSING` step. Whether this genuinely means the backend holds the HTTP connection open for a
-    slow video job, or the documented examples are simplified/aspirational, is exactly the kind of
-    thing a live call would settle.
+    returns `status: "SUCCESS"` directly in the response body — **confirmed live**, including for
+    video: a non-`async` `TEXT_TO_VIDEO` request to `lucataco/animate-diff:...` genuinely held the
+    HTTP connection open for 75 seconds before returning `status: "SUCCESS"` with the finished video,
+    no polling involved. This settles what was previously only inferred from the docs' example
+    shapes. Heavier video models (Kling, Veo3, Sora) were not tested live, so whether they behave the
+    same way (long-held connection) or something else (timeout, forced async) for genuinely long
+    renders remains unconfirmed — worth an explicit HTTP client timeout budget in the adapter either
+    way.
   - `"async": true`: returns immediately with `status: "PROCESSING"` and a `uuid`; poll
     `GET /api/results/{uuid}` (the "Get Result API") until `status` becomes `"SUCCESS"` or
     `"FAILURE"`. The docs state explicitly: *"The `uuid` returned in the response **is** the result id
@@ -96,37 +103,63 @@ request parameters." One unified endpoint and response envelope for every featur
     asset — this is what the adapter should fetch, the same role `data[].url` plays for DeepInfra
     video, and it carries the same implication: it's a third-party (AWS S3-hosted) URL, not
     `api.1min.ai` itself, so the same redirect-target-revalidation/DNS-rebinding protections built
-    for OpenRouter apply if the adapter follows it directly.
+    for OpenRouter apply if the adapter follows it directly. **Confirmed live** for image, audio and
+    video: all three landed on the same bucket, `https://s3.us-east-1.amazonaws.com/asset.1min.ai/
+    {images,audios,videos}/<generated-name>?X-Amz-...`, and all three downloaded successfully as
+    valid files (PNG signature `89 50 4e 47`, MP3 frame sync `ff f3`, MP4 `ftypisom` respectively).
   - **Get Result "not found" response:** `{"aiRecord": null}` — a request for an unknown/expired
     `resultId` returns 200 with a null record rather than 404, so the adapter must check for null
     explicitly rather than relying on HTTP status alone.
 
 ### Image generation — `type: "IMAGE_GENERATOR"`
 
-Per-model `promptObject` shape (confirmed example, `black-forest-labs/flux-schnell`):
+**The documented Flux Schnell model identifier is stale/wrong — confirmed live.** The docs page for
+Flux Schnell gives `"model": "black-forest-labs/flux-schnell"` verbatim, but submitting that live
+returned `HTTP 400 {"errorCode":"UNSUPPORTED_MODEL","message":"Model black-forest-labs/flux-schnell
+is not supported for feature IMAGE_GENERATOR"}`. This is real evidence that 1min.AI's per-model docs
+pages can drift from what the API actually accepts — every model identifier needs a live check before
+the adapter trusts it, not just a docs read.
+
+**Confirmed working live** (`stable-diffusion-xl-1024-v1-0`, from the Stable Diffusion XL 1.0 docs
+page):
 
 ```json
 {
   "type": "IMAGE_GENERATOR",
-  "model": "black-forest-labs/flux-schnell",
+  "model": "stable-diffusion-xl-1024-v1-0",
   "promptObject": {
-    "prompt": "Modern minimalist logo design, clean lines, professional",
-    "aspect_ratio": "1:1",
-    "num_inference_steps": 4,
-    "go_fast": true,
-    "megapixels": "1",
-    "output_quality": 80,
-    "disable_safety_checker": false,
-    "seed": null
+    "prompt": "a small red apple on a white background",
+    "samples": 1,
+    "size": "1024x1024",
+    "cfg_scale": 7,
+    "steps": 20,
+    "seed": 42
   }
 }
 ```
 
+- `size` **must** be one of a fixed set of dimensions — confirmed by a live rejection: requesting
+  `"512x512"` returned `HTTP 400 {"errorCode":"EXTERNAL_API_RESPONSE_WITH_ERROR", ...,
+  "details":"...\"message\":\"for stable-diffusion-xl-1024-v0-9 and stable-diffusion-xl-1024-v1-0 the
+  allowed dimensions are 1024x1024, 1152x896, 1216x832, 1344x768, 1536x640, 640x1536, 768x1344,
+  832x1216, 896x1152, but we received 512x512\"..."}`. Note this error is the *downstream* provider's
+  (StabilityAI's) own message, forwarded through 1min.AI's `EXTERNAL_API_RESPONSE_WITH_ERROR`
+  envelope — the adapter should expect model-specific validation errors to arrive this way rather than
+  being caught by 1min.AI's own request-shape validation first.
+- Successful response returned `status: "SUCCESS"` synchronously (no `PROCESSING` step for this
+  model), `resultObject: ["images/2026_08_17_06_31_44_448_201553.png"]`, and a working `temporaryUrl`
+  that downloaded a valid PNG.
+- `metadata` was an empty `{}` on this response — unlike chat's populated
+  `metadata.credit`/`inputCredit`/`outputCredit` breakdown, image generation doesn't report a
+  per-call credit cost inline (see "Live verification results" for how cost was inferred instead).
+
 Every other image model (41 total, per the site's own model index — Magic Art, GPT Image, Leonardo
-variants, Stable Diffusion, Flux variants, Gemini image, Grok-2, Ideogram, Qwen, Recraft, Dzine) has
-its own dedicated docs page under `/docs/api/ai-for-image/image-generator/{model-slug}-image-generation`
-with its own `promptObject` field set — **do not assume Flux's fields apply to other models**; each
-one needs its own page checked before the adapter special-cases it.
+variants, other Stable Diffusion/Flux variants, Gemini image, Grok-2, Ideogram, Qwen, Recraft, Dzine)
+has its own dedicated docs page under
+`/docs/api/ai-for-image/image-generator/{model-slug}-image-generation` with its own `promptObject`
+field set — **do not assume SDXL's or Flux's fields apply to other models, and do not trust a
+model's documented identifier without a live check**, given Flux Schnell's identifier was already
+found to be wrong.
 
 ### Text-to-speech — `type: "TEXT_TO_SPEECH"`
 
@@ -145,11 +178,13 @@ one needs its own page checked before the adapter special-cases it.
 ```
 
 `model` is `"tts-1"` or `"tts-1-hd"` — these are OpenAI's own TTS model names, consistent with the
-page living under `/docs/api/ai-for-audio/text-to-speech/openai`. Response follows the general
-AI Feature API envelope above — audio bytes are **not** inline in the JSON; fetch them from
-`temporaryUrl`. This is a different shape from DeepInfra's `/v1/audio/speech`, which returns raw
-audio bytes directly in the HTTP response body — 1min.AI always wraps results in the JSON envelope
-plus a follow-up fetch, for every feature type, audio included.
+page living under `/docs/api/ai-for-audio/text-to-speech/openai`. **Confirmed working live** exactly
+as documented, with `model: "tts-1"`, `voice: "alloy"`: response follows the general AI Feature API
+envelope — audio bytes are **not** inline in the JSON; `resultObject: ["audios/<generated-name>.mp3"]`
+plus a `temporaryUrl` that downloaded a valid MP3 (`ff f3` frame sync). This is a different shape from
+DeepInfra's `/v1/audio/speech`, which returns raw audio bytes directly in the HTTP response body —
+1min.AI always wraps results in the JSON envelope plus a follow-up fetch, for every feature type,
+audio included.
 
 ### Video generation — `type: "TEXT_TO_VIDEO"`
 
@@ -157,7 +192,36 @@ Ten distinct models, each with its own docs page and `promptObject` shape under
 `/docs/api/ai-for-video/text-to-video/{model-slug}-text-to-video`: AnimateDiff, Hailuo, Hunyuan,
 Kling, Luma, Pika AI, Sora, TongYi, Veo3, Wan 2.7, Wanx.
 
-Confirmed example (Kling):
+**Confirmed working live** (AnimateDiff, the only video model actually exercised):
+
+```json
+{
+  "type": "TEXT_TO_VIDEO",
+  "model": "lucataco/animate-diff:beecf59c4aee8d81bf04f0381033dfa10dc16e845b4ae00d281e2fa377e48a9f",
+  "conversationId": "TEXT_TO_VIDEO",
+  "promptObject": {
+    "prompt": "mystical forest with glowing fireflies",
+    "path": "toonyou_beta3.safetensors",
+    "n_prompt": "blurry, low quality, distorted",
+    "guidance_scale": 7.5,
+    "motion_module": "mm_sd_v15_v2",
+    "seed": 0,
+    "steps": 25
+  }
+}
+```
+
+Unlike Flux Schnell's image identifier, this exact (long, hash-suffixed) model identifier from the
+docs page **did** work as documented. The call took 75 seconds end to end and returned `status:
+"SUCCESS"` synchronously (no `async` flag set, no polling) with `resultObject:
+["videos/<generated-name>.mp4"]` and a `temporaryUrl` that downloaded a valid MP4. This is the call
+that settled the "does a sync video request really block for the full render time" question left open
+by the documentation-only pass — yes, at least for this lightweight model.
+
+Kling and Veo3's request shapes below remain **documentation-only, not live-tested** — treat their
+model identifiers with the same suspicion Flux Schnell's turned out to deserve.
+
+Documented example (Kling, unverified):
 
 ```json
 {
@@ -179,7 +243,8 @@ Kling-specific notes: `duration` is 5 or 10 seconds for `version` below 3.0, 3�
 `mode` is `"std"` or `"pro"` (3.0 Omni uses `resolution` instead); `cfg_scale` (0–1) and
 `camera_control_type` only apply below version 3.0.
 
-Confirmed example (Veo3) — note the model-specific field names differ entirely from Kling's:
+Documented example (Veo3, unverified) — note the model-specific field names differ entirely from
+Kling's:
 
 ```json
 {
@@ -204,16 +269,41 @@ models needs its own confirmed field mapping before the adapter can submit to it
 codebase already treats each image/audio/video model individually rather than assuming a shared
 shape.
 
-## Still open after this documentation pass
+## Live verification results
 
-- No live call has confirmed any of the above — recommended before implementing: one cheap chat call,
-  one cheap image call (Flux Schnell looks like the cheapest/fastest option from its request shape),
-  and one TTS call, mirroring the DeepInfra verification pass in
-  `docs/developer/deepinfra-audio-video-contract.md`.
-- Whether a synchronous (non-`async`) video request genuinely blocks the HTTP connection for the
-  full generation time, or whether some video models silently ignore the sync/async choice, is
-  unconfirmed.
-- Pricing/rate-limit/credit-cost details (`/docs/api/specifications/rate-limits`,
-  `/docs/api/specifications/credits-limits`) were not fetched in this pass.
-- Per-model `promptObject` field sets for the other 8 video models and 40 other image models beyond
-  Flux Schnell/Kling/Veo3 were not individually fetched.
+Verified 2026-08-17 with a real API key and an explicit user-approved 100,000-credit ceiling. All
+four calls together used well under 20,000 credits (roughly 19,300, per the account's own running
+`usedCredit` counter — see the credit-lag caveat below), leaving most of the budget unused.
+
+| Modality | Model tested | Result | Notes |
+| --- | --- | --- | --- |
+| Chat | `gpt-4o-mini` | Success | Matched documented shape exactly; only modality with an inline `metadata.credit` cost breakdown (56 credits: 45 input + 11 output). |
+| Image | `stable-diffusion-xl-1024-v1-0` | Success (after fixing dimensions) | Flux Schnell's documented identifier failed first — see above. |
+| Audio (TTS) | `tts-1` / `alloy` | Success | Matched documented shape exactly. |
+| Video | `lucataco/animate-diff:...` | Success | 75-second synchronous call, matched documented shape exactly. |
+
+**Credit-cost figures are approximate, not authoritative**, because the `teamUser.usedCredit` field in
+each response appears to lag by one request (it reflects credits used as of *before* the current call
+was billed, not after) — e.g. the response immediately after the image call still showed the
+pre-image total. Attributing exact per-call costs from these snapshots would mean guessing at the lag
+semantics rather than reading a real value, so this doc reports only the overall trend: the SDXL image
+call was the single largest cost of the four (roughly an order of magnitude more than chat), video and
+TTS were mid-range, and chat was cheapest. A future pass wanting exact per-call costs should either
+find a more authoritative source (a dedicated usage/billing endpoint) or issue calls one at a time with
+a delay and a fresh balance check before each one, rather than reading the trailing snapshot.
+
+**Not tested live** (left as documentation-only, flagged in their sections above as needing the same
+scrutiny Flux Schnell's identifier required before being trusted):
+
+- Kling and Veo3 (or any other of the 9 non-AnimateDiff video models).
+- Any of the other 40 image models beyond Stable Diffusion XL 1.0.
+- Whether a heavier/slower video model (Kling, Veo3, Sora) behaves the same way AnimateDiff did for a
+  synchronous request (blocks for the full render) or hits some other behavior (timeout, forced
+  async) — AnimateDiff's 75-second render is not necessarily representative of a multi-minute Sora or
+  Veo3 job.
+- Streaming responses (`isStreaming=true`) for chat or features.
+- The `async: true` opt-in path and Get Result polling — every live call in this pass used the
+  synchronous default.
+- Pricing/rate-limit details from `/docs/api/specifications/rate-limits` and
+  `/docs/api/specifications/credits-limits` (page content wasn't substantive enough to extract a
+  pricing table when fetched).
