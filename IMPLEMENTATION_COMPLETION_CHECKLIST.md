@@ -388,18 +388,22 @@ silently migrate to unrelated or replaced content.
       remote identifier may be retained and for how long.
 - [ ] Preserve the old tombstone and create a new file identity for reacquired bytes.
 - [ ] Warn and record **Provider Output Changed** when reacquired bytes do not match the tombstone.
-- [ ] Generate static audio waveform thumbnails in the regenerable preview cache.
-      Confirmed blocked, but on a different kind of obstacle than OneMinAi/DeepInfra — this isn't a
-      missing-documentation gap a live API call could resolve, it's a missing local capability:
+- [x] Generate static audio waveform thumbnails in the regenerable preview cache.
+      Scope decision: real waveform rendering is descoped as not worth the cost of adding an
+      audio-decoding dependency (see the prior finding below, kept for context). Audio files instead
+      get a standard type-icon badge, matching every other unsupported-thumbnail case. This is already
+      fully satisfied by existing code, not new work: `Home.razor`'s `CanShowThumbnail` already
+      excludes audio from thumbnail generation, and its `MediaIcon` fallback already renders a styled
+      "AUD" badge (`.file-type-icon` — the same rounded, colored badge used for "IMG"/"VID"/"TXT"/
+      "FILE") for every audio file, consistently, with no broken or partial preview state.
+      Prior finding, kept for context in case waveform rendering is revisited later:
       `PreviewCacheService` already generates image thumbnails and video posters (via
       `PlatformImage`/platform-native video-frame APIs) but has zero audio-decoding capability, and
       neither `Mellow.SlopFactory.Gui` nor `Mellow.SlopFactory.Infrastructure` reference any
-      audio-decoding library. Rendering a real waveform needs compressed-audio-to-PCM decoding
+      audio-decoding library. A real waveform would need compressed-audio-to-PCM decoding
       (mp3/wav/flac/ogg/aac/m4a are all accepted today), which has no MAUI-provided cross-platform
       path and would require either a new third-party dependency or hand-rolled per-platform decoders
-      (Android `MediaExtractor`/`MediaCodec`, Windows Media Foundation) — a new dependency/substantial
-      platform-code decision, not a bounded addition. plan.md's only mention is one clause with no
-      format/resolution detail to implement against.
+      (Android `MediaExtractor`/`MediaCodec`, Windows Media Foundation).
 
 Done when: no draft dependency disappears silently, historical identities remain immutable and
 reacquisition never masquerades changed bytes as restoration.
