@@ -112,14 +112,6 @@ credentialed developer can run bounded live smoke tests deliberately.
       cancellation that landed before anything was sent, which finalizes to
       `CancelledBeforeSubmission` instead). No reconciliation, UI surface or connection-revision
       gating against it exists yet.
-- [ ] Add **Attempt Reconciliation** for adapters with a documented lookup mechanism.
-      Confirmed not currently actionable: no integrated adapter (OpenAI, DeepInfra, OpenRouter,
-      generic OpenAI-compatible) captures a provider request ID for its synchronous Text/Image/Audio
-      calls or documents idempotency-key replay or a status-lookup endpoint. `milestone2.md` and
-      `milestone4.md` already record this as deliberately deferred pending provider documentation
-      that does not exist today — implementing this now would mean guessing at an undocumented
-      contract, which the release gate explicitly disallows. Revisit only once such a mechanism is
-      confirmed for a specific adapter.
 - [x] Add **Abandon Recovery and Apply Changes**, retaining sanitized non-actionable history while
       removing identifiers that could still drive provider actions.
       `ILibraryWorkspace.AbandonGenerationOutcomeAsync` finalizes a `SubmissionOutcomeUnknown` or
@@ -135,7 +127,8 @@ credentialed developer can run bounded live smoke tests deliberately.
       Changes** (bulk `AbandonGenerationOutcomeAsync`) or **Cancel** — alongside the pre-existing
       pending-async-job-registry check with its own **Stop Tracking and Apply Changes**/**Cancel**
       pair. Still only two resolution paths rather than the documented three: **Attempt
-      Reconciliation** is omitted because it isn't implementable for any adapter today (see above).
+      Reconciliation** is omitted because it isn't implementable for any adapter today (see "Future
+      work" at the end of this file).
 - [ ] Complete cancellation behavior before submission, during upload, after provider acceptance,
       during polling and during result download.
       Before-submission and mid-flight-with-unknown-outcome (Text/Image/Audio) now both finalize their
@@ -153,22 +146,11 @@ credentialed developer can run bounded live smoke tests deliberately.
       deleting it). A still-queued job's recycled source-file/destination-folder dependency pins
       (`QueuedJob.RecycledDependencyIds`) are held the same way. `AbandonGenerationOutcomeAsync` is
       now the explicit-abandonment path for a generation record itself.
-- [ ] Implement **Monitoring Paused**, **Check Now** and **Resume Monitoring** when an adapter
-      declares a maximum monitoring lifetime.
-      Confirmed not currently actionable: no adapter ever sets `AsyncGenerationSubmission
-      .MonitoringDeadline` (always null), so no adapter currently declares a maximum monitoring
-      lifetime for this to react to. The `MonitoringPaused` status and `MonitoringDeadline` field
-      remain in place for when one does.
-- [ ] Implement idempotency-key creation, durable pre-send persistence, scoped reuse and terminal
-      disposal for each adapter that documents idempotency support.
-      Confirmed not currently actionable, same finding as Attempt Reconciliation above: no integrated
-      adapter documents idempotency-key support. `AsyncRemoteJobRecord.IdempotencyKey` and
-      `async_remote_jobs.idempotency_key` remain as schema placeholders for when one does.
 - [x] Apply in-progress throttling to explicit provider-status refresh and reconciliation actions.
       `GenerationQueueService.RetryMissingResultDownloadAsync` (**Refresh Provider Status**/**Import
       Missing Results**) now rejects a repeat call for the same async job within a 5-second window
       locally, without making a provider request. No reconciliation action exists yet to throttle
-      (see Attempt Reconciliation above).
+      (see "Future work" at the end of this file).
 
 Done when: crash/restart, uncertain submission, cancellation and reconciliation tests cover every
 implemented state transition without duplicate submission or untracked provider work.
@@ -569,6 +551,28 @@ Repository automation may assist them, but does not complete them by itself.
 Done when: all manual test evidence is recorded, signed Store and direct-download artifacts install
 and update correctly, published checksums verify, and no production secret or signing material
 exists in the repository.
+
+## Future work (deferred pending provider documentation)
+
+These items are not incomplete for lack of effort — each names a capability that no currently
+integrated provider adapter (OpenAI, DeepInfra, OpenRouter, generic OpenAI-compatible, or the
+still-unimplemented 1min.AI) documents a supporting mechanism for. Implementing any of them now
+would mean guessing at an undocumented provider contract, which the release gate explicitly
+disallows. Revisit only once a specific adapter's documentation confirms the underlying mechanism
+exists, then re-add the item to section 3 with that adapter named.
+
+- **Attempt Reconciliation** (originally section 3): no adapter captures a provider request ID for
+  its synchronous Text/Image/Audio calls, or documents idempotency-key replay or a status-lookup
+  endpoint that could confirm whether an ambiguous submission actually reached the provider.
+  `milestone2.md`/`milestone4.md` already recorded this as deliberately deferred.
+- **Idempotency-key creation, persistence, reuse and disposal** (originally section 3): same root
+  cause as Attempt Reconciliation — no integrated adapter documents idempotency-key support.
+  `AsyncRemoteJobRecord.IdempotencyKey` and `async_remote_jobs.idempotency_key` remain as schema
+  placeholders for when one does.
+- **Monitoring Paused, Check Now and Resume Monitoring** (originally section 3): no adapter ever
+  sets `AsyncGenerationSubmission.MonitoringDeadline` (always null), so no adapter currently
+  declares a maximum monitoring lifetime for this feature to react to. The `MonitoringPaused` status
+  and `MonitoringDeadline` field remain in place in the schema/enum for when one does.
 
 ## Release completion gate
 
