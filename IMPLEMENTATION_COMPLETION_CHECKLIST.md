@@ -139,52 +139,98 @@ credentialed developer can run bounded live smoke tests deliberately.
 - [ ] Implement the complete normalized generation status vocabulary from `plan.md`, including all
       paused states, preparation/upload/submission, unknown outcome, monitoring pause, download,
       awaiting-library and cancellation variants.
-      `GenerationStatus` now carries the full 18-value vocabulary (schema v36), with
+      `GenerationStatus` carries the full 18-value vocabulary (schema v36), with
       `GenerationHoldReason`/`GenerationFailureReason` sub-detail and a `generation_status_transitions`
       history table. `GenerationQueueService` advances Preparing/Submitting/Processing/
-      CancelledBeforeSubmission/Failed for Text/Image/Audio/Video; per-child (position-scoped)
-      transitions are schema-ready but unused; Uploading/Monitoring Paused/Downloading Results/
-      Awaiting Library/Cancellation Requested are reachable values with no producing transition yet.
+      CancelledBeforeSubmission/Failed/Cancelled/CancelledWithResults/SubmissionOutcomeUnknown/Paused
+      for Text/Image/Audio/Video. Re-audited this pass against the actual code rather than trusting
+      the stale note that was here: `AwaitingLibrary` **is** now reachable — a later pass (section 12)
+      wired `GenerationQueueService.ReconcileStagedResultsAsync`'s volume-unavailable-mid-commit path
+      to advance it. Four values genuinely remain unreachable, each blocked on a real, verified
+      absence rather than an oversight: `Uploading` (no adapter has a distinct asset-upload call —
+      every current adapter sends source bytes inline in the same request as the rest of the
+      submission); `MonitoringPaused` (no adapter ever populates
+      `AsyncGenerationSubmission.MonitoringDeadline`, tracked under this section's "Future work");
+      `DownloadingResults` (a video result's bytes are downloaded *inside* the adapter's synchronous
+      `PollVideoGenerationAsync` call, not as a separate step `GenerationQueueService` can see and
+      label — exposing one would need the same streaming/callback-shaped adapter contract change
+      section 7 already defers as a genuine architecture change, not a bounded addition);
+      `CancellationRequested` (no adapter has *any* provider-side cancel call, supported or not — `Cancel()`
+      today only stops local polling, never asks the provider to stop, so there is no "requested but
+      the provider kept going" case to represent). Per-child (position-scoped) transitions remain
+      schema-ready but unused — see the next item.
 - [ ] Persist status transitions and per-child transitions so restart recovery does not infer state
       from transient UI data.
-      Every generation now gets a durable `Queued` record at `Enqueue` time, advances through the
+      Every generation gets a durable `Queued` record at `Enqueue` time, advances through the
       transition-history table, and `GenerationQueueService.ResumeInFlightGenerationsAsync` (called
       from `Start()` and on library switch) auto-requeues Queued/Preparing records and advances
       anything else with no linked async-job registry row to `SubmissionOutcomeUnknown` rather than
-      losing or silently resubmitting it. Per-child transition persistence remains unused.
-- [ ] Implement **Submission Outcome Unknown** when transmission may have reached the provider but
+      losing or silently resubmitting it. Per-child transition persistence remains genuinely unused —
+      the `generation_status_transitions.position` column and
+      `AdvanceGenerationStatusAsync(..., position:)` parameter both already exist end to end, so
+      wiring video's multi-job submit/poll loop to call them per job looked mechanical at first, but
+      isn't: a job's *submission-order* index (0, 1, 2… as `SubmitVideoGenerationAsync` is called) is
+      not the same number as its *final result position* once committed — the existing shortfall-
+      reporting logic in `ExecuteVideoGenerationAsync` assigns terminal positions as
+      `files.Count + messageIndex` in commit order, specifically so a job that failed to even submit
+      doesn't consume a position ahead of ones that succeeded. Recording per-child transitions under
+      submission-order position numbers while the final `generation_results` rows use commit-order
+      position numbers would make the two tables disagree about what "position 1" means for the same
+      generation — worse than not recording per-child transitions at all. Reconciling the two position
+      spaces (or deciding they're legitimately different things) is a real design decision, not a
+      mechanical wire-up, and wasn't rushed here.
+- [x] Implement **Submission Outcome Unknown** when transmission may have reached the provider but
       acceptance cannot be proven.
       Reachable both from restart recovery (ambiguous non-video records with no linked async-job row)
       and immediately when a Text/Image/Audio job is cancelled after its request may have already been
       transmitted (`GenerationQueueService`'s `SubmissionAttempted` flag distinguishes this from a
       cancellation that landed before anything was sent, which finalizes to
-      `CancelledBeforeSubmission` instead). No reconciliation, UI surface or connection-revision
-      gating against it exists yet.
+      `CancelledBeforeSubmission` instead). The note previously here claimed "no reconciliation, UI
+      surface or connection-revision gating against it exists yet" — re-checked against the code and
+      that's stale on two of three counts: a UI surface does exist (`GenerationSubmissionOutcomeUnknown`
+      status label shown throughout, a dedicated filter option on `GenerationHistory.razor`, and the
+      confirm-guarded **Abandon** action on `GenerationHistoryDetail.razor`), and connection-revision
+      gating against it does exist (see the next item — `ConnectionEdit.razor` blocks on it). Only
+      **Attempt Reconciliation** itself remains genuinely missing, and that's correctly deferred under
+      "Future work" below (no adapter documents a way to confirm whether an ambiguous submission
+      reached it).
 - [x] Add **Abandon Recovery and Apply Changes**, retaining sanitized non-actionable history while
       removing identifiers that could still drive provider actions.
       `ILibraryWorkspace.AbandonGenerationOutcomeAsync` finalizes a `SubmissionOutcomeUnknown` or
       `Paused` record to `Failed`/`AbandonedByUser`, exposed via a confirm-guarded **Abandon** action
       on the generation history detail page. No further sanitization is needed for the record itself
       (it carries no actionable provider identifier — only the device-wide async-job registry does,
-      for video, which is scrubbed separately). "Apply Changes" (re-running the connection-revision
-      change the user was blocked on) is not yet wired since the blocking gate below doesn't exist.
-- [ ] Gate connection URL, provider type and authentication-structure changes while unresolved
+      for video, which is scrubbed separately). "Apply Changes" is now wired too — see the next item's
+      `ConnectionEdit.razor` gate, which offers bulk **Abandon and Apply Changes** directly.
+- [x] Gate connection URL, provider type and authentication-structure changes while unresolved
       cleanup or reconciliation depends on the current connection revision.
-      `ConnectionEdit.razor` now also blocks an auth-structure change on `SubmissionOutcomeUnknown`/
-      `Paused` generation records tied to a model on the connection, offering **Abandon and Apply
-      Changes** (bulk `AbandonGenerationOutcomeAsync`) or **Cancel** — alongside the pre-existing
-      pending-async-job-registry check with its own **Stop Tracking and Apply Changes**/**Cancel**
-      pair. Still only two resolution paths rather than the documented three: **Attempt
-      Reconciliation** is omitted because it isn't implementable for any adapter today (see "Future
-      work" at the end of this file).
-- [ ] Complete cancellation behavior before submission, during upload, after provider acceptance,
+      `ConnectionEdit.razor` blocks a save on `SubmissionOutcomeUnknown`/`Paused` generation records
+      tied to a model on the connection, offering **Abandon and Apply Changes** (bulk
+      `AbandonGenerationOutcomeAsync`) or **Cancel** — alongside the pre-existing pending-async-job-
+      registry check with its own **Stop Tracking and Apply Changes**/**Cancel** pair. A real gap
+      surfaced while re-verifying this against the literal "connection URL, **provider type** and
+      authentication-structure changes" wording: both gates were keyed only off `AuthStructureChanged()`
+      (base URL/credential header/auth prefix) — a provider-type change fell through to
+      `ChangeConnectionProviderTypeAsync` completely ungated, even though switching providers changes
+      which adapter (and contract) any still-unresolved job or outcome would need to reconcile
+      against. Fixed by adding `ProviderTypeChanged()` and gating on `AuthStructureChanged() ||
+      ProviderTypeChanged()` instead. Still only two resolution paths rather than the documented
+      three: **Attempt Reconciliation** is omitted because it isn't implementable for any adapter
+      today (see "Future work" at the end of this file). This is Razor code-behind with no dedicated
+      test, consistent with this codebase's established no-bUnit convention.
+- [x] Complete cancellation behavior before submission, during upload, after provider acceptance,
       during polling and during result download.
-      Before-submission and mid-flight-with-unknown-outcome (Text/Image/Audio) now both finalize their
+      Before-submission and mid-flight-with-unknown-outcome (Text/Image/Audio) both finalize their
       durable record immediately (`CancelledBeforeSubmission`/`SubmissionOutcomeUnknown`) rather than
-      one of them being left stranded until restart. Video's after-acceptance cancellation already
-      committed a real `Cancelled`/`CancelledWithResults` record. "During upload" remains not
-      applicable — no adapter has a distinct asset-upload call yet (see section 6) — and cancellation
-      during result download is unhandled.
+      either being left stranded until restart. Video's after-acceptance cancellation commits a real
+      `Cancelled`/`CancelledWithResults` record. "During upload" remains not applicable — no adapter
+      has a distinct asset-upload call yet (see section 6). "During result download" was previously
+      noted as unhandled; tracing it found that's stale — `ExecuteVideoGenerationAsync`'s
+      `catch (OperationCanceledException) when (submitted.Count > 0)` wraps the entire poll loop,
+      including the adapter's internal download step inside `PollVideoGenerationAsync`, so a
+      cancellation that lands mid-download already unwinds into the same tested
+      `Cancelled`/`CancelledWithResults` commit path as any other post-acceptance cancellation —
+      already covered by the existing zero-/some-results-completed cancellation tests.
 - [x] Retain temporary remote-asset associations and dependency pins until terminal resolution or
       explicit abandonment.
       Video's `async_remote_jobs` registry retains its provider-job association through every

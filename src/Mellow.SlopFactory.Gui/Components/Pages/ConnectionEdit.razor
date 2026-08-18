@@ -282,6 +282,18 @@ else
     private bool AuthStructureChanged() =>
         !IsNew && (_form.BaseUrl.TrimEnd('/') != _originalBaseUrl.TrimEnd('/') || _form.CredentialHeaderName != _originalCredentialHeaderName || _form.AuthPrefix != _originalAuthPrefix);
 
+    private bool ProviderTypeChanged() => !IsNew && _form.ProviderType != _originalProviderType;
+
+    /// <summary>Whether this save requires the unresolved-async-job/unresolved-generation-outcome
+    /// gate below. A provider-type change is included alongside <see cref="AuthStructureChanged"/>
+    /// because it changes which adapter (and therefore which request/response contract) any
+    /// still-unresolved job or outcome would be reconciled against — the same reconciliation-breaking
+    /// risk plan.md's "connection URL, provider type and authentication-structure changes" wording
+    /// names explicitly. Previously only auth-structure changes were gated here;
+    /// <c>ChangeConnectionProviderTypeAsync</c> ran unconditionally right after, with no check
+    /// against either registry.</summary>
+    private bool RequiresUnresolvedWorkGate() => AuthStructureChanged() || ProviderTypeChanged();
+
     private async Task SaveAsync()
     {
         var workspace = LibraryState.Workspace;
@@ -289,7 +301,7 @@ else
         _busy = true;
         try
         {
-            if (AuthStructureChanged() && !_confirmedStopTrackingUnresolvedJobs)
+            if (RequiresUnresolvedWorkGate() && !_confirmedStopTrackingUnresolvedJobs)
             {
                 var unresolvedJobs = (await workspace.GetAsyncRemoteJobsForConnectionAsync(Id))
                     .Count(asyncJob => asyncJob.Phase is AsyncRemoteJobPhase.Submitted or AsyncRemoteJobPhase.Processing or AsyncRemoteJobPhase.MonitoringPaused or AsyncRemoteJobPhase.CompletedAwaitingDownload);
@@ -302,7 +314,7 @@ else
                 }
             }
 
-            if (AuthStructureChanged() && !_confirmedAbandonedUnresolvedGenerationOutcomes)
+            if (RequiresUnresolvedWorkGate() && !_confirmedAbandonedUnresolvedGenerationOutcomes)
             {
                 var unresolvedOutcomes = await GetUnresolvedGenerationOutcomesAsync(workspace);
                 if (unresolvedOutcomes.Count > 0)
@@ -415,9 +427,9 @@ else
 
     /// <summary>Generation records submitted through models on this connection whose outcome was
     /// never confirmed — distinct from the device-wide async-job registry above, which only tracks
-    /// video's submit-then-poll jobs. Gates the same auth-structure changes for the same reason:
-    /// changing the connection's base URL, credential header or auth prefix could make it impossible
-    /// to ever resolve them.</summary>
+    /// video's submit-then-poll jobs. Gates the same auth-structure/provider-type changes for the
+    /// same reason: changing the connection's base URL, credential header, auth prefix or provider
+    /// type could make it impossible to ever resolve them.</summary>
     private async Task<IReadOnlyList<GenerationRecord>> GetUnresolvedGenerationOutcomesAsync(ILibraryWorkspace workspace)
     {
         var modelIds = (await workspace.GetActiveModelsAsync())
