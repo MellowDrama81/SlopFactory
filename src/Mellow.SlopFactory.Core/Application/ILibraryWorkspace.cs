@@ -50,13 +50,17 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<FileExportResult> ExportFileAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
     Task<FileExportResult> ExportChangedBytesAsync(string fileId, string destinationPath, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
     Task<BulkExportPreflight> BuildBulkExportPreflightAsync(IReadOnlyCollection<string> fileIds, string destinationDirectory, CancellationToken cancellationToken = default);
-    Task<BulkExportResult> ExportFilesAsync(BulkExportPreflight preflight, IReadOnlyDictionary<string, ExportCollisionChoice> collisionChoices, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default);
+    Task<BulkExportResult> ExportFilesAsync(BulkExportPreflight preflight, IReadOnlyDictionary<string, ExportCollisionChoice> collisionChoices, ExportSidecarOptions? sidecarOptions = null, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default);
     /// <summary>Exports the file exactly like <see cref="ExportFileAsync"/>, then — only if that
     /// succeeded and <paramref name="sidecarOptions"/> requests one (plan.md:752 "commits each media
     /// object before attempting its sidecar") — writes a `.slopfactory.json` sidecar next to it
     /// through the same atomic-temp-then-journal path. A sidecar failure never affects the already-
     /// successful media result and never deletes it.</summary>
     Task<(FileExportResult Media, SidecarExportResult? Sidecar)> ExportFileWithSidecarAsync(string fileId, string destinationPath, ExportSidecarOptions sidecarOptions, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Builds the exact sidecar JSON a real export with these options would write, without
+    /// exporting anything — lets the GUI show a disclosure preview before the user commits.</summary>
+    Task<string> BuildSidecarPreviewAsync(string fileId, ExportSidecarOptions sidecarOptions, CancellationToken cancellationToken = default);
     Task<ExternalOpenCopy> CreateExternalOpenCopyAsync(string fileId, string temporaryDirectory, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MetadataEntry>> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default);
     Task<MetadataEntry> SetMetadataAsync(string fileId, string key, MetadataValueKind kind, string serializedValue, bool isSensitive, CancellationToken cancellationToken = default);

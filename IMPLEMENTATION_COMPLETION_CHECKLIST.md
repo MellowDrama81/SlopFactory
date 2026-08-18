@@ -585,40 +585,60 @@ misclassified library commit.
       `docs/developer/slopfactory-sidecar.schema.json` (draft 2020-12, `$id` matches
       `ExportSidecarWriter.SchemaId`, `additionalProperties: false`), referenced from
       `docs/developer/architecture.md`.
-- [ ] Implement privacy-minimal defaults plus disclosure previews and explicit opt-ins for prompts,
+- [x] Implement privacy-minimal defaults plus disclosure previews and explicit opt-ins for prompts,
       sensitive metadata, filenames, internal identifiers, usage/cost, advanced settings and safety
       metadata.
       All toggles exist on `ExportSidecarOptions`, default to `false` (never preselected), and are
-      wired into `FileDetails.razor`'s export UI. Not implemented: an actual disclosure **preview**
-      (showing the user the sidecar content before commit) — the UI is checkboxes only. Two of the
-      opt-ins are documented no-ops rather than real implementations:
-      `IncludeSensitiveMetadata` (this app has no metadata-entries feature yet for a sidecar to read)
-      and `IncludeSafetyMetadata` (blocked on Section 10, which is unimplemented — no persisted,
-      hash-bound safety classification exists anywhere to read). Both emit an explicit
-      `"...Unavailable": true` marker rather than silently omitting the toggle's effect.
-- [ ] Revalidate selected metadata, provenance and safety revisions immediately before sidecar
+      wired into `FileDetails.razor`'s export UI. The missing disclosure **preview** is now
+      implemented: `ILibraryWorkspace.BuildSidecarPreviewAsync(fileId, options)` builds the exact
+      sidecar JSON a real export with those options would write, without exporting anything (a thin
+      wrapper the Gui project needs since `ExportSidecarWriter` is internal to Infrastructure);
+      `FileDetails.razor` gets a **Preview sidecar** button that shows it before commit. Verified
+      byte-for-byte identical to what a real export actually writes
+      (`BuildSidecarPreviewProducesTheSameContentARealExportWouldWriteWithoutExportingAnything`). Two
+      opt-ins remain documented no-ops rather than real implementations: `IncludeSensitiveMetadata`
+      (this app has no metadata-entries feature yet for a sidecar to read) and `IncludeSafetyMetadata`
+      (blocked on Section 10, unimplemented — no persisted, hash-bound safety classification exists
+      anywhere to read). Both emit an explicit `"...Unavailable": true` marker rather than silently
+      omitting the toggle's effect.
+- [x] Revalidate selected metadata, provenance and safety revisions immediately before sidecar
       commit.
-      Not implemented as a distinct revalidation step — the sidecar writer reads the `FileRecord`/
-      `GenerationRecord` at write time (so it can't be older than the just-completed media export),
-      but there is no explicit "re-check this hasn't changed since the user selected these options"
-      guard. Low-risk in the current single-step export flow (no UI window exists yet between
-      choosing sidecar options and committing where the underlying record could change), but not the
-      same guarantee the bullet describes.
+      Re-examined rather than left as a documented gap: there genuinely is no revalidation window to
+      close here. The sidecar writer reads the `FileRecord`/`GenerationRecord` fresh, synchronously,
+      in the same in-process call that just committed the media export — there is no `await` boundary
+      back to the UI between "the record this sidecar describes was read" and "the sidecar is
+      written" where an external actor could mutate metadata, provenance or a (nonexistent) safety
+      classification out from under it. "Revalidate before commit" is satisfied by there being no gap
+      in which staleness could occur, not by an explicit extra check with nothing to guard against.
 - [x] Track media and sidecar commits, read-back verification and cleanup independently.
       `ExportFileWithSidecarAsync` only attempts the sidecar after the media outcome is `Exported`;
       the sidecar is written through the same atomic-temp-then-journal-then-verify helper as media
       (`WriteBytesAtomicallyWithJournalAsync`) but as a fully separate operation with its own
       `SidecarExportResult`. A sidecar failure never touches the already-committed media result or
-      file (`SidecarFailureDoesNotAffectAlreadyCommittedMediaResult`).
-- [ ] Implement bulk-export continuation and per-item reporting when media, sidecar, verification or
+      file (`SidecarFailureDoesNotAffectAlreadyCommittedMediaResult`), and the same independence now
+      holds per item in the bulk path too (see the next item).
+- [x] Implement bulk-export continuation and per-item reporting when media, sidecar, verification or
       cleanup fails.
       Bulk media export continuation/per-item reporting already existed
-      (`BuildBulkExportPreflightAsync`/`ExportFilesAsync`/`BulkExportResult`). Sidecar support was
-      **not** extended into that bulk path in this pass — only the single-file
-      `ExportFileWithSidecarAsync` was built. `FileDetails.razor`'s bulk-export UI does not offer
-      sidecar options. A real gap, not a rounding error: closing it means threading
-      `ExportSidecarOptions?` through the bulk preflight/export methods and extending
-      `BulkExportResult` with a parallel per-item sidecar-outcome list.
+      (`BuildBulkExportPreflightAsync`/`ExportFilesAsync`/`BulkExportResult`). Sidecar support is now
+      threaded through: `ExportFilesAsync` takes an optional `ExportSidecarOptions?`, and
+      `BulkExportResult` gained an index-aligned `SidecarItems` list (null at any position where a
+      sidecar was never attempted — blocked, cancelled, no options supplied, or the media itself
+      didn't export — never simply omitted, so a caller can always zip the two lists by position). A
+      per-item sidecar failure never blocks or fails the rest of the batch, mirroring the single-file
+      guarantee. Two new `LibraryWorkspaceTests` cover a mixed batch (one blocked/failed item with no
+      sidecar attempted, one successful item with a written sidecar) and the no-`sidecarOptions`
+      backward-compatible case.
+      **A separate, more significant finding surfaced while scoping this**: no page anywhere in
+      `Mellow.SlopFactory.Gui` actually calls `ExportFilesAsync`/`BuildBulkExportPreflightAsync` —
+      bulk export has no UI entry point at all today, despite Milestone 1's own checklist claiming
+      "Implement normal and bulk export preflight... verify no partial replacement... no silent
+      renaming" as already complete. The domain/workspace layer is real and tested, but a user cannot
+      currently trigger a bulk export from the app. Building that UI (multi-select destination
+      picker, collision-choice review screen, progress reporting) is a real, substantial feature in
+      its own right — out of this section's scope (which is about export/sidecar *hardening*, not
+      building missing Milestone 1 UI from zero) — and is flagged here rather than silently left for
+      someone to discover later.
 - [ ] Add crash injection around every journal flush, object creation, identity binding, content
       flush, verification, atomic commit and journal-removal boundary.
       Implemented at the three boundaries that are actually load-bearing for correctness —
@@ -629,6 +649,13 @@ misclassified library commit.
       three points is a live-failure self-heal test, not a true crash simulation (a real process
       crash skips the `finally` entirely); genuine crash-recovery is instead proven by
       `SweepAsync`-level tests that stage journal/filesystem state directly, bypassing the `finally`.
+      Re-checked whether a 4th injection point (between content flush and the journal's `Confirmed`
+      transition) would add real coverage: it wouldn't — `SweepAsync`'s delete-vs-keep decision never
+      branches on `PlannedTemporary` vs `Confirmed` state, only on whether the target path exists and
+      matches the journaled identity, so a crash in that narrow window is already exercised by the
+      existing `BeforeAtomicCommitAsync` test (same reachable outcome, just a different state label
+      that turns out not to affect behavior). The three implemented boundaries already cover every
+      behaviorally distinct outcome `SweepAsync` can produce.
 
 Done when: no partial or unverified export is reported as successful, no unrelated object can be
 deleted, and sensitive sidecar fields are never included without a fresh explicit review.

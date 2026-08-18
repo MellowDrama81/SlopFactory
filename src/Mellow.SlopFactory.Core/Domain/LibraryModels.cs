@@ -629,8 +629,16 @@ public sealed record BulkExportPreflight(
     IReadOnlyList<BulkExportPreflightItem> Items,
     string? LibraryId = null);
 
-public sealed record BulkExportResult(IReadOnlyList<FileExportResult> Items)
+/// <summary><see cref="SidecarItems"/> is index-aligned with <see cref="Items"/> (position N's sidecar
+/// outcome corresponds to position N's media outcome) — null at a position where no sidecar was ever
+/// attempted (no sidecar options supplied, that item's media export didn't succeed, the item was
+/// blocked, or the batch was cancelled before reaching it), never simply omitted, so a caller can
+/// always zip the two lists together by position. Defaults to a same-length all-null list when
+/// omitted, so existing callers that never pass <c>sidecarOptions</c> to
+/// <see cref="Application.ILibraryWorkspace.ExportFilesAsync"/> keep working unchanged.</summary>
+public sealed record BulkExportResult(IReadOnlyList<FileExportResult> Items, IReadOnlyList<SidecarExportResult?>? SidecarItems = null)
 {
+    public IReadOnlyList<SidecarExportResult?> SidecarItems { get; init; } = SidecarItems ?? Items.Select(_ => (SidecarExportResult?)null).ToArray();
     public int ExportedCount => Items.Count(item => item.Outcome == FileExportOutcome.Exported);
     public int FailedCount => Items.Count(item => item.Outcome == FileExportOutcome.Failed);
     public int CancelledCount => Items.Count(item => item.Outcome == FileExportOutcome.Cancelled);

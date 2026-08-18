@@ -440,6 +440,8 @@
   <data name="SidecarIncludeAdvancedSettings" xml:space="preserve"><value>Include advanced generation settings</value></data>
   <data name="SidecarIncludeSafetyMetadata" xml:space="preserve"><value>Include provider safety metadata</value></data>
   <data name="SidecarSafetyMetadataUnavailableHelp" xml:space="preserve"><value>Not available yet — no persisted provider safety classification exists in this app.</value></data>
+  <data name="SidecarPreviewAction" xml:space="preserve"><value>Preview sidecar</value></data>
+  <data name="SidecarPreviewHeading" xml:space="preserve"><value>This is the exact content that will be written if you export now:</value></data>
   <data name="SidecarExportCompleted" xml:space="preserve"><value>Sidecar written.</value></data>
   <data name="SidecarExportFailed" xml:space="preserve"><value>Sidecar not written: {0}</value></data>
   <data name="ChangedBytesExported" xml:space="preserve"><value>Changed bytes exported for recovery. The library record and provenance were not changed.</value></data>

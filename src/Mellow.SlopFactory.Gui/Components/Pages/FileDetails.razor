@@ -40,6 +40,12 @@ else
                         <label class="check"><input type="checkbox" @bind="_sidecarForm.IncludeUsageAndCost" />@Strings["SidecarIncludeUsageAndCost"]</label>
                         <label class="check"><input type="checkbox" @bind="_sidecarForm.IncludeAdvancedSettings" />@Strings["SidecarIncludeAdvancedSettings"]</label>
                         <label class="check" title="@Strings["SidecarSafetyMetadataUnavailableHelp"]"><input type="checkbox" disabled />@Strings["SidecarIncludeSafetyMetadata"]</label>
+                        <button type="button" class="secondary" disabled="@_sidecarPreviewBusy" @onclick="PreviewSidecarAsync">@Strings["SidecarPreviewAction"]</button>
+                        @if (_sidecarPreview is not null)
+                        {
+                            <p class="muted">@Strings["SidecarPreviewHeading"]</p>
+                            <pre class="metadata-list">@_sidecarPreview</pre>
+                        }
                     }
                 </details>
             }
@@ -986,6 +992,29 @@ else
     }
 
     private readonly SidecarOptionsForm _sidecarForm = new();
+    private string? _sidecarPreview;
+    private bool _sidecarPreviewBusy;
+
+    /// <summary>plan.md:743's "disclosure preview" — shows the exact JSON a real export with the
+    /// currently checked options would write, without exporting anything, so the user can see what
+    /// they're about to disclose before committing to it.</summary>
+    private async Task PreviewSidecarAsync()
+    {
+        if (_file is null || LibraryState.Workspace is null) return;
+        _sidecarPreviewBusy = true;
+        try
+        {
+            _sidecarPreview = await LibraryState.Workspace.BuildSidecarPreviewAsync(_file.Id, _sidecarForm.ToOptions());
+        }
+        catch (SlopFactoryException exception)
+        {
+            _message = exception.Message;
+        }
+        finally
+        {
+            _sidecarPreviewBusy = false;
+        }
+    }
 
     private async Task ExportAsync()
     {

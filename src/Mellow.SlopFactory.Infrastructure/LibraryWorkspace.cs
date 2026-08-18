@@ -1140,7 +1140,32 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(sidecarOptions);
         var media = await ExportFileAsync(fileId, destinationPath, collisionChoice, progress, cancellationToken).ConfigureAwait(false);
-        if (media.Outcome != FileExportOutcome.Exported || !sidecarOptions.WriteSidecar) return (media, null);
+        var sidecar = await WriteSidecarForExportedMediaAsync(fileId, media, sidecarOptions, collisionChoice, cancellationToken).ConfigureAwait(false);
+        return (media, sidecar);
+    }
+
+    /// <summary>Builds the exact sidecar JSON a real export with these options would write, without
+    /// exporting anything — lets the GUI show a disclosure preview before the user commits, per
+    /// plan.md:743's "disclosure previews." <see cref="ExportSidecarWriter"/> is internal to this
+    /// assembly, so this is the seam the Gui project (which has no `InternalsVisibleTo` access) goes
+    /// through instead of referencing it directly.</summary>
+    public async Task<string> BuildSidecarPreviewAsync(string fileId, ExportSidecarOptions sidecarOptions, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(sidecarOptions);
+        var file = await _database.GetFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        var generation = await _database.GetGenerationRecordForResultFileAsync(fileId, cancellationToken).ConfigureAwait(false);
+        return ExportSidecarWriter.BuildJson(file, generation, sidecarOptions);
+    }
+
+    /// <summary>Shared by <see cref="ExportFileWithSidecarAsync"/> and the bulk path in
+    /// <see cref="ExportFilesAsync"/> — writes a sidecar for a media file that has already been
+    /// exported (or not, if <paramref name="sidecarOptions"/> is null/disabled or the media export
+    /// itself didn't succeed, in which case this is a no-op returning null, never attempting a
+    /// sidecar for an unverified or absent export).</summary>
+    private async Task<SidecarExportResult?> WriteSidecarForExportedMediaAsync(string fileId, FileExportResult media, ExportSidecarOptions? sidecarOptions, ExportCollisionChoice collisionChoice, CancellationToken cancellationToken)
+    {
+        if (media.Outcome != FileExportOutcome.Exported || sidecarOptions is not { WriteSidecar: true }) return null;
 
         try
         {
@@ -1151,11 +1176,11 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             var sidecarPath = media.DestinationPath + ".slopfactory.json";
             var sidecarResult = await WriteBytesAtomicallyWithJournalAsync(fileId, sidecarBytes, sidecarPath, collisionChoice, cancellationToken).ConfigureAwait(false);
             var sidecarPathOrNull = sidecarResult.Outcome == FileExportOutcome.Exported ? sidecarResult.DestinationPath : null;
-            return (media, new SidecarExportResult(sidecarPathOrNull, sidecarResult.Outcome, sidecarResult.Error));
+            return new SidecarExportResult(sidecarPathOrNull, sidecarResult.Outcome, sidecarResult.Error);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SlopFactoryException or ArgumentException)
         {
-            return (media, new SidecarExportResult(null, FileExportOutcome.Failed, exception.Message));
+            return new SidecarExportResult(null, FileExportOutcome.Failed, exception.Message);
         }
     }
 
@@ -1252,29 +1277,38 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return new BulkExportPreflight(previewId, directory, items, Descriptor.LibraryId);
     }
 
-    public async Task<BulkExportResult> ExportFilesAsync(BulkExportPreflight preflight, IReadOnlyDictionary<string, ExportCollisionChoice> collisionChoices, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<BulkExportResult> ExportFilesAsync(BulkExportPreflight preflight, IReadOnlyDictionary<string, ExportCollisionChoice> collisionChoices, ExportSidecarOptions? sidecarOptions = null, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(preflight);
         ArgumentNullException.ThrowIfNull(collisionChoices);
         if (preflight.LibraryId is not null && !string.Equals(preflight.LibraryId, Descriptor.LibraryId, StringComparison.Ordinal)) throw new LibraryValidationException("A bulk-export review cannot be committed from a different library.");
         var results = new List<FileExportResult>(preflight.Items.Count);
+        // Index-aligned with results — null for every item where a sidecar was never attempted
+        // (blocking reason, cancelled, sidecarOptions disabled, or media itself didn't export),
+        // never merely omitted, so a caller can always zip Items with SidecarItems by position.
+        var sidecarResults = new List<SidecarExportResult?>(preflight.Items.Count);
         for (var index = 0; index < preflight.Items.Count; index++)
         {
             var item = preflight.Items[index];
             if (cancellationToken.IsCancellationRequested)
             {
                 results.AddRange(preflight.Items.Skip(index).Select(remaining => new FileExportResult(remaining.FileId, remaining.DestinationPath, FileExportOutcome.Cancelled, 0, null, null)));
+                sidecarResults.AddRange(Enumerable.Repeat<SidecarExportResult?>(null, preflight.Items.Count - index));
                 break;
             }
-            if (item.BlockingReason is not null) { results.Add(new(item.FileId, item.DestinationPath, FileExportOutcome.Failed, 0, null, item.BlockingReason)); continue; }
+            if (item.BlockingReason is not null) { results.Add(new(item.FileId, item.DestinationPath, FileExportOutcome.Failed, 0, null, item.BlockingReason)); sidecarResults.Add(null); continue; }
             var choice = collisionChoices.GetValueOrDefault(item.FileId, ExportCollisionChoice.Fail);
             progress?.Report(new ImportProgress(index + 1, preflight.Items.Count, item.DisplayName, "Exporting", 0, 1));
             var result = await ExportFileAsync(item.FileId, item.DestinationPath, choice, cancellationToken: cancellationToken).ConfigureAwait(false);
             results.Add(result);
+            // A sidecar failure never rolls back or fails the media result — same independence
+            // ExportFileWithSidecarAsync already guarantees for a single file, extended here so one
+            // item's sidecar failure never blocks or fails the rest of the batch either.
+            sidecarResults.Add(await WriteSidecarForExportedMediaAsync(item.FileId, result, sidecarOptions, choice, cancellationToken).ConfigureAwait(false));
             progress?.Report(new ImportProgress(index + 1, preflight.Items.Count, item.DisplayName, result.Outcome.ToString(), result.BytesWritten, Math.Max(result.BytesWritten, 1)));
         }
-        return new BulkExportResult(results);
+        return new BulkExportResult(results, sidecarResults);
     }
 
     private static string SafeExportName(string displayName)

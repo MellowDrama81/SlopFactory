@@ -3210,6 +3210,25 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task BuildSidecarPreviewProducesTheSameContentARealExportWouldWriteWithoutExportingAnything()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.Child("source.txt");
+        await File.WriteAllTextAsync(source, "original");
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var options = ExportSidecarOptions.Default with { WriteSidecar = true, IncludeFilenames = true };
+
+        var preview = await workspace.BuildSidecarPreviewAsync(file.Id, options);
+
+        Assert.False(File.Exists(temporary.Child("export.txt") + ".slopfactory.json"));
+        var (_, exported) = await workspace.ExportFileWithSidecarAsync(file.Id, temporary.Child("export.txt"), options);
+        var actualBytes = await File.ReadAllBytesAsync(exported!.SidecarPath!);
+        Assert.Equal(Encoding.UTF8.GetBytes(preview), actualBytes);
+    }
+
+    [Fact]
     public async Task SidecarFailureDoesNotAffectAlreadyCommittedMediaResult()
     {
         using var temporary = new TemporaryDirectory();
@@ -3465,6 +3484,55 @@ public sealed class LibraryWorkspaceTests
         Assert.Equal("existing", await File.ReadAllTextAsync(Path.Combine(destination, "one.txt")));
         Assert.Equal("two", await File.ReadAllTextAsync(Path.Combine(destination, "two.txt")));
         Assert.Equal(2, Directory.EnumerateFiles(destination).Count());
+    }
+
+    [Fact]
+    public async Task BulkExportWritesASidecarPerSuccessfullyExportedFileWithResultsIndexAlignedToMedia()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sources = new[] { temporary.Child("one.txt"), temporary.Child("two.txt") };
+        await File.WriteAllTextAsync(sources[0], "one");
+        await File.WriteAllTextAsync(sources[1], "two");
+        var files = (await workspace.ImportAsync(sources, workspace.Descriptor.RootFolderId)).Select(result => result.File!).ToArray();
+        var destination = temporary.Child("exports");
+        Directory.CreateDirectory(destination);
+        await File.WriteAllTextAsync(Path.Combine(destination, "one.txt"), "existing");
+        var preflight = await workspace.BuildBulkExportPreflightAsync(files.Select(file => file.Id).ToArray(), destination);
+
+        var result = await workspace.ExportFilesAsync(preflight, new Dictionary<string, ExportCollisionChoice>(), ExportSidecarOptions.Default with { WriteSidecar = true });
+
+        Assert.Equal(result.Items.Count, result.SidecarItems.Count);
+        var oneIndex = Array.FindIndex(preflight.Items.ToArray(), item => item.DisplayName == "one.txt");
+        var twoIndex = Array.FindIndex(preflight.Items.ToArray(), item => item.DisplayName == "two.txt");
+        Assert.Equal(FileExportOutcome.Failed, result.Items[oneIndex].Outcome);
+        Assert.Null(result.SidecarItems[oneIndex]);
+        Assert.Equal(FileExportOutcome.Exported, result.Items[twoIndex].Outcome);
+        Assert.NotNull(result.SidecarItems[twoIndex]);
+        Assert.Equal(FileExportOutcome.Exported, result.SidecarItems[twoIndex]!.Outcome);
+        Assert.True(File.Exists(Path.Combine(destination, "two.txt.slopfactory.json")));
+        Assert.False(File.Exists(Path.Combine(destination, "one.txt.slopfactory.json")));
+    }
+
+    [Fact]
+    public async Task BulkExportOmitsSidecarsEntirelyWhenNoSidecarOptionsAreSupplied()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var source = temporary.Child("one.txt");
+        await File.WriteAllTextAsync(source, "one");
+        var file = Assert.Single(await workspace.ImportAsync([source], workspace.Descriptor.RootFolderId)).File!;
+        var destination = temporary.Child("exports");
+        Directory.CreateDirectory(destination);
+        var preflight = await workspace.BuildBulkExportPreflightAsync([file.Id], destination);
+
+        var result = await workspace.ExportFilesAsync(preflight, new Dictionary<string, ExportCollisionChoice>());
+
+        Assert.Equal(FileExportOutcome.Exported, Assert.Single(result.Items).Outcome);
+        Assert.Null(Assert.Single(result.SidecarItems));
+        Assert.False(File.Exists(Path.Combine(destination, "one.txt.slopfactory.json")));
     }
 
     [Fact]
