@@ -9,14 +9,14 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class GenerationQueueServiceTests
 {
-    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, bool autoStart = true, IBackgroundExecutionService? backgroundExecution = null)
+    private static async Task<(AppLibraryState Libraries, ILibraryWorkspace Workspace, GenerationQueueService Queue, FakeProviderAdapter Adapter, FakeAppPreferenceStore Preferences)> CreateHarnessAsync(string root, FakeAppPreferenceStore? preferences = null, FakeDeviceEnergyStateProvider? energy = null, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, bool autoStart = true, IBackgroundExecutionService? backgroundExecution = null, IGenerationFaultInjector? faultInjector = null)
     {
         var libraries = new AppLibraryState(new LibraryWorkspaceFactory(), new FakeLibraryLocationService(root), new FakeRecentLibraryService(), new LibraryAvailabilityProbe(), new FakeAppPreferenceStore());
         await libraries.InitializeAsync();
         var adapter = new FakeProviderAdapter();
         preferences ??= new FakeAppPreferenceStore();
         energy ??= new FakeDeviceEnergyStateProvider();
-        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker, connectivity, recoveryStaging, availabilityProbe, backgroundExecution: backgroundExecution);
+        var queue = new GenerationQueueService(libraries, new FakeProviderAdapterResolver(adapter), new FakeSecureCredentialStore(), preferences, energy, videoPollInterval, rateLimitTracker, connectivity, recoveryStaging, availabilityProbe, backgroundExecution: backgroundExecution, faultInjector: faultInjector);
         if (autoStart) queue.Start();
         return (libraries, libraries.Workspace!, queue, adapter, preferences);
     }
@@ -972,6 +972,22 @@ public sealed class GenerationQueueServiceTests
     }
 
     [Fact]
+    public async Task AudioGenerationThreadsTheRequestedVoiceThroughToTheAdapter()
+    {
+        using var temporary = new TemporaryDirectory();
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"));
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("TTS", connection.Id, "hexgrad/Kokoro-82M", GenerationMode.Audio, false);
+        adapter.SetAudioResult("Read this aloud", [[0x49, 0x44, 0x33, 1, 2, 3]]);
+
+        var snapshot = new GenerationJobSnapshot("draft-audio-voice", "Tab", GenerationMode.Audio, model.Id, "Read this aloud", null, 1, workspace.Descriptor.GeneratedFolderId, null, Voice: "af_bella");
+        queue.Enqueue(snapshot, connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-audio-voice") is not null);
+        Assert.Equal("af_bella", adapter.LastRequestedVoice);
+    }
+
+    [Fact]
     public async Task AudioGenerationFailureIsCommittedAsALocalFailedGenerationRecord()
     {
         using var temporary = new TemporaryDirectory();
@@ -1914,10 +1930,12 @@ public sealed class GenerationQueueServiceTests
 
         private readonly Dictionary<string, IReadOnlyList<byte[]>> _audioResults = new(StringComparer.Ordinal);
         public void SetAudioResult(string prompt, IReadOnlyList<byte[]> bytes) { lock (_gate) _audioResults[prompt] = bytes; }
-        public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default)
+        public string? LastRequestedVoice { get; private set; }
+        public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default)
         {
             lock (_gate)
             {
+                LastRequestedVoice = voice;
                 return _audioResults.TryGetValue(prompt, out var bytes) ? Task.FromResult(bytes) : throw new ProviderAdapterException($"No configured audio result for '{prompt}'.");
             }
         }
@@ -2077,5 +2095,82 @@ public sealed class GenerationQueueServiceTests
             failureStage = "root-missing";
             return IsAvailableValue;
         }
+    }
+
+    /// <summary>Throws a real <see cref="IOException"/> from whichever seam is armed, simulating a
+    /// storage fault at a point the filesystem-deletion technique used elsewhere in this file cannot
+    /// safely reach (see <see cref="IGenerationFaultInjector"/>'s own remarks).</summary>
+    private sealed class FakeGenerationFaultInjector : IGenerationFaultInjector
+    {
+        public bool ThrowOnPrepareRead { get; set; }
+        public int PostCommitCleanupCallCount { get; private set; }
+        public bool ThrowOnPostCommitCleanup { get; set; }
+
+        public Task BeforePrepareReadAsync(CancellationToken cancellationToken)
+        {
+            if (ThrowOnPrepareRead) throw new IOException("Simulated volume removal while preparing.");
+            return Task.CompletedTask;
+        }
+
+        public Task BeforePostCommitCleanupAsync(CancellationToken cancellationToken)
+        {
+            PostCommitCleanupCallCount++;
+            if (ThrowOnPostCommitCleanup) throw new IOException("Simulated storage fault during post-commit cleanup.");
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task AStorageFaultWhilePreparingFailsTheGenerationWithoutLosingTheQueuedRecord()
+    {
+        using var temporary = new TemporaryDirectory();
+        var faultInjector = new FakeGenerationFaultInjector { ThrowOnPrepareRead = true };
+        var (_, workspace, queue, _, _) = await CreateHarnessAsync(temporary.Child("library"), faultInjector: faultInjector);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Text", connection.Id, "gpt-4o", GenerationMode.Text, true);
+
+        queue.Enqueue(Snapshot("draft-prepare-fault", model.Id, "A prompt", workspace.Descriptor.GeneratedFolderId), connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-prepare-fault") is not null);
+        var outcome = queue.GetLastOutcomeForDraft("draft-prepare-fault")!;
+        Assert.Null(outcome.Record);
+        Assert.Equal("Simulated volume removal while preparing.", outcome.LocalErrorMessage);
+
+        // The durable record created at Enqueue time (before Preparing ever ran) is not lost — it is
+        // finalized to Failed rather than left stranded at Queued/Preparing for a restart to have to
+        // reinterpret.
+        var history = await workspace.GetGenerationHistoryAsync();
+        var record = Assert.Single(history, entry => entry.Prompt == "A prompt");
+        Assert.Equal(GenerationStatus.Failed, record.Status);
+    }
+
+    [Fact]
+    public async Task APostCommitCleanupFaultNeverAffectsTheAlreadyCommittedVideoResult()
+    {
+        using var temporary = new TemporaryDirectory();
+        var faultInjector = new FakeGenerationFaultInjector { ThrowOnPostCommitCleanup = true };
+        var (_, workspace, queue, adapter, _) = await CreateHarnessAsync(temporary.Child("library"), videoPollInterval: TimeSpan.FromMilliseconds(200), faultInjector: faultInjector);
+        var connection = await CreateReadyConnectionAsync(workspace, "Connection");
+        var model = await workspace.CreateModelAsync("Video", connection.Id, "google/veo-3.1", GenerationMode.Video, false);
+        adapter.NextVideoJobId = "video-cleanup-fault";
+        adapter.EnqueueVideoPollResult(new AsyncGenerationPollResult(AsyncGenerationPollOutcome.Completed, [Mp4SignatureBytes], null));
+
+        queue.Enqueue(Snapshot("draft-cleanup-fault", model.Id, "A cat skateboarding", workspace.Descriptor.GeneratedFolderId, GenerationMode.Video), connection.Id);
+
+        await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-cleanup-fault") is not null, timeoutMs: 5000);
+        var outcome = queue.GetLastOutcomeForDraft("draft-cleanup-fault")!;
+
+        // The generation itself committed successfully — a cleanup failure for the now-stale
+        // device-wide async-job registry row must never downgrade an already-successful outcome.
+        Assert.NotNull(outcome.Record);
+        Assert.Equal(GenerationStatus.Completed, outcome.Record!.Status);
+        Assert.Single(outcome.Record.ResultFileIds);
+        Assert.True(faultInjector.PostCommitCleanupCallCount > 0);
+
+        // The cleanup step's own attempt to remove the row genuinely failed and was swallowed — the
+        // stale row is still there, a harmless leftover rather than silently proving nothing was
+        // actually exercised.
+        var remainingJobs = await workspace.GetAsyncRemoteJobsForConnectionAsync(connection.Id);
+        Assert.Single(remainingJobs, job => job.ProviderJobId == "video-cleanup-fault");
     }
 }

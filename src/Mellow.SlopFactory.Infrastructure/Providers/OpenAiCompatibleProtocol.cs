@@ -256,7 +256,7 @@ internal static class OpenAiCompatibleProtocol
                 if (string.IsNullOrWhiteSpace(id)) continue;
                 string? label = null;
                 if (entry.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String) label = nameElement.GetString();
-                results.Add(new ProviderModelInfo(id, label));
+                results.Add(new ProviderModelInfo(id, label, ParseModelPricing(entry)));
             }
 
             return results;
@@ -264,6 +264,28 @@ internal static class OpenAiCompatibleProtocol
         catch (JsonException)
         {
             throw new ProviderAdapterException("The provider's model list response was not valid JSON.");
+        }
+    }
+
+    /// <summary>Parses a model-list entry's optional <c>pricing</c> object (confirmed live for
+    /// OpenRouter: <c>{"prompt":"0.00000045","completion":"0.0000032",...}</c>, decimal-string
+    /// USD-per-token values). No other adapter's real <c>/models</c> response documents this field,
+    /// so an entry without it — including every OpenAI/generic-compatible/DeepInfra response —
+    /// simply yields <see langword="null"/> here. The USD assumption mirrors the already-confirmed
+    /// one <c>ParseCost</c> makes for OpenRouter's actual-cost reporting (OpenRouter's FAQ: "the base
+    /// currency is US dollars").</summary>
+    private static ProviderModelPricing? ParseModelPricing(JsonElement entry)
+    {
+        if (!entry.TryGetProperty("pricing", out var pricing) || pricing.ValueKind != JsonValueKind.Object) return null;
+        if (!TryGetDecimalString(pricing, "prompt", out var promptCost)) return null;
+        if (!TryGetDecimalString(pricing, "completion", out var completionCost)) return null;
+        return new ProviderModelPricing(promptCost, completionCost, "USD");
+
+        static bool TryGetDecimalString(JsonElement obj, string propertyName, out decimal value)
+        {
+            value = 0;
+            return obj.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.String
+                && decimal.TryParse(element.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value);
         }
     }
 

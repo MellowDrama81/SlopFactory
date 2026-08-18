@@ -39,6 +39,27 @@ public sealed class ProviderAdapterTests
     }
 
     [Fact]
+    public async Task OpenRouterAdapterParsesPerModelPricingFromTheModelListResponse()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+            FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"data":[{"id":"qwen/qwen3.8-27b","name":"Qwen 3.8 27B","pricing":{"prompt":"0.00000045","completion":"0.0000032","input_cache_read":"0.00000005"}},{"id":"no-pricing/model","name":"No Pricing"}]}"""));
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var models = await adapter.ListModelsAsync(connection, "secret-key");
+
+        var priced = models.Single(model => model.ProviderModelId == "qwen/qwen3.8-27b");
+        Assert.NotNull(priced.Pricing);
+        Assert.Equal(0.00000045m, priced.Pricing!.PromptCostPerToken);
+        Assert.Equal(0.0000032m, priced.Pricing.CompletionCostPerToken);
+        Assert.Equal("USD", priced.Pricing.Currency);
+
+        var unpriced = models.Single(model => model.ProviderModelId == "no-pricing/model");
+        Assert.Null(unpriced.Pricing);
+    }
+
+    [Fact]
     public async Task OpenAiAdapterTestConnectionReportsAuthenticationFailureWithoutThrowing()
     {
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent("{}") });

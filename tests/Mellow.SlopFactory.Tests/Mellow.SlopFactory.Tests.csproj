@@ -28,6 +28,7 @@
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\SensitiveRevealSessionService.cs" Link="Services\SensitiveRevealSessionService.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\ISecureCredentialStore.cs" Link="Services\ISecureCredentialStore.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\GenerationQueueService.cs" Link="Services\GenerationQueueService.cs" />
+    <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IGenerationFaultInjector.cs" Link="Services\IGenerationFaultInjector.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\CredentialReconciliationService.cs" Link="Services\CredentialReconciliationService.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IDeviceEnergyStateProvider.cs" Link="Services\IDeviceEnergyStateProvider.cs" />
     <Compile Include="..\..\src\Mellow.SlopFactory.Gui\Services\IDeviceConnectivityStateProvider.cs" Link="Services\IDeviceConnectivityStateProvider.cs" />

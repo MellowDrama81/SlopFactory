@@ -79,6 +79,55 @@ public sealed class LibraryRulesTests
     }
 
     [Theory]
+    [InlineData(ProviderType.OpenAi, false)]
+    [InlineData(ProviderType.GenericOpenAiCompatible, false)]
+    [InlineData(ProviderType.OpenRouter, false)]
+    [InlineData(ProviderType.OneMinAi, false)]
+    [InlineData(ProviderType.DeepInfra, true)]
+    public void SupportsAudioVoiceSelectionIsTrueOnlyForDeepInfra(ProviderType providerType, bool expected)
+    {
+        Assert.Equal(expected, LibraryRules.SupportsAudioVoiceSelection(providerType));
+    }
+
+    [Fact]
+    public void EstimateGenerationCostReturnsNullWithoutPricing()
+    {
+        Assert.Null(LibraryRules.EstimateGenerationCost(null, 100, null, "source", DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void EstimateGenerationCostWithoutAMaxTokensCapHasNoReliableUpperBound()
+    {
+        var pricing = new ProviderModelPricing(0.00000045m, 0.0000032m, "USD");
+        var effectiveAt = DateTimeOffset.UtcNow;
+
+        var estimate = LibraryRules.EstimateGenerationCost(pricing, 1000, null, "OpenRouter", effectiveAt);
+
+        Assert.NotNull(estimate);
+        Assert.Equal(0.00000045m * 1000, estimate!.LowerBound);
+        Assert.Equal(estimate.LowerBound, estimate.UpperBound);
+        Assert.False(estimate.HasReliableUpperBound);
+        Assert.Equal("USD", estimate.Currency);
+        Assert.Equal("OpenRouter", estimate.Source);
+        Assert.Equal(effectiveAt, estimate.EffectiveAt);
+    }
+
+    [Fact]
+    public void EstimateGenerationCostWithAMaxTokensCapReportsAReliableUpperBound()
+    {
+        var pricing = new ProviderModelPricing(0.00000045m, 0.0000032m, "USD");
+
+        var estimate = LibraryRules.EstimateGenerationCost(pricing, 1000, 500, "OpenRouter", DateTimeOffset.UtcNow);
+
+        Assert.NotNull(estimate);
+        var expectedLower = 0.00000045m * 1000;
+        var expectedUpper = expectedLower + 0.0000032m * 500;
+        Assert.Equal(expectedLower, estimate!.LowerBound);
+        Assert.Equal(expectedUpper, estimate.UpperBound);
+        Assert.True(estimate.HasReliableUpperBound);
+    }
+
+    [Theory]
     [InlineData(ProviderType.OpenAi, GenerationMode.Image)]
     [InlineData(ProviderType.OpenAi, GenerationMode.Audio)]
     [InlineData(ProviderType.DeepInfra, GenerationMode.Image)]

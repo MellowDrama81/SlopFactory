@@ -788,9 +788,29 @@ public sealed record Model(
     bool NeedsReview = false,
     TextResultFormat TextFormat = TextResultFormat.Markdown);
 
+/// <summary>Per-token pricing for one model, as reported by a provider's own model-listing endpoint
+/// at the moment it was fetched — never bundled/guessed data (`docs/developer/architecture.md`'s
+/// explicit "won't fabricate per-token/per-image pricing data" rule). Today only
+/// <c>OpenRouterProviderAdapter</c>'s confirmed <c>/models</c> response populates this; every other
+/// adapter's model list has no documented pricing field, so their entries always carry
+/// <see langword="null"/>.</summary>
+public sealed record ProviderModelPricing(decimal PromptCostPerToken, decimal CompletionCostPerToken, string Currency);
+
 public sealed record ProviderModelInfo(
     string ProviderModelId,
-    string? DisplayLabel);
+    string? DisplayLabel,
+    ProviderModelPricing? Pricing = null);
+
+/// <param name="HasReliableUpperBound"><see langword="true"/> only when <c>UpperBound</c> reflects a
+/// real cap (a configured <c>MaxTokens</c> setting) rather than being equal to
+/// <c>LowerBound</c> because no cap on completion length is known.</param>
+public sealed record GenerationCostEstimate(
+    decimal LowerBound,
+    decimal UpperBound,
+    bool HasReliableUpperBound,
+    string Currency,
+    string Source,
+    DateTimeOffset EffectiveAt);
 
 public sealed record ModelCatalogue(
     DateTimeOffset? RetrievedAt,

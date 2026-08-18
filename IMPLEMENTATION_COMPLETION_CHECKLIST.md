@@ -383,11 +383,17 @@ misreports OS suspension as a provider failure.
       "provider does not support generation settings for this mode" notice replaces the panel entirely
       when none apply (closing a real capability-rejection gap, not just a schema-completeness one —
       previously a 1min.AI user could set a temperature that was silently discarded with no
-      indication). No slider/toggle/dimension/voice control exists yet: DeepInfra's audio contract
-      documents an optional `voice` parameter, but `IProviderAdapter.GenerateAudioAsync` has no
-      parameter to carry one for any adapter — wiring it would mean the same kind of adapter-interface
-      change across all five adapters that the source-slots work required, not a bounded UI addition,
-      so it's left open rather than half-built.
+      indication). Voice is now implemented for the one confirmed case: `IProviderAdapter
+      .GenerateAudioAsync` gained an optional `voice` parameter (all five adapters updated; only
+      `DeepInfraProviderAdapter` sends it, matching its confirmed `POST /v1/audio/speech` contract's
+      optional `voice` field — `docs/developer/deepinfra-audio-video-contract.md`). New
+      `LibraryRules.SupportsAudioVoiceSelection(providerType)` gates a plain text `Voice` input on
+      `Generate.razor`, shown only for Audio-mode DeepInfra models. Deliberately not persisted through
+      `GenerationDraft`/saved settings/history/**Use Again** in this pass — it lives only in the
+      in-memory `GenerationJobSnapshot` for one submission, an explicit, documented scope cut (matching
+      the first-frame-picker precedent in section 6) rather than the larger schema-migration-sized
+      effort full persistence would need. No slider/toggle/dimension control exists for any other
+      field — no adapter documents one.
 - [x] Implement the bounded advanced JSON editor for manually entered or unknown models.
 - [x] Enforce reserved keys, nesting/size limits, type validation, normalized-request conflict
       detection and sanitized preview for advanced JSON.
@@ -662,20 +668,28 @@ deleted, and sensitive sidecar fields are never included without a fresh explici
 
 ## 9. Complete cost and usage safeguards
 
-- [ ] Implement pre-generation estimates using only documented local pricing or a non-billable
+- [x] Implement pre-generation estimates using only documented local pricing or a non-billable
       estimate endpoint that does not submit prompt/source content without separate consent.
-      Researched rather than assumed blocked: OpenRouter's `/models` list endpoint (already called
-      for model discovery/`TestConnectionAsync`/`ListModelsAsync`) genuinely documents per-model
-      prompt/completion USD pricing and is explicitly the provider's own recommended way to get
-      real-time rates — a real, confirmed, non-billable source for exactly one of five providers.
-      Not implemented: `ParseModelList` only extracts `id`/`name` today, with no pricing field, no
-      storage for a pricing snapshot/revision, and no per-request estimate computation. Left open
-      because a real implementation isn't "parse one more field" — it needs a pricing-revision data
-      model the four items below also depend on (versioning, effective date, "Unreliable" marking),
-      and only 1 of 5 providers has a confirmed source to build it from; the other four have no
-      documented non-billable pricing source at all, so "estimates" for them would mean guessing.
-- [ ] Show deterministic values or reliable ranges with source and effective pricing date.
-      Depends on the pricing-revision data model above, which doesn't exist yet.
+      Implemented for the one confirmed source: OpenRouter's `/models` endpoint's `pricing` object
+      (live-confirmed shape: `{"prompt":"0.00000045","completion":"0.0000032",...}`, decimal-string
+      USD-per-token — fetched 2026-08-18 via `https://openrouter.ai/api/v1/models`). `ParseModelList`
+      now parses this into a new `ProviderModelPricing` on `ProviderModelInfo` (null when a response
+      has no `pricing` object, which is every other adapter's real `/models` response today — safe by
+      absence, not by mislabeling). `Generate.razor` fetches it live via the same non-billable
+      `ListModelsAsync` call once, on model selection (`OnModelSelectionChangedAsync`), only for
+      Text-mode OpenRouter models — no prompt/source content is ever submitted to get it, so no
+      separate consent applies. Never bundled/guessed data, matching `docs/developer/architecture.md`'s
+      existing "won't fabricate per-token/per-image pricing data" rule.
+- [x] Show deterministic values or reliable ranges with source and effective pricing date.
+      New `LibraryRules.EstimateGenerationCost` computes a `GenerationCostEstimate`: a deterministic
+      lower bound (`EstimatedTokenCount × PromptCostPerToken`) and, only when a `Max tokens` setting
+      is actually configured, a reliable upper bound adding `MaxTokens × CompletionCostPerToken` —
+      with no configured cap there is no honest upper bound, so the range collapses to the lower bound
+      and `HasReliableUpperBound` is `false` rather than presenting a fabricated ceiling.
+      `Generate.razor` shows the range (or "at least X" when unreliable) plus its source and the exact
+      fetch timestamp, replacing "Cost unknown" for this one case. The remaining six items below are
+      unimplemented: this closes only "show an estimate," not the threshold/acknowledgement/
+      history/overrun-comparison/Unreliable-marking machinery those items separately require.
 - [ ] Implement the first-use acknowledgement for a model/connection revision whose cost is unknown.
       plan.md:1588 specifically requires this to reference a "pricing-capability revision" and to
       state "no configured threshold can be enforced" — both concepts that only mean something once
@@ -905,24 +919,29 @@ reacquisition never masquerades changed bytes as restoration.
       model settings or credential ever entered the registry; reconciliation reads the actual
       prompt/model/settings from the durable `GenerationRecord` in the library database, never from
       the staging registry itself.
-- [ ] Add fault-injection tests for volume removal during prepare, commit, post-commit cleanup and
+- [x] Add fault-injection tests for volume removal during prepare, commit, post-commit cleanup and
       application restart.
-      Covered: commit-time volume removal (staging occurs) and the reconciliation half (a second
-      "session" against the same staging registry after the volume returns), both driven through a
-      real staged→reconciled round trip. Investigated why prepare/post-commit-cleanup removal aren't
-      covered rather than assuming it was just not attempted: the existing test technique
-      (`FakeLibraryAvailabilityProbe` plus deleting the library's `media` directory to force a real
-      `IOException` without touching the exclusively-locked SQLite database or lock file Windows
-      would refuse to release) can only simulate storage loss for filesystem writes, not for the
-      SQLite reads `Preparing` does (`GetActiveModelsAsync`/`GetActiveConnectionsAsync`) — safely
-      forcing *those* to fail without breaking real file locks needs a dedicated fault-injection seam
-      (like section 8's `IExportFaultInjector`) that doesn't exist for the generation queue today.
-      Post-commit cleanup (the async-job-registry `DeleteAsyncRemoteJobAsync` loop after a successful
-      commit) has the same problem: it shares the exact same SQLite connection path the commit itself
-      just used, so there's no clean way to make only the cleanup step fail without also failing the
-      commit it follows, absent new instrumentation. Building that seam is a real, bounded addition on
-      its own, but wasn't done here rather than adding a fragile test that doesn't actually isolate
-      what it claims to.
+      Commit-time volume removal (staging occurs) and the reconciliation half (a second "session"
+      against the same staging registry after the volume returns, exercising the application-restart
+      case) are covered by a real staged→reconciled round trip. Prepare and post-commit cleanup were
+      previously left uncovered because the filesystem-deletion fault technique can't safely reach
+      either one (both share the workspace's exclusively-locked SQLite connection, which Windows
+      would refuse to let a test corrupt without breaking unrelated operations). Closed by a new
+      dedicated seam mirroring section 8's `IExportFaultInjector`:
+      `IGenerationFaultInjector`/`NullGenerationFaultInjector`
+      (`src/Mellow.SlopFactory.Gui/Services/IGenerationFaultInjector.cs`), an optional constructor
+      dependency on `GenerationQueueService` with two hooks —
+      `BeforePrepareReadAsync` (called immediately before `GetActiveModelsAsync`/
+      `GetActiveConnectionsAsync`) and `BeforePostCommitCleanupAsync` (called immediately before each
+      post-commit async-job-registry link/delete attempt, still inside the same per-entry
+      try/catch that already swallows a real cleanup failure). Two new
+      `GenerationQueueServiceTests`: `AStorageFaultWhilePreparingFailsTheGenerationWithoutLosingTheQueuedRecord`
+      (a fault at `BeforePrepareReadAsync` finalizes the already-durable `Queued` record to `Failed`
+      rather than losing it) and `APostCommitCleanupFaultNeverAffectsTheAlreadyCommittedVideoResult`
+      (a fault at `BeforePostCommitCleanupAsync` proves the already-committed video record still
+      reports `Completed` and the stale async-job registry row is left for a later sweep, not that
+      any new production behavior was added — the isolation already existed, this seam just proves
+      it).
 
 Done when: a missing volume cannot lose a completed provider result or create duplicate committed
 outputs, and recovery exposes no sensitive content outside its library.
@@ -1009,7 +1028,7 @@ artifact coverage rather than only source-level markup or CSS assertions.
       (section 4). Runtime notification-permission prompting is not automatable from this test
       harness (it requires a real OS permission dialog) and remains a manual test (section 15).
 - [x] Run the complete unit/integration suite with zero failures.
-      663 passed, 1 skipped (the opt-in `LiveProviderSmokeTests` live-credential test), 0 failed as
+      677 passed, 1 skipped (the opt-in `LiveProviderSmokeTests` live-credential test), 0 failed as
       of this pass (`dotnet test tests/Mellow.SlopFactory.Tests`).
 - [x] Produce clean Windows Debug and Release builds.
       `dotnet build src/Mellow.SlopFactory.Gui -f net10.0-windows10.0.22621.0 -c Debug` and `-c

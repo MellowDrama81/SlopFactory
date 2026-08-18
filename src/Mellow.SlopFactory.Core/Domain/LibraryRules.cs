@@ -285,6 +285,37 @@ public static class LibraryRules
             | GenerationSettingsCapability.FrequencyPenalty | GenerationSettingsCapability.PresencePenalty | GenerationSettingsCapability.AdvancedJson;
     }
 
+    /// <summary>
+    /// Whether a provider's Audio-mode adapter accepts a caller-chosen preset voice identifier.
+    /// Deliberately a small switch, not a stored/persisted schema, mirroring
+    /// <see cref="GetInputSlotCapabilities"/> and <see cref="GetGenerationSettingsCapabilities"/>:
+    /// today only DeepInfra's confirmed <c>POST /v1/audio/speech</c> contract documents an optional
+    /// <c>voice</c> field (`docs/developer/deepinfra-audio-video-contract.md`); no other adapter's
+    /// audio request documents one.
+    /// </summary>
+    public static bool SupportsAudioVoiceSelection(ProviderType providerType) => providerType == ProviderType.DeepInfra;
+
+    /// <summary>
+    /// Computes a pre-generation cost estimate from real, just-fetched provider pricing — never
+    /// bundled/guessed data (see <see cref="ProviderModelPricing"/>'s own remarks). The lower bound is
+    /// deterministic (<paramref name="promptTokens"/> is itself only a rough local estimate — see
+    /// <see cref="EstimateTokenCount"/> — but the multiplication itself is exact). The upper bound is
+    /// only "reliable" (plan.md: "use the reliable upper bound of a range") when
+    /// <paramref name="maxCompletionTokens"/> reflects a real configured cap; with no cap configured,
+    /// there is no honest upper bound to show, so <see cref="GenerationCostEstimate.UpperBound"/>
+    /// equals the lower bound and <see cref="GenerationCostEstimate.HasReliableUpperBound"/> is
+    /// <see langword="false"/> — callers must show that distinction rather than presenting the equal
+    /// bounds as a confirmed total.
+    /// </summary>
+    public static GenerationCostEstimate? EstimateGenerationCost(ProviderModelPricing? pricing, int promptTokens, int? maxCompletionTokens, string source, DateTimeOffset effectiveAt)
+    {
+        if (pricing is null || promptTokens < 0) return null;
+        var lower = pricing.PromptCostPerToken * promptTokens;
+        var hasReliableUpperBound = maxCompletionTokens is > 0;
+        var upper = hasReliableUpperBound ? lower + pricing.CompletionCostPerToken * maxCompletionTokens!.Value : lower;
+        return new GenerationCostEstimate(lower, upper, hasReliableUpperBound, pricing.Currency, source, effectiveAt);
+    }
+
     public static int EstimateTokenCount(string? text) =>
         string.IsNullOrEmpty(text) ? 0 : Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
 

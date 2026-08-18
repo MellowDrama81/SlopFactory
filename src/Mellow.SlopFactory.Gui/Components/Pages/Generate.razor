@@ -174,7 +174,7 @@ else
 
     <EditForm Model="_form" OnValidSubmit="GenerateAsync" class="stack-form">
         <label for="generate-model">@Strings["Model"]</label>
-        <InputSelect id="generate-model" @bind-Value="_form.ModelId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
+        <InputSelect id="generate-model" @bind-Value="_form.ModelId" @bind-Value:after="OnModelSelectionChangedAsync" disabled="@FormDisabled">
             @if (string.IsNullOrEmpty(_form.ModelId))
             {
                 <option value="">@Strings["ChooseReplacementModel"]</option>
@@ -304,6 +304,13 @@ else
             }
         }
 
+        @if (SelectedModelMode == GenerationMode.Audio && SelectedConnection is not null && LibraryRules.SupportsAudioVoiceSelection(SelectedConnection.ProviderType))
+        {
+            <label for="generate-voice">@Strings["Voice"]</label>
+            <input id="generate-voice" type="text" maxlength="256" @bind="_form.Voice" @bind:event="oninput" disabled="@FormDisabled" />
+            <p class="muted">@Strings["VoiceHelp"]</p>
+        }
+
         <label for="generate-prompt">@Strings["Prompt"]</label>
         <textarea id="generate-prompt" rows="8" maxlength="1048576" @bind="_form.Prompt" @bind:event="oninput" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
         @if (SelectedModelMode == GenerationMode.Text)
@@ -322,7 +329,23 @@ else
             }
         </InputSelect>
 
-        <p class="muted">@(SelectedModelReportsActualCostAfterGeneration ? Strings["CostReportedAfterGenerationNotice"] : Strings["CostUnknownNotice"])</p>
+        @if (SelectedModelReportsActualCostAfterGeneration)
+        {
+            <p class="muted">@Strings["CostReportedAfterGenerationNotice"]</p>
+        }
+        else if (CurrentCostEstimate is { } estimate)
+        {
+            <p class="muted">
+                @(estimate.HasReliableUpperBound
+                    ? Strings["EstimatedCostRangeNotice", estimate.LowerBound.ToString("0.000000", System.Globalization.CultureInfo.CurrentCulture), estimate.UpperBound.ToString("0.000000", System.Globalization.CultureInfo.CurrentCulture), estimate.Currency]
+                    : Strings["EstimatedCostMinimumNotice", estimate.LowerBound.ToString("0.000000", System.Globalization.CultureInfo.CurrentCulture), estimate.Currency])
+            </p>
+            <p class="muted">@Strings["EstimatedCostSourceNotice", estimate.Source, estimate.EffectiveAt.ToLocalTime().ToString("g")]</p>
+        }
+        else
+        {
+            <p class="muted">@Strings["CostUnknownNotice"]</p>
+        }
 
         <div class="actions">
             <button type="submit" disabled="@(FormDisabled || string.IsNullOrEmpty(_form.ModelId) || (SelectedConnection is not null && CredentialBlocked(SelectedConnection)) || HasDuplicateSourceSelection)">
@@ -1044,6 +1067,55 @@ else
 
     private int EstimatedTokenCount => LibraryRules.EstimateTokenCount(_form.SystemInstructions) + LibraryRules.EstimateTokenCount(_form.Prompt);
 
+    // Pre-generation cost estimates (plan.md's "non-billable estimate endpoint" — never bundled/
+    // guessed pricing) are only available where a live fetch of the connection's own model-list
+    // endpoint actually returns per-token pricing; today that's confirmed only for OpenRouter's
+    // Text-mode models (see ProviderModelPricing's own remarks). The fetch happens once, on model
+    // selection (OnModelSelectionChangedAsync below) — not on every keystroke — and
+    // _pricingSnapshotModelId guards against showing a stale snapshot if the model is changed again
+    // before a slow fetch returns.
+    private ProviderModelPricing? _pricingSnapshot;
+    private string? _pricingSnapshotModelId;
+    private DateTimeOffset? _pricingRetrievedAt;
+
+    private GenerationCostEstimate? CurrentCostEstimate =>
+        _pricingSnapshot is not null && _pricingRetrievedAt is not null && _pricingSnapshotModelId == _form.ModelId
+            ? LibraryRules.EstimateGenerationCost(_pricingSnapshot, EstimatedTokenCount, _form.MaxTokens, Strings["OpenRouterModelPricingSource"], _pricingRetrievedAt.Value)
+            : null;
+
+    private async Task OnModelSelectionChangedAsync()
+    {
+        ScheduleAutosave();
+        _pricingSnapshot = null;
+        _pricingRetrievedAt = null;
+        var modelId = _form.ModelId;
+        _pricingSnapshotModelId = modelId;
+
+        var model = SelectedModel;
+        var connection = SelectedConnection;
+        if (model is null || model.Mode != GenerationMode.Text || connection is not { HasCredential: true, CredentialRequiresRepair: false, CredentialRevisionId: { } revisionId } || connection.ProviderType != ProviderType.OpenRouter) return;
+
+        try
+        {
+            var apiKey = await Credentials.GetActiveAsync(LibraryState.Workspace!.Descriptor.LibraryId, connection.Id, revisionId);
+            var adapter = AdapterResolver.Resolve(connection.ProviderType);
+            var models = await adapter.ListModelsAsync(connection, apiKey);
+            var match = models.FirstOrDefault(candidate => candidate.ProviderModelId == model.ProviderModelId);
+            if (match?.Pricing is { } pricing && _form.ModelId == modelId)
+            {
+                _pricingSnapshot = pricing;
+                _pricingRetrievedAt = DateTimeOffset.UtcNow;
+            }
+        }
+        catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
+        {
+            // Best-effort: a failed pricing lookup just falls back to the ordinary "Cost unknown"
+            // notice rather than blocking model selection or surfacing an error for a non-essential
+            // enhancement.
+        }
+        StateHasChanged();
+    }
+
     private bool HasDuplicateSourceSelection
     {
         get
@@ -1411,7 +1483,8 @@ else
                 _isError = true;
                 return;
             }
-            var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, settings, sourceSlots);
+            var voice = model.Mode == GenerationMode.Audio && !string.IsNullOrWhiteSpace(_form.Voice) ? _form.Voice : null;
+            var snapshot = new GenerationJobSnapshot(_activeDraftId, DraftDisplayTitle(ActiveDraft), model.Mode, model.Id, _form.Prompt, systemInstructions, _form.ResultCount, _form.DestinationFolderId, _acceptedImprovementRecordId, settings, sourceSlots, voice);
             Queue.Enqueue(snapshot, model.ConnectionId);
             _message = null;
             _isError = false;
@@ -1516,5 +1589,6 @@ else
         public double? FrequencyPenalty { get; set; }
         public double? PresencePenalty { get; set; }
         public string AdvancedJson { get; set; } = string.Empty;
+        public string Voice { get; set; } = string.Empty;
     }
 }

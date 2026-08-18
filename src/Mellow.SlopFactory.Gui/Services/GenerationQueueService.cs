@@ -48,6 +48,10 @@ public enum MeteredNetworkTransferPolicy
     WifiOnly = 2
 }
 
+/// <param name="Voice">An Audio-mode preset voice identifier — see
+/// <see cref="Domain.LibraryRules.SupportsAudioVoiceSelection"/>. Deliberately not persisted through
+/// <c>GenerationDraft</c>/history/Use Again in this pass (an explicit, documented scope cut, not an
+/// oversight): it lives only in this in-memory submission snapshot.</param>
 public sealed record GenerationJobSnapshot(
     string DraftId,
     string SubmittedTabTitle,
@@ -59,7 +63,8 @@ public sealed record GenerationJobSnapshot(
     string DestinationFolderId,
     string? AcceptedImprovementRecordId,
     GenerationSettings? Settings = null,
-    IReadOnlyList<GenerationSourceSlot>? SourceSlots = null);
+    IReadOnlyList<GenerationSourceSlot>? SourceSlots = null,
+    string? Voice = null);
 
 public sealed record GenerationJobStatusSnapshot(string JobId, string DraftId, GenerationJobPhase Phase, int? QueuePosition);
 
@@ -311,8 +316,9 @@ public sealed class GenerationQueueService
     private readonly ILibraryAvailabilityProbe? _availabilityProbe;
     private readonly IDiagnosticsLogger? _diagnostics;
     private readonly IBackgroundExecutionService? _backgroundExecution;
+    private readonly IGenerationFaultInjector _faultInjector;
 
-    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, IDiagnosticsLogger? diagnostics = null, IBackgroundExecutionService? backgroundExecution = null)
+    public GenerationQueueService(AppLibraryState libraries, IProviderAdapterResolver adapterResolver, ISecureCredentialStore credentials, IAppPreferenceStore preferences, IDeviceEnergyStateProvider energy, TimeSpan? videoPollInterval = null, IConnectionRateLimitTracker? rateLimitTracker = null, IDeviceConnectivityStateProvider? connectivity = null, IRecoveryStagingService? recoveryStaging = null, ILibraryAvailabilityProbe? availabilityProbe = null, IDiagnosticsLogger? diagnostics = null, IBackgroundExecutionService? backgroundExecution = null, IGenerationFaultInjector? faultInjector = null)
     {
         _libraries = libraries;
         _adapterResolver = adapterResolver;
@@ -326,6 +332,7 @@ public sealed class GenerationQueueService
         _availabilityProbe = availabilityProbe;
         _diagnostics = diagnostics;
         _backgroundExecution = backgroundExecution;
+        _faultInjector = faultInjector ?? NullGenerationFaultInjector.Instance;
         if (_backgroundExecution is not null) _backgroundExecution.Suspended += OnBackgroundExecutionSuspended;
     }
 
@@ -1256,6 +1263,7 @@ public sealed class GenerationQueueService
         AdvanceLocked(job, GenerationStatus.Preparing);
         try
         {
+            await _faultInjector.BeforePrepareReadAsync(cancellationToken).ConfigureAwait(false);
             var models = await job.Workspace.GetActiveModelsAsync(cancellationToken).ConfigureAwait(false);
             var model = models.FirstOrDefault(candidate => candidate.Id == snapshot.ModelId);
             if (model is null) return LocalFailureOutcome(job, "The model configured for this submission is no longer available.");
@@ -1293,7 +1301,7 @@ public sealed class GenerationQueueService
                 {
                     AdvanceLocked(job, GenerationStatus.Submitting);
                     job.SubmissionAttempted = true;
-                    audioFiles = await adapter.GenerateAudioAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, cancellationToken).ConfigureAwait(false);
+                    audioFiles = await adapter.GenerateAudioAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, snapshot.Voice, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
                 {
@@ -1580,6 +1588,7 @@ public sealed class GenerationQueueService
                 {
                     try
                     {
+                        await _faultInjector.BeforePostCommitCleanupAsync(cancellationToken).ConfigureAwait(false);
                         await job.Workspace.LinkAsyncRemoteJobToGenerationResultAsync(entry.AsyncRecordId, record!.Id, files.Count + messageIndex, cancellationToken).ConfigureAwait(false);
                         continue;
                     }
@@ -1592,6 +1601,7 @@ public sealed class GenerationQueueService
                 }
                 try
                 {
+                    await _faultInjector.BeforePostCommitCleanupAsync(cancellationToken).ConfigureAwait(false);
                     await job.Workspace.DeleteAsyncRemoteJobAsync(entry.AsyncRecordId, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is IOException or SlopFactoryException or ObjectDisposedException)

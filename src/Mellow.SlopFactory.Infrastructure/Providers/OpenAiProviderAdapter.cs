@@ -72,7 +72,7 @@ internal sealed class OpenAiProviderAdapter : IProviderAdapter
     // the three adapters Milestone 3 scopes for audio/video generation and were not verified this
     // pass; adding them here would be exactly the guessed-shape risk that milestone's adapter work
     // was built to avoid. Revisit as a dedicated, separately-verified slice.
-    public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default) =>
         throw new ProviderAdapterException("Audio generation is not yet implemented for the OpenAI adapter.");
 
     public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default) =>

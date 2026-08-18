@@ -492,6 +492,26 @@ public sealed class NewProviderAdapterTests
     }
 
     [Fact]
+    public async Task DeepInfraAdapterSendsTheRequestedVoiceWhenSuppliedAndOmitsItOtherwise()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            capturedBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+            return FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "audio/mpeg");
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+        var model = CreateModel("hexgrad/Kokoro-82M");
+
+        await adapter.GenerateAudioAsync(connection, model, "secret-key", "Hello there", 1, "af_bella");
+        Assert.Contains("\"voice\":\"af_bella\"", capturedBody);
+
+        await adapter.GenerateAudioAsync(connection, model, "secret-key", "Hello there", 1);
+        Assert.DoesNotContain("\"voice\"", capturedBody);
+    }
+
+    [Fact]
     public async Task DeepInfraAdapterSubmitVideoGenerationReturnsTheProviderJobId()
     {
         var handler = new FakeHttpMessageHandler(request =>

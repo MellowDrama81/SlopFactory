@@ -17,8 +17,12 @@ public interface IProviderAdapter
 
     Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default);
 
-    /// <summary>Throws <see cref="Infrastructure.Providers.ProviderAdapterException"/> for a provider adapter with no verified audio generation API.</summary>
-    Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default);
+    /// <summary>Throws <see cref="Infrastructure.Providers.ProviderAdapterException"/> for a provider
+    /// adapter with no verified audio generation API. <paramref name="voice"/> is a provider-specific
+    /// preset voice identifier; only adapters that declare
+    /// <see cref="Domain.LibraryRules.SupportsAudioVoiceSelection"/> read it — others ignore it since
+    /// no non-null value should ever reach them.</summary>
+    Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Submits one asynchronous video generation job (never more than one per call — a caller wanting

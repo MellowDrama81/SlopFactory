@@ -95,7 +95,7 @@ internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
     }
 
-    public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default) =>
         throw new ProviderAdapterException("Audio generation is not yet implemented for the generic OpenAI-compatible adapter.");
 
     public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default) =>

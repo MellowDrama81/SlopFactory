@@ -96,7 +96,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
     }
 
-    public async Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default)
     {
         if (resultCount < 1) throw new ProviderAdapterException("At least one audio result must be requested.");
         var results = new List<byte[]>(resultCount);
@@ -105,7 +105,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
             using var request = new HttpRequestMessage(HttpMethod.Post, BuildAbsoluteUri(connection.BaseUrl, "/v1/audio/speech"));
             OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
             OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-            request.Content = new StringContent(BuildAudioSpeechRequestBody(model.ProviderModelId, prompt), Encoding.UTF8, "application/json");
+            request.Content = new StringContent(BuildAudioSpeechRequestBody(model.ProviderModelId, prompt, voice), Encoding.UTF8, "application/json");
             var (isSuccess, statusCode, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
             if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
             if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty audio result.");
@@ -251,7 +251,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.DescribeFailure(statusCode);
     }
 
-    private static string BuildAudioSpeechRequestBody(string providerModelId, string prompt)
+    private static string BuildAudioSpeechRequestBody(string providerModelId, string prompt, string? voice)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -260,6 +260,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
             writer.WriteString("model", providerModelId);
             writer.WriteString("input", prompt);
             writer.WriteString("response_format", "mp3");
+            if (!string.IsNullOrWhiteSpace(voice)) writer.WriteString("voice", voice);
             writer.WriteEndObject();
         }
 

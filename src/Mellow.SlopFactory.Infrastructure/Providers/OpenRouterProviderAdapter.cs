@@ -92,7 +92,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
     }
 
-    public async Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default)
     {
         if (resultCount < 1) throw new ProviderAdapterException("At least one audio result must be requested.");
         var results = new List<byte[]>(resultCount);

@@ -820,15 +820,54 @@ public sealed class UiAssetTests
         AssertNoRawVisibleMarkupText(savedSettings);
     }
 
-    private static void AssertNoRawVisibleMarkupText(string component)
+    /// <summary>
+    /// Sweeps every real page/layout component under <c>Components/</c> — not just the subset the
+    /// dedicated localization tests above happen to also cover — through the same raw-visible-text
+    /// check those tests already use, so a new literal user-visible string anywhere in the Gui project
+    /// is caught even before a page earns its own dedicated resource-key test.
+    /// <c>Routes.razor</c> and <c>_Imports.razor</c> are excluded: neither renders user-visible markup
+    /// (pure routing/import directives, no <c>@code</c> block and no visible content at all).
+    /// </summary>
+    [Fact]
+    public void EveryApplicationComponentAvoidsRawVisibleMarkupTextOutsideLocalizedResources()
     {
-        var markup = component[..component.IndexOf("@code", StringComparison.Ordinal)];
+        var componentsRoot = RepositoryDirectory("src", "Mellow.SlopFactory.Gui", "Components");
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Routes.razor", "_Imports.razor" };
+        var files = Directory.GetFiles(componentsRoot, "*.razor", SearchOption.AllDirectories)
+            .Where(path => !excluded.Contains(Path.GetFileName(path)))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.NotEmpty(files);
+        foreach (var path in files)
+        {
+            AssertNoRawVisibleMarkupText(File.ReadAllText(path), Path.GetFileName(path));
+        }
+    }
+
+    private static void AssertNoRawVisibleMarkupText(string component, string? fileName = null)
+    {
+        var codeIndex = component.IndexOf("@code", StringComparison.Ordinal);
+        var markup = codeIndex >= 0 ? component[..codeIndex] : component;
         var rawVisibleText = System.Text.RegularExpressions.Regex.Matches(markup, ">([^<]+)<")
             .Select(match => match.Groups[1].Value.Trim())
             .Where(value => value.Length > 0 && !value.Contains('\n') && !value.Contains('\r') && !value.Contains('"') && !value.Contains('=') && System.Text.RegularExpressions.Regex.IsMatch(value, "[A-Za-z]") && !value.Contains('@'))
             .ToArray();
 
-        Assert.Empty(rawVisibleText);
+        Assert.True(rawVisibleText.Length == 0, fileName is null
+            ? $"Found raw visible markup text: {string.Join(", ", rawVisibleText)}"
+            : $"Found raw visible markup text in {fileName}: {string.Join(", ", rawVisibleText)}");
+    }
+
+    private static string RepositoryDirectory(params string[] path)
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var candidate = Path.Combine([directory.FullName, .. path]);
+            if (Directory.Exists(candidate)) return candidate;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
     }
 
     private static string ReadRepositoryFile(params string[] path)
