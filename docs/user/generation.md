@@ -2,7 +2,7 @@
 
 ## Connections
 
-Open **Connections** to add an API connection: a label, a provider type, a base URL, and an API key. Supported provider types are OpenAI, a generic OpenAI-compatible API, OpenRouter, and DeepInfra. The API key is stored only in the operating system's secure storage, never in the library database or in any export.
+Open **Connections** to add an API connection: a label, a provider type, a base URL, and an API key. Supported provider types are OpenAI, a generic OpenAI-compatible API, OpenRouter, DeepInfra, and 1min.AI. The API key is stored only in the operating system's secure storage, never in the library database or in any export.
 
 **Test Connection** validates the base URL and credential without sending a generation request — it lists available models where the provider supports that, or otherwise confirms only that authentication succeeds. A connection can still be saved after a failed or unreachable test; it shows **Unverified** until a test succeeds, and the first generation attempt through it asks for confirmation.
 
@@ -12,7 +12,7 @@ A connection's provider type can only be changed while it has no active models; 
 
 ## Models
 
-Open **Models** to configure a model against a connection: a label, the model's provider-side ID (typed manually or chosen from **Load Models**, when the provider supports listing), and its generation mode — Text, Image, Audio, or Video. Audio and video models are only available on connections whose provider adapter actually supports that modality; DeepInfra does not yet generate audio or video.
+Open **Models** to configure a model against a connection: a label, the model's provider-side ID (typed manually or chosen from **Load Models**, when the provider supports listing), and its generation mode — Text, Image, Audio, or Video. Audio and video models are only available on connections whose provider adapter actually supports that modality: OpenRouter and DeepInfra support all four modes; 1min.AI supports text, image, and audio (not video); OpenAI and the generic OpenAI-compatible connection support text and image.
 
 **Load Models** also refreshes a per-connection cached model list, shown with its retrieval time and a **Possibly Stale**/**Stale** label if the cache hasn't been refreshed recently or a refresh failed. A configured model no longer present in that list is marked **Not Currently Listed** — it still works, this is only a hint that the provider may have removed or renamed it.
 
@@ -22,9 +22,9 @@ Changing a model's provider-model ID or generation mode marks it, and any saved 
 
 Open **Generate** to write a prompt against a configured model and choose how many results to create. Generate keeps a tab per in-progress or recently used prompt — switch, duplicate, rename, or close tabs independently; each tab autosaves as you type.
 
-Text-mode generation can include an optional system-instructions field (only shown for a model configured to support it), up to three optional source images, and per-request settings (temperature, top P, max tokens, frequency/presence penalty) — leave any of these blank to use the provider's own default rather than sending a specific value. **Improve Prompt** sends your current prompt to a chosen text model for a rewritten suggestion you can accept or ignore.
+Text-mode generation can include an optional system-instructions field (only shown for a model configured to support it), up to three optional source images, and per-request settings (temperature, top P, max tokens, frequency/presence penalty) — leave any of these blank to use the provider's own default rather than sending a specific value. Which of these settings actually apply depends on the provider: 1min.AI's chat endpoint doesn't use any of them, so its models show a notice instead of the settings panel. An **Advanced JSON settings** field accepts hand-written JSON for request fields the typed settings don't cover, for a manually entered or otherwise unlisted model — it's validated (must be a JSON object, bounded in size and nesting) and previewed before it's ever sent, and can't be used to override a field SlopFactory already controls (the model, prompt, or one of the typed settings above). **Improve Prompt** sends your current prompt to a chosen text model for a rewritten suggestion you can accept or ignore.
 
-Image, audio and video generation each use their target model's own request shape; audio and video currently accept no source input. Video generation is asynchronous — after it's submitted, the app polls the provider until every requested result finishes or fails, shown as **Submitted — awaiting the provider…** on the Queue page while it's in progress. Multiple video results in one request are tracked and completed as one group.
+Image, audio and video generation each use their target model's own request shape and currently accept no source input, except that DeepInfra's audio models additionally offer an optional **Voice** field for a provider-specific preset voice. Video generation is asynchronous — after it's submitted, the app polls the provider until every requested result finishes or fails, shown as **Submitted — awaiting the provider…** on the Queue page while it's in progress. Multiple video results in one request are tracked and completed as one group.
 
 Clicking **Generate** enqueues the request rather than sending it inline — the page stays responsive, and the same tab can submit another run while an earlier one is still active. Every submission shows its own run card with a **Cancel** action; cancelling before anything reached the provider records no history entry, while cancelling after a video job was already accepted keeps whatever results had already finished rather than discarding them.
 
@@ -47,3 +47,5 @@ Every generated result becomes a library file linked to its generation-history r
 **Generation history** lists every completed, partial, failed or cancelled run, filterable by status, mode, model, provider and date range, with **Use Again** to start a new tab prefilled from a past run. **Saved generation settings** let you save a prompt/model/settings combination under a title and reopen it later without repeating the setup.
 
 Where a provider reports the actual cost of a run (currently OpenRouter video generation), it's shown on that run's history detail page. **Cost Summary** aggregates reported cost across your generation history, filterable by date range, provider and model, with separate totals per currency.
+
+For OpenRouter's Text-mode models specifically, **Generate** also shows a pre-generation cost estimate — computed live from OpenRouter's own published per-model pricing, shown as a range with its source and the moment it was fetched. The estimate's lower bound is always shown; an upper bound is only shown once a **Max tokens** limit is actually set, since without one there's no honest cap on how much a response could cost. Every other provider and mode still shows the plain **Cost unknown** notice, since no other provider publishes pricing SlopFactory can read.

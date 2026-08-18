@@ -17,9 +17,11 @@ The manifest contains the format identity `mellow.slopfactory.library`, manifest
 
 The lock file is opened with exclusive sharing while a workspace is active. Its mere presence is not treated as an active lock, so a stale file after a crash can be reopened when no process holds it.
 
-## SQLite schema version 6
+## SQLite schema: original library tables (versions 1–7)
 
-The schema contains:
+The schema version number is a single running counter (`LibraryRules.SchemaVersion` in code) shared by every table SlopFactory has ever added, not just the ones below — later versions add connections, models, generation records and history, the generation queue's async-job registry, cost/safety fields, source-input slots, and more. This section documents only the tables the *original* library-storage foundation introduced, versions 1 through 7; see [Architecture](architecture.md) for the complete, chronological per-version changelog as later features landed, and the constant's current value for what "latest" actually is today.
+
+The original schema contains:
 
 - `library_info`: library identity, display name, schema version, and permanent folder IDs;
 - `folders`: the virtual folder tree and recycle state;
@@ -36,7 +38,7 @@ Active file and folder names are unique within their parent using normalized inv
 
 ## Schema upgrades
 
-Opening an older library upgrades it to version 7 before normal access. Version 2 introduced explicit-link recycling ownership; version 3 added permanent-deletion failure records; version 4 added the retained original filename used by library search; version 5 added managed-content health independently of recycle lifecycle; version 6 added immutable original-content provenance for replacement; and version 7 adds direct duplicate/edited-copy provenance. Libraries upgraded from version 3 backfill the original filename from the display name because the earlier format did not retain a distinct imported name. Existing records start with healthy content state; their bytes are still verified before built-in use or through explicit revalidation. A version-5 record has no provenance row until replacement and reads its current identity as the original identity. After obtaining the exclusive lock, SlopFactory checkpoints SQLite, creates `library.sqlite3.upgrade-backup`, applies every required database change in one transaction, and atomically updates the manifest. Success removes the rollback copy. Failure restores the original database and manifest and leaves the library closed. Media bytes are not copied during a schema upgrade, and libraries declaring a newer schema are rejected.
+Opening an older library upgrades it to the current schema version before normal access, applying every intervening version's changes in order — see [Architecture](architecture.md) for what each version after 7 adds. Within the original foundation documented above: version 2 introduced explicit-link recycling ownership; version 3 added permanent-deletion failure records; version 4 added the retained original filename used by library search; version 5 added managed-content health independently of recycle lifecycle; version 6 added immutable original-content provenance for replacement; and version 7 adds direct duplicate/edited-copy provenance. Libraries upgraded from version 3 backfill the original filename from the display name because the earlier format did not retain a distinct imported name. Existing records start with healthy content state; their bytes are still verified before built-in use or through explicit revalidation. A version-5 record has no provenance row until replacement and reads its current identity as the original identity. After obtaining the exclusive lock, SlopFactory checkpoints SQLite, creates `library.sqlite3.upgrade-backup`, applies every required database change in one transaction, and atomically updates the manifest. Success removes the rollback copy. Failure restores the original database and manifest and leaves the library closed. Media bytes are not copied during a schema upgrade, and libraries declaring a newer schema are rejected.
 
 ## Copied-library adoption
 

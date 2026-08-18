@@ -1,94 +1,83 @@
 # SlopFactory
 
-SlopFactory is a local-first application for organizing files and creating text, image, audio, and video content with configurable AI providers. It is designed as a single-user application for Windows and Android, with each library stored entirely in a user-selected location on the local device.
+SlopFactory is a local-first, single-user application for generating text, image, audio, and video
+content with configurable AI providers. Generation is the point of the application: a **Generate**
+page submits prompts (and, where a model supports it, source images) to a connected provider,
+tracks the request through a real submission queue, and commits each result.
 
-Imported files are copied into application-managed storage. Library records, folders, metadata, file relationships, and generation history are stored in SQLite, while API credentials remain in the operating system's secure storage. Libraries are independent, portable between supported Windows installations where the filesystem permits it, and are not synchronized or backed up by SlopFactory.
+The bundled media library exists to serve that workflow, not to compete with it. It is where the
+source files you feed into a generation and the outputs you get back are organized, previewed,
+linked, and kept safe — folders, search, metadata, a recycle bin, and integrity checks are all in
+service of managing generation inputs and outputs, not a general-purpose file manager. Everything
+lives entirely on the local device: library records, folders, metadata, file relationships, and
+generation history are stored in SQLite, while API credentials remain in the operating system's
+secure storage. Libraries are portable between supported Windows installations where the filesystem
+permits it, and are not synchronized or backed up by SlopFactory itself.
 
-The current development build implements the local-library foundation, including:
+SlopFactory runs on Windows and Android, sharing one .NET MAUI Blazor Hybrid codebase.
 
-- configurable local libraries and persistent library identity;
-- copied-library detection plus explicit in-place adoption as a new independent library;
-- remembered-library discovery with availability, duplicate-ID and nested-location safeguards, switching, relinking, and non-destructive forgetting;
-- reviewed managed-file import with hashing/copy progress, cancellation, duplicate choices and recycled-match recovery, per-file outcomes, plus duplication, rename, and move operations;
-- recursive system-picker import with a non-mutating inventory, frozen source snapshots, hidden/protected-entry controls, virtual-folder recreation, and normalized Windows security-zone handling;
-- verified single and bulk export, a recovery-only changed-byte export, and external opening through temporary read-only copies with detected-byte active-content safeguards;
-- Android share intents and Windows file activation/drag-and-drop routed through private staging and the same explicit import review;
-- virtual folders and breadcrumbs, plus paged library-wide search, filters, stable sorting, and list/grid views;
-- cross-page file selection with reviewed bulk move, recycle, and typed user-metadata operations;
-- bulk marking or unmarking of sensitive metadata without exposing stored values;
-- reviewed bulk duplication with per-file outcomes and safe name conflict handling;
-- retained original filenames, privacy-safe typed-metadata match explanations, and strict type-aware metadata filters;
-- a read-only UTF-8 viewer with full-file search, sanitized rendered Markdown, confirmed external links, and a non-destructive **Edit as Copy** workflow;
-- a verified image viewer with fit, zoom, pan, viewing rotation, and sanitized SVG;
-- verified, seekable audio and video playback with no autoplay, one active player, speed controls, and platform caption/full-screen support;
-- on-demand image thumbnails and video posters in a separate size-limited, clearable device cache;
-- typed user metadata and sensitive-value concealment;
-- directed file links with recycle and restore behavior;
-- searchable aggregate recycling with conflict-aware bulk recovery, persisted retryable-deletion failures, and empty-bin processing;
-- coherent non-mutating integrity scans covering active and recycled managed content while library changes wait;
-- durable missing/changed managed-content health with exact-byte recovery, explicit safe changed-byte inspection, and preserved metadata and links;
-- reviewed permanent managed-content replacement with immutable original identity and optional transactional metadata clearing;
-- detected-byte format classification with persistent display-extension mismatch warnings;
-- debounced managed-media watching with silent validation of expected writes and global external-change review notices;
-- fail-closed manifest/database watching with mutation-bound identity and integrity revalidation;
-- Windows managed-file hard-link detection and containment safeguards;
-- transactional SQLite schema upgrades;
-- shared .NET MAUI application projects for Windows and Android; and
-- API connections (OpenAI and generic OpenAI-compatible) with OS secure-storage credentials, connection testing, configured models with provider-backed or manual model discovery, and base-URL transport-security validation (HTTPS required for public hosts, with a visible warning where HTTP is permitted for loopback/private-network hosts); and
-- a cached model catalogue per connection with a visible retrieval timestamp, **Possibly Stale**/**Stale** labelling, and a **Not Currently Listed** label (never a deletion) for a configured model absent from the latest refresh; and
-- a per-connection request timeout override (5–600 seconds, default 100), with a provider timeout now reliably reported as a provider error rather than mistaken for user-initiated cancellation; and
-- additional non-secret connection headers for gateway/routing use cases, with reserved transport headers and credential-carrying header names (`Authorization`, `Proxy-Authorization`, `Cookie`) refused outright rather than half-supported; and
-- per-modality relative-path overrides and per-modality enable/disable for a generic OpenAI-compatible connection, with a disabled modality refusing generation before any request is sent; and
-- a connection's provider type can be changed once it has no active dependent models (locked while any exist), resetting its generic per-modality settings; and
-- a minimal synchronous text and image generation workflow: a **Generate** page that sends a prompt to a configured Text or Image model, commits each returned result as a library file (images use real file-signature detection rather than a trusted provider format), and records a lightweight generation-history entry; and
-- saved generation settings (title, model, prompt, result count, destination folder) that can be reused to open a prefilled generation, with the same recycle/restore/permanent-delete lifecycle and cascading as connections and models; and
-- **Use Again** from generation history, which repopulates a new generation from a past attempt's model, prompt, result count and destination without altering the historical record; and
-- an optional **System Instructions** field for Text-mode generation, shown only for a model configured to support it, sent through the documented `system` chat role and carried through saved settings and Use Again; and
-- provider-reported prompt/completion token usage captured from the OpenAI-shaped chat-completions response and shown alongside each text generation result; and
-- up to three independent, optional vision source images for Text-mode generation, each read through the existing verified image pipeline and sent as an OpenAI-shaped image content part, with every reference carried through saved settings, Use Again and generation history; and
-- typed per-model generation settings (temperature, top P, max tokens, frequency/presence penalty) with per-field range validation and an explicit **Use Provider Default** that omits a setting entirely rather than sending a guessed value; and
-- status/mode/model/provider and from/to date-range filters on the generation-history list; and
-- a **Cancel** action for an in-flight generation request that records no history entry rather than guessing an outcome; and
-- an **Improve Prompt** action that sends the current prompt to a chosen text model with a built-in instruction template and lets the user accept a returned suggestion into the prompt, without altering saved settings; every attempt (successful, failed, or retried) is recorded as its own lightweight prompt-improvement history entry, shown separately on the generation-history page, and an accepted suggestion links its originating attempt to the resulting generation record; and
-- a distinct **Credentials Required** connection status that takes priority over a connection's test result, surfaced on the Connections list and as a submission-blocking notice on **Generate** (with a warning, not a block, for a credentialed but never-successfully-tested connection); and
-- a revisioned credential lifecycle: replacing a connection's API key stages it, tests it, and promotes it only after a successful test (or an explicit **Save New Key as Unverified** override), so a crash mid-replacement can never leave a connection without a usable credential; a **Credential State Requires Repair** status surfaces if reconciliation ever finds a credential it cannot trust, without guessing or discarding anything; and
-- **Needs Review** propagation: changing a configured model's provider model ID or mode requires confirmation (showing which saved settings are affected) and marks the model and those saved settings for review; a model needing review is excluded from generation until a **Mark as Reviewed** action clears it; and
-- a per-model text result format setting (Markdown by default, or plain text), recorded on each generation-history entry alongside the actual committed file; and
-- bounded automatic retry (honoring `Retry-After`, exponential backoff with jitter) for model-listing requests specifically, since that is the one operation documented as safe to retry without provider-confirmed idempotency support — a generation-submission request never auto-retries; and
-- a 1 MiB well-formed-UTF-8 bound on the prompt, system instructions, and prompt-improvement raw prompt/guidance; and
-- a **Partially Completed** generation status when a provider returns fewer results than requested without the request failing outright, shown distinctly from full completion on both **Generate** and generation history; and
-- a dedicated generation-history detail page (`/generation-history/{Id}`), with the main list trimmed to a summary row plus **View Details** and **Use Again**; and
-- a persisted, multi-tab generation workspace on **Generate**: create, duplicate, rename (or reset to an automatic title), reorder, and close draft tabs, each autosaved with a **Saving**/**Saved**/**Not Saved** status and **Retry Save**; closing a tab offers **Discard without saving** (an instant, permanent delete with no recycle-bin entry — a deliberate departure from the recycle/restore lifecycle used elsewhere in this application), **Save settings first**, or **Keep tab open**; and
-- generation submissions now go through a per-connection FIFO queue with a device-wide submission cap (3 on Windows, 2 on Android) assigned by fair round-robin, so multiple tabs' **Generate** clicks schedule fairly instead of blocking each other; a queued submission continues and commits even if the user navigates away from `/generate` and back, and cancelling one before it starts contacts no provider and creates no history entry; and
-- a dedicated **Queue** page showing every queued or running submission grouped by connection, with move-left/move-right reordering of waiting jobs on the same connection and a **Cancel** action for either state; and
-- an adjustable device-wide submission cap (a **Library Settings** control; 1–8 on Windows, 1–4 on Android) that also temporarily reduces to 1 while the OS reports energy-saver mode, without ever cancelling an already-running job; and
-- a unified recycle bin (`/recycle-bin`) covering folders, files, links, connections, models, saved generation settings, and generation-history records in one searchable, category-filterable, batch-restorable/deletable surface, with connection permanent-deletion also removing its secure-storage credential entries; and
-- explicit **Save**/**Save As** actions for saved generation settings with revision-conflict detection (**Review Changes**/**Overwrite**/**Save As**/**Cancel** instead of silent last-write-wins), plus dependency-restoration handling when a tab's source saved settings or model is later recycled (inline **Restore**) or permanently deleted (only **Save As**, or an explicit replacement model, remains available); and
-- generation-history records carrying the same recycle/restore/permanent-delete lifecycle as every other library entity, with a permanently deleted source or result file leaving a tombstone (former display name, media type, content hash) in generation history instead of a broken link; and
-- an Android compact tab-switcher (a single "title (N of M)" control) and a searchable, virtualized tab-management list shared with the Windows/tablet tab strip, for reordering, renaming, duplicating, or closing any open generation tab without switching to it first; and
-- optional OS notifications when a generation finishes or fails while the app is backgrounded or unfocused, showing only the model label and status, disabled by default and configurable in **Library Settings**; and
-- a persistent, non-blocking **Cost unknown** notice on **Generate**'s submit action and **Improve Prompt**, since no adapter exposes a cost-estimate API; and
-- a live, per-keystroke approximate token-count estimate for Text-mode prompts and system instructions, clearly labelled as inexact and never blocking generation; and
-- an adjustable per-connection submission-concurrency limit (1–8 on Windows, 1–4 on Android, default 1), independent of and layered under the device-wide cap; and
-- a device-local Session Recovery marker that flags a draft tab whose edits may not have been saved if the app is suspended or killed before autosave completes, surfaced as a dismissible notice on relaunch, with a best-effort flush attempted ahead of platform suspension; and
-- multiple concurrent runs from the same generation tab, each with its own run card, status and independent **Cancel** action, retaining the 10 most recent terminal runs per tab (older ones remain fully available in generation history); and
-- detection of a provider's own content-safety filtering on a text result, reported as a sanitized note rather than a silent shortfall, without affecting other results in the same request; and
-- OpenRouter and DeepInfra provider adapters, reusing the OpenAI-compatible connection/model/text/image path and adding OpenRouter's own image, audio and asynchronous video endpoints (DeepInfra's audio/video generation is not yet implemented, since its exact request shape wasn't confirmed); and
-- audio and video generation modes, sharing the same result-commit pipeline as image generation, with video's asynchronous submit-then-poll jobs tracked in a persisted registry and releasing their queue submission slot as soon as the provider durably accepts the job rather than holding it for the whole poll duration; and
-- per-child result status within one multi-result generation, a **Retry Failed/Missing Results Only** action, and `Cancelled`/`Cancelled with Results` outcomes that keep whatever a video job's already-completed children produced instead of discarding real provider work; and
-- a **Retain as Unverified Binary**/**Discard** decision for a result whose bytes don't match the expected media type and aren't recognizable as a provider error/authentication response, kept export-only (never previewable, never opened externally, never reusable as a source) if retained; and
-- provider-hosted result-URL downloads validated against HTTPS and private/loopback/reserved address ranges before every fetch; and
-- a **Refresh Provider Status** action for a video result that failed only because its download didn't succeed (the provider itself finished the job), retrying just the download instead of generating anything again; and
-- provider-reported actual generation cost captured per run where an adapter reports it, plus a local **Cost Summary** page aggregating it by date range, provider and model; and
-- per-connection rate-limit tracking from OpenAI's documented `x-ratelimit-*` response headers, with the generation queue proactively holding back a connection's next submission once its quota is known to be exhausted until its reset window passes; and
-- offline and metered-network queue handling: new submissions pause automatically on connectivity loss (never cancelling one already running) and stay paused until an explicit **Resume queue**, plus a device-wide **Allow**/**Ask**/**Wi-Fi/unmetered only** metered-network transfer setting.
+## Generation
 
-1min.AI's adapter, the full asynchronous-status vocabulary (Monitoring Paused, Submission Outcome Unknown, idempotency keys and reconciliation), named per-modality source-input slots for audio/video, the remaining Provider Safety Responses machinery, the full prompt-improvement opt-in/disclosure model, and the remaining connection-state distinctions (**Secure Storage Unavailable**, **Authentication Failed**) remain under development. The outstanding product requirements are tracked in the [implementation completion checklist](IMPLEMENTATION_COMPLETION_CHECKLIST.md).
+- **Providers**: OpenAI, a generic OpenAI-compatible endpoint (for gateways and self-hosted
+  OpenAI-shaped APIs), OpenRouter, DeepInfra, and 1min.AI — each with its own connection, secure
+  credential storage, and per-provider capability rules rather than one-size-fits-all behavior.
+- **Modes**: text, image, audio, and video, with per-model capability tracking (which modes a
+  connection actually supports, whether a model accepts system instructions, and which source-input
+  roles — reference image, DeepInfra video's first frame, and so on — it declares).
+- **A real submission queue**: generation requests go through a per-connection FIFO queue with a
+  device-wide submission cap and an adjustable per-connection concurrency limit, so multiple
+  concurrent generation tabs schedule fairly instead of blocking each other. Offline and metered
+  connections pause new submissions automatically without cancelling one already running; per-model
+  rate-limit headers are tracked so a connection's next submission holds back once its quota is
+  known to be exhausted.
+- **Prompt improvement**: an optional, explicitly separate step that sends the current prompt to a
+  chosen text model for a suggested rewrite, recorded as its own history entry and never silently
+  applied.
+- **Cost awareness**: actual provider-reported cost is captured per run where an adapter exposes it,
+  aggregated on a dedicated Cost Summary page; OpenRouter's own published per-model pricing also
+  drives a live pre-generation cost estimate for Text-mode models, shown with its source and fetch
+  time rather than a fabricated number.
+- **Generation history**: every submission — successful, failed, cancelled, or partially completed —
+  is recorded with the same recycle/restore/permanent-delete lifecycle as the rest of the library,
+  plus a **Use Again** action that repopulates a new generation from a past attempt without altering
+  the historical record.
+- **Resilience**: a hard process kill mid-generation never leaves a submission stranded or silently
+  duplicated — durable status transitions, restart recovery, and (for asynchronous video jobs) a
+  persisted job registry all exist specifically so an interrupted generation resolves correctly the
+  next time the app runs.
+
+## Library
+
+The library is the supporting structure around generation, not the headline feature:
+
+- managed import (reviewed, hashed, deduplicated) for files you want to use as generation sources,
+  and the same review path for files handed to SlopFactory by the OS (share intents, drag-and-drop,
+  file activation);
+- folders, search, filters, and typed metadata for organizing both sources and generated outputs;
+- built-in viewers for text, images, audio, and video, plus on-demand thumbnails and posters;
+- verified single and bulk export — including versioned, privacy-minimal `.slopfactory.json`
+  sidecars that can optionally disclose a file's prompt, generation settings, cost, or other
+  provenance alongside the exported media, with every opt-in defaulting off;
+- a unified recycle bin and non-mutating integrity scans covering the whole library;
+- device-local diagnostics (a rolling local log, exportable, with sensitive content kept out of it
+  by construction rather than by after-the-fact redaction).
+
+## Current status
+
+SlopFactory is under active development. Provider adapters, generation modes, the submission queue,
+and the library foundation described above are implemented and tested; some machinery — a full
+asynchronous-status vocabulary for long-running jobs, named per-modality source-input slots beyond
+what's listed above, the full cost-threshold/acknowledgement system, and provider safety-response
+handling — is partially built or still open. The authoritative, itemized status of every remaining
+requirement is tracked in the
+[implementation completion checklist](IMPLEMENTATION_COMPLETION_CHECKLIST.md).
 
 ## Documentation
 
-- [User documentation](docs/user/README.md) explains installation assumptions, library locations, importing, browsing, metadata, links, and recycle-bin behavior.
-- [Developer documentation](docs/developer/README.md) covers the solution architecture, library format, persistence protocols, builds, and tests.
+- [User documentation](docs/user/README.md) explains installation assumptions, library locations,
+  importing, browsing, metadata, links, and recycle-bin behavior.
+- [Developer documentation](docs/developer/README.md) covers the solution architecture, library
+  format, persistence protocols, builds, and tests.
 
 ## Development
 
@@ -99,4 +88,5 @@ dotnet restore SlopFactory.slnx --configfile NuGet.Config
 dotnet test tests\Mellow.SlopFactory.Tests\Mellow.SlopFactory.Tests.csproj --no-restore
 ```
 
-See the [developer build and test guide](docs/developer/testing.md) for platform-specific build commands and prerequisites.
+See the [developer build and test guide](docs/developer/testing.md) for platform-specific build
+commands and prerequisites.
