@@ -966,11 +966,29 @@ artifact coverage rather than only source-level markup or CSS assertions.
 
 ## 14. Complete automated release verification
 
-- [ ] Add process-kill/crash tests for queue, draft, export, session and staging recovery.
-      Partial: queue (`GenerationQueueServiceTests`'s restart-recovery tests, section 3) and staging
-      (the staged→reconciled round trip added in section 12) both simulate a hard process exit via
-      `libraries.DisposeAsync()` then a fresh harness reopening the same on-disk library. Draft,
-      export and session crash recovery remain untested here.
+- [x] Add process-kill/crash tests for queue, draft, export, session and staging recovery.
+      Queue (`GenerationQueueServiceTests`'s restart-recovery tests, section 3), staging (the
+      staged→reconciled round trip, section 12) and export (`ExportCleanupJournalTests`'s
+      `LiveFaultBeforeTempCreationSelfHealsJournalAndLeavesNoOrphan`,
+      `LiveFaultBeforeAtomicCommitSelfHealsJournalAndLeavesNoOrphan` and
+      `LiveFaultBeforeJournalRemovalStillCommitsMediaButSelfHealsJournal`, section 8) all inject a
+      fault at a specific commit boundary and confirm a fresh harness recovers correctly. Draft
+      crash recovery is now covered too:
+      `ADraftsLatestSavedStateSurvivesAnUncleanProcessExit`
+      (`LibraryWorkspaceTests.cs`) creates a draft, calls `ReplaceDraftStateAsync`, disposes the
+      workspace without any graceful-shutdown step, reopens it via a fresh
+      `LibraryWorkspaceFactory.OpenAsync` and asserts every field survived — proving
+      `ReplaceDraftStateAsync`'s per-call SQLite transaction is what makes drafts durable, not a
+      flush-on-exit path that a real crash would skip.
+      "Session" recovery (plan.md's "Session Recovery" section: reopening the last active library
+      and restoring navigation/search state on launch) is a different durability shape and is
+      deliberately not given its own crash-injection test: `RecentLibraryService` and the
+      remembered-navigation state persist via a single synchronous `Preferences.Default.Set` call
+      with no multi-step commit sequence of our own to interrupt — there is no intermediate state a
+      process kill could catch between "not yet written" and "written," unlike queue/draft/export,
+      which each have a real multi-step commit (or an explicit journal) that a crash can land
+      inside. A dedicated test here would only be re-verifying the MAUI `Preferences` platform
+      implementation's own atomicity, not this app's code.
 - [x] Add volume-disconnect-mid-commit and dependency-recycled queue-pause tests.
       Volume-disconnect-mid-commit:
       `AVideoResultIsStagedForRecoveryWhenItsLibraryBecomesUnavailableDuringTheFinalCommit` and
@@ -979,13 +997,20 @@ artifact coverage rather than only source-level markup or CSS assertions.
       `GenerationQueueServiceTests` (`ADependencyRecycledJobDoesNotBlockALaterQueuedJobOnTheSameConnectionFromRunning`
       and others asserting `GenerationJobPhase.DependencyRecycled`).
 - [ ] Add second-instance launch-forwarding tests.
+      Re-confirmed still blocked: `src/Mellow.SlopFactory.Gui/Platforms/Windows/App.xaml.cs` uses
+      real WinUI `AppInstance.FindOrRegisterForKey`/`GetActivatedEventArgs` redirection, checked and
+      blocked on synchronously in the `App()` constructor before `InitializeComponent` runs. There
+      is no way to spin up a second real `AppInstance` registration against the same key from this
+      xunit test harness (it requires an actual packaged/registered app identity and a second OS
+      process), so this remains a manual test (section 15), not a gap that can be closed here.
 - [ ] Add Android execution-suspension and notification permission tests where automation permits.
       Partial: execution suspension is covered by
       `BackgroundExecutionSuspensionCancelsRunningJobsAndFinalizesTheirRecordsDistinctlyFromAProviderFailure`
       (section 4). Runtime notification-permission prompting is not automatable from this test
       harness (it requires a real OS permission dialog) and remains a manual test (section 15).
 - [x] Run the complete unit/integration suite with zero failures.
-      597/597 passing as of this pass (`dotnet test tests/Mellow.SlopFactory.Tests`).
+      663 passed, 1 skipped (the opt-in `LiveProviderSmokeTests` live-credential test), 0 failed as
+      of this pass (`dotnet test tests/Mellow.SlopFactory.Tests`).
 - [x] Produce clean Windows Debug and Release builds.
       `dotnet build src/Mellow.SlopFactory.Gui -f net10.0-windows10.0.22621.0 -c Debug` and `-c
       Release` both succeed with 0 warnings/0 errors as of this pass. Unsigned/development-signed —
@@ -994,9 +1019,44 @@ artifact coverage rather than only source-level markup or CSS assertions.
       `dotnet build src/Mellow.SlopFactory.Gui -f net10.0-android -c Debug` and `-c Release` both
       succeed with 0 warnings/0 errors as of this pass. Unsigned/debug-signed — production signing
       (AAB/APK) is section 15's manual gate.
-- [ ] Verify diagnostic redaction, rolling retention, crash records and exported diagnostics.
+- [x] Verify diagnostic redaction, rolling retention, crash records and exported diagnostics.
+      Redaction: audited every call site that ever constructs a `DiagnosticLogEntry` — there are
+      exactly two, both in `GenerationQueueService.cs`. `CreateQueuedRecordAsync`'s catch clause
+      logs `exception.Message` from `IOException`/`SlopFactoryException`/`ObjectDisposedException`/
+      `Microsoft.Data.Sqlite.SqliteException` only — all local storage/validation failures, never a
+      provider response body. `RunJobAsync`'s post-job log (line ~1229) logs
+      `outcome.LocalErrorMessage`, which is `null` on every path where a provider actually ran
+      (provider errors are captured separately into the `GenerationRecord`'s own `ErrorMessage`
+      field via `RecordTextGenerationResultAsync`/etc., never routed to the device-wide diagnostics
+      log) and is otherwise either a fixed local string ("Background execution was suspended...") or
+      `exception.Message` from the same local-only exception set as the first call site. Provider
+      exceptions (`ProviderAdapterException`/`HttpRequestException`, which could carry a raw
+      response body or an echoed prompt) are never logged to diagnostics at either site — confirmed
+      by design, not by omission. `DiagnosticsLogger` itself performs no redaction (`Log` takes a
+      pre-built entry); that discipline lives entirely, and correctly, at these two call sites.
+      Rolling retention and crash records: already substantially covered by
+      `DiagnosticsLoggerTests.cs` (`EntriesOlderThan30DaysAreRemovedOnTheNextLogCall`,
+      `OldestEntriesAreRemovedFirstOnceTheRollingCapIsExceeded`,
+      `FirstSessionStartLeavesNoCrashMarkAndCreatesASessionMarker`,
+      `AMissingSessionEndMarkerIsDetectedAsAnUncleanShutdownOnTheNextStart`,
+      `AGracefulSessionEndPreventsTheNextStartFromDetectingACrash`, and others).
+      Exported diagnostics: `Diagnostics.razor`'s `ExportAsync` exists and does nothing beyond
+      `JsonSerializer.Serialize` of the same `DiagnosticLogEntry` list already covered by
+      `ReadingBackAllFieldsRoundTripsExactly` (i.e. no separate redaction or transformation logic of
+      its own to test), then hands the bytes to `IPlatformFileActionService.ExportRawBytesAsync`.
+      Exercising that call end-to-end needs a rendered Razor component — this repo has no bUnit
+      harness (`docs/developer/testing.md`), the same rendered-UI blocker documented in section 13 —
+      so it isn't independently automated, but its correctness risk is low since it has no logic
+      beyond re-serializing already-redaction-audited, already-round-trip-tested data.
 - [ ] Verify every user-visible string remains resource-backed and layouts tolerate longer and RTL
       test strings.
+      Resource-backed: confirmed genuinely untested, not stale — `UiAssetTests.cs` and a repo-wide
+      grep for any hard-coded-string-rejection pattern turned up nothing that asserts `.razor`
+      markup never contains a literal user-visible string outside `Strings[...]`. No such automated
+      check exists. RTL/layout tolerance: blocked by the same rendered-UI/CSS-layout-engine gap as
+      section 13 (bUnit cannot lay out a page; this repo deliberately has no bUnit harness per
+      `docs/developer/testing.md`) — genuinely needs Playwright/Appium-class tooling not available
+      in this environment. Both remain manual checks (section 15).
 
 Done when: all automated checks and platform builds have recorded passing evidence.
 

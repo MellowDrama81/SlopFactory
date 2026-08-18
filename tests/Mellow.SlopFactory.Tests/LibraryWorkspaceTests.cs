@@ -77,6 +77,34 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task ADraftsLatestSavedStateSurvivesAnUncleanProcessExit()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        var first = await factory.CreateAsync(root);
+        var connection = await first.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await first.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var draft = await first.CreateDraftAsync();
+        draft = await first.ReplaceDraftStateAsync(draft.Id, "My Tab", model.Id, "autosaved prompt", "autosaved instructions", 2, first.Descriptor.GeneratedFolderId, null, null);
+
+        // Simulate a hard process exit: Dispose only releases the exclusive lock file, never flushes
+        // anything extra — every ReplaceDraftStateAsync call above already committed durably through
+        // RunMutationAsync's own transaction, so nothing here should depend on a graceful shutdown
+        // path running first.
+        await first.DisposeAsync();
+
+        await using var reopened = await factory.OpenAsync(root);
+        var recovered = Assert.Single(await reopened.GetDraftsAsync());
+        Assert.Equal(draft.Id, recovered.Id);
+        Assert.Equal("My Tab", recovered.CustomTitle);
+        Assert.Equal(model.Id, recovered.ModelId);
+        Assert.Equal("autosaved prompt", recovered.Prompt);
+        Assert.Equal("autosaved instructions", recovered.SystemInstructions);
+        Assert.Equal(2, recovered.ResultCount);
+    }
+
+    [Fact]
     public async Task OpenRevalidatesRootStorageCapabilitiesWithoutLeavingProbeArtifacts()
     {
         using var temporary = new TemporaryDirectory();
