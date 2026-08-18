@@ -804,11 +804,22 @@ public sealed record ConnectionTestResult(
     bool SupportsModelDiscovery,
     IReadOnlyList<ProviderModelInfo>? DiscoveredModels = null);
 
+/// <param name="Candidates">One entry per candidate the provider actually returned, in response
+/// order — lets a safety-blocked candidate keep a stable per-position identity (section 10) instead
+/// of only contributing to the aggregate <see cref="SafetyBlockedCount"/>. Null when an adapter
+/// doesn't distinguish per-candidate order at all (every adapter except the shared OpenAI-compatible
+/// protocol today) — callers fall back to the pre-existing aggregate-only behavior in that case.</param>
 public sealed record TextGenerationResult(
     IReadOnlyList<string> Texts,
     int? PromptTokens,
     int? CompletionTokens,
-    int SafetyBlockedCount = 0);
+    int SafetyBlockedCount = 0,
+    IReadOnlyList<TextGenerationCandidate>? Candidates = null);
+
+/// <summary>One provider-returned text candidate, before it becomes a committed file or a
+/// <see cref="GenerationResultStatus.SafetyBlocked"/> result-entry. <see cref="Text"/> is null exactly
+/// when <see cref="SafetyBlocked"/> is true — a blocked candidate has no usable content.</summary>
+public sealed record TextGenerationCandidate(bool SafetyBlocked, string? Text);
 
 public sealed record TextGenerationSourceImage(
     string MediaType,
@@ -955,7 +966,12 @@ public enum GenerationResultStatus
     /// provider-blocked payload — so instead of an automatic discard, the result awaits an explicit
     /// <c>Retain as Unverified Binary</c>/<c>Discard</c> decision (see
     /// <c>ILibraryWorkspace.GetPendingUnverifiedResultsAsync</c>).</summary>
-    PendingReview = 2
+    PendingReview = 2,
+    /// <summary>The provider itself declined to return this candidate on safety/content-policy
+    /// grounds (e.g. OpenAI-compatible `finish_reason: content_filter`) — distinct from
+    /// <see cref="Failed"/> because retrying the identical request would predictably be blocked again
+    /// too, so it is never offered through <c>Retry Failed/Missing Results Only</c>.</summary>
+    SafetyBlocked = 3
 }
 
 /// <summary>

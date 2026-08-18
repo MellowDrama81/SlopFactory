@@ -739,18 +739,56 @@ claims that a local threshold is a provider-account spending limit.
 
 - [ ] Persist normalized provider safety classifications and their immutable association with the
       exact content hash that was classified.
+      Genuinely 0% built: no persisted, hash-bound safety-classification value exists anywhere in
+      this app (confirmed by every other section that touches safety, e.g. sections 8/9's sidecar
+      `IncludeSafetyMetadata` no-op). This is the foundational data model the five items below all
+      depend on — not attempted here since building it now would mean inventing a classification
+      schema (values, revisions, storage) with no confirmed provider contract driving any of its
+      states except the one narrow signal item 4 below actually uses.
 - [ ] Implement concealment, session reveal, persistent per-file override and external-open
       reauthorization.
+      Depends entirely on the persisted classification above; nothing to conceal/reveal without it.
 - [ ] Share applicable classification events across duplicate content without leaking unrelated
       file metadata.
-- [ ] Give content-filtered multi-result children stable per-child identities rather than only an
+      Depends on the persisted classification above.
+- [x] Give content-filtered multi-result children stable per-child identities rather than only an
       aggregate blocked count.
+      Implemented for the one confirmed signal this app actually has: OpenAI-compatible
+      `finish_reason: content_filter`. `TextGenerationResult` gained an ordered
+      `Candidates` list (`TextGenerationCandidate(SafetyBlocked, Text)`, response order,
+      built by `OpenAiCompatibleProtocol.ParseChatCompletionResult` alongside the pre-existing
+      aggregate `SafetyBlockedCount`) so a blocked candidate's position is known, not just counted.
+      `RecordTextGenerationResultCoreAsync` now synthesizes a `GenerationResultEntry` per candidate
+      when the adapter provided one — `GenerationResultStatus.SafetyBlocked` (new value) for a
+      blocked position with no file, `Committed` for a successful one — mirroring the per-position
+      entry pattern `RecordImageGenerationResultCoreAsync` already established for media. Deliberately
+      excluded from **Retry Failed/Missing Results Only** (only counts `Failed`), since retrying an
+      identical request would predictably be blocked again. `GenerationHistoryDetail.razor` shows a
+      distinct "Blocked by provider safety policy" label per position. Adapters that don't populate
+      `Candidates` (everything except the shared OpenAI-compatible protocol) keep the pre-existing
+      aggregate-only behavior unchanged — purely additive. Six new tests cover candidate ordering
+      (including the blocked entry appearing first) and end-to-end per-position persistence.
 - [ ] Implement **Provider Blocked After Delivery** when a provider exposes a documented late
       reclassification signal.
+      No adapter documents one. Depends on the persisted classification above regardless.
 - [ ] Map OpenRouter, DeepInfra and 1min.AI safety signals only after each contract is confirmed.
+      Partially and narrowly true already, confirmed while implementing the item above rather than
+      newly built: `OpenRouterProviderAdapter`, `DeepInfraProviderAdapter` and
+      `GenericOpenAiCompatibleProviderAdapter`'s text generation all call the same
+      `OpenAiCompatibleProtocol.ParseChatCompletionResult`, so they already inherit
+      `content_filter` detection (and now per-candidate identity) automatically — not something
+      requiring separate per-provider mapping work, since they share the exact response shape. Image/
+      audio/video moderation signals for OpenRouter/DeepInfra remain unconfirmed by any fetched
+      documentation, and 1min.AI (native, non-OpenAI-compatible protocol) has no confirmed safety
+      signal at all — its own contract doc notes the docs site couldn't be fetched. Left unchecked
+      since the full three-provider, every-modality scope isn't met, but the text-mode inheritance for
+      3 of the 4 OpenAI-compatible adapters is real and now verified, not assumed.
 - [ ] Reactivate a classification after exact-byte restoration, but never transfer it to differing
       replacement bytes.
+      Depends on the persisted classification above.
 - [ ] Apply safety-aware export confirmation and sidecar disclosure rules.
+      Depends on the persisted classification above; sections 8/9 already wired `IncludeSafetyMetadata`
+      as a documented no-op pending exactly this.
 
 Done when: safety state follows the classified bytes, remains distinct from diagnostics and cannot
 silently migrate to unrelated or replaced content.

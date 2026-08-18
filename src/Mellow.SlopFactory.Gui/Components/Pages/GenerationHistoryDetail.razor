@@ -43,7 +43,7 @@ else if (_record is not null)
         {
             <p class="muted">@Strings["GenerationPartiallyCompletedDetail", _record.ResultFileIds.Count, _record.ResultCount]</p>
         }
-        @if (_record.Results.Any(entry => entry.Status is GenerationResultStatus.Failed or GenerationResultStatus.PendingReview))
+        @if (_record.Results.Any(entry => entry.Status is GenerationResultStatus.Failed or GenerationResultStatus.PendingReview or GenerationResultStatus.SafetyBlocked))
         {
             <details open>
                 <summary>@Strings["PerResultStatusHeading"]</summary>
@@ -51,7 +51,7 @@ else if (_record is not null)
                     @foreach (var entry in _record.Results.OrderBy(candidate => candidate.Position))
                     {
                         <li>
-                            @Strings["ResultPositionLabel", entry.Position + 1]: @(entry.Status switch { GenerationResultStatus.Committed => Strings["ResultCommitted"], GenerationResultStatus.PendingReview => Strings["ResultPendingReview"], _ => Strings["ResultFailed"] })
+                            @Strings["ResultPositionLabel", entry.Position + 1]: @(entry.Status switch { GenerationResultStatus.Committed => Strings["ResultCommitted"], GenerationResultStatus.PendingReview => Strings["ResultPendingReview"], GenerationResultStatus.SafetyBlocked => Strings["ResultSafetyBlocked"], _ => Strings["ResultFailed"] })
                             @if (entry.ErrorMessage is not null)
                             {
                                 <span class="muted"> — @entry.ErrorMessage</span>

@@ -360,6 +360,12 @@ internal static class OpenAiCompatibleProtocol
 
             var results = new List<string>();
             var safetyBlockedCount = 0;
+            // Response order, one entry per choice that was either safety-blocked or produced usable
+            // text — the same condition set as results/safetyBlockedCount above, so a malformed choice
+            // (no message/content) stays silently ignored exactly as before, never a fabricated
+            // candidate. Lets a safety-blocked candidate keep a stable per-position identity in
+            // GenerationRecord.Results instead of only contributing to the aggregate count.
+            var candidates = new List<TextGenerationCandidate>();
             foreach (var choice in choices.EnumerateArray())
             {
                 if (choice.ValueKind != JsonValueKind.Object) continue;
@@ -369,12 +375,17 @@ internal static class OpenAiCompatibleProtocol
                 if (isSafetyBlocked)
                 {
                     safetyBlockedCount++;
+                    candidates.Add(new TextGenerationCandidate(SafetyBlocked: true, Text: null));
                     continue;
                 }
                 if (!choice.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object) continue;
                 if (!message.TryGetProperty("content", out var contentElement) || contentElement.ValueKind != JsonValueKind.String) continue;
                 var text = contentElement.GetString();
-                if (!string.IsNullOrEmpty(text)) results.Add(text);
+                if (!string.IsNullOrEmpty(text))
+                {
+                    results.Add(text);
+                    candidates.Add(new TextGenerationCandidate(SafetyBlocked: false, Text: text));
+                }
             }
 
             if (results.Count == 0 && safetyBlockedCount == 0) throw new ProviderAdapterException("The provider returned no usable text results.");
@@ -387,7 +398,7 @@ internal static class OpenAiCompatibleProtocol
                 if (usage.TryGetProperty("completion_tokens", out var completionTokensElement) && completionTokensElement.ValueKind == JsonValueKind.Number) completionTokens = completionTokensElement.GetInt32();
             }
 
-            return new TextGenerationResult(results, promptTokens, completionTokens, safetyBlockedCount);
+            return new TextGenerationResult(results, promptTokens, completionTokens, safetyBlockedCount, candidates);
         }
         catch (JsonException)
         {

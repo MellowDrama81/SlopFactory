@@ -506,6 +506,32 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task RecordTextGenerationResultGivesASafetyBlockedCandidateAStablePerPositionIdentity()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        IReadOnlyList<TextGenerationCandidate> candidates =
+        [
+            new TextGenerationCandidate(SafetyBlocked: false, Text: "first result"),
+            new TextGenerationCandidate(SafetyBlocked: true, Text: null),
+            new TextGenerationCandidate(SafetyBlocked: false, Text: "third result"),
+        ];
+
+        var record = await workspace.RecordTextGenerationResultAsync(model.Id, "a prompt", 3, workspace.Descriptor.GeneratedFolderId, ["first result", "third result"], null, safetyBlockedCount: 1, candidates: candidates);
+
+        Assert.Equal(3, record.Results.Count);
+        var committed = record.Results.Where(entry => entry.Status == GenerationResultStatus.Committed).OrderBy(entry => entry.Position).ToArray();
+        Assert.Equal([0, 2], committed.Select(entry => entry.Position).ToArray());
+        var blocked = Assert.Single(record.Results, entry => entry.Status == GenerationResultStatus.SafetyBlocked);
+        Assert.Equal(1, blocked.Position);
+        Assert.Null(blocked.FileId);
+        Assert.Equal(GenerationStatus.PartiallyCompleted, record.Status);
+    }
+
+    [Fact]
     public async Task GetGenerationHistoryOnlyIncludesRecycledRecordsWhenExplicitlyAsked()
     {
         using var temporary = new TemporaryDirectory();

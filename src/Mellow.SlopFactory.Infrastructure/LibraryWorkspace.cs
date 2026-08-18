@@ -2328,10 +2328,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.PermanentlyDeleteGenerationRecordAsync(generationId, cancellationToken), cancellationToken);
     }
 
-    public Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, string? promptImprovementRecordId = null, GenerationSettings? settings = null, int safetyBlockedCount = 0, string? existingGenerationRecordId = null, CancellationToken cancellationToken = default)
+    public Task<GenerationRecord> RecordTextGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions = null, int? promptTokens = null, int? completionTokens = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, string? promptImprovementRecordId = null, GenerationSettings? settings = null, int safetyBlockedCount = 0, string? existingGenerationRecordId = null, IReadOnlyList<TextGenerationCandidate>? candidates = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => RecordTextGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultTexts, errorMessage, systemInstructions, promptTokens, completionTokens, sourceSlots, promptImprovementRecordId, settings, safetyBlockedCount, existingGenerationRecordId, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => RecordTextGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultTexts, errorMessage, systemInstructions, promptTokens, completionTokens, sourceSlots, promptImprovementRecordId, settings, safetyBlockedCount, existingGenerationRecordId, candidates, cancellationToken), cancellationToken);
     }
 
     public Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId = null, string? existingGenerationRecordId = null, CancellationToken cancellationToken = default)
@@ -2635,15 +2635,82 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         }
     }
 
-    private async Task<GenerationRecord> RecordTextGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions, int? promptTokens, int? completionTokens, IReadOnlyList<GenerationSourceSlot>? sourceSlots, string? promptImprovementRecordId, GenerationSettings? settings, int safetyBlockedCount, string? existingGenerationRecordId, CancellationToken cancellationToken)
+    private async Task<GenerationRecord> RecordTextGenerationResultCoreAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<string>? resultTexts, string? errorMessage, string? systemInstructions, int? promptTokens, int? completionTokens, IReadOnlyList<GenerationSourceSlot>? sourceSlots, string? promptImprovementRecordId, GenerationSettings? settings, int safetyBlockedCount, string? existingGenerationRecordId, IReadOnlyList<TextGenerationCandidate>? candidates, CancellationToken cancellationToken)
     {
         var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
         var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
         var resultFileIds = new List<string>();
+        // Only populated when the adapter distinguished per-candidate order (see
+        // TextGenerationResult.Candidates) — a safety-blocked candidate gets its own stable-position
+        // entry instead of only contributing to the aggregate safetyBlockedCount, mirroring how
+        // RecordImageGenerationResultCoreAsync already builds per-position entries for media.
+        List<GenerationResultEntry>? resultEntries = candidates is not null ? [] : null;
 
         var (extension, mediaType) = model.TextFormat == TextResultFormat.PlainText ? (".txt", "text/plain") : (".md", "text/markdown");
 
-        if (resultTexts is { Count: > 0 })
+        async Task<string> WriteTextResultFileAsync(string text, string baseName, UTF8Encoding utf8)
+        {
+            byte[] bytes;
+            try { bytes = utf8.GetBytes(text); }
+            catch (EncoderFallbackException) { throw new LibraryValidationException("Generated text contains an invalid Unicode sequence."); }
+
+            var fileId = LibraryRules.NewId();
+            var managedName = fileId + extension;
+            var stagingPath = _layout.StagingFilePath(fileId + ".generating");
+            var managedPath = _layout.ManagedFilePath(managedName);
+            var resolvedName = await _database.ResolveAvailableFileNameAsync(destinationFolderId, baseName, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await using (var stream = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65_536, FileOptions.Asynchronous | FileOptions.WriteThrough))
+                {
+                    await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                    await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
+                var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+                File.Move(stagingPath, managedPath, false);
+                stagingPath = string.Empty;
+                var now = DateTimeOffset.UtcNow;
+                var record = new FileRecord(fileId, destinationFolderId, resolvedName, resolvedName, managedName, hash, bytes.LongLength, mediaType,
+                    FileOrigin.Generated, LibraryRecordState.Active, now, now, null, null);
+                try
+                {
+                    await _database.InsertImportedFileAsync(record, cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    TryDelete(managedPath);
+                    throw;
+                }
+                managedPath = string.Empty;
+                return fileId;
+            }
+            finally
+            {
+                TryDelete(stagingPath);
+                TryDelete(managedPath);
+            }
+        }
+
+        if (candidates is { Count: > 0 })
+        {
+            var utf8 = new UTF8Encoding(false, true);
+            var safeLabel = new string(model.Label.Select(character => character is '/' or '\\' ? '_' : character).ToArray());
+            var baseName = $"{safeLabel} {DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}{extension}";
+            var position = 0;
+            foreach (var candidate in candidates)
+            {
+                var currentPosition = position++;
+                if (candidate.SafetyBlocked || candidate.Text is null)
+                {
+                    resultEntries!.Add(new GenerationResultEntry(currentPosition, GenerationResultStatus.SafetyBlocked, null, "The provider declined to return this result on safety/content-policy grounds."));
+                    continue;
+                }
+                var fileId = await WriteTextResultFileAsync(candidate.Text, baseName, utf8).ConfigureAwait(false);
+                resultFileIds.Add(fileId);
+                resultEntries!.Add(new GenerationResultEntry(currentPosition, GenerationResultStatus.Committed, fileId, null));
+            }
+        }
+        else if (resultTexts is { Count: > 0 })
         {
             var utf8 = new UTF8Encoding(false, true);
             var safeLabel = new string(model.Label.Select(character => character is '/' or '\\' ? '_' : character).ToArray());
@@ -2651,50 +2718,13 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
 
             foreach (var text in resultTexts)
             {
-                byte[] bytes;
-                try { bytes = utf8.GetBytes(text); }
-                catch (EncoderFallbackException) { throw new LibraryValidationException("Generated text contains an invalid Unicode sequence."); }
-
-                var fileId = LibraryRules.NewId();
-                var managedName = fileId + extension;
-                var stagingPath = _layout.StagingFilePath(fileId + ".generating");
-                var managedPath = _layout.ManagedFilePath(managedName);
-                var resolvedName = await _database.ResolveAvailableFileNameAsync(destinationFolderId, baseName, cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    await using (var stream = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65_536, FileOptions.Asynchronous | FileOptions.WriteThrough))
-                    {
-                        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
-                        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                    }
-                    var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
-                    File.Move(stagingPath, managedPath, false);
-                    stagingPath = string.Empty;
-                    var now = DateTimeOffset.UtcNow;
-                    var record = new FileRecord(fileId, destinationFolderId, resolvedName, resolvedName, managedName, hash, bytes.LongLength, mediaType,
-                        FileOrigin.Generated, LibraryRecordState.Active, now, now, null, null);
-                    try
-                    {
-                        await _database.InsertImportedFileAsync(record, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        TryDelete(managedPath);
-                        throw;
-                    }
-                    managedPath = string.Empty;
-                    resultFileIds.Add(fileId);
-                }
-                finally
-                {
-                    TryDelete(stagingPath);
-                    TryDelete(managedPath);
-                }
+                var fileId = await WriteTextResultFileAsync(text, baseName, utf8).ConfigureAwait(false);
+                resultFileIds.Add(fileId);
             }
         }
 
         var status = DetermineGenerationStatus(resultFileIds.Count, resultCount);
-        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, resultFileIds, promptTokens, completionTokens, sourceSlots, promptImprovementRecordId, model.TextFormat, settings, safetyBlockedCount, cancellationToken, existingGenerationRecordId: existingGenerationRecordId).ConfigureAwait(false);
+        return await _database.CreateGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, status, errorMessage, destinationFolderId, resultFileIds, promptTokens, completionTokens, sourceSlots, promptImprovementRecordId, model.TextFormat, settings, safetyBlockedCount, cancellationToken, existingGenerationRecordId: existingGenerationRecordId, results: resultEntries).ConfigureAwait(false);
     }
 
     /// <summary>The top-level media-type prefix a mode's results must match to be committed, or

@@ -914,6 +914,7 @@
   <data name="ResultCommitted" xml:space="preserve"><value>Committed</value></data>
   <data name="ResultFailed" xml:space="preserve"><value>Failed</value></data>
   <data name="ResultPendingReview" xml:space="preserve"><value>Awaiting review</value></data>
+  <data name="ResultSafetyBlocked" xml:space="preserve"><value>Blocked by provider safety policy</value></data>
   <data name="RetainAsUnverifiedBinary" xml:space="preserve"><value>Retain as unverified binary</value></data>
   <data name="DiscardUnverifiedResult" xml:space="preserve"><value>Discard</value></data>
   <data name="RefreshProviderStatus" xml:space="preserve"><value>Refresh provider status</value></data>

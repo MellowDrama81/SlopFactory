@@ -138,6 +138,32 @@ public sealed class ProviderAdapterTests
 
         Assert.Equal(["Allowed candidate"], result.Texts);
         Assert.Equal(1, result.SafetyBlockedCount);
+        Assert.NotNull(result.Candidates);
+        Assert.Equal(2, result.Candidates!.Count);
+        Assert.False(result.Candidates[0].SafetyBlocked);
+        Assert.Equal("Allowed candidate", result.Candidates[0].Text);
+        Assert.True(result.Candidates[1].SafetyBlocked);
+        Assert.Null(result.Candidates[1].Text);
+    }
+
+    [Fact]
+    public async Task OpenAiAdapterKeepsCandidateOrderStableWhenTheBlockedChoiceComesFirst()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"choices":[{"finish_reason":"content_filter","message":{"content":""}},{"message":{"content":"Second candidate"}}]}""", Encoding.UTF8, "application/json")
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel();
+
+        var result = await adapter.GenerateTextAsync(connection, model, "secret-key", "Write a haiku", 2);
+
+        Assert.NotNull(result.Candidates);
+        Assert.Equal(2, result.Candidates!.Count);
+        Assert.True(result.Candidates[0].SafetyBlocked);
+        Assert.False(result.Candidates[1].SafetyBlocked);
+        Assert.Equal("Second candidate", result.Candidates[1].Text);
     }
 
     [Fact]
