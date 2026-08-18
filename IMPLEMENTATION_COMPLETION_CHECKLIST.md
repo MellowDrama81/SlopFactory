@@ -797,17 +797,46 @@ silently migrate to unrelated or replaced content.
 
 - [ ] Preserve recycled or missing source and destination references in open drafts as stable
       unavailable references instead of clearing them.
+      Genuinely needs the larger tab-state-model redesign already identified in earlier sessions
+      (milestone3.md/milestone4.md) — a real "unavailable reference" concept with restore/replace/
+      remove actions, not a bounded fix. Fixed a narrower, real bug found while re-verifying this:
+      `Generate.razor`'s draft-resume path carried a recycled/deleted **destination folder** ID
+      straight into the form with *no* handling at all — worse than source images, which at least get
+      explicit filtering (`FilterActiveSourceSlots`). A stale ID not present in `_activeFolders`
+      left the actual bound `<select>` value to the browser's own default behavior (silently landing
+      on an arbitrary different folder) rather than a deliberate, visible choice. Now falls back to
+      the library's root folder with a distinct notice, mirroring the model-unavailable pattern
+      already used for a recycled/deleted model. This closes a real gap but does not itself satisfy
+      this item — a reset-to-root-with-notice is not a "stable unavailable reference," which would
+      need to remember and offer to restore/replace the original folder, not just land somewhere safe.
 - [ ] Preview affected open tabs before recycle or permanent deletion.
+      No preview exists; depends on the same tab-state model as the item above.
 - [ ] Provide restore, replace and remove actions; convert permanently deleted references into an
       explicit non-restorable state.
+      Depends on the stable-unavailable-reference model above existing first.
 - [ ] Revalidate open drafts and saved settings after managed-content replacement.
+      Not implemented; no revalidation pass runs after `CommitManagedContentReplacementAsync`.
 - [ ] Mark incompatible replacements **Needs Review** and compatible replacements **Content
       Replaced**.
+      Neither status exists in the UI; depends on the revalidation pass above.
 - [ ] Prevent submission until every required unavailable or incompatible reference is resolved.
+      Not implemented — today an unavailable source/destination is silently substituted (or, before
+      this pass's fix above, left entirely unhandled for the destination folder) rather than blocking
+      submission.
 - [ ] Implement **Reacquire Permanently Deleted Output** after deciding and documenting what durable
       remote identifier may be retained and for how long.
+      Re-verified rather than assumed stale: the per-library `async_remote_jobs` registry row is still
+      deleted immediately once a generation commits successfully (confirmed — every
+      `DeleteAsyncRemoteJobAsync` call site in `GenerationQueueService` fires right after a successful
+      commit), so there remains no durable provider job ID or result URL to reacquire from once a
+      committed output file is later permanently deleted. Building this needs a real, deliberate
+      design decision (retain a provider identifier indefinitely post-commit, with its own privacy/
+      staleness tradeoffs, purely to support a rarely-used recovery path) that this pass didn't make
+      unilaterally, matching the same reasoning already recorded for this item in milestone4.md.
 - [ ] Preserve the old tombstone and create a new file identity for reacquired bytes.
+      Depends on Reacquire existing first.
 - [ ] Warn and record **Provider Output Changed** when reacquired bytes do not match the tombstone.
+      Depends on Reacquire existing first.
 - [x] Generate static audio waveform thumbnails in the regenerable preview cache.
       Scope decision: real waveform rendering is descoped as not worth the cost of adding an
       audio-decoding dependency (see the prior finding below, kept for context). Audio files instead

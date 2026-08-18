@@ -735,6 +735,19 @@ else
         }
 
         var draftFormActiveSlots = ExtractSourceFileIds(FilterActiveSourceSlots(draft.SourceSlots));
+        // A recycled/deleted destination folder was previously carried into the form unchanged, with
+        // no explicit fallback — the <select> below only ever lists _activeFolders, so a stale ID not
+        // among them left the actual bound value to whatever the browser's default <select> behavior
+        // happens to be (silently landing on an arbitrary different folder) rather than a deliberate,
+        // visible choice. Falls back to the library's root folder, matching the model-unavailable
+        // pattern above with its own distinct notice.
+        var resolvedDestinationFolderId = _activeFolders.Any(folder => folder.Id == draft.DestinationFolderId)
+            ? draft.DestinationFolderId
+            : LibraryState.Workspace?.Descriptor.RootFolderId ?? draft.DestinationFolderId;
+        if (resolvedDestinationFolderId != draft.DestinationFolderId)
+        {
+            unavailableMessage ??= Strings["DraftDestinationFolderUnavailable"];
+        }
         _form = new GenerateForm
         {
             ModelId = resolvedModelId,
@@ -744,7 +757,7 @@ else
             SecondarySourceFileId = draftFormActiveSlots.Secondary ?? string.Empty,
             TertiarySourceFileId = draftFormActiveSlots.Tertiary ?? string.Empty,
             ResultCount = draft.ResultCount,
-            DestinationFolderId = draft.DestinationFolderId,
+            DestinationFolderId = resolvedDestinationFolderId,
             Temperature = draft.Settings.Temperature,
             TopP = draft.Settings.TopP,
             MaxTokens = draft.Settings.MaxTokens,
