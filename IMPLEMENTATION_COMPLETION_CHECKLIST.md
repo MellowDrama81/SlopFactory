@@ -878,9 +878,23 @@ reacquisition never masquerades changed bytes as restoration.
       later attempt.
 - [ ] Retry a staged download when internal storage was insufficient and the provider result is
       still available.
-      Still unimplemented: no "insufficient internal staging storage" detection or provider-side
-      retry exists — today's staging path only reacts to the *destination* library's volume being
-      unavailable, not to the device's internal staging storage itself running out mid-write.
+      Traced the actual failure path rather than re-stating the existing note. If `StageAsync` itself
+      throws (e.g. the *local* staging volume, not the destination library, is out of space), it
+      does so from inside `ExecuteVideoGenerationAsync`'s destination-unavailable `catch` block, with
+      no nested handling — the exception propagates to `ExecuteAsync`'s outer safety-net catch
+      (`LocalFailureOutcome`, added specifically to prevent an unobserved-task-exception data loss),
+      which marks the generation `Failed`. This is not a silent crash or true data loss for the
+      confirmed-loop case, but it is a documented real correctness edge: if the loop is staging
+      multiple positions and fails partway through (position 0 succeeds, position 1 hits
+      insufficient storage), the positions that *did* stage successfully remain correctly tagged to
+      the generation record and are still picked up by `ReconcileStagedGenerationGroupAsync` on the
+      next reconciliation pass regardless of the record's current status (self-correcting, not
+      permanently lost) — but the record is transiently shown `Failed` instead of `AwaitingLibrary`
+      until that next pass, and the position that failed to stage has no bytes anywhere and is
+      genuinely gone. Not fixed here: reliably distinguishing "insufficient storage" from any other
+      `IOException` is platform-specific (Windows vs. Android report disk-full differently) and this
+      session's policy is to not guess at unverified platform behavior; a real fix also needs a
+      distinct retryable state and UI action, not just a smarter catch clause.
 - [x] Notify the user generically when a staged result is awaiting its library.
       `MainLayout.razor` now shows a device-wide count-only banner ("N result(s) are awaiting their
       library and may expire remotely") linking to Recovery Staging, alongside the pre-existing
@@ -895,9 +909,20 @@ reacquisition never masquerades changed bytes as restoration.
       application restart.
       Covered: commit-time volume removal (staging occurs) and the reconciliation half (a second
       "session" against the same staging registry after the volume returns), both driven through a
-      real staged→reconciled round trip. Not covered: removal during prepare, during post-commit
-      cleanup specifically, or while the application is still running (only the restart-driven
-      reconciliation path is tested).
+      real staged→reconciled round trip. Investigated why prepare/post-commit-cleanup removal aren't
+      covered rather than assuming it was just not attempted: the existing test technique
+      (`FakeLibraryAvailabilityProbe` plus deleting the library's `media` directory to force a real
+      `IOException` without touching the exclusively-locked SQLite database or lock file Windows
+      would refuse to release) can only simulate storage loss for filesystem writes, not for the
+      SQLite reads `Preparing` does (`GetActiveModelsAsync`/`GetActiveConnectionsAsync`) — safely
+      forcing *those* to fail without breaking real file locks needs a dedicated fault-injection seam
+      (like section 8's `IExportFaultInjector`) that doesn't exist for the generation queue today.
+      Post-commit cleanup (the async-job-registry `DeleteAsyncRemoteJobAsync` loop after a successful
+      commit) has the same problem: it shares the exact same SQLite connection path the commit itself
+      just used, so there's no clean way to make only the cleanup step fail without also failing the
+      commit it follows, absent new instrumentation. Building that seam is a real, bounded addition on
+      its own, but wasn't done here rather than adding a fragile test that doesn't actually isolate
+      what it claims to.
 
 Done when: a missing volume cannot lose a completed provider result or create duplicate committed
 outputs, and recovery exposes no sensitive content outside its library.
