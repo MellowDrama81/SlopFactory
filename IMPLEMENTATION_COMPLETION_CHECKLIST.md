@@ -930,8 +930,28 @@ outputs, and recovery exposes no sensitive content outside its library.
 ## 13. Complete UI acceptance automation
 
 - [ ] Add rendered fixed-viewport coverage for primary phone, tablet and desktop layouts.
+      Re-verified this isn't just "no test library chosen yet" but a real capability gap even if one
+      were: `docs/developer/testing.md` already documents "no bUnit harness in this repo" as a
+      settled, repeated decision across several existing source-level-only tests, and checked whether
+      bUnit specifically would actually satisfy this item — it wouldn't. bUnit renders a component
+      tree headlessly with no CSS/layout engine at all, so it has no concept of a viewport size or
+      computed layout to assert against; it cannot tell whether a control is visually clipped at
+      375px width, only whether a component's C# logic/DOM structure is correct. Genuinely testing
+      "fixed viewport" rendering needs a real browser engine (e.g. Playwright driving the app's
+      actual BlazorWebView content) or on-device MAUI UI automation (e.g. Appium) — either is a real
+      new testing-technology adoption with its own CI/headless-browser-or-emulator availability
+      requirements, not a bounded addition to the existing xUnit suite. Left as a deliberate,
+      already-documented scope decision rather than re-litigated here.
 - [ ] Add keyboard-driven coverage for focus visibility, activation, modal focus capture and focus
       restoration.
+      Same root cause as the item above, with an additional confirmed reason bUnit specifically
+      wouldn't work here even as a partial answer: this app's focus-restoration behavior
+      (`ui.js`'s `MutationObserver`-based helper, per `docs/developer/architecture.md`) is real
+      JavaScript executing against a real DOM — bUnit's JSInterop is stubbed/mocked, not a real
+      browser DOM, so it cannot exercise that logic at all, only assert that Blazor *called* into
+      JSInterop with expected arguments. The current source-level tests already do exactly that
+      (asserting `role="dialog"` markup is present so the JS helper *would* fire); closing this gap
+      needs the same real-browser/device tooling decision as the item above.
 - [x] Add automated manifest verification for Android backup exclusion, permissions and document
       picker declarations.
       `AndroidManifestBuildVerificationTests` parses the real Android-manifest-merger output from a
