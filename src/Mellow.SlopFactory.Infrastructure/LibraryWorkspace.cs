@@ -2219,6 +2219,14 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     {
         var model = await _database.GetModelAsync(modelId, cancellationToken).ConfigureAwait(false);
         var connectionRecord = await _database.GetConnectionAsync(model.ConnectionId, cancellationToken).ConfigureAwait(false);
+        // Server-side capability enforcement at the single authoritative submission boundary — every
+        // caller (Generate.razor's normal submit, Use Again, Retry Failed/Missing Results) funnels
+        // through here. Previously `LibraryRules.ValidateSourceSlots` was tested but never actually
+        // called anywhere in production code; the UI only avoided invalid slot assignments because
+        // its pickers happen to offer no way to construct one today, not because anything enforced
+        // it — the same "UI discipline, not a guarantee" gap this session already fixed for system
+        // instructions in section 2.
+        LibraryRules.ValidateSourceSlots(sourceSlots ?? [], LibraryRules.GetInputSlotCapabilities(connectionRecord.ProviderType, model.Mode));
         return await _database.CreateQueuedGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, destinationFolderId, sourceSlots, settings, promptImprovementRecordId, cancellationToken).ConfigureAwait(false);
     }
 

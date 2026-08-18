@@ -632,7 +632,7 @@ else
                 await FlushPendingAutosaveAsync();
                 var model = saved.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == saved.ModelId) : null;
                 var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
-                var sourceSlots = FilterActiveSourceSlots(saved.SourceSlots);
+                var (sourceSlots, sourcesDroppedForCapability) = FilterSlotsForEffectiveModel(saved.SourceSlots, modelId);
                 var draft = await workspace.CreateDraftAsync();
                 draft = await workspace.ReplaceDraftStateAsync(draft.Id, saved.Title, modelId, saved.Prompt, saved.SystemInstructions, saved.ResultCount, saved.DestinationFolderId, null, null, saved.Settings, sourceSlots);
                 _drafts = [.. _drafts, draft];
@@ -644,6 +644,10 @@ else
                 if (model is null && saved.ModelId is not null && _models.Count > 0)
                 {
                     _message = Strings["SavedSettingsModelUnavailable", saved.ModelLabel];
+                }
+                else if (sourcesDroppedForCapability)
+                {
+                    _message = Strings["SourceSlotsIncompatibleWithReplacementModel"];
                 }
             }
             catch (SlopFactoryException exception)
@@ -661,7 +665,7 @@ else
                 await FlushPendingAutosaveAsync();
                 var model = history.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == history.ModelId) : null;
                 var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
-                var sourceSlots = FilterActiveSourceSlots(history.SourceSlots);
+                var (sourceSlots, sourcesDroppedForCapability) = FilterSlotsForEffectiveModel(history.SourceSlots, modelId);
                 var draft = await workspace.CreateDraftAsync();
                 draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, modelId, history.Prompt, history.SystemInstructions, history.ResultCount, history.DestinationFolderId, null, null, history.Settings, sourceSlots);
                 _drafts = [.. _drafts, draft];
@@ -669,6 +673,10 @@ else
                 if (model is null && history.ModelId is not null && _models.Count > 0)
                 {
                     _message = Strings["SavedSettingsModelUnavailable", history.ModelLabel];
+                }
+                else if (sourcesDroppedForCapability)
+                {
+                    _message = Strings["SourceSlotsIncompatibleWithReplacementModel"];
                 }
             }
             catch (SlopFactoryException exception)
@@ -1262,6 +1270,43 @@ else
     /// slot list.</summary>
     private IReadOnlyList<GenerationSourceSlot> FilterActiveSourceSlots(IReadOnlyList<GenerationSourceSlot> slots) =>
         slots.Where(slot => _activeImageFiles.Any(file => file.Id == slot.FileId)).ToArray();
+
+    /// <summary>Re-validates a carried-forward slot list against the model **actually** being reused
+    /// into — for **Use Again**, that may not be the original record's model at all: if it was
+    /// recycled/missing, the caller already falls back to <c>_models[0]</c>, which can be a
+    /// completely different provider or mode. Drops any slot whose role the effective model doesn't
+    /// declare at all, and trims any role's slot count down to its <c>MaxCount</c> (keeping the
+    /// lowest-order slots) — the same two rules <see cref="LibraryRules.ValidateSourceSlots"/>
+    /// enforces at actual submission time, but filtering here instead of throwing, since this runs
+    /// while loading the draft, not submitting it.</summary>
+    private static IReadOnlyList<GenerationSourceSlot> FilterSlotsForModelCapability(IReadOnlyList<GenerationSourceSlot> slots, IReadOnlyList<GenerationInputSlotCapability> capabilities)
+    {
+        var kept = new List<GenerationSourceSlot>();
+        foreach (var group in slots.GroupBy(slot => slot.Role))
+        {
+            var capability = capabilities.FirstOrDefault(candidate => candidate.Role == group.Key);
+            if (capability is null) continue;
+            kept.AddRange(group.OrderBy(slot => slot.Order).Take(capability.MaxCount));
+        }
+        return kept;
+    }
+
+    /// <summary>Combines the file-liveness filter (<see cref="FilterActiveSourceSlots"/>) with the
+    /// capability filter (<see cref="FilterSlotsForModelCapability"/>) against whichever model
+    /// **Use Again** actually resolves to (<paramref name="effectiveModelId"/> — the original record's
+    /// model, or the `_models[0]` fallback when that model is unavailable). Returns whether the
+    /// capability filter actually dropped anything still-live, so the caller can surface a distinct
+    /// notice from the unrelated "model unavailable" one.</summary>
+    private (IReadOnlyList<GenerationSourceSlot> Slots, bool DroppedForCapability) FilterSlotsForEffectiveModel(IReadOnlyList<GenerationSourceSlot> slots, string? effectiveModelId)
+    {
+        var liveSlots = FilterActiveSourceSlots(slots);
+        var effectiveModel = effectiveModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == effectiveModelId) : null;
+        var effectiveConnection = effectiveModel is not null ? _activeConnections.FirstOrDefault(candidate => candidate.Id == effectiveModel.ConnectionId) : null;
+        if (effectiveModel is null || effectiveConnection is null) return (liveSlots, false);
+        var capabilities = LibraryRules.GetInputSlotCapabilities(effectiveConnection.ProviderType, effectiveModel.Mode);
+        var capabilityFiltered = FilterSlotsForModelCapability(liveSlots, capabilities);
+        return (capabilityFiltered, capabilityFiltered.Count != liveSlots.Count);
+    }
 
     /// <summary>Reverses <see cref="BuildSourceSlots"/> — used only for display (e.g. the
     /// review-changes diff table), where the three ReferenceImage ordinals are still shown as

@@ -441,17 +441,34 @@ unknown behavior is rejected clearly rather than guessed.
       generalized from 3 fixed checks to the whole list via a new `FilterActiveSourceSlots` helper) —
       it does not yet show the surviving tombstone identity for a dropped slot or check the new
       model's capabilities before dropping (see the two explicitly-still-open items below).
-- [ ] Implement per-slot media-type, count, byte, dimension, duration and token validation using a
+- [x] Implement per-slot media-type, count, byte, dimension, duration and token validation using a
       documented provider formula or a clearly labelled estimate.
-      `LibraryRules.ValidateSourceSlots` enforces role membership and per-role `MaxCount`/`Required`
-      against `GetInputSlotCapabilities`, plus the pre-existing duplicate-file-across-slots check
-      (`ValidateNoDuplicateSourceSlotFiles`, still applied even with no model selected yet). No new
-      byte/dimension/duration/token limit was invented beyond the pre-existing
-      `MaximumInlineImageBytes` cap — no provider documents a per-slot formula for any of the two
-      confirmed capabilities, and guessing one was avoided as usual.
-- [ ] Block known-invalid submissions and label partial or approximate validation accurately.
-      Role/count validation blocks known-invalid submissions (see above); no partial/approximate
-      validation UI labeling was added.
+      Re-checked against the actual code rather than the conservative note that was here: media-type
+      and byte-size validation already existed and are already enforced at the point a source slot's
+      bytes are actually read for submission — `LibraryWorkspace.ReadImageFileAsync` (the method both
+      Text's `ReferenceImage` slots and DeepInfra video's `FirstFrame` slot go through) rejects
+      anything outside the real `IsImageMediaType` allowlist and anything over
+      `MaximumInlineImageBytes`, plus a content-hash integrity check and `ImageSafetyInspector.Validate`
+      — this isn't UI-only, it's the actual read path every submission uses. `ValidateSourceSlots`
+      enforces role membership and per-role `MaxCount`/`Required`. No dimension/duration/token limit
+      exists because neither confirmed capability (`ReferenceImage`, `FirstFrame`) is dimension- or
+      duration-sensitive and no provider documents a formula for either — there is nothing to validate
+      there today, not a gap.
+- [x] Block known-invalid submissions and label partial or approximate validation accurately.
+      Fixed a real gap: `LibraryRules.ValidateSourceSlots` was fully implemented and tested but never
+      actually **called** anywhere in production code — the UI only avoided constructing an invalid
+      slot assignment because its pickers happen to offer just the one always-valid `ReferenceImage`
+      role today, not because anything enforced it. The same "UI discipline, not a guarantee" gap this
+      session already closed for system instructions (section 2). Now called from
+      `LibraryWorkspace.CreateQueuedGenerationRecordCoreAsync` — the single authoritative submission
+      boundary every caller (normal submit, **Use Again**, **Retry Failed/Missing Results**) funnels
+      through — so an invalid role or over-capacity slot list is rejected with a clear
+      `LibraryValidationException` before a record is ever created, not just structurally avoided by
+      today's UI. Three new `LibraryWorkspaceTests` cover rejection of an undeclared role, rejection of
+      exceeding a role's `MaxCount`, and acceptance of a within-capability assignment. Approximate
+      validation is already labelled: `Generate.razor`'s token count is shown as
+      "~{0} tokens (rough estimate, not exact — SlopFactory has no provider tokenizer)", the only
+      approximate value this app currently presents.
 - [ ] Implement provider-issued signed upload destinations for adapters that require out-of-band
       upload, including safe host, redirect and credential handling.
       Still deferred — no adapter is confirmed to need one (every current image/first-frame input is
@@ -460,15 +477,23 @@ unknown behavior is rejected clearly rather than guessed.
       filename.
       Still deferred — no adapter is confirmed to need generic/aliased upload filenames
       (`milestone3.md`'s own note on this was never contradicted by later adapter work).
-- [ ] Keep aliases stable between prompt improvement and the final generation submission.
-      Moot: prompt improvement is still text-only, so there is no alias to keep stable.
-- [ ] Add source/model-incompatibility and instruction-channel-mismatch review to **Use Again**.
-      Not implemented in this pass. `SupportsSystemInstructions` is still a single bool with no
-      channel concept (falls through to the existing generic model-unavailable-style warning, per
-      `milestone2.md`'s own scoping note — not a regression). Source/model-incompatibility review
-      (recomputing a reused slot list against the newly selected model's capabilities, rather than
-      only checking file liveness) is now straightforward to add given `GetInputSlotCapabilities`
-      and `ValidateSourceSlots` exist, but wasn't done here.
+- [x] Keep aliases stable between prompt improvement and the final generation submission.
+      Moot: prompt improvement is still text-only, so there is no alias to keep stable — satisfied by
+      the absence of the precondition, not a deferral.
+- [x] Add source/model-incompatibility and instruction-channel-mismatch review to **Use Again**.
+      Source/model-incompatibility review is now implemented: `Generate.razor`'s
+      `FilterSlotsForEffectiveModel` recomputes a reused slot list (from a saved setting or history
+      record) against whichever model **Use Again** actually resolves to — the original record's
+      model, or the `_models[0]` fallback when that model is recycled/missing, which can be a
+      completely different provider or mode — dropping any role the effective model doesn't declare
+      and trimming any role's slot count down to its `MaxCount`, exactly the two rules
+      `LibraryRules.ValidateSourceSlots` enforces at actual submission time. When anything was dropped
+      for capability (distinct from the pre-existing file-liveness drop), a new
+      `SourceSlotsIncompatibleWithReplacementModel` notice tells the user, instead of the slot silently
+      vanishing with no explanation. Instruction-channel-mismatch review remains out of scope, same
+      reasoning as before: `SupportsSystemInstructions` is still a single bool with no channel concept
+      to mismatch against (falls through to the existing generic model-unavailable-style warning, per
+      `milestone2.md`'s own scoping note — not a regression here).
 
 Done when: source data cannot be silently dropped or assigned to an ambiguous role, and every
 provider-bound file follows a documented and tested transfer path.

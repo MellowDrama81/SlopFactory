@@ -2136,6 +2136,67 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task CreateQueuedGenerationRecordRejectsASourceSlotRoleTheModelDoesNotDeclare()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0]);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        IReadOnlyList<GenerationSourceSlot> invalidSlots = [new(GenerationInputSlotRole.FirstFrame, sourceFile.Id, 0)];
+
+        var exception = await Assert.ThrowsAsync<LibraryValidationException>(() =>
+            workspace.CreateQueuedGenerationRecordAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: invalidSlots));
+
+        Assert.Contains("FirstFrame", exception.Message, StringComparison.Ordinal);
+        Assert.Empty(await workspace.GetNonTerminalGenerationRecordsAsync());
+    }
+
+    [Fact]
+    public async Task CreateQueuedGenerationRecordRejectsMoreReferenceImagesThanTheModelsCapabilityAllows()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0]);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourceFiles = new List<FileRecord>();
+        for (var index = 0; index < 4; index++)
+        {
+            var path = temporary.Child($"source{index}.png");
+            await File.WriteAllBytesAsync(path, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, (byte)index]);
+            sourceFiles.Add(Assert.Single(await workspace.ImportAsync([path], workspace.Descriptor.RootFolderId)).File!);
+        }
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        IReadOnlyList<GenerationSourceSlot> tooManySlots = sourceFiles.Select((file, index) => new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, file.Id, index)).ToArray();
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() =>
+            workspace.CreateQueuedGenerationRecordAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: tooManySlots));
+    }
+
+    [Fact]
+    public async Task CreateQueuedGenerationRecordAcceptsAReferenceImageSlotWithinCapability()
+    {
+        using var temporary = new TemporaryDirectory();
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0]);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        IReadOnlyList<GenerationSourceSlot> validSlots = [new(GenerationInputSlotRole.ReferenceImage, sourceFile.Id, 0)];
+
+        var record = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: validSlots);
+
+        Assert.Single(record.SourceSlots);
+    }
+
+    [Fact]
     public async Task OpeningVersionTwentySevenLibraryAddsSecondaryAndTertiarySourceSlots()
     {
         using var temporary = new TemporaryDirectory();
