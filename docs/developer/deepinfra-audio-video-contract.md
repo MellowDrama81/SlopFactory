@@ -3,8 +3,7 @@
 Confirmed 2026-08-17 against DeepInfra's published documentation
 (<https://docs.deepinfra.com/>) and live API calls made with an explicit user-approved test budget
 (~$0.04 spent of a $5 ceiling: a short TTS request and one 2-second video generation). This
-supersedes the "contract not confirmed" status recorded in `milestone3.md` and
-`IMPLEMENTATION_COMPLETION_CHECKLIST.md` for DeepInfra audio and video — those adapters can now be
+supersedes the previously recorded "contract not confirmed" status for DeepInfra audio and video — those adapters can now be
 implemented against a verified contract rather than deferred.
 
 ## Audio: `POST /v1/audio/speech`

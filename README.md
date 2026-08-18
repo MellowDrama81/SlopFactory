@@ -68,9 +68,7 @@ SlopFactory is under active development. Provider adapters, generation modes, th
 and the library foundation described above are implemented and tested; some machinery — a full
 asynchronous-status vocabulary for long-running jobs, named per-modality source-input slots beyond
 what's listed above, the full cost-threshold/acknowledgement system, and provider safety-response
-handling — is partially built or still open. The authoritative, itemized status of every remaining
-requirement is tracked in the
-[implementation completion checklist](IMPLEMENTATION_COMPLETION_CHECKLIST.md).
+handling — is partially built or still open.
 
 ## Documentation
 

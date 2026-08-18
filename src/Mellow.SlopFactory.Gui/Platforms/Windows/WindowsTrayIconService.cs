@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace Mellow.SlopFactory.Gui.Services;
 
 /// <summary>
-/// Real Windows notification-area icon (plan.md:441/444), implemented directly against the classic
+/// Real Windows notification-area icon, implemented directly against the classic
 /// Win32 Shell_NotifyIcon API rather than a third-party NuGet package — there is no notify-icon
 /// control in the stable Windows App SDK, and this project prefers not to add a new dependency for
 /// something achievable with a small amount of interop. A dedicated message-only-style native

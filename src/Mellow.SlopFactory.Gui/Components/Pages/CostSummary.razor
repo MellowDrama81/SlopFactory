@@ -123,8 +123,8 @@ else
         await LibraryState.InitializeAsync();
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
-        // Recycled history is included by default (plan.md:1615 — recycling never undoes incurred
-        // provider cost); _excludeRecycled below is the opt-out filter, not an opt-in one.
+        // Recycled history is included by default — recycling never undoes incurred
+        // provider cost — _excludeRecycled below is the opt-out filter, not an opt-in one.
         var records = await workspace.GetGenerationHistoryAsync(includeRecycled: true);
         _costedRecords = CostSummaryCalculator.ApplyFilters(records);
     }

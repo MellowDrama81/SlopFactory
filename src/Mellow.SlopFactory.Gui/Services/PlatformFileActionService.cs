@@ -15,7 +15,7 @@ public interface IPlatformFileActionService
     /// export cleanup journal and sidecars").</summary>
     Task<(FileExportResult Media, SidecarExportResult? Sidecar)> ExportAsync(ILibraryWorkspace workspace, FileRecord file, bool changedBytes, ExportSidecarOptions? sidecarOptions = null, CancellationToken cancellationToken = default);
     /// <summary>Writes arbitrary bytes not owned by any library to a user-chosen destination — used
-    /// by recovery staging's **Export Copy** (plan.md:331), which has no <see cref="FileRecord"/> or
+    /// by recovery staging's **Export Copy**, which has no <see cref="FileRecord"/> or
     /// <see cref="ILibraryWorkspace"/> to export from. Returns true if the user completed the save,
     /// false if they cancelled the picker.</summary>
     Task<bool> ExportRawBytesAsync(byte[] bytes, string suggestedFileName, string mediaType, CancellationToken cancellationToken = default);

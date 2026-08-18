@@ -103,7 +103,7 @@ else
             {
                 <!-- Deliberately not an aria-live region: this text changes on every single
                      imported item, which would otherwise re-announce hundreds of times during a
-                     large import (plan.md:161's "without repeatedly interrupting the user"). The
+                     large import, without repeatedly interrupting the user. The
                      one-shot completion message (below, role="status") already announces once the
                      whole operation finishes. -->
                 <div class="scan-progress" aria-live="off">
@@ -857,9 +857,9 @@ else
     private async Task ConfirmBulkRecycleAsync()
     {
         if (LibraryState.Workspace is null) return;
-        // plan.md:418 — a file actively being read/uploaded by a running generation cannot be
+        // A file actively being read/uploaded by a running generation cannot be
         // recycled; every other selected file proceeds normally and pauses any queued job that
-        // depends on it (plan.md:413) instead of being blocked.
+        // depends on it instead of being blocked.
         var eligibleIds = _selectedFileIds.Where(id => !Queue.IsFileActivelyInUse(id)).ToArray();
         var skippedCount = _selectedFileIds.Count - eligibleIds.Length;
         if (eligibleIds.Length == 0)

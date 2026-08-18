@@ -4,7 +4,7 @@ namespace Mellow.SlopFactory.Gui.Services;
 
 /// <summary>
 /// Coordinates <see cref="IPendingResultRegistryService"/>'s device-wide metadata index with the
-/// actual staged bytes on disk (plan.md:322-334). Used when a provider result finishes downloading
+/// actual staged bytes on disk. Used when a provider result finishes downloading
 /// but its destination library's volume is unavailable, so the bytes are not simply discarded.
 /// </summary>
 public interface IRecoveryStagingService
@@ -14,7 +14,7 @@ public interface IRecoveryStagingService
     /// <summary>Writes <paramref name="bytes"/> into the device-wide staging folder and registers a
     /// new entry for them. Returns the new entry's ID. <paramref name="generationRecordId"/>/
     /// <paramref name="position"/> link the entry back to the durable generation record it belongs
-    /// to (plan.md:329's "generation identifier"), enabling automatic reconciliation once the
+    /// to (its "generation identifier"), enabling automatic reconciliation once the
     /// intended library returns.</summary>
     Task<string> StageAsync(string libraryId, string libraryDisplayName, string draftId, byte[] bytes, string safeFileName, string mediaType, string? generationRecordId = null, int? position = null, CancellationToken cancellationToken = default);
 
@@ -22,14 +22,14 @@ public interface IRecoveryStagingService
     /// memory. The stream is bounded by the shared provider-result limit.</summary>
     Task<string> StageFromStreamAsync(string libraryId, string libraryDisplayName, string draftId, Stream source, string safeFileName, string mediaType, long? declaredLength = null, string? generationRecordId = null, int? position = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Reads a staged result's bytes back — used by **Export Copy** (plan.md:331) and by the
-    /// sandboxed preview (plan.md:330). Throws if the entry is unknown.</summary>
+    /// <summary>Reads a staged result's bytes back — used by **Export Copy** and by the
+    /// sandboxed preview. Throws if the entry is unknown.</summary>
     Task<byte[]> ReadBytesAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>Opens the staged result for streaming consumers such as reconciliation or export.</summary>
     Task<Stream> OpenReadAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>Removes both the registry entry and its staged bytes. plan.md:332-333 — exporting a
+    /// <summary>Removes both the registry entry and its staged bytes. Exporting a
     /// copy never calls this; only an explicit discard (or a future successful reconcile) does.</summary>
     Task DiscardAsync(string id, CancellationToken cancellationToken = default);
 }

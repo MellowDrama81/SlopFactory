@@ -276,7 +276,7 @@ else
         }
     }
 
-    /// <summary>Whether this edit touches a field plan.md requires gating on unresolved async jobs
+    /// <summary>Whether this edit touches a field that requires gating on unresolved async jobs
     /// (base URL, credential header name or auth prefix) — not label, timeout, headers or modality
     /// settings, which never affect authentication or the request target.</summary>
     private bool AuthStructureChanged() =>
@@ -288,8 +288,8 @@ else
     /// gate below. A provider-type change is included alongside <see cref="AuthStructureChanged"/>
     /// because it changes which adapter (and therefore which request/response contract) any
     /// still-unresolved job or outcome would be reconciled against — the same reconciliation-breaking
-    /// risk plan.md's "connection URL, provider type and authentication-structure changes" wording
-    /// names explicitly. Previously only auth-structure changes were gated here;
+    /// risk that connection URL, provider type and authentication-structure changes all
+    /// carry. Previously only auth-structure changes were gated here;
     /// <c>ChangeConnectionProviderTypeAsync</c> ran unconditionally right after, with no check
     /// against either registry.</summary>
     private bool RequiresUnresolvedWorkGate() => AuthStructureChanged() || ProviderTypeChanged();

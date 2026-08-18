@@ -3,8 +3,8 @@ using Mellow.SlopFactory.Domain;
 namespace Mellow.SlopFactory.Application;
 
 /// <summary>
-/// A device-local, authenticated, versioned record of in-flight external export temporary objects
-/// (plan.md:602-613), so a crash between creating a temporary export object and committing or
+/// A device-local, authenticated, versioned record of in-flight external export temporary objects,
+/// so a crash between creating a temporary export object and committing or
 /// cleaning it up leaves something a later <see cref="SweepAsync"/> can safely recover — never by
 /// guessing, only by reverifying the exact identity that was journaled before the crash. Defined in
 /// Core (no platform dependency) because the atomic-export code that calls it

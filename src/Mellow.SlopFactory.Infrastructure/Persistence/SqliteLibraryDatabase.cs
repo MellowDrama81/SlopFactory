@@ -3396,7 +3396,7 @@ internal sealed class SqliteLibraryDatabase
 
     /// <summary>Single choke point for every status change after a record's initial creation: updates
     /// the current status (and completion timestamp, once terminal) and logs a timestamped transition
-    /// row, in one transaction. Throws once the record is already terminal — plan.md: a terminal
+    /// row, in one transaction. Throws once the record is already terminal — a terminal
     /// status never returns to an active state.</summary>
     public async Task<GenerationRecord> AdvanceGenerationStatusAsync(string generationRecordId, GenerationStatus status, GenerationHoldReason? holdReason, GenerationFailureReason? failureReason, int? position, CancellationToken cancellationToken)
     {

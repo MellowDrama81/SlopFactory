@@ -34,8 +34,8 @@ public sealed class AppLibraryState : IAsyncDisposable
     private readonly Dictionary<string, ILibraryWorkspace> _backgroundWorkspaces = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Registers a predicate consulted before disposing the outgoing workspace on a library switch
-    /// (plan.md:423-424): if any registered predicate returns true for it, it is kept open in the
+    /// Registers a predicate consulted before disposing the outgoing workspace on a library switch:
+    /// if any registered predicate returns true for it, it is kept open in the
     /// background instead of disposed. <see cref="GenerationQueueService"/> registers one during
     /// startup so a library with active queued/running work is never torn out from under it merely
     /// because the user switched away. Not itself a DI registration (kept as a plain method call to
@@ -46,12 +46,12 @@ public sealed class AppLibraryState : IAsyncDisposable
     private bool HasRegisteredActiveWork(ILibraryWorkspace workspace) => _keepOpenPredicates.Any(predicate => predicate(workspace));
 
     /// <summary>Every library kept open in the background for still-active work, for a global
-    /// activity indicator (plan.md:425) grouped by library display name.</summary>
+    /// activity indicator grouped by library display name.</summary>
     public IReadOnlyList<(string LibraryId, string DisplayName, ILibraryWorkspace Workspace)> BackgroundLibraries =>
         _backgroundWorkspaces.Values.Select(workspace => (workspace.Descriptor.LibraryId, workspace.Descriptor.DisplayName, workspace)).ToArray();
 
     /// <summary>True if this library — active or kept open in the background — currently has
-    /// registered active work, so **Forget Library** can refuse it (plan.md:428).</summary>
+    /// registered active work, so **Forget Library** can refuse it.</summary>
     public bool HasActiveWorkFor(string libraryId)
     {
         if (Workspace is not null && Workspace.Descriptor.LibraryId == libraryId && HasRegisteredActiveWork(Workspace)) return true;
@@ -66,7 +66,7 @@ public sealed class AppLibraryState : IAsyncDisposable
         ReferenceEquals(Workspace, workspace) || _backgroundWorkspaces.Values.Any(candidate => ReferenceEquals(candidate, workspace));
 
     /// <summary>
-    /// Releases a background-kept workspace's lock once its last operation completes (plan.md:430).
+    /// Releases a background-kept workspace's lock once its last operation completes.
     /// A no-op for the current active workspace (which has its own lifecycle) or a workspace not
     /// currently tracked in the background set, so a caller never needs to check which case applies
     /// first.
@@ -176,11 +176,11 @@ public sealed class AppLibraryState : IAsyncDisposable
     /// <summary>Count of dirty-draft markers for any library, active or not — reads the same
     /// device-wide preference key <see cref="LoadDirtyDraftIds"/> keeps current for the active
     /// library, so it works for a library that's merely remembered too. Used to block
-    /// **Forget Library** while unreconciled emergency draft markers exist (plan.md:459).</summary>
+    /// **Forget Library** while unreconciled emergency draft markers exist.</summary>
     public int GetDirtyDraftCount(string libraryId) =>
         _preferences.ReadString(DirtyDraftsPreferenceKeyPrefix + libraryId, string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
 
-    /// <summary>**Delete Recovery Drafts and Forget**'s draft-side step (plan.md:461): clears every
+    /// <summary>**Delete Recovery Drafts and Forget**'s draft-side step: clears every
     /// dirty-draft marker for this library so **Forget Library** can proceed. Only removes the
     /// device-local marker, never the library's own persisted draft content.</summary>
     public void DeleteDirtyDraftsFor(string libraryId)
@@ -291,7 +291,7 @@ public sealed class AppLibraryState : IAsyncDisposable
             _preferences.WriteString("active_library_path", fullPath);
             _recentLibraries.RecordOpened(replacement.Descriptor);
             LoadDirtyDraftIds();
-            // plan.md:423-424 — a library with active queued/running work stays open and locked
+            // A library with active queued/running work stays open and locked
             // rather than being disposed merely because the user switched away from it.
             if (previous is not null)
             {

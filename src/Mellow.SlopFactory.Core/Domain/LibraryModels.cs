@@ -544,7 +544,7 @@ public enum FileExportOutcome
     Failed = 1,
     Cancelled = 2,
     /// <summary>A destination read-back mismatch after the outgoing stream already matched the
-    /// source (plan.md:649-652) — distinct from <see cref="Failed"/> (an outgoing-stream mismatch
+    /// source — distinct from <see cref="Failed"/> (an outgoing-stream mismatch
     /// caught before anything was committed) because the destination file may already have replaced
     /// something, so recovery guidance differs.</summary>
     VerificationFailed = 3
@@ -569,7 +569,7 @@ public enum ExportCleanupObjectType
     AndroidDocumentUri = 1
 }
 
-/// <summary>Lifecycle of one journal entry, mirroring plan.md's cleanup-journal states: a
+/// <summary>Lifecycle of one journal entry, mirroring the cleanup-journal states: a
 /// <see cref="PlannedTemporary"/> entry is written before the temp object is created (so a crash in
 /// that narrow interval is still visible), <see cref="Confirmed"/> once the object durably exists,
 /// and <see cref="CleanupPending"/> for an entry a sweep found but could not safely act on (identity
@@ -597,8 +597,8 @@ public sealed record ExportCleanupEntry(
 public sealed record SidecarExportResult(string? SidecarPath, FileExportOutcome Outcome, string? Error);
 
 /// <summary>Disclosure opt-ins for a `.slopfactory.json` sidecar. Every toggle defaults to minimal
-/// disclosure (false) — plan.md:743 "every new export operation begins with privacy-minimal sidecar
-/// defaults... never preselected." <see cref="IncludeSafetyMetadata"/> is accepted but is always a
+/// disclosure (false) — every new export operation begins with privacy-minimal sidecar
+/// defaults, never preselected. <see cref="IncludeSafetyMetadata"/> is accepted but is always a
 /// documented no-op until a persisted, hash-bound safety classification exists (checklist Section
 /// 10, not yet implemented) for the sidecar writer to read.</summary>
 public sealed record ExportSidecarOptions(
@@ -657,7 +657,7 @@ public enum ExternalOpenSafety
     BlockedActiveContent = 2,
     BlockedUnavailableContent = 3,
     /// <summary>An unverified provider-output binary (<see cref="FileOrigin.UnverifiedProviderOutput"/>)
-    /// — export-only per plan.md, never opened externally regardless of its detected media type.</summary>
+    /// — export-only, never opened externally regardless of its detected media type.</summary>
     BlockedUnverifiedContent = 4
 }
 
@@ -959,8 +959,8 @@ public enum GenerationFailureReason
     AbandonedByUser = 1,
     /// <summary>The operating system suspended or timed out the background execution this job was
     /// running under (e.g. Android killed the foreground service) rather than the provider reporting
-    /// a failure — plan.md's "Android execution suspension and timeout are recorded separately from
-    /// provider failure."</summary>
+    /// a failure — Android execution suspension and timeout are recorded separately from
+    /// provider failure.</summary>
     ExecutionSuspended = 2
 }
 
@@ -1141,7 +1141,7 @@ public enum AsyncRemoteJobPhase
 /// A minimal device-local record of an in-flight asynchronous provider job, keyed by the draft that
 /// submitted it rather than by generation-history ID, because no <see cref="GenerationRecord"/>
 /// exists until the job reaches a terminal outcome. Never contains prompts, source content or
-/// credentials, per the pending-job registry rules in plan.md.
+/// credentials.
 /// </summary>
 public sealed record AsyncRemoteJobRecord(
     string Id,

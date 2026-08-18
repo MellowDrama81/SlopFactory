@@ -221,8 +221,8 @@ else if (_record is not null)
 
     /// <summary>
     /// Submits a new, independent run covering only the positions that failed or were never
-    /// attempted — the original request's immutable snapshot is never edited in place, matching
-    /// plan.md's rule that a submitted request can only be replaced by a new run with its own
+    /// attempted — the original request's immutable snapshot is never edited in place; a submitted
+    /// request can only be replaced by a new run with its own
     /// history ID. Uses a synthetic draft ID scoped to this record rather than a real
     /// <c>GenerationDraft</c>, since a history record does not know which draft originally
     /// submitted it (or whether that draft still exists) and this retry never needs one.

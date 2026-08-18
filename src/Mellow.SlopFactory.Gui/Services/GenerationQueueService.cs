@@ -12,17 +12,16 @@ public enum GenerationJobPhase
     Running = 1,
     /// <summary>A submit-then-poll job whose provider submission durably succeeded and whose queue
     /// submission slot has therefore already been released — it no longer counts against the
-    /// device-wide or per-connection concurrency cap, matching plan.md's "an asynchronous job
-    /// releases its submission slot after the provider durably accepts it; later status polling
-    /// does not consume a submission slot" rule.</summary>
+    /// device-wide or per-connection concurrency cap. An asynchronous job releases its submission
+    /// slot once the provider durably accepts it; later status polling does not consume one.</summary>
     Monitoring = 2,
     /// <summary>A still-queued (not yet submitted) job paused because a source file or destination
-    /// folder it depends on was recycled (plan.md:413) or permanently deleted
+    /// folder it depends on was recycled or permanently deleted
     /// (<see cref="GenerationQueueEntry.NonRunnable"/> distinguishes the two — permanent deletion
     /// also sets that flag). Retains its queue position and never proceeds using the recycled/deleted
-    /// dependency automatically; restoring every paused dependency returns it to <see cref="Queued"/>
-    /// (plan.md:414), while a permanently deleted dependency requires the user to cancel and resubmit
-    /// from the originating tab (plan.md:415).</summary>
+    /// dependency automatically; restoring every paused dependency returns it to <see cref="Queued"/>,
+    /// while a permanently deleted dependency requires the user to cancel and resubmit from the
+    /// originating tab.</summary>
     DependencyRecycled = 3,
     /// <summary>A never-submitted job held after the device lost connectivity. It keeps its
     /// position and resumes only after the user explicitly resumes the queue.</summary>
@@ -70,7 +69,7 @@ public sealed record GenerationJobStatusSnapshot(string JobId, string DraftId, G
 
 /// <param name="NonRunnable">True once a dependency this job needs was permanently deleted rather
 /// than merely recycled — restoring a dependency can never clear this, so the job can only ever be
-/// cancelled and resubmitted, matching plan.md:415.</param>
+/// cancelled and resubmitted.</param>
 public sealed record GenerationQueueEntry(
     string JobId,
     string DraftId,
@@ -84,7 +83,7 @@ public sealed record GenerationQueueEntry(
 
 /// <param name="StagedForRecovery">True when a video result finished at the provider but could not
 /// be committed because its destination library's volume was unavailable, and the already-downloaded
-/// bytes were staged into device-wide recovery storage instead of being discarded (plan.md:323).
+/// bytes were staged into device-wide recovery storage instead of being discarded.
 /// <see cref="Record"/> is null in that case — the result exists only in recovery staging, not as a
 /// generation-history record, until the library returns and the user resolves it.</param>
 public sealed record GenerationJobOutcome(
@@ -119,7 +118,7 @@ public sealed class GenerationQueueService
         /// and tells <see cref="RunJobAsync"/> not to decrement the counters again at the end.</summary>
         public bool SlotReleased;
         /// <summary>True once a dependency (source file or destination folder) this job needs was
-        /// permanently deleted — terminal, never cleared by a later restore, matching plan.md:415.</summary>
+        /// permanently deleted — terminal, never cleared by a later restore.</summary>
         public bool NonRunnable;
         /// <summary>IDs of currently-recycled dependencies (source file/destination folder) keeping
         /// this job paused at <see cref="GenerationJobPhase.DependencyRecycled"/> — the job only
@@ -203,7 +202,7 @@ public sealed class GenerationQueueService
 
     /// <summary>
     /// True once the device has been observed offline while the queue had (or was offered) work to
-    /// start — stays true even after connectivity returns, per plan.md's manual-resume requirement,
+    /// start — stays true even after connectivity returns, requiring an explicit manual resume,
     /// until <see cref="ResumeQueue"/> is called explicitly. Never affects an already-running job.
     /// </summary>
     public bool IsPausedForConnectionLost { get { lock (_gate) return _connectionLostLatched; } }
@@ -370,8 +369,8 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>
-    /// Automatic staged-result reconciliation (plan.md:325: "When the intended library returns, the
-    /// staged result is moved into it atomically and the staged copy is deleted"). Every staged entry
+    /// Automatic staged-result reconciliation: when the intended library returns, the staged result
+    /// is moved into it atomically and the staged copy is deleted. Every staged entry
     /// tagged with a generation record belonging to the now-open library is committed into that
     /// record; the staged copy is only discarded once that commit durably succeeds. Entries staged
     /// before generation-record linkage existed (<see cref="StagedResultEntry.GenerationRecordId"/>
@@ -440,8 +439,8 @@ public sealed class GenerationQueueService
 
         await workspace.RecordMediaGenerationResultAsync(model.Id, record.Prompt, record.ResultCount, record.DestinationFolderId, files, null, record.PromptImprovementRecordId, existingGenerationRecordId: record.Id, sourceSlots: record.SourceSlots).ConfigureAwait(false);
 
-        // Only reached once the commit above durably succeeded — plan.md:325's "the staged copy is
-        // deleted" only after reconciliation, never before.
+        // Only reached once the commit above durably succeeded — the staged copy is deleted only
+        // after reconciliation, never before.
         foreach (var entry in entries)
         {
             await _recoveryStaging!.DiscardAsync(entry.Id).ConfigureAwait(false);
@@ -450,8 +449,8 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>
-    /// Restores generation records left non-terminal by a crash or restart (plan.md: restart
-    /// recovery must not infer state from transient UI data). A record still at
+    /// Restores generation records left non-terminal by a crash or restart — restart recovery must
+    /// not infer state from transient UI data. A record still at
     /// <see cref="GenerationStatus.Queued"/> or <see cref="GenerationStatus.Preparing"/> never reached
     /// a provider, so it is safe to silently re-enter the queue from the durable record itself (which
     /// already carries the full request shape). Every other nonterminal status may have already
@@ -561,8 +560,8 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>
-    /// plan.md:1433 ("When the application reopens, it resumes polling incomplete asynchronous
-    /// jobs") — scoped to the one case resumable without the original submission context
+    /// When the application reopens, it resumes polling incomplete asynchronous jobs — scoped to
+    /// the one case resumable without the original submission context
     /// (prompt/model/settings), which per-async-job persistence deliberately never retains: a job
     /// the provider already confirmed <see cref="AsyncRemoteJobPhase.CompletedAwaitingDownload"/> can
     /// be retried purely from its existing generation-record position, via the same
@@ -873,8 +872,8 @@ public sealed class GenerationQueueService
         {
             foreach (var job in _jobsById.Values.ToArray())
             {
-                // plan.md:423-424 — a job whose library was switched away from keeps running as long
-                // as that workspace is still open (either still active, or kept open in the
+                // A job whose library was switched away from keeps running as long as that workspace
+                // is still open (either still active, or kept open in the
                 // background by AppLibraryState because this same check told it to). Only a job
                 // whose workspace was actually disposed (switched away from with no active work, or
                 // now genuinely closed) needs to be torn down here.
@@ -905,8 +904,8 @@ public sealed class GenerationQueueService
     private static bool ReferencesFolder(GenerationJobSnapshot snapshot, string folderId) => snapshot.DestinationFolderId == folderId;
 
     /// <summary>True while a still-<see cref="GenerationJobPhase.Running"/> job is actively reading or
-    /// uploading this file as a source input — the narrow "actively in use" sense plan.md:418 uses to
-    /// block recycling, distinct from a merely-<see cref="GenerationJobPhase.Queued"/> job that
+    /// uploading this file as a source input — the narrow "actively in use" sense that blocks
+    /// recycling, distinct from a merely-<see cref="GenerationJobPhase.Queued"/> job that
     /// references the same file (which pauses instead of blocking, see <see cref="NotifyFileRecycled"/>).</summary>
     public bool IsFileActivelyInUse(string fileId)
     {
@@ -920,8 +919,8 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>True while a connection has a submitted (<see cref="GenerationJobPhase.Running"/> or
-    /// <see cref="GenerationJobPhase.Monitoring"/>) job against it — plan.md:417 requires the user to
-    /// cancel or wait for these rather than recycling the connection out from under them. A merely
+    /// <see cref="GenerationJobPhase.Monitoring"/>) job against it — the user must cancel or wait for
+    /// these rather than recycling the connection out from under them. A merely
     /// <see cref="GenerationJobPhase.Queued"/> job never blocks recycling; see
     /// <see cref="CancelQueuedJobsForConnection"/> for the cascade that handles those instead.</summary>
     public bool IsConnectionActivelyInUse(string connectionId)
@@ -938,22 +937,22 @@ public sealed class GenerationQueueService
     /// <summary>True while any job (queued, running, monitoring or dependency-paused) still belongs
     /// to this workspace — the predicate <see cref="AppLibraryState.RegisterKeepOpenPredicate"/>
     /// registers so a library the user switches away from stays open and locked while it has active
-    /// work (plan.md:423-424), rather than being disposed and taking that work down with it.</summary>
+    /// work, rather than being disposed and taking that work down with it.</summary>
     public bool HasActiveWorkFor(ILibraryWorkspace workspace)
     {
         lock (_gate) return _jobsById.Values.Any(job => ReferenceEquals(job.Workspace, workspace));
     }
 
     /// <summary>Count of active jobs against this workspace, for a global activity indicator grouped
-    /// by library (plan.md:425).</summary>
+    /// by library.</summary>
     public int GetActiveJobCountForWorkspace(ILibraryWorkspace workspace)
     {
         lock (_gate) return _jobsById.Values.Count(job => ReferenceEquals(job.Workspace, workspace));
     }
 
     /// <summary>Submitted-tab titles of every still-queued (never yet submitted) job that depends on
-    /// this connection — for a recycle-confirmation cascade warning, matching plan.md:419's "included
-    /// in the cascade warning" requirement.</summary>
+    /// this connection — for a recycle-confirmation cascade warning, since these jobs must be
+    /// included in it.</summary>
     public IReadOnlyList<string> GetQueuedJobTitlesForConnection(string connectionId)
     {
         lock (_gate) return _jobsById.Values.Where(job => job.ConnectionId == connectionId && IsPreSubmissionPhase(job.Phase)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
@@ -966,7 +965,7 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>Submitted-tab titles of every job (queued or already dependency-paused) that
-    /// references this file, for a recycle/permanent-deletion preview (plan.md:409-410).</summary>
+    /// references this file, for a recycle/permanent-deletion preview.</summary>
     public IReadOnlyList<string> GetQueuedJobTitlesForFile(string fileId)
     {
         lock (_gate) return _jobsById.Values.Where(job => IsPreSubmissionPhase(job.Phase) && ReferencesFile(job.Snapshot, fileId)).Select(job => job.Snapshot.SubmittedTabTitle).ToArray();
@@ -979,8 +978,8 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>Cascade-cancels every still-queued (never yet submitted) job depending on this
-    /// connection — called after the user confirms a recycle-connection cascade warning
-    /// (plan.md:419). A job that already reached <see cref="GenerationJobPhase.Running"/> or
+    /// connection — called after the user confirms a recycle-connection cascade warning.
+    /// A job that already reached <see cref="GenerationJobPhase.Running"/> or
     /// <see cref="GenerationJobPhase.Monitoring"/> is never touched here; recycling is blocked
     /// entirely while one of those exists (see <see cref="IsConnectionActivelyInUse"/>), so by the
     /// time this runs only genuinely never-submitted jobs remain.</summary>
@@ -1045,15 +1044,15 @@ public sealed class GenerationQueueService
         if (changed) RaiseChanged();
     }
 
-    /// <summary>Pauses every still-queued job whose source-image slot references this file
-    /// (plan.md:413) — called after a source file is recycled.</summary>
+    /// <summary>Pauses every still-queued job whose source-image slot references this file —
+    /// called after a source file is recycled.</summary>
     public void NotifyFileRecycled(string fileId) => MarkDependencyRecycled(fileId, ReferencesFile);
 
     /// <summary>Resumes a paused job once every dependency it was waiting on (this file included) is
-    /// restored (plan.md:414) — called after a source file is restored from the recycle bin.</summary>
+    /// restored — called after a source file is restored from the recycle bin.</summary>
     public void NotifyFileRestored(string fileId) => MarkDependencyRestored(fileId, ReferencesFile);
 
-    /// <summary>Marks every job referencing this file as permanently non-runnable (plan.md:415) —
+    /// <summary>Marks every job referencing this file as permanently non-runnable —
     /// called after a source file is permanently deleted.</summary>
     public void NotifyFilePermanentlyDeleted(string fileId) => MarkDependencyPermanentlyDeleted(fileId, ReferencesFile);
 
@@ -1132,7 +1131,7 @@ public sealed class GenerationQueueService
                     var index = (_cursor + i) % count;
                     var connectionId = _connectionOrder[index];
                     if (!_queues.TryGetValue(connectionId, out var queue) || queue.Count == 0) continue;
-                    // A dependency-recycled job keeps its place in the queue (plan.md:413) but is
+                    // A dependency-recycled job keeps its place in the queue but is
                     // never itself eligible to start — later, unaffected jobs on the same connection
                     // must still be able to run around it rather than stalling behind it.
                     var node = queue.First;
@@ -1160,7 +1159,7 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>
-    /// Proactive backoff per plan.md: once a connection's last-observed remaining request quota
+    /// Proactive backoff: once a connection's last-observed remaining request quota
     /// (from the OpenAI-documented <c>x-ratelimit-remaining-requests</c> header — see
     /// <see cref="RateLimitHeaderParser"/>) hits zero and its reset window hasn't elapsed yet, new
     /// submissions on that connection wait rather than being sent into a near-certain 429.
@@ -1226,7 +1225,7 @@ public sealed class GenerationQueueService
         JobCompleted?.Invoke(this, outcome);
         RaiseChanged();
         Pump();
-        // plan.md:430 — a background-kept library's lock is released once its last operation
+        // A background-kept library's lock is released once its last operation
         // completes. A no-op for the still-active workspace or one with other jobs still pending.
         if (!HasActiveWorkFor(job.Workspace)) _ = _libraries.ReleaseBackgroundWorkspaceIfIdleAsync(job.Workspace);
         _diagnostics?.Log(new DiagnosticLogEntry(
@@ -1347,8 +1346,8 @@ public sealed class GenerationQueueService
             if (job.SuspendedByOperatingSystem)
             {
                 // The OS suspending background execution is a known, local cause — recorded as a
-                // distinct Failed reason rather than blaming the provider (plan.md: "Android
-                // execution suspension and timeout are recorded separately from provider failure"),
+                // distinct Failed reason rather than blaming the provider (Android execution
+                // suspension and timeout are recorded separately from provider failure),
                 // matching how any other local failure (e.g. LocalFailureOutcome) always finalizes to
                 // a terminal state rather than leaving the record stranded non-terminal.
                 AdvanceLocked(job, GenerationStatus.Failed, failureReason: GenerationFailureReason.ExecutionSuspended);
@@ -1376,9 +1375,9 @@ public sealed class GenerationQueueService
     /// <summary>
     /// Runs a video generation to completion. A request for more than one result submits that many
     /// independent provider jobs up front — <see cref="IProviderAdapter.SubmitVideoGenerationAsync"/>
-    /// never accepts more than one result per call — and polls all of them as one indivisible group,
-    /// matching plan.md's "a generation which requires multiple separate provider submissions
-    /// occupies one queue position as an indivisible group" rule; the final record reflects whichever
+    /// never accepts more than one result per call — and polls all of them as one indivisible group;
+    /// a generation which requires multiple separate provider submissions occupies one queue
+    /// position as an indivisible group. The final record reflects whichever
     /// jobs actually completed (partial success is possible, matching every other multi-result mode).
     /// Each job is persisted in the device-wide pending-job registry so it is at least
     /// visible/inspectable if the process exits mid-poll.
@@ -1390,16 +1389,16 @@ public sealed class GenerationQueueService
     /// work and reporting it as "Cancelled Before Submission" would be false.
     /// Once at least one job is durably accepted, this releases the connection's queue submission
     /// slot immediately (<see cref="ReleaseSubmissionSlotEarly"/>) rather than holding it through the
-    /// whole poll duration, matching plan.md's "an asynchronous job releases its submission slot
-    /// after the provider durably accepts it" rule — the job moves to
+    /// whole poll duration — an asynchronous job releases its submission slot after the provider
+    /// durably accepts it, so the job moves to
     /// <see cref="GenerationJobPhase.Monitoring"/> and no longer counts against the device-wide or
     /// per-connection concurrency cap while only polling for status.
     /// Known limitation, not yet addressed: polling does not resume automatically after an
-    /// application restart — that needs separate queue-scheduler work tracked in milestone3.md.
+    /// application restart — that needs separate queue-scheduler work.
     /// If the final commit fails because the destination library's volume is disconnected
     /// (checked via <see cref="ILibraryAvailabilityProbe"/> only once bytes are already in hand —
     /// never for an ordinary provider/validation failure), the downloaded result files are staged
-    /// into device-wide recovery storage instead of being discarded (plan.md:322-334) and the
+    /// into device-wide recovery storage instead of being discarded and the
     /// returned record is null with <c>StagedForRecovery</c> true. Both new dependencies are
     /// optional constructor params — a harness that omits them gets the pre-recovery-staging
     /// behavior (an ordinary local failure) unchanged.
@@ -1514,8 +1513,8 @@ public sealed class GenerationQueueService
                         files.AddRange(pollResult.Files);
                         if (pollResult.Cost is { } cost)
                         {
-                            // Only a run-level total is kept, matching plan.md's "SlopFactory never
-                            // divides a run total among output sidecars" rule — a per-child cost
+                            // Only a run-level total is kept — SlopFactory never divides a run total
+                            // among output sidecars — a per-child cost
                             // breakdown isn't modeled since there's no per-child result identity yet.
                             totalCost = (totalCost ?? 0) + cost.Amount;
                             costCurrency ??= cost.Currency;
@@ -1564,7 +1563,7 @@ public sealed class GenerationQueueService
             // The destination volume is gone — not some other storage fault, which is why the
             // availability probe is checked only after catching a storage-shaped exception, never
             // for an ordinary provider/validation failure. Stage every already-downloaded file
-            // instead of silently discarding real, already-completed provider work (plan.md:323),
+            // instead of silently discarding real, already-completed provider work,
             // tagged with its intended generation record/position so a later reconciliation pass can
             // commit it into that exact record once the library returns.
             for (var position = 0; position < files.Count; position++)
@@ -1703,12 +1702,12 @@ public sealed class GenerationQueueService
     }
 
     /// <summary>
-    /// Starts/stops Android's foreground background-execution service (plan.md:263-272) to match
+    /// Starts/stops Android's foreground background-execution service to match
     /// whether any job actually needs it — <see cref="GenerationJobPhase.Running"/> (actively
     /// uploading/reading) or <see cref="GenerationJobPhase.Monitoring"/> (actively polling a
     /// submitted async job). A merely <see cref="GenerationJobPhase.Queued"/> job needs no
-    /// background execution yet, matching plan.md:269's "used for active transfers rather than
-    /// indefinite provider-status polling." A no-op on every other platform
+    /// background execution yet — this is used for active transfers rather than
+    /// indefinite provider-status polling. A no-op on every other platform
     /// (<see cref="NullBackgroundExecutionService"/>).
     /// </summary>
     private void UpdateBackgroundExecution()

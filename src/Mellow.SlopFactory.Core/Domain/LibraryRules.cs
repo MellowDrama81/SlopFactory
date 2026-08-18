@@ -25,8 +25,8 @@ public static class LibraryRules
     /// <summary>
     /// The current version of the normalized settings snapshot shape (<see
     /// cref="GenerationSettings"/> plus how a provider adapter interprets it) written into new
-    /// <see cref="GenerationRecord"/> and <see cref="SavedGenerationSetting"/> rows — plan.md:920-921
-    /// / milestone3.md's "signed adapter versioning for normalized snapshot formats," so a record
+    /// <see cref="GenerationRecord"/> and <see cref="SavedGenerationSetting"/> rows — signed adapter
+    /// versioning for normalized snapshot formats, so a record
     /// stays tagged with the format it was actually written under even after a later signed
     /// application update changes how that format is produced or interpreted.
     /// A historical record's own <c>SettingsFormatVersion</c> is never rewritten in place — only a
@@ -300,7 +300,7 @@ public static class LibraryRules
     /// bundled/guessed data (see <see cref="ProviderModelPricing"/>'s own remarks). The lower bound is
     /// deterministic (<paramref name="promptTokens"/> is itself only a rough local estimate — see
     /// <see cref="EstimateTokenCount"/> — but the multiplication itself is exact). The upper bound is
-    /// only "reliable" (plan.md: "use the reliable upper bound of a range") when
+    /// only "reliable" (using the reliable upper bound of a range) when
     /// <paramref name="maxCompletionTokens"/> reflects a real configured cap; with no cap configured,
     /// there is no honest upper bound to show, so <see cref="GenerationCostEstimate.UpperBound"/>
     /// equals the lower bound and <see cref="GenerationCostEstimate.HasReliableUpperBound"/> is
@@ -320,8 +320,7 @@ public static class LibraryRules
         string.IsNullOrEmpty(text) ? 0 : Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
 
     /// <summary>Whether a <see cref="GenerationStatus"/> never returns to an active state — a
-    /// terminal generation cannot be advanced further (plan.md: "a terminal status cannot return to
-    /// an active state").</summary>
+    /// terminal generation cannot be advanced further, no matter what.</summary>
     public static bool IsTerminalGenerationStatus(GenerationStatus status) => status switch
     {
         GenerationStatus.Completed => true,

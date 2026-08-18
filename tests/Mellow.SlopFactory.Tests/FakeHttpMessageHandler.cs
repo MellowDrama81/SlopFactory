@@ -8,7 +8,7 @@ namespace Mellow.SlopFactory.Tests;
 /// A shared, reusable fake HTTP transport for provider-adapter tests. The single-responder
 /// constructors below are the original minimal shape every existing adapter test already uses;
 /// <see cref="Sequenced(Func{HttpRequestMessage,HttpResponseMessage}[])"/> and the canned-response
-/// builders extend it to cover the scenarios the Testing section of plan.md calls for — streaming,
+/// builders extend it to cover the scenarios provider tests call for — streaming,
 /// asynchronous job submission/polling, rate limits, redirects and binary downloads — without every
 /// adapter test hand-rolling its own call-counting closure.
 /// </summary>

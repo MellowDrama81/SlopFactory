@@ -1145,8 +1145,8 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
     }
 
     /// <summary>Builds the exact sidecar JSON a real export with these options would write, without
-    /// exporting anything — lets the GUI show a disclosure preview before the user commits, per
-    /// plan.md:743's "disclosure previews." <see cref="ExportSidecarWriter"/> is internal to this
+    /// exporting anything — lets the GUI show a disclosure preview before the user commits.
+    /// <see cref="ExportSidecarWriter"/> is internal to this
     /// assembly, so this is the seam the Gui project (which has no `InternalsVisibleTo` access) goes
     /// through instead of referencing it directly.</summary>
     public async Task<string> BuildSidecarPreviewAsync(string fileId, ExportSidecarOptions sidecarOptions, CancellationToken cancellationToken = default)
@@ -1341,7 +1341,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             if (File.Exists(destination) && (new FileInfo(destination).Attributes & FileAttributes.ReparsePoint) != 0) throw new LibraryValidationException("A redirected file cannot be replaced during export.");
             temporary = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.slopfactory-exporting");
 
-            // plan.md:603 — the journal durably records the planned temporary object before it's
+            // The journal durably records the planned temporary object before it's
             // created, so a crash in the narrow window before creation is still recoverable.
             if (_exportCleanupJournal is not null)
             {
@@ -1359,7 +1359,7 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
             await _exportFaultInjector.BeforeJournalRemovalAsync(cancellationToken).ConfigureAwait(false);
             if (operationId is not null) await _exportCleanupJournal!.RemoveAsync(operationId, cancellationToken).ConfigureAwait(false);
 
-            // plan.md:649-652 — the outgoing stream above already matched the source, but that only
+            // The outgoing stream above already matched the source, but that only
             // proves what was sent, not what physically landed at the destination (a filesystem quirk
             // or partial flush could still diverge). A mismatch here never marks the source library
             // record corrupt or changed — nothing above touches its ContentState at all — and it is
@@ -2778,14 +2778,13 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
                     var (mediaType, extension) = await MediaTypeDetector.DetectAsync(stagingPath, cancellationToken).ConfigureAwait(false);
                     if (ExpectedMediaTypeCategory(model.Mode) is { } expectedCategory && !mediaType.StartsWith(expectedCategory, StringComparison.Ordinal))
                     {
-                        // Bytes could not be validated as the expected media category (plan.md:
-                        // "the application validates ... expected media category ... When bytes
-                        // cannot be validated as the expected ... type, the result fails and no
-                        // successful media record is created automatically"). A recognized rejection
+                        // Bytes could not be validated as the expected media category — when bytes
+                        // cannot be validated as the expected type, the result fails and no
+                        // successful media record is created automatically. A recognized rejection
                         // (error document/authentication page) is discarded exactly as before — the
                         // staged temporary file is cleaned up by the existing finally block below
                         // since stagingPath is never cleared to empty on that path. Otherwise the
-                        // bytes are genuinely unrecognized, so per plan.md they're held durably for
+                        // bytes are genuinely unrecognized, so they're held durably for
                         // an explicit Retain-as-Unverified-Binary/Discard decision instead.
                         if (ProviderRejectionPayloadClassifier.IsRecognizedRejectionPayload(bytes, mediaType))
                         {

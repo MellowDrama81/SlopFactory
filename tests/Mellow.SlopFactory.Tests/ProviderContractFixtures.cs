@@ -2,14 +2,13 @@ namespace Mellow.SlopFactory.Tests;
 
 /// <summary>
 /// Versioned, sanitized provider response shapes pinned as named constants rather than scattered
-/// inline JSON literals, per plan.md's "provider contract fixtures are versioned so API changes can
-/// be reviewed deliberately" rule. Each name carries a version suffix (<c>V1</c>) — a confirmed
+/// inline JSON literals — provider contract fixtures are versioned so API changes can
+/// be reviewed deliberately. Each name carries a version suffix (<c>V1</c>) — a confirmed
 /// provider API change gets a new <c>V2</c> constant alongside it (never a silent edit to the
 /// existing one) so a reviewer sees the exact shape that changed via a normal diff, and any adapter
 /// test still pinned to the old shape keeps failing loudly until it's deliberately updated.
-/// Every value here reflects a shape the OpenRouter/DeepInfra adapter research this milestone
-/// actually confirmed (see milestone3.md's Provider adapters section for what's confirmed vs.
-/// assumed) — this file does not itself invent any new shape.
+/// Every value here reflects a shape the OpenRouter/DeepInfra adapter research this project
+/// actually confirmed — this file does not itself invent any new shape.
 /// </summary>
 internal static class ProviderContractFixtures
 {

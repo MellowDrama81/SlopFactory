@@ -4,7 +4,7 @@ namespace Mellow.SlopFactory.Gui.Services;
 
 /// <summary>
 /// File-based <see cref="IDiagnosticsLogger"/> — a single JSON-lines file under a device-wide
-/// directory (not per-library, matching plan.md:167's "remain local" without being tied to any one
+/// directory (remains local without being tied to any one
 /// library). Takes a plain directory path rather than a MAUI path-provider interface (unlike
 /// <see cref="IRecoveryStagingPathProvider"/>) so it's directly constructible and testable with a
 /// real temporary directory, the same way <c>LibraryWorkspaceFactory</c> takes a root path.
@@ -67,8 +67,8 @@ public sealed class DiagnosticsLogger : IDiagnosticsLogger
 
     public void EnableVerbose()
     {
-        // Re-activating an already-running period never extends it — plan.md:181's "without
-        // extending the deadline through activity."
+        // Re-activating an already-running period never extends it — reverts
+        // without extending the deadline through activity.
         if (VerboseEnabled) return;
         _preferences.WriteString(VerboseExpiresAtPreferenceKey, (DateTimeOffset.UtcNow + VerboseDuration).ToString("o"));
     }
@@ -123,7 +123,7 @@ public sealed class DiagnosticsLogger : IDiagnosticsLogger
 
     /// <summary>
     /// Applies the 30-day age limit and the 50 MB rolling cap together on every write, oldest
-    /// entries removed first, per plan.md:167-170. Re-reads and (if anything changed) rewrites the
+    /// entries removed first. Re-reads and (if anything changed) rewrites the
     /// whole file — a deliberately simple approach rather than a true multi-file rolling log, which
     /// is acceptable for occasional diagnostic events rather than a high-frequency logging hot path.
     /// </summary>

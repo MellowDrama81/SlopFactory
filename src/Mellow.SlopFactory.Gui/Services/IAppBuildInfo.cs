@@ -1,6 +1,6 @@
 namespace Mellow.SlopFactory.Gui.Services;
 
-/// <summary>plan.md:40 — the distribution channel, semantic version and platform build number shown in About and diagnostics.</summary>
+/// <summary>The distribution channel, semantic version and platform build number shown in About and diagnostics.</summary>
 public interface IAppBuildInfo
 {
     string Channel { get; }
@@ -9,7 +9,7 @@ public interface IAppBuildInfo
     string ApplicationId { get; }
 
     /// <summary>
-    /// plan.md:45 — a static HTTPS link to the official download page, with no SlopFactory-added
+    /// A static HTTPS link to the official download page, with no SlopFactory-added
     /// tracking parameters. Null until a real release pipeline supplies one via
     /// /p:SlopFactoryDownloadPageUrl=..., since no official project site exists yet.
     /// </summary>

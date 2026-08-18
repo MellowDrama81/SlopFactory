@@ -3,8 +3,8 @@ using System.Text.RegularExpressions;
 namespace Mellow.SlopFactory.Domain;
 
 /// <summary>
-/// A single connection's most recently observed rate-limit state, per plan.md's "per-connection
-/// rate-limit state (last observed limit, remaining, reset time)". Request and token dimensions are
+/// A single connection's most recently observed per-connection
+/// rate-limit state (last observed limit, remaining, reset time). Request and token dimensions are
 /// independent since a provider can report either, both or neither on a given response.
 /// </summary>
 public sealed record RateLimitObservation(

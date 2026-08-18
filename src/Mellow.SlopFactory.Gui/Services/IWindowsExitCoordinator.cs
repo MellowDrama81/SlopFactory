@@ -2,7 +2,7 @@ namespace Mellow.SlopFactory.Gui.Services;
 
 /// <summary>
 /// Coordinates the Windows **Keep Running** / **Cancel Work and Exit** / **Return to App** decision
-/// (plan.md:440-448) between the native window-close interception (Windows-only,
+/// between the native window-close interception (Windows-only,
 /// `Platforms/Windows/App.xaml.cs`) and the Blazor-rendered confirmation dialog
 /// (`MainLayout.razor`). Registered on every platform (harmless — nothing on Android ever calls
 /// <see cref="RequestDecision"/>, since Android has no equivalent window-close gate).
@@ -12,8 +12,8 @@ public interface IWindowsExitCoordinator
     /// <summary>True while the confirmation dialog should be showing.</summary>
     bool PendingDecision { get; }
 
-    /// <summary>Whether the user has previously chosen to remember **Keep Running**
-    /// (plan.md:447) — read by the native close handler to skip the dialog entirely next time.</summary>
+    /// <summary>Whether the user has previously chosen to remember **Keep Running** —
+    /// read by the native close handler to skip the dialog entirely next time.</summary>
     bool RememberedKeepRunning { get; }
 
     void SetRememberedKeepRunning(bool value);
@@ -22,7 +22,7 @@ public interface IWindowsExitCoordinator
     /// remembered choice to apply automatically.</summary>
     void RequestDecision();
 
-    /// <summary>plan.md:441-442 — keeps the process and window state; the window itself is hidden
+    /// <summary>Keeps the process and window state; the window itself is hidden
     /// by the native handler listening for <see cref="KeptRunning"/>, not by this call.</summary>
     void KeepRunning(bool remember);
 
@@ -30,7 +30,7 @@ public interface IWindowsExitCoordinator
     /// so the native handler can perform the real process exit.</summary>
     Task CancelWorkAndExitAsync();
 
-    /// <summary>plan.md:439 (semantics reused for the active-work dialog) — leaves everything
+    /// <summary>Semantics reused for the active-work dialog — leaves everything
     /// unchanged; the window was already prevented from closing.</summary>
     void ReturnToApp();
 

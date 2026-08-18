@@ -3,7 +3,7 @@
   <application android:allowBackup="false" android:fullBackupContent="false" android:supportsRtl="true" android:usesCleartextTraffic="false" />
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-  <!-- plan.md:263-272 — required to keep an active video-generation upload/poll alive while the app
+  <!-- Required to keep an active video-generation upload/poll alive while the app
        isn't in the foreground; DATA_SYNC matches GenerationForegroundService's declared
        ForegroundServiceType and is the closest documented Android 14+ category to "user-initiated
        background data transfer" of the ones Android defines. -->

@@ -65,7 +65,7 @@ public sealed class AndroidManifestBuildVerificationTests
             .ToArray();
         Assert.DoesNotContain(actions, name => name.StartsWith("android.intent.action.OPEN_DOCUMENT", StringComparison.Ordinal) || name == "android.intent.action.CREATE_DOCUMENT");
 
-        // The foreground service backing background transfers (plan.md:263-272) is declared with the
+        // The foreground service backing background transfers is declared with the
         // matching foregroundServiceType, not merely present.
         var service = manifest.Descendants("service").FirstOrDefault(element => ((string?)element.Attribute(Android + "name"))?.EndsWith(".GenerationForegroundService", StringComparison.Ordinal) == true);
         Assert.NotNull(service);

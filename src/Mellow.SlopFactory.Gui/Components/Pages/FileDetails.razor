@@ -784,7 +784,7 @@ else
     private async Task CommitReplacementAsync()
     {
         if (LibraryState.Workspace is null || _replacementReview is null) return;
-        // plan.md:556 — a file actively pinned by a queued/running generation using it as a source
+        // A file actively pinned by a queued/running generation using it as a source
         // input cannot be replaced or accepted until the pin releases or the work is cancelled.
         if (Queue.IsFileActivelyInUse(Id))
         {
@@ -986,7 +986,7 @@ else
         public bool IncludeUsageAndCost { get; set; }
         public bool IncludeAdvancedSettings { get; set; }
 
-        // plan.md's opt-ins this app has no supporting data for yet — present so the user can see
+        // Opt-ins this app has no supporting data for yet — present so the user can see
         // they're deliberately unavailable rather than silently absent, never selectable.
         public ExportSidecarOptions ToOptions() => new(WriteSidecar, IncludePrompt, IncludeSensitiveMetadata: false, IncludeFilenames, IncludeInternalIdentifiers, IncludeUsageAndCost, IncludeAdvancedSettings, IncludeSafetyMetadata: false);
     }
@@ -995,7 +995,7 @@ else
     private string? _sidecarPreview;
     private bool _sidecarPreviewBusy;
 
-    /// <summary>plan.md:743's "disclosure preview" — shows the exact JSON a real export with the
+    /// <summary>Disclosure preview — shows the exact JSON a real export with the
     /// currently checked options would write, without exporting anything, so the user can see what
     /// they're about to disclose before committing to it.</summary>
     private async Task PreviewSidecarAsync()
@@ -1023,7 +1023,7 @@ else
         try
         {
             var (result, sidecar) = await PlatformFiles.ExportAsync(LibraryState.Workspace, _file, changedBytes: false, _sidecarForm.ToOptions());
-            // plan.md:649-652 — a destination read-back mismatch recommends an integrity scan rather
+            // A destination read-back mismatch recommends an integrity scan rather
             // than silently retrying or claiming the failure means the source library file is
             // corrupt (nothing about this failure touches its ContentState at all).
             if (result.Outcome == FileExportOutcome.VerificationFailed) ScanRecommendation.Recommend(IntegrityScanRecommendationReason.StorageInconsistency);

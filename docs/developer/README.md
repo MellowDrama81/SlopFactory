@@ -1,6 +1,6 @@
 # SlopFactory developer documentation
 
-This directory documents behavior that is implemented and verified. Remaining requirements stay in [`plan.md`](../../plan.md) until their implementation and tests are complete.
+This directory documents behavior that is implemented and verified.
 
 ## Documents
 

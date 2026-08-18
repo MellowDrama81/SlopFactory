@@ -220,7 +220,7 @@
     @if (_scanProgress is not null)
     {
         <!-- Not an aria-live region: this text changes per scanned file, which would otherwise
-             re-announce on every single one across a large library (plan.md:161). The scan's
+             re-announce on every single one across a large library. The scan's
              completion is already announced separately once _scanReport is set (role="status"
              region below). -->
         <div class="scan-progress" aria-live="off">
@@ -536,15 +536,15 @@
         await SwitchAsync();
     }
 
-    /// <summary>plan.md:428 — a library with active queued/running/monitoring work cannot be
+    /// <summary>A library with active queued/running/monitoring work cannot be
     /// forgotten, whether it is the currently active library or one kept open in the background.</summary>
     private bool HasActiveWork(RecentLibrary library) => LibraryState.HasActiveWorkFor(library.LibraryId);
 
-    /// <summary>plan.md:459 — blocks ordinary Forget Library while unreconciled emergency draft
+    /// <summary>Blocks ordinary Forget Library while unreconciled emergency draft
     /// markers exist for this library, since they may be the only record that unsaved work exists.</summary>
     private bool HasDirtyDrafts(RecentLibrary library) => LibraryState.GetDirtyDraftCount(library.LibraryId) > 0;
 
-    /// <summary>plan.md:463 — blocks ordinary Forget Library while completed provider results remain
+    /// <summary>Blocks ordinary Forget Library while completed provider results remain
     /// staged for recovery for this library.</summary>
     private bool HasStagedResults(RecentLibrary library) => RecoveryStaging.GetAll().Any(entry => entry.LibraryId == library.LibraryId);
 
@@ -560,11 +560,11 @@
     }
 
     /// <summary>**Delete Recovery Drafts and Forget** / **Discard Staged Results and Forget**
-    /// combined (plan.md:460-461, 464-465): explicitly clears whichever device-local recovery data
+    /// combined: explicitly clears whichever device-local recovery data
     /// blocks the ordinary Forget above, then completes the normal forget workflow. Never touches the
     /// library's own database — dirty-draft markers and staged results are both device-local-only
-    /// state, not library content, matching plan.md:462's "does not enter the library recycle bin"
-    /// rule (there is nothing library-side to recycle).</summary>
+    /// state, not library content, and do not enter the library recycle bin
+    /// (there is nothing library-side to recycle).</summary>
     private async Task ForceForgetRecentAsync()
     {
         if (_forceForgetCandidate is null || IsActive(_forceForgetCandidate) || HasActiveWork(_forceForgetCandidate)) return;

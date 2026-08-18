@@ -5,8 +5,8 @@ namespace Mellow.SlopFactory.Infrastructure.Providers;
 
 /// <summary>
 /// Validates a provider-hosted result URL (a downloadable video/asset URL returned in a provider's
-/// JSON response, as opposed to inline base64 bytes) before it is fetched, per plan.md's rule that
-/// "a result URL from a public-internet connection cannot target or redirect to loopback,
+/// JSON response, as opposed to inline base64 bytes) before it is fetched: a result URL from a
+/// public-internet connection cannot target or redirect to loopback,
 /// link-local, private, multicast or unspecified network addresses." Host resolution is injected
 /// rather than hardcoded to <see cref="Dns"/> so callers — and this class's own tests — never
 /// perform a real DNS lookup against a literal test hostname.

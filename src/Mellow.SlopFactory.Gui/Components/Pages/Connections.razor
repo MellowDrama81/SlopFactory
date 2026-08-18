@@ -169,7 +169,7 @@ else
         _busy = true;
         try
         {
-            // plan.md:419 — recycling cancels every still-queued (never yet submitted) job on this
+            // Recycling cancels every still-queued (never yet submitted) job on this
             // connection, having already shown their count in the cascade warning above.
             Queue.CancelQueuedJobsForConnection(connectionId);
             await LibraryState.Workspace!.RecycleConnectionAsync(connectionId);

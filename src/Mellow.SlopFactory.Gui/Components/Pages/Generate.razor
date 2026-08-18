@@ -1067,7 +1067,7 @@ else
 
     private int EstimatedTokenCount => LibraryRules.EstimateTokenCount(_form.SystemInstructions) + LibraryRules.EstimateTokenCount(_form.Prompt);
 
-    // Pre-generation cost estimates (plan.md's "non-billable estimate endpoint" — never bundled/
+    // Pre-generation cost estimates (a non-billable estimate endpoint — never bundled/
     // guessed pricing) are only available where a live fetch of the connection's own model-list
     // endpoint actually returns per-token pricing; today that's confirmed only for OpenRouter's
     // Text-mode models (see ProviderModelPricing's own remarks). The fetch happens once, on model

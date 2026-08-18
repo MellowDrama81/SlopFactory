@@ -3,8 +3,8 @@
 Confirmed 2026-08-17 against 1min.AI's published documentation (<https://docs.1min.ai/docs/api/intro>)
 **and** live API calls made with an explicit user-approved budget (well under the 100,000-credit
 ceiling given — see "Live verification results" below for what was actually spent). This supersedes
-the "docs site could not be fetched at all" status recorded in `docs/developer/architecture.md` and
-`milestone3.md` — the documentation exists, is fetchable, and one representative model per modality
+the "docs site could not be fetched at all" status previously recorded in `docs/developer/architecture.md`
+— the documentation exists, is fetchable, and one representative model per modality
 (chat, image, audio, video) has now been exercised end to end.
 
 **Caveat that still applies:** only one model was live-tested per modality. The other 40 image models
@@ -19,7 +19,7 @@ Bearer`) plus `Content-Type: application/json`.
 
 ## Chat — `POST /api/chat-with-ai`
 
-Matches plan.md's "Chat requests use its unified chat API."
+Chat requests use its unified chat API.
 
 - Streaming variant: `POST /api/chat-with-ai?isStreaming=true` (SSE: `content`, `result`, `done`,
   `error` events, `event: <type>\ndata: <JSON>` format).
@@ -61,15 +61,15 @@ Matches plan.md's "Chat requests use its unified chat API."
 
 ## AI Feature API — `POST /api/features` (image, audio, video, writing, code)
 
-Matches plan.md's "image, audio and video generation use its AI Feature API with feature-specific
-request parameters." One unified endpoint and response envelope for every feature type; the
+Image, audio and video generation use its AI Feature API with feature-specific
+request parameters. One unified endpoint and response envelope for every feature type; the
 `type`/`model`/`promptObject` fields vary per feature.
 
 - Streaming variant: `POST /api/features?isStreaming=true` (for feature types that support it).
 - Request shape: `{"type": "<FEATURE_TYPE>", "model": "<model id>", "promptObject": {...}, "async":
   false}`.
-- **Sync vs async is caller-chosen, not fixed per model** (matches plan.md's "long-running feature
-  requests **can** use its asynchronous result polling" — optional, not mandatory):
+- **Sync vs async is caller-chosen, not fixed per model** (long-running feature
+  requests **can** use its asynchronous result polling — optional, not mandatory):
   - Default (`async` omitted or `false`): the HTTP call itself blocks until the result is ready and
     returns `status: "SUCCESS"` directly in the response body — **confirmed live**, including for
     video: a non-`async` `TEXT_TO_VIDEO` request to `lucataco/animate-diff:...` genuinely held the

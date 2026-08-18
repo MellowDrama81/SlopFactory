@@ -6,7 +6,7 @@ namespace Mellow.SlopFactory.Domain;
 /// <summary>
 /// Distinguishes a provider response that failed the expected-media-category check because it's a
 /// recognizable rejection (an HTML error/authentication page, or a JSON error document) from bytes
-/// that are genuinely unrecognized. Per plan.md: "If the non-empty bytes are not recognized as an
+/// that are genuinely unrecognized. If the non-empty bytes are not recognized as an
 /// error document, authentication page or provider-blocked payload, the result review offers Retain
 /// as Unverified Binary or Discard." Recognized rejections are never eligible for retention — only
 /// the unrecognized remainder is.

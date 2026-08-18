@@ -52,8 +52,8 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<BulkExportPreflight> BuildBulkExportPreflightAsync(IReadOnlyCollection<string> fileIds, string destinationDirectory, CancellationToken cancellationToken = default);
     Task<BulkExportResult> ExportFilesAsync(BulkExportPreflight preflight, IReadOnlyDictionary<string, ExportCollisionChoice> collisionChoices, ExportSidecarOptions? sidecarOptions = null, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default);
     /// <summary>Exports the file exactly like <see cref="ExportFileAsync"/>, then — only if that
-    /// succeeded and <paramref name="sidecarOptions"/> requests one (plan.md:752 "commits each media
-    /// object before attempting its sidecar") — writes a `.slopfactory.json` sidecar next to it
+    /// succeeded and <paramref name="sidecarOptions"/> requests one, committing each media
+    /// object before attempting its sidecar — writes a `.slopfactory.json` sidecar next to it
     /// through the same atomic-temp-then-journal path. A sidecar failure never affects the already-
     /// successful media result and never deletes it.</summary>
     Task<(FileExportResult Media, SidecarExportResult? Sidecar)> ExportFileWithSidecarAsync(string fileId, string destinationPath, ExportSidecarOptions sidecarOptions, ExportCollisionChoice collisionChoice = ExportCollisionChoice.Fail, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
@@ -130,7 +130,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
 
     /// <summary>Active generation records by default (matching <c>GenerationHistory.razor</c>'s
     /// existing semantics — a recycled record belongs on the Recycle Bin page, not here). Pass
-    /// <paramref name="includeRecycled"/> for a view like the cost summary, where plan.md requires
+    /// <paramref name="includeRecycled"/> for a view like the cost summary, which requires
     /// recycled history included by default because recycling a generation record never undoes its
     /// already-incurred provider cost.</summary>
     Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(bool includeRecycled = false, CancellationToken cancellationToken = default);

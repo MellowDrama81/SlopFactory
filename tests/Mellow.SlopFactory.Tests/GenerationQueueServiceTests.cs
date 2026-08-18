@@ -832,7 +832,7 @@ public sealed class GenerationQueueServiceTests
         await WaitUntilAsync(() => queue.GetLastOutcomeForDraft("draft-running") is not null);
         Assert.NotNull(queue.GetLastOutcomeForDraft("draft-running")!.Record);
 
-        // plan.md:430 — the background lock releases once the last operation completes.
+        // The background lock releases once the last operation completes.
         await WaitUntilAsync(() => !libraries.BackgroundLibraries.Any(entry => entry.LibraryId == libraryId));
         Assert.False(libraries.HasActiveWorkFor(libraryId));
     }
@@ -1897,7 +1897,7 @@ public sealed class GenerationQueueServiceTests
         var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
 
         // The first job starts running (needs background execution); the second stays merely
-        // Queued behind it — plan.md:269's "active transfers", not indefinite queue waiting.
+        // Queued behind it — "active transfers", not indefinite queue waiting.
         queue.Enqueue(Snapshot("draft-1", model.Id, "prompt1", workspace.Descriptor.GeneratedFolderId), connection.Id);
         queue.Enqueue(Snapshot("draft-2", model.Id, "prompt2", workspace.Descriptor.GeneratedFolderId), connection.Id);
         await WaitUntilAsync(() => adapter.InvokedPrompts.Contains("prompt1"));

@@ -18,7 +18,7 @@ internal sealed class AndroidBackgroundExecutionService : IBackgroundExecutionSe
     {
         var context = global::Android.App.Application.Context;
         if (context is null) return;
-        // plan.md:267 — the notification permission is requested only when background transfer
+        // The notification permission is requested only when background transfer
         // behavior is first actually needed, not proactively at app launch.
         if (OperatingSystem.IsAndroidVersionAtLeast(33)
             && ContextCompat.CheckSelfPermission(context, global::Android.Manifest.Permission.PostNotifications) != global::Android.Content.PM.Permission.Granted)

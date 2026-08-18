@@ -7,10 +7,10 @@ namespace Mellow.SlopFactory.Gui.Services;
 
 /// <summary>
 /// Foreground service keeping an active video-generation upload/poll alive while SlopFactory isn't
-/// in the foreground (plan.md:263-272) — Android aggressively suspends ordinary background work,
+/// in the foreground — Android aggressively suspends ordinary background work,
 /// unlike Windows. Started/stopped by <see cref="AndroidBackgroundExecutionService"/>, never on its
-/// own (plan.md:271 — a generation is never started automatically during device boot, which is
-/// trivially true here since nothing in this app has a boot receiver at all).
+/// own — a generation is never started automatically during device boot, which is
+/// trivially true here since nothing in this app has a boot receiver at all.
 /// </summary>
 [Service(Exported = false, ForegroundServiceType = global::Android.Content.PM.ForegroundService.TypeDataSync)]
 public sealed class GenerationForegroundService : Service
@@ -67,7 +67,7 @@ public sealed class GenerationForegroundService : Service
         return new NotificationCompat.Builder(this, ChannelId)
             .SetContentTitle("SlopFactory")
             .SetContentText(statusText)
-            // plan.md:268 — warns that leaving may interrupt the operation, since this ongoing
+            // Warns that leaving may interrupt the operation, since this ongoing
             // notification is itself the visible warning that background execution is in progress
             // and Android's own OS-level suspension risk still applies if it's dismissed/denied.
             .SetOngoing(true)

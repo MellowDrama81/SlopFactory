@@ -5,7 +5,7 @@ using Mellow.SlopFactory.Domain;
 namespace Mellow.SlopFactory.Infrastructure;
 
 /// <summary>
-/// Builds a `.slopfactory.json` sidecar document (plan.md:663-761) for one exported
+/// Builds a `.slopfactory.json` sidecar document for one exported
 /// <see cref="FileRecord"/>. Privacy-minimal by default: only <see cref="ExportSidecarOptions"/>'s
 /// explicit opt-ins add anything beyond identity/size/hash/timestamps and (if the file has a known
 /// originating generation) a label-only provider/model snapshot and provenance state. Deterministic:
@@ -17,7 +17,7 @@ internal static class ExportSidecarWriter
 {
     /// <summary>Matches the `$id` in the published schema doc (docs/developer/slopfactory-sidecar.schema.json).
     /// A future breaking change to the emitted shape must bump both this and
-    /// <see cref="SidecarSchemaVersion"/> together (plan.md:670).</summary>
+    /// <see cref="SidecarSchemaVersion"/> together.</summary>
     public const string SchemaId = "https://slopfactory.app/schema/sidecar/v1.json";
     public const int SidecarSchemaVersion = 1;
 
@@ -45,7 +45,7 @@ internal static class ExportSidecarWriter
             if (options.IncludeInternalIdentifiers)
             {
                 // Never provider request IDs — this app never persists one anywhere to begin with,
-                // so that exclusion (plan.md:705) is automatically satisfied, not a filtered field.
+                // so that exclusion is automatically satisfied, not a filtered field.
                 writer.WriteString("fileId", file.Id);
                 if (generation is not null) writer.WriteString("generationRecordId", generation.Id);
                 if (generation?.ModelId is { } modelId) writer.WriteString("modelId", modelId);
@@ -101,7 +101,7 @@ internal static class ExportSidecarWriter
         var utf8 = stream.ToArray();
         var text = Encoding.UTF8.GetString(utf8);
         // Utf8JsonWriter emits '\n' between properties already on every platform (it does not use
-        // Environment.NewLine), but normalize explicitly since plan.md:665 requires LF
+        // Environment.NewLine), but normalize explicitly since LF is required
         // unconditionally and this is the one detail worth not simply trusting.
         text = text.Replace("\r\n", "\n", StringComparison.Ordinal);
         return text;
@@ -126,7 +126,7 @@ internal static class ExportSidecarWriter
         writer.WriteEndObject();
     }
 
-    /// <summary>plan.md:698-700's four provenance states. <c>current</c> means the generation's
+    /// <summary>The four provenance states. <c>current</c> means the generation's
     /// terminal outcome is exactly what's reflected here; the others flag that the sidecar is
     /// describing something less certain than "this is the live, current record."</summary>
     private static string ProvenanceState(GenerationRecord generation)

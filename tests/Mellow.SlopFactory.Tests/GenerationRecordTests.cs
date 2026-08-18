@@ -521,7 +521,7 @@ public sealed class GenerationRecordTests
         Assert.EndsWith(".bin", retained.ManagedName, StringComparison.Ordinal);
         Assert.Equal(PngSignatureBytes.LongLength, retained.ByteSize);
         Assert.Equal(LibraryRecordState.Active, retained.State);
-        // Export-only per plan.md: never previewable (media type forced to opaque octet-stream
+        // Export-only: never previewable (media type forced to opaque octet-stream
         // regardless of the mismatched bytes' own detected type) and never opened externally.
         Assert.Equal(BuiltInPreviewKind.Unsupported, BuiltInPreviewCapabilities.ForMediaType(retained.MediaType));
 

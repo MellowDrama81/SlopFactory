@@ -28,7 +28,7 @@ public interface IExportJournalSecretStore
 /// <see cref="IExportCleanupJournal"/> implementation backed by device-local JSON (mirroring
 /// <see cref="PendingResultRegistryService"/>'s shape) with each entry authenticated by an
 /// HMAC-SHA256 keyed by a secret held in OS secure storage under its own key — a separate namespace
-/// from connection credentials (plan.md:609), generated once on first use. An entry whose HMAC does
+/// from connection credentials, generated once on first use. An entry whose HMAC does
 /// not verify against the current secret (tampered, or written by a build using a different/lost
 /// secret) is never acted on by <see cref="SweepAsync"/> — it is left in the journal exactly as
 /// found, never deleted or used to authorize a filesystem mutation. Storage access is behind
@@ -163,7 +163,7 @@ public sealed class ExportCleanupJournalService(IExportJournalStorage storage, I
             }
             else
             {
-                // Target Changed (plan.md:610-612) — the path exists but no longer matches what was
+                // Target Changed — the path exists but no longer matches what was
                 // journaled (different type, or a different file entirely); never delete it.
                 var pending = item with { State = (int)ExportCleanupState.CleanupPending };
                 kept.Add(pending);

@@ -34,7 +34,7 @@ public partial class App : Microsoft.Maui.Controls.Application
         window.Stopped += (_, _) => _lifecycle.SetForeground(false);
         window.Stopped += (_, _) => _ = _libraryState.FlushForSuspensionAsync();
         window.Destroying += (_, _) => _ = _libraryState.FlushForSuspensionAsync();
-        // plan.md:184-185's crash detection relies on this NOT having run last time — Destroying is
+        // Crash detection relies on this NOT having run last time — Destroying is
         // the closest existing signal to "the app is genuinely closing," the same one
         // FlushForSuspensionAsync above already treats as the graceful-shutdown point.
         window.Destroying += (_, _) => _diagnostics.MarkSessionEndedNormally();

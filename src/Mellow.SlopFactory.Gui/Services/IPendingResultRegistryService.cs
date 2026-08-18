@@ -1,15 +1,15 @@
 namespace Mellow.SlopFactory.Gui.Services;
 
 /// <summary>
-/// A single staged provider result, per plan.md:322 ("library ID, provider type, connection ID,
-/// remote job ID and status, but never prompts or source content") extended with the minimum extra
-/// fields plan.md:329 requires the recovery-staging list to show (safe filename, media type, size,
+/// A single staged provider result — library ID, provider type, connection ID,
+/// remote job ID and status, but never prompts or source content — extended with the minimum extra
+/// fields the recovery-staging list requires to show (safe filename, media type, size,
 /// generation identifier, validation status). Deliberately carries no prompt, model settings or
 /// source-file content — only enough to let the user identify, preview, export or discard the file,
 /// and to link it back to its owning library and draft once that library is available again.
 /// </summary>
 /// <param name="GenerationRecordId">The durable generation record this staged result belongs to —
-/// plan.md:329's "generation identifier." Null for an entry staged before this field existed; such
+/// its generation identifier. Null for an entry staged before this field existed; such
 /// an entry can still be previewed/exported/discarded manually but is not eligible for automatic
 /// reconciliation, which needs the record to commit into.</param>
 /// <param name="Position">The result position within <paramref name="GenerationRecordId"/> this
