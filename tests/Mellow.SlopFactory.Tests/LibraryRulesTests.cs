@@ -88,6 +88,38 @@ public sealed class LibraryRulesTests
         Assert.Empty(LibraryRules.GetInputSlotCapabilities(providerType, mode));
     }
 
+    [Theory]
+    [InlineData(ProviderType.OpenAi)]
+    [InlineData(ProviderType.GenericOpenAiCompatible)]
+    [InlineData(ProviderType.OpenRouter)]
+    [InlineData(ProviderType.DeepInfra)]
+    public void GetGenerationSettingsCapabilitiesReturnsEveryFieldForTextModeOnOpenAiCompatibleProviders(ProviderType providerType)
+    {
+        var capabilities = LibraryRules.GetGenerationSettingsCapabilities(providerType, GenerationMode.Text);
+
+        Assert.Equal(
+            GenerationSettingsCapability.Temperature | GenerationSettingsCapability.TopP | GenerationSettingsCapability.MaxTokens
+                | GenerationSettingsCapability.FrequencyPenalty | GenerationSettingsCapability.PresencePenalty | GenerationSettingsCapability.AdvancedJson,
+            capabilities);
+    }
+
+    [Fact]
+    public void GetGenerationSettingsCapabilitiesReturnsNoneForOneMinAiTextBecauseItsAdapterIgnoresEveryField()
+    {
+        Assert.Equal(GenerationSettingsCapability.None, LibraryRules.GetGenerationSettingsCapabilities(ProviderType.OneMinAi, GenerationMode.Text));
+    }
+
+    [Theory]
+    [InlineData(ProviderType.OpenAi, GenerationMode.Image)]
+    [InlineData(ProviderType.OpenAi, GenerationMode.Audio)]
+    [InlineData(ProviderType.OpenAi, GenerationMode.Video)]
+    [InlineData(ProviderType.DeepInfra, GenerationMode.Video)]
+    [InlineData(ProviderType.OneMinAi, GenerationMode.Image)]
+    public void GetGenerationSettingsCapabilitiesReturnsNoneForEveryNonTextModeOnAnyProvider(ProviderType providerType, GenerationMode mode)
+    {
+        Assert.Equal(GenerationSettingsCapability.None, LibraryRules.GetGenerationSettingsCapabilities(providerType, mode));
+    }
+
     [Fact]
     public void ValidateSourceSlotsAcceptsAssignmentsWithinDeclaredCapabilities()
     {

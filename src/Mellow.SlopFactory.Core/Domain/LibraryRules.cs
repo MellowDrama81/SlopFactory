@@ -265,6 +265,26 @@ public static class LibraryRules
         }
     }
 
+    /// <summary>
+    /// Which <see cref="GenerationSettings"/> fields a provider+mode combination actually transmits.
+    /// Deliberately a small switch, not a stored/persisted schema, mirroring
+    /// <see cref="GetInputSlotCapabilities"/>: only Text mode through the shared
+    /// OpenAI-compatible protocol (OpenAI, the generic OpenAI-compatible adapter, OpenRouter and
+    /// DeepInfra all reuse <c>OpenAiCompatibleProtocol.BuildChatCompletionRequestBody</c>, which
+    /// sends every one of these fields when present) actually honors any of them today. 1min.AI's
+    /// native chat endpoint accepts a <c>GenerationSettings</c> parameter but never reads it — these
+    /// fields have no effect there and were silently ignored before this capability schema existed.
+    /// No adapter's Image/Audio/Video request builder accepts <see cref="GenerationSettings"/> at
+    /// all, so every non-Text mode has no capabilities regardless of provider.
+    /// </summary>
+    public static GenerationSettingsCapability GetGenerationSettingsCapabilities(ProviderType providerType, GenerationMode mode)
+    {
+        if (mode != GenerationMode.Text) return GenerationSettingsCapability.None;
+        if (providerType == ProviderType.OneMinAi) return GenerationSettingsCapability.None;
+        return GenerationSettingsCapability.Temperature | GenerationSettingsCapability.TopP | GenerationSettingsCapability.MaxTokens
+            | GenerationSettingsCapability.FrequencyPenalty | GenerationSettingsCapability.PresencePenalty | GenerationSettingsCapability.AdvancedJson;
+    }
+
     public static int EstimateTokenCount(string? text) =>
         string.IsNullOrEmpty(text) ? 0 : Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
 

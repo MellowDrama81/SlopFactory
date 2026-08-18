@@ -214,10 +214,10 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
 
     /// <summary>
     /// Extracts the provider-reported <c>usage.cost</c> field OpenRouter's video (and image)
-    /// responses include. The currency is not itself part of that response field — OpenRouter's
-    /// billing is USD-denominated, so "USD" is used, but this is an assumption based on their known
-    /// billing model rather than something the API response explicitly states; treat it as
-    /// provisional until confirmed against a live account.
+    /// responses include. The currency is not itself part of that response field, but "USD" is
+    /// correct: OpenRouter's own FAQ documents "OpenRouter uses a credit system where the base
+    /// currency is US dollars. All of the pricing on our site and API is denoted in dollars."
+    /// (https://openrouter.ai/docs/faq, confirmed 2026-08-18).
     /// </summary>
     private static AsyncGenerationCost? ParseCost(JsonElement root)
     {

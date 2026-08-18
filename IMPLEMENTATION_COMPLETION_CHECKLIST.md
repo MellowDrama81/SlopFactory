@@ -248,12 +248,15 @@ misreports OS suspension as a provider failure.
       `NewProviderAdapterTests.cs` (text, image-conditioning rejection, image+download, feature-error
       passthrough, audio+download, video not-implemented, model-discovery not-implemented); full suite
       and Windows/Android builds pass.
-- [ ] Complete all documented OpenRouter modality operations and close known response-shape gaps.
-      Confirmed mostly done: `OpenRouterProviderAdapter` implements all four operations (text, image,
-      audio, video submit/poll) with none throwing "not implemented." The one remaining documented
-      gap is `ParseCost`'s hardcoded `"USD"` currency assumption, flagged in the class's own comment
-      as provisional until confirmed against a live account — left open pending that confirmation
-      rather than guessed at further.
+- [x] Complete all documented OpenRouter modality operations and close known response-shape gaps.
+      `OpenRouterProviderAdapter` implements all four operations (text, image, audio, video
+      submit/poll) with none throwing "not implemented." The one remaining documented gap —
+      `ParseCost`'s hardcoded `"USD"` currency assumption — is now confirmed rather than provisional:
+      OpenRouter's own FAQ (https://openrouter.ai/docs/faq, fetched 2026-08-18) states "OpenRouter
+      uses a credit system where the base currency is US dollars. All of the pricing on our site and
+      API is denoted in dollars." This is public-documentation confirmation, not a live-account test,
+      but it satisfies "verified against real documentation" — the class comment and this note now
+      cite the source instead of flagging it provisional.
 - [x] Complete DeepInfra audio/video operations only for endpoints with confirmed contracts.
       Implemented against the confirmed contract in
       `docs/developer/deepinfra-audio-video-contract.md`. `DeepInfraProviderAdapter.GenerateAudioAsync`
@@ -293,8 +296,36 @@ misreports OS suspension as a provider failure.
       interpretation logic for older versions alongside bumping the constant.
 - [ ] Add provider/model capability schemas for inputs, limits, settings, concurrency and
       instruction-channel behavior.
+      Two of the five now have a real schema, following section 6's `GetInputSlotCapabilities`
+      precedent (a small switch, not a stored/persisted schema): **inputs** — already existed
+      (`GetInputSlotCapabilities`). **settings** — new `LibraryRules.GetGenerationSettingsCapabilities(providerType, mode)`
+      / `GenerationSettingsCapability` flags enum, built after verifying a real, previously-silent gap:
+      `GenerationSettings` (temperature/topP/maxTokens/frequencyPenalty/presencePenalty/advancedJson)
+      was shown and accepted in the GUI for every Text-mode model, but 1min.AI's `GenerateTextAsync`
+      accepts a `GenerationSettings` parameter and never reads it — those fields had silently no
+      effect for that provider. No adapter's Image/Audio/Video request builder accepts
+      `GenerationSettings` at all, so non-Text modes correctly have no capabilities either. The
+      remaining three are not covered by a schema: **limits** — the existing
+      `LibraryRules.MinTemperature`/`MaxTemperature`/etc. constants are global, not per-provider;
+      no adapter documents a *different* numeric range from OpenAI's own documented bounds, so there
+      is nothing to differentiate yet. **concurrency** — no adapter documents a hard parallel-submission
+      ceiling; the existing per-connection cap already defaults conservatively to 1 and is
+      user-adjustable up to 8, which is arguably already the safe behavior a schema would encode, but
+      it isn't expressed as a capability schema. **instruction-channel** — `Model.SupportsSystemInstructions`
+      is already a per-model capability flag, just a bare bool rather than a richer channel schema
+      (unchanged from Milestone 2's own documented scope decision).
 - [ ] Generate structured selectors, sliders, toggles, dimensions and voice controls from those
       schemas.
+      The settings schema above is now wired into `Generate.razor`: each of the six settings controls
+      only renders when `CurrentSettingsCapabilities` includes its flag, and a clear
+      "provider does not support generation settings for this mode" notice replaces the panel entirely
+      when none apply (closing a real capability-rejection gap, not just a schema-completeness one —
+      previously a 1min.AI user could set a temperature that was silently discarded with no
+      indication). No slider/toggle/dimension/voice control exists yet: DeepInfra's audio contract
+      documents an optional `voice` parameter, but `IProviderAdapter.GenerateAudioAsync` has no
+      parameter to carry one for any adapter — wiring it would mean the same kind of adapter-interface
+      change across all five adapters that the source-slots work required, not a bounded UI addition,
+      so it's left open rather than half-built.
 - [x] Implement the bounded advanced JSON editor for manually entered or unknown models.
 - [x] Enforce reserved keys, nesting/size limits, type validation, normalized-request conflict
       detection and sanitized preview for advanced JSON.

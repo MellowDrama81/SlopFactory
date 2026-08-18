@@ -1056,6 +1056,21 @@ public sealed record GenerationSettings(
     public static readonly GenerationSettings Empty = new();
 }
 
+/// <summary>Which <see cref="GenerationSettings"/> fields a specific provider+mode combination
+/// actually transmits to the provider — see <see cref="LibraryRules.GetGenerationSettingsCapabilities"/>
+/// for which adapters honor which flags today.</summary>
+[Flags]
+public enum GenerationSettingsCapability
+{
+    None = 0,
+    Temperature = 1 << 0,
+    TopP = 1 << 1,
+    MaxTokens = 1 << 2,
+    FrequencyPenalty = 1 << 3,
+    PresencePenalty = 1 << 4,
+    AdvancedJson = 1 << 5
+}
+
 /// <summary>
 /// The lifecycle of a provider job tracked by the device-wide pending-job registry. This is
 /// separate from a draft's local queue scheduling (queued/running before submission) and from a

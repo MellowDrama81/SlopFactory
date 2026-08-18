@@ -246,37 +246,62 @@ else
                 <p class="notice error" role="alert">@Strings["DuplicateSourceSelectionError"]</p>
             }
 
-            <details>
-                <summary>@Strings["GenerationSettingsHeading"]</summary>
-                <label for="generate-temperature">@Strings["Temperature"]</label>
-                <InputNumber id="generate-temperature" @bind-Value="_form.Temperature" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
-                <p class="muted">@Strings["TemperatureHelp", LibraryRules.MinTemperature, LibraryRules.MaxTemperature]</p>
+            @if (CurrentSettingsCapabilities == GenerationSettingsCapability.None)
+            {
+                <p class="muted">@Strings["GenerationSettingsUnsupportedByProvider"]</p>
+            }
+            else
+            {
+                <details>
+                    <summary>@Strings["GenerationSettingsHeading"]</summary>
+                    @if (CurrentSettingsCapabilities.HasFlag(GenerationSettingsCapability.Temperature))
+                    {
+                        <label for="generate-temperature">@Strings["Temperature"]</label>
+                        <InputNumber id="generate-temperature" @bind-Value="_form.Temperature" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
+                        <p class="muted">@Strings["TemperatureHelp", LibraryRules.MinTemperature, LibraryRules.MaxTemperature]</p>
+                    }
 
-                <label for="generate-top-p">@Strings["TopP"]</label>
-                <InputNumber id="generate-top-p" @bind-Value="_form.TopP" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
-                <p class="muted">@Strings["TopPHelp", LibraryRules.MinTopP, LibraryRules.MaxTopP]</p>
+                    @if (CurrentSettingsCapabilities.HasFlag(GenerationSettingsCapability.TopP))
+                    {
+                        <label for="generate-top-p">@Strings["TopP"]</label>
+                        <InputNumber id="generate-top-p" @bind-Value="_form.TopP" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
+                        <p class="muted">@Strings["TopPHelp", LibraryRules.MinTopP, LibraryRules.MaxTopP]</p>
+                    }
 
-                <label for="generate-max-tokens">@Strings["MaxTokens"]</label>
-                <InputNumber id="generate-max-tokens" @bind-Value="_form.MaxTokens" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled" />
-                <p class="muted">@Strings["MaxTokensHelp", LibraryRules.MinMaxTokens]</p>
+                    @if (CurrentSettingsCapabilities.HasFlag(GenerationSettingsCapability.MaxTokens))
+                    {
+                        <label for="generate-max-tokens">@Strings["MaxTokens"]</label>
+                        <InputNumber id="generate-max-tokens" @bind-Value="_form.MaxTokens" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled" />
+                        <p class="muted">@Strings["MaxTokensHelp", LibraryRules.MinMaxTokens]</p>
+                    }
 
-                <label for="generate-frequency-penalty">@Strings["FrequencyPenalty"]</label>
-                <InputNumber id="generate-frequency-penalty" @bind-Value="_form.FrequencyPenalty" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
-                <p class="muted">@Strings["FrequencyPenaltyHelp", LibraryRules.MinFrequencyPenalty, LibraryRules.MaxFrequencyPenalty]</p>
+                    @if (CurrentSettingsCapabilities.HasFlag(GenerationSettingsCapability.FrequencyPenalty))
+                    {
+                        <label for="generate-frequency-penalty">@Strings["FrequencyPenalty"]</label>
+                        <InputNumber id="generate-frequency-penalty" @bind-Value="_form.FrequencyPenalty" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
+                        <p class="muted">@Strings["FrequencyPenaltyHelp", LibraryRules.MinFrequencyPenalty, LibraryRules.MaxFrequencyPenalty]</p>
+                    }
 
-                <label for="generate-presence-penalty">@Strings["PresencePenalty"]</label>
-                <InputNumber id="generate-presence-penalty" @bind-Value="_form.PresencePenalty" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
-                <p class="muted">@Strings["PresencePenaltyHelp", LibraryRules.MinPresencePenalty, LibraryRules.MaxPresencePenalty]</p>
+                    @if (CurrentSettingsCapabilities.HasFlag(GenerationSettingsCapability.PresencePenalty))
+                    {
+                        <label for="generate-presence-penalty">@Strings["PresencePenalty"]</label>
+                        <InputNumber id="generate-presence-penalty" @bind-Value="_form.PresencePenalty" @bind-Value:after="ScheduleAutosave" step="0.1" disabled="@FormDisabled" />
+                        <p class="muted">@Strings["PresencePenaltyHelp", LibraryRules.MinPresencePenalty, LibraryRules.MaxPresencePenalty]</p>
+                    }
 
-                <label for="generate-advanced-settings">@Strings["AdvancedGenerationSettings"]</label>
-                <textarea id="generate-advanced-settings" rows="5" maxlength="65536" @bind="_form.AdvancedJson" @bind:event="oninput" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
-                <p class="muted">@Strings["AdvancedGenerationSettingsHelp", LibraryRules.MaximumAdvancedGenerationSettingsJsonBytes]</p>
-                @if (AdvancedSettingsPreview is { } preview)
-                {
-                    <p class="muted">@Strings["AdvancedGenerationSettingsPreview"]</p>
-                    <pre class="metadata-list">@preview</pre>
-                }
-            </details>
+                    @if (CurrentSettingsCapabilities.HasFlag(GenerationSettingsCapability.AdvancedJson))
+                    {
+                        <label for="generate-advanced-settings">@Strings["AdvancedGenerationSettings"]</label>
+                        <textarea id="generate-advanced-settings" rows="5" maxlength="65536" @bind="_form.AdvancedJson" @bind:event="oninput" @bind:after="ScheduleAutosave" disabled="@FormDisabled"></textarea>
+                        <p class="muted">@Strings["AdvancedGenerationSettingsHelp", LibraryRules.MaximumAdvancedGenerationSettingsJsonBytes]</p>
+                        @if (AdvancedSettingsPreview is { } preview)
+                        {
+                            <p class="muted">@Strings["AdvancedGenerationSettingsPreview"]</p>
+                            <pre class="metadata-list">@preview</pre>
+                        }
+                    }
+                </details>
+            }
         }
 
         <label for="generate-prompt">@Strings["Prompt"]</label>
@@ -1247,9 +1272,24 @@ else
         return (ordered.Length > 0 ? ordered[0].FileId : null, ordered.Length > 1 ? ordered[1].FileId : null, ordered.Length > 2 ? ordered[2].FileId : null);
     }
 
-    private GenerationSettings CurrentGenerationSettings() => SelectedModelMode == GenerationMode.Text
-        ? new GenerationSettings(_form.Temperature, _form.TopP, _form.MaxTokens, _form.FrequencyPenalty, _form.PresencePenalty, _form.AdvancedJson)
-        : GenerationSettings.Empty;
+    /// <summary>Which of the settings controls below actually affect the currently selected
+    /// provider+mode — see <see cref="LibraryRules.GetGenerationSettingsCapabilities"/>.</summary>
+    private GenerationSettingsCapability CurrentSettingsCapabilities =>
+        SelectedModelMode is { } mode && SelectedConnection is { } connection
+            ? LibraryRules.GetGenerationSettingsCapabilities(connection.ProviderType, mode)
+            : GenerationSettingsCapability.None;
+
+    private GenerationSettings CurrentGenerationSettings()
+    {
+        var capabilities = CurrentSettingsCapabilities;
+        return new GenerationSettings(
+            capabilities.HasFlag(GenerationSettingsCapability.Temperature) ? _form.Temperature : null,
+            capabilities.HasFlag(GenerationSettingsCapability.TopP) ? _form.TopP : null,
+            capabilities.HasFlag(GenerationSettingsCapability.MaxTokens) ? _form.MaxTokens : null,
+            capabilities.HasFlag(GenerationSettingsCapability.FrequencyPenalty) ? _form.FrequencyPenalty : null,
+            capabilities.HasFlag(GenerationSettingsCapability.PresencePenalty) ? _form.PresencePenalty : null,
+            capabilities.HasFlag(GenerationSettingsCapability.AdvancedJson) ? _form.AdvancedJson : null);
+    }
 
     private string? AdvancedSettingsPreview
     {

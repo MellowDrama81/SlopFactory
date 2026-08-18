@@ -810,6 +810,7 @@
   <data name="SourceImageSlotUsed" xml:space="preserve"><value>Source {0}</value></data>
   <data name="DuplicateSourceSelectionError" xml:space="preserve"><value>The same file cannot be selected in more than one source slot.</value></data>
   <data name="GenerationSettingsHeading" xml:space="preserve"><value>Generation settings</value></data>
+  <data name="GenerationSettingsUnsupportedByProvider" xml:space="preserve"><value>The selected provider does not support generation settings for this mode.</value></data>
   <data name="Temperature" xml:space="preserve"><value>Temperature</value></data>
   <data name="TemperatureHelp" xml:space="preserve"><value>Leave blank to use the provider default. Must be between {0} and {1}.</value></data>
   <data name="TopP" xml:space="preserve"><value>Top P</value></data>
