@@ -322,7 +322,7 @@ else
             }
         </InputSelect>
 
-        <p class="muted">@Strings["CostUnknownNotice"]</p>
+        <p class="muted">@(SelectedModelReportsActualCostAfterGeneration ? Strings["CostReportedAfterGenerationNotice"] : Strings["CostUnknownNotice"])</p>
 
         <div class="actions">
             <button type="submit" disabled="@(FormDisabled || string.IsNullOrEmpty(_form.ModelId) || (SelectedConnection is not null && CredentialBlocked(SelectedConnection)) || HasDuplicateSourceSelection)">
@@ -1019,6 +1019,15 @@ else
 
     private Model? SelectedModel => _models.FirstOrDefault(candidate => candidate.Id == _form.ModelId);
     private GenerationMode? SelectedModelMode => SelectedModel?.Mode;
+
+    /// <summary>Whether the selected provider+mode combination actually populates
+    /// <c>GenerationRecord.ActualCost</c> after a generation completes — only
+    /// <c>OpenRouterProviderAdapter.PollVideoGenerationAsync</c> parses a real
+    /// <c>usage.cost</c> field today (see its `ParseCost`); no other adapter or mode reports one.
+    /// Drives which pre-generation cost notice is shown — "unknown" is actively wrong for this one
+    /// case, since a real number will in fact be recorded once the job completes.</summary>
+    private bool SelectedModelReportsActualCostAfterGeneration =>
+        SelectedConnection?.ProviderType == ProviderType.OpenRouter && SelectedModelMode == GenerationMode.Video;
 
     private int EstimatedTokenCount => LibraryRules.EstimateTokenCount(_form.SystemInstructions) + LibraryRules.EstimateTokenCount(_form.Prompt);
 

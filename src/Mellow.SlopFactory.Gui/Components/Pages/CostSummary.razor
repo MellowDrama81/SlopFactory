@@ -56,6 +56,7 @@ else
             <label for="cost-date-to-filter">@Strings["FilterByDateTo"]
                 <input id="cost-date-to-filter" type="date" @bind="_dateToFilter" />
             </label>
+            <label class="check"><input id="cost-exclude-recycled-filter" type="checkbox" @bind="_excludeRecycled" />@Strings["ExcludeRecycledOperations"]</label>
             <button type="button" class="secondary" @onclick="ClearFilters">@Strings["ClearSearchAndFilters"]</button>
         </div>
     </section>
@@ -115,13 +116,16 @@ else
     private string _providerFilter = string.Empty;
     private DateOnly? _dateFromFilter;
     private DateOnly? _dateToFilter;
+    private bool _excludeRecycled;
 
     protected override async Task OnInitializedAsync()
     {
         await LibraryState.InitializeAsync();
         var workspace = LibraryState.Workspace;
         if (workspace is null) return;
-        var records = await workspace.GetGenerationHistoryAsync();
+        // Recycled history is included by default (plan.md:1615 — recycling never undoes incurred
+        // provider cost); _excludeRecycled below is the opt-out filter, not an opt-in one.
+        var records = await workspace.GetGenerationHistoryAsync(includeRecycled: true);
         _costedRecords = CostSummaryCalculator.ApplyFilters(records);
     }
 
@@ -131,7 +135,7 @@ else
         _dateFromFilter, _dateToFilter,
         string.IsNullOrEmpty(_providerFilter) ? null : Enum.Parse<ProviderType>(_providerFilter),
         string.IsNullOrEmpty(_modeFilter) ? null : Enum.Parse<GenerationMode>(_modeFilter),
-        _modelFilter);
+        _modelFilter, _excludeRecycled);
 
     private IReadOnlyList<CostSummaryGroup> GrandTotals => CostSummaryCalculator.GroupTotalsByCurrency(FilteredRecords);
     private IReadOnlyList<CostSummaryGroup> ByModel => CostSummaryCalculator.GroupTotals(FilteredRecords, record => record.ModelLabel);
@@ -145,6 +149,7 @@ else
         _providerFilter = string.Empty;
         _dateFromFilter = null;
         _dateToFilter = null;
+        _excludeRecycled = false;
     }
 
     private string ProviderLabel(string providerTypeName) => Enum.Parse<ProviderType>(providerTypeName) switch

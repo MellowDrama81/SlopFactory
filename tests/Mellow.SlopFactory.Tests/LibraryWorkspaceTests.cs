@@ -506,6 +506,27 @@ public sealed class LibraryWorkspaceTests
     }
 
     [Fact]
+    public async Task GetGenerationHistoryOnlyIncludesRecycledRecordsWhenExplicitlyAsked()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("GPT", connection.Id, "gpt-4o", GenerationMode.Text, true);
+        var active = await workspace.RecordTextGenerationResultAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, ["result"], null);
+        var recycled = await workspace.RecordTextGenerationResultAsync(model.Id, "another prompt", 1, workspace.Descriptor.GeneratedFolderId, ["result"], null);
+        await workspace.RecycleGenerationRecordAsync(recycled.Id);
+
+        var defaultHistory = await workspace.GetGenerationHistoryAsync();
+        Assert.Equal(active.Id, Assert.Single(defaultHistory).Id);
+
+        var fullHistory = await workspace.GetGenerationHistoryAsync(includeRecycled: true);
+        Assert.Equal(2, fullHistory.Count);
+        Assert.Contains(fullHistory, record => record.Id == active.Id);
+        Assert.Contains(fullHistory, record => record.Id == recycled.Id);
+    }
+
+    [Fact]
     public async Task BatchRestoreAndEmptyRecycleBinOrderLinksSafely()
     {
         using var temporary = new TemporaryDirectory();

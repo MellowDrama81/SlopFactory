@@ -5,9 +5,22 @@ namespace Mellow.SlopFactory.Tests;
 
 public sealed class CostSummaryCalculatorTests
 {
-    private static GenerationRecord Record(string modelLabel, ProviderType providerType, GenerationMode mode, DateTimeOffset createdAt, double? actualCost, string? currency = "USD", GenerationStatus status = GenerationStatus.Completed) =>
+    private static GenerationRecord Record(string modelLabel, ProviderType providerType, GenerationMode mode, DateTimeOffset createdAt, double? actualCost, string? currency = "USD", GenerationStatus status = GenerationStatus.Completed, LibraryRecordState state = LibraryRecordState.Active) =>
         new("id-" + Guid.NewGuid().ToString("N"), "model-id", modelLabel, "provider-model-id", providerType, mode, "prompt", null, 1, status, null,
-            "folder-id", createdAt, createdAt, [], ActualCost: actualCost, ActualCostCurrency: currency);
+            "folder-id", createdAt, createdAt, [], ActualCost: actualCost, ActualCostCurrency: currency, State: state);
+
+    [Fact]
+    public void ApplyFiltersIncludesRecycledRecordsByDefaultBecauseRecyclingDoesNotUndoIncurredCost()
+    {
+        var active = Record("Model", ProviderType.OpenRouter, GenerationMode.Video, DateTimeOffset.UtcNow, 0.10, state: LibraryRecordState.Active);
+        var recycled = Record("Model", ProviderType.OpenRouter, GenerationMode.Video, DateTimeOffset.UtcNow, 0.20, state: LibraryRecordState.Recycled);
+
+        var included = CostSummaryCalculator.ApplyFilters([active, recycled]);
+        Assert.Equal(2, included.Count);
+
+        var excluded = CostSummaryCalculator.ApplyFilters([active, recycled], excludeRecycled: true);
+        Assert.Equal(active.Id, Assert.Single(excluded).Id);
+    }
 
     [Fact]
     public void ApplyFiltersExcludesRecordsWithNoReportedCost()

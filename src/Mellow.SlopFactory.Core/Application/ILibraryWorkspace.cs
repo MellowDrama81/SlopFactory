@@ -128,7 +128,12 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task RestoreModelAsync(string modelId, CancellationToken cancellationToken = default);
     Task PermanentlyDeleteModelAsync(string modelId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken = default);
+    /// <summary>Active generation records by default (matching <c>GenerationHistory.razor</c>'s
+    /// existing semantics — a recycled record belongs on the Recycle Bin page, not here). Pass
+    /// <paramref name="includeRecycled"/> for a view like the cost summary, where plan.md requires
+    /// recycled history included by default because recycling a generation record never undoes its
+    /// already-incurred provider cost.</summary>
+    Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(bool includeRecycled = false, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GenerationRecord>> GetRecycledGenerationHistoryAsync(CancellationToken cancellationToken = default);
     Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default);
     /// <summary>Finds the generation record that produced <paramref name="resultFileId"/>, if any —

@@ -3113,13 +3113,17 @@ internal sealed class SqliteLibraryDatabase
 
     private const string GenerationRecordSelect = "SELECT id,model_id,model_label,provider_model_id,provider_type,mode,prompt,system_instructions,result_count,status,error_message,destination_folder_id,created_at,completed_at,prompt_tokens,completion_tokens,source_file_id,prompt_improvement_record_id,text_format,state,recycled_at,tombstone_source_display_name,tombstone_source_media_type,tombstone_source_content_hash,settings_temperature,settings_top_p,settings_max_tokens,settings_frequency_penalty,settings_presence_penalty,settings_advanced_json,secondary_source_file_id,secondary_tombstone_display_name,secondary_tombstone_media_type,secondary_tombstone_content_hash,tertiary_source_file_id,tertiary_tombstone_display_name,tertiary_tombstone_media_type,tertiary_tombstone_content_hash,safety_blocked_count,actual_cost,actual_cost_currency,hold_reason,failure_reason,settings_format_version FROM generation_records";
 
-    public async Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(bool includeRecycled, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var records = new List<GenerationRecord>();
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = GenerationRecordSelect + " WHERE state=0 ORDER BY created_at DESC;";
+            // Recycled (state=1) is included alongside Active (state=0) only when explicitly asked
+            // for — recycling a generation record never undoes its already-incurred provider cost,
+            // so a cost-aggregating view needs it; PendingPermanentDeletion/Missing/ContentChanged/
+            // ContentReplaced are never included either way, matching the pre-existing behavior.
+            command.CommandText = GenerationRecordSelect + (includeRecycled ? " WHERE state IN (0,1) ORDER BY created_at DESC;" : " WHERE state=0 ORDER BY created_at DESC;");
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadGenerationRecord(reader));
         }

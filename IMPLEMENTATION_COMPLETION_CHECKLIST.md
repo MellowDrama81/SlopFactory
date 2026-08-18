@@ -664,19 +664,73 @@ deleted, and sensitive sidecar fields are never included without a fresh explici
 
 - [ ] Implement pre-generation estimates using only documented local pricing or a non-billable
       estimate endpoint that does not submit prompt/source content without separate consent.
+      Researched rather than assumed blocked: OpenRouter's `/models` list endpoint (already called
+      for model discovery/`TestConnectionAsync`/`ListModelsAsync`) genuinely documents per-model
+      prompt/completion USD pricing and is explicitly the provider's own recommended way to get
+      real-time rates — a real, confirmed, non-billable source for exactly one of five providers.
+      Not implemented: `ParseModelList` only extracts `id`/`name` today, with no pricing field, no
+      storage for a pricing snapshot/revision, and no per-request estimate computation. Left open
+      because a real implementation isn't "parse one more field" — it needs a pricing-revision data
+      model the four items below also depend on (versioning, effective date, "Unreliable" marking),
+      and only 1 of 5 providers has a confirmed source to build it from; the other four have no
+      documented non-billable pricing source at all, so "estimates" for them would mean guessing.
 - [ ] Show deterministic values or reliable ranges with source and effective pricing date.
+      Depends on the pricing-revision data model above, which doesn't exist yet.
 - [ ] Implement the first-use acknowledgement for a model/connection revision whose cost is unknown.
+      plan.md:1588 specifically requires this to reference a "pricing-capability revision" and to
+      state "no configured threshold can be enforced" — both concepts that only mean something once
+      the pricing-estimate and threshold items below exist. Building the acknowledgement gate itself
+      without them would mean inventing what it acknowledges.
 - [ ] Implement device-wide thresholds keyed by exact currency/provider unit and per-connection
       overrides.
+      No threshold concept exists anywhere in this app today (settings, storage or UI).
 - [ ] Compare thresholds only between like units and use the reliable upper bound of a range.
+      Depends on thresholds and estimate ranges, neither of which exist yet.
 - [ ] Store the displayed estimate, source, range, effective date and applied threshold in history.
+      Depends on the estimate/threshold items above.
 - [ ] Compare provider-reported actual cost with the estimate and threshold and highlight material
       overruns.
+      Depends on the estimate/threshold items above; actual cost itself is already captured and
+      displayed (`GenerationRecord.ActualCost`, shown on `GenerationHistoryDetail.razor`) — there is
+      simply nothing to compare it against yet.
 - [ ] Mark a bundled pricing revision **Unreliable** after the specified repeated material overruns.
-- [ ] Finish the cost-summary view with date, provider, connection, model and operation filters.
-- [ ] Correct the current **Cost unknown** notice wherever an adapter reports real cost.
-- [ ] Export opted-in run/per-output/prompt-improvement usage and cost accurately in sidecars,
+      Depends on a bundled pricing-revision concept, which doesn't exist yet.
+- [x] Finish the cost-summary view with date, provider, connection, model and operation filters.
+      Date range, provider, model and operation-type (`GenerationMode`) filters already existed on
+      `CostSummary.razor`. **Connection** is deliberately not a filter dimension — confirmed still
+      correct, not stale: `GenerationRecord` has no connection reference at all (only a snapshotted
+      `ModelId`/`ModelLabel`/`ProviderType`), so there is nothing to filter by without a join through
+      `Model` that could easily point at a deleted model. Fixed a real gap while re-verifying this
+      item: `GetGenerationHistoryAsync` (and therefore the cost summary) only ever queried
+      `state=0` (Active) — recycled generation records were silently excluded from cost totals
+      entirely, even though plan.md:1615 explicitly requires them included by default ("recycling
+      does not undo incurred usage"), with only an opt-out filter to exclude them. Added an
+      `includeRecycled` parameter (default `false`, preserving `GenerationHistory.razor`'s existing
+      active-only semantics) and wired `CostSummary.razor` to pass `true`, plus a new **Exclude
+      recycled operations** checkbox and a matching `CostSummaryCalculator.ApplyFilters` parameter.
+      Two new tests cover the workspace-level query and the calculator-level filter.
+- [x] Correct the current **Cost unknown** notice wherever an adapter reports real cost.
+      Fixed a real, verified gap: `Generate.razor` showed "Cost unknown" unconditionally for every
+      provider and mode, but `OpenRouterProviderAdapter.PollVideoGenerationAsync` genuinely does parse
+      and report a real `usage.cost` for OpenRouter video generations (confirmed — the only
+      adapter/mode combination that populates `ActualCost` today; no other adapter or mode does). The
+      notice now conditionally shows a different, accurate message
+      ("...this provider reports the actual cost once generation completes...") specifically for that
+      one case via a new `SelectedModelReportsActualCostAfterGeneration` check, and the ordinary
+      "Cost unknown" notice everywhere else, including this section's own future estimate wording.
+- [x] Export opted-in run/per-output/prompt-improvement usage and cost accurately in sidecars,
       including nonterminal `reported-so-far` state.
+      Already implemented by section 8's `ExportSidecarWriter`: `IncludeUsageAndCost` exports
+      `actualCost`/`actualCostCurrency`/`promptTokens`/`completionTokens` at the run level. Re-checked
+      the two clauses this item's own wording implies might be missing: **per-output** cost is
+      deliberately never divided among individual sidecars (plan.md's own "never divides a run total
+      among output sidecars" rule, already documented in section 8) — correct, not a gap.
+      **Prompt-improvement** cost has no sidecar to appear in at all, since prompt improvement
+      produces no exportable file — moot, same as section 6's aliases item. **Nonterminal
+      `reported-so-far`** state is unreachable today: no adapter or app mechanism ever reports a
+      partial/incremental cost mid-run (cost is only ever known once a job fully terminates), and a
+      sidecar is only ever written for an already-committed, already-exported file — there is no
+      nonterminal sidecar scenario for this app's design to produce.
 
 Done when: cost UI never presents an estimate as actual, never compares unlike units and never
 claims that a local threshold is a provider-account spending limit.

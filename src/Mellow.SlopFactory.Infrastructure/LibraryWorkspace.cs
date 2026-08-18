@@ -2219,10 +2219,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.PermanentlyDeleteModelAsync(modelId, cancellationToken), cancellationToken);
     }
 
-    public Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<GenerationRecord>> GetGenerationHistoryAsync(bool includeRecycled = false, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _database.GetGenerationHistoryAsync(cancellationToken);
+        return _database.GetGenerationHistoryAsync(includeRecycled, cancellationToken);
     }
 
     public Task<GenerationRecord> GetGenerationRecordAsync(string generationId, CancellationToken cancellationToken = default)

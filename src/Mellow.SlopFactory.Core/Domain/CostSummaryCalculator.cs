@@ -16,17 +16,23 @@ public static class CostSummaryCalculator
 {
     /// <summary>Records with a known provider-reported cost, narrowed by the same filter
     /// dimensions <c>GenerationHistory.razor</c> already exposes (status is intentionally omitted —
-    /// a cost summary cares what was spent regardless of whether the run fully succeeded).</summary>
+    /// a cost summary cares what was spent regardless of whether the run fully succeeded).
+    /// Recycled records are included by default (<paramref name="excludeRecycled"/> is false) per
+    /// plan.md:1615 — "recycling does not undo incurred usage" — with an opt-out filter, not an
+    /// opt-in one, so a recycled generation's real cost is never silently dropped from the total
+    /// unless the user specifically asks to see only active history.</summary>
     public static IReadOnlyList<GenerationRecord> ApplyFilters(
         IReadOnlyList<GenerationRecord> records,
         DateOnly? dateFromInclusive = null,
         DateOnly? dateToInclusive = null,
         ProviderType? providerType = null,
         GenerationMode? mode = null,
-        string? modelLabel = null)
+        string? modelLabel = null,
+        bool excludeRecycled = false)
     {
         return records
             .Where(record => record.ActualCost is not null)
+            .Where(record => !excludeRecycled || record.State != LibraryRecordState.Recycled)
             .Where(record => dateFromInclusive is not { } from || DateOnly.FromDateTime(record.CreatedAt.ToLocalTime().DateTime) >= from)
             .Where(record => dateToInclusive is not { } to || DateOnly.FromDateTime(record.CreatedAt.ToLocalTime().DateTime) <= to)
             .Where(record => providerType is null || record.ProviderType == providerType.Value)
