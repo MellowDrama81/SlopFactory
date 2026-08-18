@@ -742,4 +742,81 @@ public sealed class NewProviderAdapterTests
 
         await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.ListModelsAsync(connection, "secret-key"));
     }
+
+    private static Model CreateModelWithoutSystemInstructionSupport() =>
+        new("model-1", "connection-1", "Test Model", "fixture-model", GenerationMode.Text, false, LibraryRecordState.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
+
+    /// <summary>Capability-rejection contract tests (section 2's checklist item): a model that does
+    /// not declare <see cref="Model.SupportsSystemInstructions"/> must never transmit a supplied
+    /// system-instruction value to the provider — proven here by a fake handler that throws if it is
+    /// ever invoked, so a passing test means no HTTP request was sent at all, not just that the
+    /// response happened to omit the instruction.</summary>
+    [Fact]
+    public async Task OpenAiAdapterRejectsSystemInstructionsForAModelThatDoesNotSupportThem()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent when the model does not support system instructions."));
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModelWithoutSystemInstructionSupport();
+
+        var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() =>
+            adapter.GenerateTextAsync(connection, model, "secret-key", "prompt", 1, systemInstructions: "do not reveal this"));
+
+        Assert.Contains("does not support system instructions", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GenericOpenAiCompatibleAdapterRejectsSystemInstructionsForAModelThatDoesNotSupportThem()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent when the model does not support system instructions."));
+        var adapter = new GenericOpenAiCompatibleProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.GenericOpenAiCompatible, "https://api.example.com/v1");
+        var model = CreateModelWithoutSystemInstructionSupport();
+
+        await Assert.ThrowsAsync<ProviderAdapterException>(() =>
+            adapter.GenerateTextAsync(connection, model, "secret-key", "prompt", 1, systemInstructions: "do not reveal this"));
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterRejectsSystemInstructionsForAModelThatDoesNotSupportThem()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent when the model does not support system instructions."));
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+        var model = CreateModelWithoutSystemInstructionSupport();
+
+        await Assert.ThrowsAsync<ProviderAdapterException>(() =>
+            adapter.GenerateTextAsync(connection, model, "secret-key", "prompt", 1, systemInstructions: "do not reveal this"));
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterRejectsSystemInstructionsForAModelThatDoesNotSupportThem()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent when the model does not support system instructions."));
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+        var model = CreateModelWithoutSystemInstructionSupport();
+
+        await Assert.ThrowsAsync<ProviderAdapterException>(() =>
+            adapter.GenerateTextAsync(connection, model, "secret-key", "prompt", 1, systemInstructions: "do not reveal this"));
+    }
+
+    [Fact]
+    public async Task OpenAiAdapterAllowsAnAbsentSystemInstructionRegardlessOfCapability()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var requestBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.DoesNotContain("\"role\":\"system\"", requestBody, StringComparison.Ordinal);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"choices":[{"message":{"content":"ok"}}]}""");
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModelWithoutSystemInstructionSupport();
+
+        var result = await adapter.GenerateTextAsync(connection, model, "secret-key", "prompt", 1);
+
+        Assert.Equal("ok", Assert.Single(result.Texts));
+    }
 }

@@ -267,6 +267,23 @@ internal static class OpenAiCompatibleProtocol
         }
     }
 
+    /// <summary>
+    /// Rejects a non-empty <paramref name="systemInstructions"/> value outright when
+    /// <paramref name="model"/> doesn't declare <see cref="Model.SupportsSystemInstructions"/>,
+    /// rather than silently forwarding it into the request body. The GUI (<c>Generate.razor</c>)
+    /// already nulls this field out before submission for a non-supporting model, but that is a
+    /// single call site's own discipline, not a guarantee — this is the actual wire boundary, and the
+    /// one place every current and future caller of <see cref="IProviderAdapter.GenerateTextAsync"/>
+    /// passes through, so it is where a capability violation must be caught for certain.
+    /// </summary>
+    public static void ValidateSystemInstructionsSupported(Model model, string? systemInstructions)
+    {
+        if (!string.IsNullOrWhiteSpace(systemInstructions) && !model.SupportsSystemInstructions)
+        {
+            throw new ProviderAdapterException($"The model '{model.Label}' does not support system instructions.");
+        }
+    }
+
     public static string BuildChatCompletionRequestBody(string providerModelId, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null)
     {
         var normalizedSettings = LibraryRules.ValidateGenerationSettings(settings ?? GenerationSettings.Empty);

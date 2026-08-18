@@ -68,6 +68,7 @@ internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
             throw new ProviderAdapterException("Text generation is disabled for this connection.");
         }
 
+        OpenAiCompatibleProtocol.ValidateSystemInstructionsSupported(model, systemInstructions);
         using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, modalitySettings.TextGenerationPathOverride ?? "chat/completions"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);

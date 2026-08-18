@@ -82,11 +82,27 @@ can have multiple owners when implementation and release verification are intent
       streaming responses, asynchronous jobs, rate limits, moderation, redirects, result downloads
       and representative error responses.
 - [x] Add sanitized, versioned request/response fixtures for every supported provider operation.
-- [ ] Add contract tests for instruction-channel mapping, normalized message order, hidden-message
+- [x] Add contract tests for instruction-channel mapping, normalized message order, hidden-message
       absence, capability rejection and immutable sent-instruction snapshots.
       OpenAI-compatible instruction mapping, message order/absence and source-byte snapshots are
-      covered by ProviderInstructionContractTests; capability-rejection coverage remains pending
-      the capability-schema work in section 5.
+      covered by `ProviderInstructionContractTests`. Capability rejection was previously blocked on
+      section 5's broader capability-schema work, but that conflated two different things: the
+      *settings* capability schema (temperature/topP/etc., section 5) is unrelated to whether a model
+      that lacks `Model.SupportsSystemInstructions` can have a system instruction transmitted to it —
+      that only needed the pre-existing per-model bool, which the four OpenAI-compatible adapters
+      (OpenAI, generic OpenAI-compatible, OpenRouter, DeepInfra) never actually checked before this
+      pass: `OpenAiProviderAdapter.GenerateTextAsync` and its three siblings blindly forwarded
+      whatever `systemInstructions` value was passed, relying entirely on `Generate.razor`'s own UI
+      code nulling it out first — a single call site's discipline, not a guarantee, and the true wire
+      boundary had no defense of its own. Added
+      `OpenAiCompatibleProtocol.ValidateSystemInstructionsSupported(model, systemInstructions)`,
+      called at the top of all four adapters' `GenerateTextAsync`, throwing `ProviderAdapterException`
+      before any HTTP request is built. Four new `NewProviderAdapterTests` (one per adapter) prove
+      rejection happens with **zero** HTTP requests sent (a fake handler that throws if invoked, not
+      just an assertion on the response), plus one proving an absent instruction is still accepted
+      regardless of capability. 1min.AI is unaffected: its adapter already handles system instructions
+      via prompt-prepending rather than a true system-role message (its API has no separate channel),
+      which is a deliberate instruction-channel mapping choice, not a capability violation to guard.
 - [x] Add fault-injection coverage for timeouts, disconnects, truncated streams, invalid JSON,
       malformed media, redirect chains, DNS changes and partial multi-result responses.
       Timeout, disconnect, cancellation, truncated-stream, invalid-JSON, malformed-media and
