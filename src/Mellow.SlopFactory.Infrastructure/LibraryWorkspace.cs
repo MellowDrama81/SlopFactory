@@ -2183,16 +2183,16 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return _database.GetModelAsync(modelId, cancellationToken);
     }
 
-    public Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat = TextResultFormat.Markdown, CancellationToken cancellationToken = default)
+    public Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat = TextResultFormat.Markdown, string? comfyWorkflowTemplate = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => _database.CreateModelAsync(label, connectionId, providerModelId, mode, supportsSystemInstructions, textFormat, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => _database.CreateModelAsync(label, connectionId, providerModelId, mode, supportsSystemInstructions, textFormat, comfyWorkflowTemplate, cancellationToken), cancellationToken);
     }
 
-    public Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat = TextResultFormat.Markdown, CancellationToken cancellationToken = default)
+    public Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat = TextResultFormat.Markdown, string? comfyWorkflowTemplate = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => _database.UpdateModelAsync(modelId, label, providerModelId, mode, supportsSystemInstructions, textFormat, cancellationToken), cancellationToken);
+        return RunMutationAsync(() => _database.UpdateModelAsync(modelId, label, providerModelId, mode, supportsSystemInstructions, textFormat, comfyWorkflowTemplate, cancellationToken), cancellationToken);
     }
 
     public Task<Model> MarkModelReviewedAsync(string modelId, CancellationToken cancellationToken = default)
@@ -2334,10 +2334,10 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => RecordTextGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultTexts, errorMessage, systemInstructions, promptTokens, completionTokens, sourceSlots, promptImprovementRecordId, settings, safetyBlockedCount, existingGenerationRecordId, candidates, cancellationToken), cancellationToken);
     }
 
-    public Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId = null, string? existingGenerationRecordId = null, CancellationToken cancellationToken = default)
+    public Task<GenerationRecord> RecordImageGenerationResultAsync(string modelId, string prompt, int resultCount, string destinationFolderId, IReadOnlyList<byte[]>? resultImages, string? errorMessage, string? promptImprovementRecordId = null, string? existingGenerationRecordId = null, IReadOnlyList<GenerationSourceSlot>? sourceSlots = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return RunMutationAsync(() => RecordImageGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultImages, errorMessage, promptImprovementRecordId, cancellationToken, existingGenerationRecordId: existingGenerationRecordId), cancellationToken);
+        return RunMutationAsync(() => RecordImageGenerationResultCoreAsync(modelId, prompt, resultCount, destinationFolderId, resultImages, errorMessage, promptImprovementRecordId, cancellationToken, existingGenerationRecordId: existingGenerationRecordId, sourceSlots: sourceSlots), cancellationToken);
     }
 
     /// <summary>

@@ -59,6 +59,38 @@ public sealed class ProviderAdapterTests
         Assert.Null(unpriced.Pricing);
     }
 
+    [Theory]
+    [InlineData(GenerationMode.Text, "https://openrouter.ai/api/v1/models?output_modalities=text")]
+    [InlineData(GenerationMode.Image, "https://openrouter.ai/api/v1/models?output_modalities=image")]
+    [InlineData(GenerationMode.Audio, "https://openrouter.ai/api/v1/models?output_modalities=audio")]
+    [InlineData(GenerationMode.Video, "https://openrouter.ai/api/v1/models?output_modalities=all")]
+    public async Task OpenRouterAdapterFiltersModelListingByModeUsingOutputModalities(GenerationMode mode, string expectedUrl)
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal(expectedUrl, request.RequestUri!.ToString());
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"data":[{"id":"some/model"}]}""");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        await adapter.ListModelsAsync(connection, "secret-key", mode);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterOmitsOutputModalitiesWhenNoModeIsGiven()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://openrouter.ai/api/v1/models", request.RequestUri!.ToString());
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"data":[{"id":"some/model"}]}""");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        await adapter.ListModelsAsync(connection, "secret-key");
+    }
+
     [Fact]
     public async Task OpenAiAdapterTestConnectionReportsAuthenticationFailureWithoutThrowing()
     {
@@ -429,6 +461,39 @@ public sealed class ProviderAdapterTests
     }
 
     [Fact]
+    public async Task OpenAiAdapterUsesImagesEditsMultipartWhenSourceImagesAreProvided()
+    {
+        var imageBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 1, 2, 3, 4 };
+        var sourceBytes = new byte[] { 10, 20, 30 };
+        var encoded = Convert.ToBase64String(imageBytes);
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.openai.com/v1/images/edits", request.RequestUri!.ToString());
+            Assert.StartsWith("multipart/form-data", request.Content!.Headers.ContentType!.ToString(), StringComparison.Ordinal);
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.Contains("name=model", body, StringComparison.Ordinal);
+            Assert.Contains("gpt-image-1", body, StringComparison.Ordinal);
+            Assert.Contains("name=prompt", body, StringComparison.Ordinal);
+            Assert.Contains("A watercolor fox", body, StringComparison.Ordinal);
+            Assert.Contains("name=n", body, StringComparison.Ordinal);
+            Assert.Contains("name=response_format", body, StringComparison.Ordinal);
+            Assert.Contains("b64_json", body, StringComparison.Ordinal);
+            Assert.Contains("name=image; filename=source.png", body, StringComparison.Ordinal);
+            Assert.Contains("Content-Type: image/png", body, StringComparison.Ordinal);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                ProviderContractFixtures.OpenAiCompatibleImageGenerationResponseV1.Replace("__BASE64__", encoded));
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel("gpt-image-1");
+        TextGenerationSourceImage[] sourceImages = [new("image/png", sourceBytes)];
+
+        var images = await adapter.GenerateImageAsync(connection, model, "secret-key", "A watercolor fox", 1, sourceImages);
+
+        Assert.Equal(imageBytes, Assert.Single(images));
+    }
+
+    [Fact]
     public async Task OpenAiAdapterGenerateImageThrowsSanitizedExceptionOnProviderError()
     {
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") });
@@ -490,7 +555,7 @@ public sealed class ProviderAdapterTests
         using var cancellation = new CancellationTokenSource();
         cancellation.CancelAfter(TimeSpan.FromMilliseconds(200));
 
-        await Assert.ThrowsAsync<TaskCanceledException>(() => adapter.ListModelsAsync(connection, "secret-key", cancellation.Token));
+        await Assert.ThrowsAsync<TaskCanceledException>(() => adapter.ListModelsAsync(connection, "secret-key", cancellationToken: cancellation.Token));
     }
 
     [Fact]

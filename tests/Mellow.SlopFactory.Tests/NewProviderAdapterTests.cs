@@ -40,6 +40,30 @@ public sealed class NewProviderAdapterTests
     }
 
     [Fact]
+    public async Task OpenRouterAdapterIncludesInputReferencesWhenSourceImagesAreProvided()
+    {
+        byte[] pngBytes = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3];
+        byte[] sourceBytes = [10, 20, 30];
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.Equal(
+                """{"model":"bytedance-seed/seedream-4.5","prompt":"A watercolor fox","n":1,"input_references":[{"type":"image_url","image_url":{"url":"data:image/png;base64,__SOURCE_BASE64__"}}]}"""
+                    .Replace("__SOURCE_BASE64__", Convert.ToBase64String(sourceBytes)),
+                body);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+        var model = CreateModel("bytedance-seed/seedream-4.5");
+        TextGenerationSourceImage[] sourceImages = [new("image/png", sourceBytes)];
+
+        var images = await adapter.GenerateImageAsync(connection, model, "secret-key", "A watercolor fox", 1, sourceImages);
+
+        Assert.Equal(pngBytes, Assert.Single(images));
+    }
+
+    [Fact]
     public async Task OpenRouterAdapterGeneratesAudioWithOneRequestPerResult()
     {
         var callCount = 0;
@@ -63,6 +87,23 @@ public sealed class NewProviderAdapterTests
         Assert.Equal(2, callCount);
         Assert.Equal(2, results.Count);
         Assert.NotEqual(results[0], results[1]);
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterSendsTheCallerChosenVoiceWhenSuppliedRatherThanTheHardcodedDefault()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return FakeHttpMessageHandler.BinaryResponse([1, 2, 3], "audio/mpeg");
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        await adapter.GenerateAudioAsync(connection, CreateModel("openai/gpt-4o-mini-tts"), "secret-key", "Hello there", 1, "nova");
+
+        Assert.Contains("\"voice\":\"nova\"", capturedBody, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -470,6 +511,30 @@ public sealed class NewProviderAdapterTests
     }
 
     [Fact]
+    public async Task DeepInfraAdapterUsesImagesEditsMultipartWhenSourceImagesAreProvided()
+    {
+        byte[] pngBytes = [0x89, 0x50, 0x4E, 0x47, 9, 9];
+        var sourceBytes = new byte[] { 10, 20, 30 };
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.deepinfra.com/v1/openai/images/edits", request.RequestUri!.ToString());
+            Assert.StartsWith("multipart/form-data", request.Content!.Headers.ContentType!.ToString(), StringComparison.Ordinal);
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.Contains("name=model", body, StringComparison.Ordinal);
+            Assert.Contains("black-forest-labs/FLUX.1-Kontext-dev", body, StringComparison.Ordinal);
+            Assert.Contains("name=image; filename=source.png", body, StringComparison.Ordinal);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.DeepInfraImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+        TextGenerationSourceImage[] sourceImages = [new("image/png", sourceBytes)];
+
+        var images = await adapter.GenerateImageAsync(connection, CreateModel("black-forest-labs/FLUX.1-Kontext-dev"), "secret-key", "Make it watercolor", 1, sourceImages);
+
+        Assert.Equal(pngBytes, Assert.Single(images));
+    }
+
+    [Fact]
     public async Task DeepInfraAdapterGeneratesAudioAgainstTheAbsoluteAudioSpeechPathNotTheOpenAiCompatibleBase()
     {
         var callCount = 0;
@@ -661,15 +726,71 @@ public sealed class NewProviderAdapterTests
     }
 
     [Fact]
-    public async Task OneMinAiAdapterGenerateTextThrowsWhenImageConditioningIsRequestedSinceTheAttachmentFormatIsUnconfirmed()
+    public async Task OneMinAiAdapterUploadsSourceImagesThenGeneratesTextAgainstChatWithImage()
     {
-        var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No request should be sent for unsupported image conditioning."));
+        var handler = FakeHttpMessageHandler.Sequenced(
+            request =>
+            {
+                Assert.Equal("https://api.1min.ai/api/assets", request.RequestUri!.ToString());
+                Assert.StartsWith("multipart/form-data", request.Content!.Headers.ContentType!.ToString(), StringComparison.Ordinal);
+                var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                Assert.Contains("name=asset; filename=source.png", body, StringComparison.Ordinal);
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"asset":{"key":"images/first.png"},"fileContent":{"path":"images/first.png"}}""");
+            },
+            request =>
+            {
+                Assert.Equal("https://api.1min.ai/api/assets", request.RequestUri!.ToString());
+                var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                Assert.Contains("name=asset; filename=source.jpg", body, StringComparison.Ordinal);
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"asset":{"key":"images/second.jpg"},"fileContent":{"path":"images/second.jpg"}}""");
+            },
+            request =>
+            {
+                Assert.Equal("https://api.1min.ai/api/chat-with-ai", request.RequestUri!.ToString());
+                var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                Assert.Equal(
+                    """{"type":"CHAT_WITH_IMAGE","model":"gpt-4o-mini","promptObject":{"prompt":"Describe this","attachments":{"images":["images/first.png","images/second.jpg"],"files":[]}}}""",
+                    body);
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"aiRecord":{"uuid":"rec-1","status":"SUCCESS","model":"gpt-4o-mini","type":"CHAT_WITH_IMAGE","aiRecordDetail":{"promptObject":{"prompt":"Describe this"},"resultObject":["Two images described."]},"modelDetail":{"name":"gpt-4o-mini","provider":"openai"}}}""");
+            });
         var adapter = new OneMinAiProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
         var model = CreateModel("gpt-4o-mini");
+        TextGenerationSourceImage[] sourceImages = [new("image/png", [1, 2, 3]), new("image/jpeg", [4, 5, 6])];
 
-        await Assert.ThrowsAsync<ProviderAdapterException>(() =>
-            adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this", 1, sourceImages: [new TextGenerationSourceImage("image/png", [1, 2, 3])]));
+        var result = await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this", 1, sourceImages: sourceImages);
+
+        Assert.Equal("Two images described.", Assert.Single(result.Texts));
+    }
+
+    [Fact]
+    public async Task OneMinAiAdapterUploadsSourceImagesOnceAndReusesThemAcrossMultipleResults()
+    {
+        var callCount = 0;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            callCount++;
+            if (request.RequestUri!.ToString() == "https://api.1min.ai/api/assets")
+            {
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                    """{"asset":{"key":"images/first.png"},"fileContent":{"path":"images/first.png"}}""");
+            }
+
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+                """{"aiRecord":{"uuid":"rec-1","status":"SUCCESS","model":"gpt-4o-mini","type":"CHAT_WITH_IMAGE","aiRecordDetail":{"promptObject":{"prompt":"Describe this"},"resultObject":["Result"]},"modelDetail":{"name":"gpt-4o-mini","provider":"openai"}}}""");
+        });
+        var adapter = new OneMinAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OneMinAi, "https://api.1min.ai");
+        var model = CreateModel("gpt-4o-mini");
+        TextGenerationSourceImage[] sourceImages = [new("image/png", [1, 2, 3])];
+
+        var result = await adapter.GenerateTextAsync(connection, model, "secret-key", "Describe this", 2, sourceImages: sourceImages);
+
+        Assert.Equal(2, result.Texts.Count);
+        Assert.Equal(3, callCount); // one asset upload + two chat calls, not two uploads
     }
 
     [Fact]
@@ -838,5 +959,28 @@ public sealed class NewProviderAdapterTests
         var result = await adapter.GenerateTextAsync(connection, model, "secret-key", "prompt", 1);
 
         Assert.Equal("ok", Assert.Single(result.Texts));
+    }
+
+    [Fact]
+    public async Task OpenAiAdapterGeneratesAudioAgainstAudioSpeechReusingTheAlreadyProvenOpenRouterDeepInfraShape()
+    {
+        var callCount = 0;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            callCount++;
+            Assert.Equal("https://api.openai.com/v1/audio/speech", request.RequestUri!.ToString());
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.Equal("""{"model":"tts-1","input":"Hello there","response_format":"mp3","voice":"alloy"}""", body);
+            return FakeHttpMessageHandler.BinaryResponse([1, 2, 3, (byte)callCount], "audio/mpeg");
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var model = CreateModel("tts-1");
+
+        var results = await adapter.GenerateAudioAsync(connection, model, "secret-key", "Hello there", 2, "alloy");
+
+        Assert.Equal(2, callCount);
+        Assert.Equal(2, results.Count);
+        Assert.NotEqual(results[0], results[1]);
     }
 }

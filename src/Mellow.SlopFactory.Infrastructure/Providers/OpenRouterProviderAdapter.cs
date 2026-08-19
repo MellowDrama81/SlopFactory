@@ -37,7 +37,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         var host = TryGetHost(connection.BaseUrl);
         try
         {
-            var models = await ListModelsAsync(connection, apiKey, cancellationToken).ConfigureAwait(false);
+            var models = await ListModelsAsync(connection, apiKey, cancellationToken: cancellationToken).ConfigureAwait(false);
             return new ConnectionTestResult(true, "Connection succeeded.", host, true, models);
         }
         catch (ProviderAdapterException exception)
@@ -50,9 +50,23 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         }
     }
 
-    public async Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default)
+    /// <summary>Confirmed against https://openrouter.ai/docs/guides/overview/models: the <c>/models</c>
+    /// endpoint accepts an <c>output_modalities</c> query parameter (comma-separated
+    /// <c>text</c>/<c>image</c>/<c>audio</c>/<c>embeddings</c>, or <c>all</c>) to narrow the returned
+    /// catalogue by output type; omitted, OpenRouter itself defaults to <c>text</c>. There is no
+    /// dedicated <c>video</c> value, so a <see cref="GenerationMode.Video"/> request asks for
+    /// <c>all</c> instead of silently filtering video models out under an unsupported value.</summary>
+    public async Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, GenerationMode? mode = null, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "models"));
+        var path = mode switch
+        {
+            null => "models",
+            GenerationMode.Text => "models?output_modalities=text",
+            GenerationMode.Image => "models?output_modalities=image",
+            GenerationMode.Audio => "models?output_modalities=audio",
+            _ => "models?output_modalities=all"
+        };
+        using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, path));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
@@ -81,12 +95,12 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseChatCompletionResult(body);
     }
 
-    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "images"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = new StringContent(BuildImageRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
+        request.Content = new StringContent(BuildImageRequestBody(model.ProviderModelId, prompt, resultCount, sourceImages), Encoding.UTF8, "application/json");
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
@@ -101,7 +115,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
             using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "audio/speech"));
             OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
             OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-            request.Content = new StringContent(BuildAudioSpeechRequestBody(model.ProviderModelId, prompt), Encoding.UTF8, "application/json");
+            request.Content = new StringContent(BuildAudioSpeechRequestBody(model.ProviderModelId, prompt, voice), Encoding.UTF8, "application/json");
             var (isSuccess, statusCode, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
             if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
             if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty audio result.");
@@ -270,7 +284,16 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         mediaType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(mediaType, "application/octet-stream", StringComparison.OrdinalIgnoreCase);
 
-    private static string BuildImageRequestBody(string providerModelId, string prompt, int resultCount)
+    /// <summary>Confirmed against https://openrouter.ai/docs/guides/overview/multimodal/image-generation
+    /// — <c>input_references</c> (the reference-image field for image-to-image editing on the
+    /// <c>/images</c> endpoint) is an array of <c>{ "type": "image_url", "image_url": { "url": ... } }</c>
+    /// entries, URL or base64 data URI — the same nested content-part shape OpenRouter's chat vision
+    /// input uses (<see cref="OpenAiCompatibleProtocol.BuildChatCompletionRequestBody"/>'s
+    /// <c>image_url</c> parts), not a flat <c>{ "url": ... }</c>; a flat shape was tried first and
+    /// OpenRouter rejected it with HTTP 400. Not every image model honors this field (see
+    /// <c>GET /api/v1/images/models</c> <c>supported_parameters</c>), but an unsupported model simply
+    /// ignores or rejects it with a normal provider error rather than this adapter guessing per model.</summary>
+    private static string BuildImageRequestBody(string providerModelId, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -279,13 +302,27 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
             writer.WriteString("model", providerModelId);
             writer.WriteString("prompt", prompt);
             writer.WriteNumber("n", resultCount);
+            if (sourceImages is { Count: > 0 })
+            {
+                writer.WriteStartArray("input_references");
+                foreach (var image in sourceImages)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "image_url");
+                    writer.WriteStartObject("image_url");
+                    writer.WriteString("url", $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}");
+                    writer.WriteEndObject();
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
             writer.WriteEndObject();
         }
 
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private static string BuildAudioSpeechRequestBody(string providerModelId, string prompt)
+    private static string BuildAudioSpeechRequestBody(string providerModelId, string prompt, string? voice)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -293,7 +330,7 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
             writer.WriteStartObject();
             writer.WriteString("model", providerModelId);
             writer.WriteString("input", prompt);
-            writer.WriteString("voice", DefaultAudioVoice);
+            writer.WriteString("voice", string.IsNullOrWhiteSpace(voice) ? DefaultAudioVoice : voice);
             writer.WriteString("response_format", "mp3");
             writer.WriteEndObject();
         }

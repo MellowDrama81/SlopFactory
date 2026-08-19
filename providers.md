@@ -1,6 +1,46 @@
 # Candidate generative AI providers
 
-Research notes on generative AI API providers that could be added to SlopFactory, beyond the five currently integrated (`OpenAi`, `GenericOpenAiCompatible`, `OneMinAi`, `OpenRouter`, `DeepInfra` — see `docs/developer/architecture.md`). This is a research/backlog document, not a record of implemented behavior; nothing here is wired up yet.
+Research notes on generative AI API providers that could be added to SlopFactory, beyond the seventeen
+currently integrated (`OpenAi`, `GenericOpenAiCompatible`, `OneMinAi`, `OpenRouter`, `DeepInfra`,
+`ComfyUi`, `Mistral`, `Groq`, `TogetherAi`, `FireworksAi`, `DeepSeek`, `Perplexity`, `XAi`, `Anthropic`,
+`Gemini`, `Cohere`, `AI21` — see `docs/developer/architecture.md`). This is a research/backlog document,
+not a record of implemented behavior for anything below.
+
+**Update:** every provider in both the "Directly OpenAI-compatible" and "Custom shape required" sections
+immediately below has since been implemented (see `docs/developer/architecture.md`'s "Seven
+directly-OpenAI-compatible providers" and "Four bespoke-shape providers" sections) — the entries are
+left in place as a record of what was/wasn't confirmed live before shipping (**none** of the eleven were
+live-verified with a real API key; the four bespoke ones carry materially higher shape-mismatch risk
+than the OpenAI-compatible seven, since they don't reuse the well-exercised OpenAI-compatible request
+path), not as an open backlog item. Image generation was added on top of the initial text-only pass for
+the two providers whose image API is a real, single-endpoint call confirmed reachable without extra
+speculative work: Google Gemini (Imagen's `predict` endpoint) and xAI (Grok Imagine's
+`images/generations`-shaped endpoint). Mistral's image generation was deliberately **not** added even
+though its API genuinely exists — it's an agent-tool/Conversations-API flow (multi-step, not a single
+endpoint call), too speculative to implement without live verification. DeepSeek's Janus-Pro image
+family was also not added — it isn't confirmed to be exposed through `api.deepseek.com` at all, as
+opposed to only via third-party inference hosts (DeepInfra, Together AI) that already carry it. Audio
+generation was added for the two providers whose text-to-speech API reuses an already-proven, confirmed
+shape: OpenAI and Groq both got it via the standard OpenAI Audio API (`POST .../audio/speech`, the exact
+same shape already shipped for OpenRouter/DeepInfra — Groq's PlayAI-based TTS models are documented
+against this endpoint too); OpenRouter's existing audio implementation was also fixed to actually honor
+a caller-chosen voice rather than always sending its hardcoded default, a pre-existing gap noticed while
+extending this same capability elsewhere. Google Gemini also got audio — its TTS reuses `generateContent`
+itself (`responseModalities:["AUDIO"]` + `speechConfig`), the same endpoint Text/Image already use, with
+its raw-PCM response wrapped in a WAV header before returning it. No video generation was added anywhere
+in this pass: Gemini's Veo is a genuinely separate, asynchronous long-running-operation API whose exact
+response envelope this pass didn't have enough confidence in to guess at for something this consequential
+to get wrong, and xAI's Grok Imagine video rides on an endpoint shape that was never verified at all —
+both are left unimplemented rather than shipping a guess. Every other provider's audio (Mistral's
+Voxtral, Groq's own Whisper hosting — speech-to-text, no surface in this app — Together AI/Fireworks
+AI's unconfirmed shapes, DeepSeek V4's unconfirmed-GA speech) and video offerings stay unimplemented for
+the same reasons as before. None of the three that support chat vision input (Anthropic, Gemini, Cohere)
+have that translated either; see each adapter's own remarks for why.
+Everything else in this document (the aggregators, ComfyUI's original research — now implemented, see
+`docs/developer/architecture.md`'s ComfyUI section — and the 3D/music/world-model/embeddings categories)
+remains unimplemented backlog, and stays out of scope for the same reason ComfyUI originally did before
+its own dedicated pass: each needs new domain concepts (a workflow entity, a new generation surface, a
+different credential/auth model) rather than just another `IProviderAdapter` implementation.
 
 ## How a provider plugs in today
 
@@ -109,12 +149,24 @@ All of these are async, credit-metered, job-submission APIs (submit a text/image
 
 ## Suggested next step
 
-If a new provider is prioritized, the choice depends on what's actually wanted:
-- **Cheapest text-only addition, low risk**: Mistral or DeepSeek (direct) — OpenAI-compatible, well-documented, aggressively priced, close to a drop-in `GenericOpenAiCompatibleProviderAdapter`-style config plus a `LibraryRules` capability declaration.
-- **Broadest modality coverage from one provider**: Together AI (all four surfaces via one OpenAI-compatible endpoint) or Google Gemini (all four surfaces, but as 3-4 distinct API families needing more adapter work).
-- **Best video specifically**: xAI Grok Imagine or Google Veo 3.1 — both currently competitive at the top of video-gen leaderboards.
-- **Avoid**: adding Anthropic or Cohere purely to expand Image/Audio/Video coverage — neither offers native generation on those surfaces, so the integration effort would only ever light up Text (plus Cohere's Embed/Rerank, which have no home in this app's adapter surface today).
-- **ComfyUI is a different kind of decision, not a "next provider" pick**: even via the official Comfy Cloud API (normal `X-API-Key` auth, so the credential-shape objection is gone), it still requires new domain concepts — a workflow/graph entity plus per-workflow capability declaration — because there's no stable model catalog and output modality is chosen by whichever workflow JSON is submitted, not fixed per provider. Only worth scoping if support for arbitrary community SD/Flux/video/audio pipelines (not just fixed hosted models) is an explicit product goal, not as a way to add "one more provider."
+Every provider named in this document's "Directly OpenAI-compatible" and "Custom shape required"
+sections, plus ComfyUI, is now implemented — see `docs/developer/architecture.md`. What's left is
+qualitatively different, not just "the next provider on the list":
+- **Live-verify before depending on any of the eleven newly-implemented adapters.** None were checked
+  against a real account. Text generation for all eleven, image generation for Together AI/Fireworks
+  AI, and the bespoke Anthropic/Gemini/Cohere/AI21 wire shapes all rest on published documentation
+  only — confirm against a real account before depending on them the way DeepInfra/1min.AI/Comfy
+  Cloud's contracts were confirmed. The four bespoke adapters carry more risk than the seven
+  OpenAI-compatible ones, since none of them reuse the well-exercised OpenAI-compatible request path.
+- **Cohere's Embed/Rerank, and grounded web search (Perplexity)** have no home in this app's
+  `IProviderAdapter` surface — adding them would mean a new generation-surface concept, not a
+  capability flag on an existing one.
+- **The remaining aggregators (AWS Bedrock, Azure AI Foundry, Google Vertex AI)** need a different
+  credential/auth model (SigV4, Azure AD, GCP service accounts) than every provider integrated so far,
+  which is a genuinely separate decision from "add one more adapter."
+- **3D generation, music generation, world models, and embeddings/rerank as their own modality class**
+  all need a new generation surface (new `IProviderAdapter` method, new `LibraryRules` capability enum,
+  new UI) — see "Modalities beyond Text/Image/Audio/Video" below for the fuller breakdown.
 
 ---
-*Research notes only — not reflected in `IMPLEMENTATION_COMPLETION_CHECKLIST.md` or `docs/developer/architecture.md`. Pricing figures are approximate as of August 2026 and should be re-verified against each provider's current pricing page before any integration decision.*
+*Research notes only — not reflected in `IMPLEMENTATION_COMPLETION_CHECKLIST.md`. Implemented providers are reflected in `docs/developer/architecture.md`, which is authoritative over this file where they overlap. Pricing figures are approximate as of August 2026 and should be re-verified against each provider's current pricing page before any integration decision.*

@@ -35,7 +35,9 @@ Chat requests use its unified chat API.
   ```
   `promptObject` also accepts `conversationId` (multi-turn), `settings` (`webSearchSettings`,
   `historySettings`, `withMemories`), and `attachments` (`images`, `files` — image/file references
-  for multimodal input, not this app's own source-file slots).
+  for multimodal input). **Now confirmed and wired to this app's own Text-mode `ReferenceImage`
+  source-file slots** — see "Image-conditioned chat" below; this note previously said the opposite
+  before that was live-verified.
 - Non-streaming response:
   ```json
   {
@@ -58,6 +60,110 @@ Chat requests use its unified chat API.
   The generated text is `aiRecordDetail.resultObject[0]` (an array of strings — unclear from docs
   whether more than one element is ever populated for a non-multi-candidate request).
 - Error response: `{"success": false, "error": {"code": "ERROR_CODE", "message": "Description"}}`.
+
+## Image-conditioned chat — `type: "CHAT_WITH_IMAGE"` and the Asset API
+
+Confirmed live 2026-08-19. Two-step flow, both steps required:
+
+1. **`POST /api/assets`** — upload the image first. `multipart/form-data` with a single field named
+   `asset` (the file), same `API-KEY` auth header as every other request. Response:
+   ```json
+   {
+     "asset": {"fieldname": "asset", "originalname": "...", "mimetype": "image/jpeg", "size": 45228,
+       "bucket": "asset.1min.ai", "key": "images/...", "location": "https://s3.us-east-1.amazonaws.com/...", "metadata": {}},
+     "fileContent": {"uuid": "...", "path": "images/2026_08_19_05_27_59_899_....jpg", "type": "jpg",
+       "name": "...", "status": "ACTIVE", "createdAt": "..."}
+   }
+   ```
+   `fileContent.path` is the value used in step 2 — a storage-relative path, not a public URL.
+2. **`POST /api/chat-with-ai`** with `"type": "CHAT_WITH_IMAGE"` (not `UNIFY_CHAT_WITH_AI`) and the
+   uploaded path(s) listed under `promptObject.attachments.images`:
+   ```json
+   {
+     "type": "CHAT_WITH_IMAGE",
+     "model": "gpt-4o-mini",
+     "promptObject": {
+       "prompt": "Describe exactly what is in this image in detail...",
+       "attachments": {"images": ["images/2026_08_19_05_27_59_899_....jpg"], "files": []}
+     }
+   }
+   ```
+   Response envelope is identical to plain chat's. Verified genuinely correct with **two** different
+   images in the same request (an illustrated cartoon vs. a real photo) — the model accurately
+   described and distinguished both, and `metadata.inputCredit` scaled with image count (roughly 25x a
+   text-only call per image, consistent with real image-token billing, not a flat per-request fee). No
+   documented maximum image count; two is the highest actually tested.
+
+**Two other candidate fields were tried and confirmed not to work — do not use them:**
+
+- A bare `imageList: ["<path>"]` field (found mentioned in some third-party/community documentation)
+  sent to **`POST /api/features`** with `type: "CHAT_WITH_IMAGE"` is rejected outright:
+  `HTTP 400 {"errorCode":"UNKNOWN_ERROR","message":"Unsupported feature type: CHAT_WITH_IMAGE"}` —
+  that type simply isn't valid on the Features endpoint.
+- The same `imageList` field sent to **`POST /api/chat-with-ai`** (the correct endpoint) is accepted
+  with `HTTP 200` and echoed back in the response's `promptObject.imageList`, but is **silently
+  ignored** — the model's own reply states "I'm unable to see images directly," and the billed
+  `inputCredit` matches a plain text-only request. This is a genuine silent-failure trap: no error,
+  no indication anything is wrong, just a response that quietly never saw the image. Confirmed by
+  contrast against the same request using `attachments.images` instead, which billed ~25x more input
+  credit and produced an accurate image description.
+
+There is also a separate, unrelated `IMAGE_VARIATOR` feature type (`POST /api/features`, model
+`"dzine"`) documented with a single `imageUrl` field (also an Asset API path) for style-transfer image
+editing — confirmed only from docs, not live-tested, single-image only per its own docs, and
+structurally unrelated to `CHAT_WITH_IMAGE`. Do not confuse the two.
+
+**Image generation reference-image support was also tested and found non-functional — across every
+field name tried, including the one confirmed to work for chat.** Sending `imageUrls` (array),
+`imageUrl` (singular), and `attachments.images` (the exact field confirmed working for
+`CHAT_WITH_IMAGE` above) inside `promptObject` for `type: "IMAGE_GENERATOR"` with
+`black-forest-labs/flux-2-klein-4b` are all accepted with `HTTP 200` and no error, but every one has
+**zero effect on the generated image** — confirmed across five live tests (two image orderings with
+two images, single-image tests with the plural and singular field names, and a fifth test reusing the
+working `attachments.images` shape verbatim), every one producing output derived purely from the text
+prompt with no trace of the uploaded image's actual content. This means `CHAT_WITH_IMAGE` (vision/chat)
+and `IMAGE_GENERATOR` (image generation) are separate pipelines on 1min.ai's backend — whatever wiring
+makes `attachments.images` reach the vision model does not extend to the image-generation model, so
+this isn't a field-naming problem to keep guessing at. `imageUrls` (plural) is real elsewhere on this
+API — it is the confirmed field for Pika's `IMAGE_TO_VIDEO` `pikascenes` mode (multiple images composed
+into a *video*), which is likely why it appears associated with 1min.ai in general searches — but it
+does not carry over to image generation either. No 1min.ai image-generation model is currently declared
+as accepting a `ReferenceImage`
+source slot in `LibraryRules.GetInputSlotCapabilities` because of this.
+
+**A real `IMAGE_EDITOR` feature does exist, confirmed via a third-party reverse-engineered client —
+but it lives on a different, inaccessible surface, not the public developer API.**
+[cyber-wojtek/1MinAI-API](https://github.com/cyber-wojtek/1MinAI-API), a Python wrapper for 1min.ai's
+actual web app (not the documented public API), implements genuine image editing/compositing —
+`IMAGE_EDITOR` (Flux Kontext, Qwen Image Edit, Klein), `FACE_SWAPPER` (two-image, `sourceImageList`/
+`targetImageList`), `IMAGE_VARIATOR`, `IMAGE_OBJECT_REMOVER`, `BACKGROUND_REPLACER`,
+`SKETCH_TO_IMAGE`, `IMAGE_3D_GENERATOR` — all keyed on a `promptObject.imageList` array, matching the
+chat contract's own field naming more closely than anything documented for `/api/features`. Confirmed
+live (2026-08-19) that this genuinely is a different, inaccessible surface, not just a different field
+name to plug into what we already have:
+
+- These calls target a **team-scoped endpoint**, `POST https://api.1min.ai/teams/{team_id}/features`
+  (not the plain `POST /api/features` this adapter uses), authenticated with
+  `X-Auth-Token: Bearer <token>` — **not** the `API-KEY` header every confirmed-working endpoint in
+  this document uses.
+- Sending our real `API-KEY` value in that `X-Auth-Token` header returns
+  `HTTP 401 {"errorCode":"INVALID_AUTH_TOKEN",...}` — the endpoint expects a genuine logged-in web
+  session JWT (obtained via email/password or Google OAuth login through the client's `oauth_login()`
+  method), not a developer API key. An API key and a session token are different credential types on
+  1min.ai's backend, and only the latter can reach this endpoint.
+- For completeness, sending `type: "IMAGE_EDITOR"` to the **public**, `API-KEY`-authed
+  `POST /api/features` endpoint (in case the feature type is dispatched the same way regardless of
+  route) returned `HTTP 522` (Cloudflare origin timeout) on two separate attempts, ~19 seconds each —
+  not a working response, and not a clean rejection either. Left unresolved rather than retried
+  further, since each attempt risks real cost/time for an inconclusive result.
+
+**Deliberately not pursued further.** Reaching `IMAGE_EDITOR` would require this adapter to obtain and
+maintain a logged-in web-session token (email/password or OAuth login, plus token refresh) rather than
+using the single static API key this app's `Connection` credential model is built around for every
+provider — a materially different, more sensitive trust relationship (impersonating a user's actual
+account session, not calling a published developer API with a scoped key), and likely outside the
+terms 1min.ai intends for third-party API-key access. If this is ever revisited, it needs an explicit
+product decision about that credential-model change, not just a request-shape fix.
 
 ## AI Feature API — `POST /api/features` (image, audio, video, writing, code)
 
@@ -281,6 +387,8 @@ four calls together used well under 20,000 credits (roughly 19,300, per the acco
 | Image | `stable-diffusion-xl-1024-v1-0` | Success (after fixing dimensions) | Flux Schnell's documented identifier failed first — see above. |
 | Audio (TTS) | `tts-1` / `alloy` | Success | Matched documented shape exactly. |
 | Video | `lucataco/animate-diff:...` | Success | 75-second synchronous call, matched documented shape exactly. |
+| Image-conditioned chat | `gpt-4o-mini`, `CHAT_WITH_IMAGE` | Success (2026-08-19, separate pass) | Asset API upload + `attachments.images` confirmed working with 2 images; `imageList` confirmed silently non-functional; see "Image-conditioned chat" above. |
+| Image-generation reference input | `black-forest-labs/flux-2-klein-4b`, `IMAGE_GENERATOR` | Confirmed non-functional (2026-08-19) | `imageUrl`/`imageUrls`/`attachments.images` (all 3 field shapes, the last being chat's confirmed-working field) accepted with no error but had zero effect across 5 trials; see "Image-conditioned chat" above. |
 
 **Credit-cost figures are approximate, not authoritative**, because the `teamUser.usedCredit` field in
 each response appears to lag by one request (it reflects credits used as of *before* the current call

@@ -4,18 +4,27 @@ using Mellow.SlopFactory.Domain;
 
 namespace Mellow.SlopFactory.Infrastructure.Providers;
 
-internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
+/// <summary>
+/// Mistral AI (`api.mistral.ai`) exposes an OpenAI-compatible `chat/completions` endpoint, so this
+/// adapter reuses <see cref="OpenAiCompatibleProtocol"/>'s shared request/response helpers exactly like
+/// <see cref="OpenAiProviderAdapter"/> — see providers.md's "Directly OpenAI-compatible" section.
+/// Image generation exists only via an "image generation" agent tool on Mistral's separate
+/// Conversations API, not a plain `images/generations`-shaped endpoint, so it is not implemented here
+/// rather than guessed at. Audio (Voxtral TTS/STT) has no confirmed public REST shape in providers.md's
+/// research pass and is likewise not implemented.
+/// </summary>
+internal sealed class MistralProviderAdapter : IProviderAdapter
 {
     private readonly HttpClient _httpClient;
     private readonly IConnectionRateLimitTracker? _rateLimitTracker;
 
-    public GenericOpenAiCompatibleProviderAdapter(HttpClient httpClient, IConnectionRateLimitTracker? rateLimitTracker = null)
+    public MistralProviderAdapter(HttpClient httpClient, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         _httpClient = httpClient;
         _rateLimitTracker = rateLimitTracker;
     }
 
-    public ProviderType ProviderType => ProviderType.GenericOpenAiCompatible;
+    public ProviderType ProviderType => ProviderType.Mistral;
 
     public async Task<ConnectionTestResult> TestConnectionAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default)
     {
@@ -37,39 +46,18 @@ internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
 
     public async Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, GenerationMode? mode = null, CancellationToken cancellationToken = default)
     {
-        var modalitySettings = connection.GenericModalitySettings ?? GenericConnectionModalitySettings.Default;
-        if (!modalitySettings.ModelsEnabled)
-        {
-            throw new ProviderAdapterException("Model discovery is disabled for this connection.");
-        }
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, modalitySettings.ModelsPathOverride ?? "models"));
+        using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "models"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
-        if (!isSuccess)
-        {
-            if (statusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                throw new ProviderAdapterException("Model discovery is not available at this base URL. The connection can still be saved and used manually.");
-            }
-
-            throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
-        }
-
+        if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseModelList(body);
     }
 
     public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default)
     {
-        var modalitySettings = connection.GenericModalitySettings ?? GenericConnectionModalitySettings.Default;
-        if (!modalitySettings.TextGenerationEnabled)
-        {
-            throw new ProviderAdapterException("Text generation is disabled for this connection.");
-        }
-
         OpenAiCompatibleProtocol.ValidateSystemInstructionsSupported(model, systemInstructions);
-        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, modalitySettings.TextGenerationPathOverride ?? "chat/completions"));
+        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "chat/completions"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         request.Content = new StringContent(OpenAiCompatibleProtocol.BuildChatCompletionRequestBody(model.ProviderModelId, prompt, resultCount, systemInstructions, sourceImages, settings), Encoding.UTF8, "application/json");
@@ -78,31 +66,17 @@ internal sealed class GenericOpenAiCompatibleProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseChatCompletionResult(body);
     }
 
-    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default)
-    {
-        var modalitySettings = connection.GenericModalitySettings ?? GenericConnectionModalitySettings.Default;
-        if (!modalitySettings.ImageGenerationEnabled)
-        {
-            throw new ProviderAdapterException("Image generation is disabled for this connection.");
-        }
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, modalitySettings.ImageGenerationPathOverride ?? "images/generations"));
-        OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
-        OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
-        if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
-        return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
-    }
+    public Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default) =>
+        throw new ProviderAdapterException("Image generation is not implemented for Mistral: it is only available through an agent-tool on the separate Conversations API, not a plain images endpoint.");
 
     public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default) =>
-        throw new ProviderAdapterException("Audio generation is not yet implemented for the generic OpenAI-compatible adapter.");
+        throw new ProviderAdapterException("Audio generation is not implemented for Mistral: Voxtral's public API shape was not confirmed.");
 
     public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default) =>
-        throw new ProviderAdapterException("Video generation is not yet implemented for the generic OpenAI-compatible adapter.");
+        throw new ProviderAdapterException("Video generation is not implemented for Mistral: no video-generation API is offered.");
 
     public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default) =>
-        throw new ProviderAdapterException("Video generation is not yet implemented for the generic OpenAI-compatible adapter.");
+        throw new ProviderAdapterException("Video generation is not implemented for Mistral: no video-generation API is offered.");
 
     private static string? TryGetHost(string baseUrl) => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) ? uri.Host : null;
 }

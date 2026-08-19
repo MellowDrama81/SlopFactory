@@ -79,14 +79,42 @@ public sealed class LibraryRulesTests
     }
 
     [Theory]
-    [InlineData(ProviderType.OpenAi, false)]
+    [InlineData(ProviderType.OpenAi, true)]
     [InlineData(ProviderType.GenericOpenAiCompatible, false)]
-    [InlineData(ProviderType.OpenRouter, false)]
+    [InlineData(ProviderType.OpenRouter, true)]
     [InlineData(ProviderType.OneMinAi, false)]
     [InlineData(ProviderType.DeepInfra, true)]
-    public void SupportsAudioVoiceSelectionIsTrueOnlyForDeepInfra(ProviderType providerType, bool expected)
+    [InlineData(ProviderType.Groq, true)]
+    [InlineData(ProviderType.Gemini, true)]
+    [InlineData(ProviderType.Mistral, false)]
+    [InlineData(ProviderType.Anthropic, false)]
+    [InlineData(ProviderType.Cohere, false)]
+    public void SupportsAudioVoiceSelectionMatchesEachAdaptersConfirmedAudioSpeechShape(ProviderType providerType, bool expected)
     {
         Assert.Equal(expected, LibraryRules.SupportsAudioVoiceSelection(providerType));
+    }
+
+    [Theory]
+    [InlineData(ProviderType.OpenAi, true)]
+    [InlineData(ProviderType.GenericOpenAiCompatible, true)]
+    [InlineData(ProviderType.OpenRouter, true)]
+    [InlineData(ProviderType.DeepInfra, true)]
+    [InlineData(ProviderType.OneMinAi, false)]
+    [InlineData(ProviderType.ComfyUi, false)]
+    [InlineData(ProviderType.Mistral, true)]
+    [InlineData(ProviderType.Groq, true)]
+    [InlineData(ProviderType.TogetherAi, true)]
+    [InlineData(ProviderType.FireworksAi, true)]
+    [InlineData(ProviderType.DeepSeek, true)]
+    [InlineData(ProviderType.Perplexity, true)]
+    [InlineData(ProviderType.XAi, true)]
+    [InlineData(ProviderType.Anthropic, true)]
+    [InlineData(ProviderType.Gemini, true)]
+    [InlineData(ProviderType.Cohere, true)]
+    [InlineData(ProviderType.AI21, true)]
+    public void SupportsModelDiscoveryIsFalseOnlyForOneMinAiAndComfyUi(ProviderType providerType, bool expected)
+    {
+        Assert.Equal(expected, LibraryRules.SupportsModelDiscovery(providerType));
     }
 
     [Fact]
@@ -128,13 +156,47 @@ public sealed class LibraryRulesTests
     }
 
     [Theory]
-    [InlineData(ProviderType.OpenAi, GenerationMode.Image)]
     [InlineData(ProviderType.OpenAi, GenerationMode.Audio)]
-    [InlineData(ProviderType.DeepInfra, GenerationMode.Image)]
+    [InlineData(ProviderType.GenericOpenAiCompatible, GenerationMode.Image)]
+    [InlineData(ProviderType.OneMinAi, GenerationMode.Image)]
     [InlineData(ProviderType.OneMinAi, GenerationMode.Video)]
+    [InlineData(ProviderType.TogetherAi, GenerationMode.Image)]
+    [InlineData(ProviderType.FireworksAi, GenerationMode.Image)]
+    [InlineData(ProviderType.Mistral, GenerationMode.Image)]
+    [InlineData(ProviderType.Groq, GenerationMode.Image)]
+    [InlineData(ProviderType.Anthropic, GenerationMode.Text)]
+    [InlineData(ProviderType.Gemini, GenerationMode.Text)]
+    [InlineData(ProviderType.Cohere, GenerationMode.Text)]
     public void GetInputSlotCapabilitiesReturnsNoneForEveryOtherModeProviderCombination(ProviderType providerType, GenerationMode mode)
     {
+        // TogetherAi/FireworksAi have a plain images/generations-shaped endpoint (see
+        // TogetherAiProviderAdapter/FireworksAiProviderAdapter's remarks) but no confirmed image-edit
+        // shape, so unlike OpenAI/OpenRouter/DeepInfra they get no ReferenceImage input slot here.
+        // Anthropic/Gemini/Cohere all genuinely support chat vision input, but none of their bespoke
+        // adapters translate TextGenerationSourceImage into that provider's shape in this pass, so they
+        // get no Text-mode ReferenceImage slot either (see GetInputSlotCapabilities's remarks).
         Assert.Empty(LibraryRules.GetInputSlotCapabilities(providerType, mode));
+    }
+
+    [Theory]
+    [InlineData(ProviderType.OpenAi)]
+    [InlineData(ProviderType.OpenRouter)]
+    [InlineData(ProviderType.DeepInfra)]
+    public void GetInputSlotCapabilitiesReturnsUpToThreeReferenceImagesForImageModeOnConfirmedProviders(ProviderType providerType)
+    {
+        // DeepInfra's actual per-model behavior varies (confirmed by live testing: some models keep
+        // only the last of several supplied images, others genuinely use more than one with real
+        // run-to-run quality variance — see DeepInfraProviderAdapter.GenerateImageAsync's remarks), but
+        // this capability schema deliberately does not special-case that per model ID: a per-model
+        // allowlist was tried and reverted as unmaintainable, so DeepInfra gets the same flat MaxCount
+        // as OpenAI/OpenRouter and any per-model quirk surfaces as an ordinary generation outcome.
+        var capabilities = LibraryRules.GetInputSlotCapabilities(providerType, GenerationMode.Image);
+
+        var capability = Assert.Single(capabilities);
+        Assert.Equal(GenerationInputSlotRole.ReferenceImage, capability.Role);
+        Assert.Equal(0, capability.MinCount);
+        Assert.Equal(3, capability.MaxCount);
+        Assert.False(capability.Required);
     }
 
     [Theory]
@@ -145,6 +207,29 @@ public sealed class LibraryRulesTests
     public void GetGenerationSettingsCapabilitiesReturnsEveryFieldForTextModeOnOpenAiCompatibleProviders(ProviderType providerType)
     {
         var capabilities = LibraryRules.GetGenerationSettingsCapabilities(providerType, GenerationMode.Text);
+
+        Assert.Equal(
+            GenerationSettingsCapability.Temperature | GenerationSettingsCapability.TopP | GenerationSettingsCapability.MaxTokens
+                | GenerationSettingsCapability.FrequencyPenalty | GenerationSettingsCapability.PresencePenalty | GenerationSettingsCapability.AdvancedJson,
+            capabilities);
+    }
+
+    [Theory]
+    [InlineData(ProviderType.Anthropic)]
+    [InlineData(ProviderType.Gemini)]
+    public void GetGenerationSettingsCapabilitiesWithholdsPenaltyFieldsForAnthropicAndGeminiTextSinceNeitherRequestShapeHasThem(ProviderType providerType)
+    {
+        var capabilities = LibraryRules.GetGenerationSettingsCapabilities(providerType, GenerationMode.Text);
+
+        Assert.Equal(
+            GenerationSettingsCapability.Temperature | GenerationSettingsCapability.TopP | GenerationSettingsCapability.MaxTokens | GenerationSettingsCapability.AdvancedJson,
+            capabilities);
+    }
+
+    [Fact]
+    public void GetGenerationSettingsCapabilitiesReturnsEveryFieldForCohereTextSinceItsRequestShapeSupportsThem()
+    {
+        var capabilities = LibraryRules.GetGenerationSettingsCapabilities(ProviderType.Cohere, GenerationMode.Text);
 
         Assert.Equal(
             GenerationSettingsCapability.Temperature | GenerationSettingsCapability.TopP | GenerationSettingsCapability.MaxTokens
@@ -185,7 +270,7 @@ public sealed class LibraryRulesTests
     [Fact]
     public void ValidateSourceSlotsRejectsARoleTheModelDoesNotAccept()
     {
-        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Image);
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OneMinAi, GenerationMode.Image);
         GenerationSourceSlot[] slots = [new(GenerationInputSlotRole.ReferenceImage, "file-1", 0)];
 
         Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
@@ -205,6 +290,19 @@ public sealed class LibraryRulesTests
     }
 
     [Fact]
+    public void ValidateSourceSlotsAcceptsASecondReferenceImageForDeepInfraImageMode()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.DeepInfra, GenerationMode.Image);
+        GenerationSourceSlot[] slots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, "file-1", 0),
+            new(GenerationInputSlotRole.ReferenceImage, "file-2", 1),
+        ];
+
+        LibraryRules.ValidateSourceSlots(slots, capabilities);
+    }
+
+    [Fact]
     public void ValidateSourceSlotsRejectsTheSameFileSelectedInMoreThanOneSlot()
     {
         var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Text);
@@ -215,5 +313,116 @@ public sealed class LibraryRulesTests
         ];
 
         Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
+
+    [Fact]
+    public void GetInputSlotCapabilitiesReturnsAtMostTwoReferenceImagesForComfyUiImageMode()
+    {
+        // ComfyUi's real per-slot capability lives in the model's own workflow JSON, which this flat
+        // (provider, mode) switch cannot see — this is a fixed upper bound (Comfy.md section 3.3,
+        // option (a)), not a claim every ComfyUi workflow accepts two reference images. 2 matches the
+        // highest count any built-in workflow template (ComfyBuiltInWorkflows) actually uses.
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.ComfyUi, GenerationMode.Image);
+
+        var capability = Assert.Single(capabilities);
+        Assert.Equal(GenerationInputSlotRole.ReferenceImage, capability.Role);
+        Assert.Equal(0, capability.MinCount);
+        Assert.Equal(2, capability.MaxCount);
+        Assert.False(capability.Required);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ValidateComfyWorkflowTemplateRejectsAMissingValue(string? value)
+    {
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateComfyWorkflowTemplate(value, GenerationMode.Image));
+    }
+
+    [Fact]
+    public void ValidateComfyWorkflowTemplateRejectsInvalidJson()
+    {
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateComfyWorkflowTemplate("not json", GenerationMode.Image));
+    }
+
+    [Fact]
+    public void ValidateComfyWorkflowTemplateRejectsAJsonArray()
+    {
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateComfyWorkflowTemplate("""["3"]""", GenerationMode.Image));
+    }
+
+    [Fact]
+    public void ValidateComfyWorkflowTemplateRejectsANonNumericNodeKey()
+    {
+        const string json = """{"clip":{"class_type":"CLIPTextEncode","inputs":{"text":"{{PROMPT}}"}}}""";
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateComfyWorkflowTemplate(json, GenerationMode.Image));
+    }
+
+    [Fact]
+    public void ValidateComfyWorkflowTemplateRejectsANodeMissingClassTypeOrInputs()
+    {
+        const string json = """{"3":{"inputs":{"text":"{{PROMPT}}"}}}""";
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateComfyWorkflowTemplate(json, GenerationMode.Image));
+    }
+
+    [Fact]
+    public void ValidateComfyWorkflowTemplateRejectsAWorkflowWithNoPromptPlaceholder()
+    {
+        const string json = """{"3":{"class_type":"CLIPTextEncode","inputs":{"text":"a fixed prompt"}}}""";
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateComfyWorkflowTemplate(json, GenerationMode.Image));
+    }
+
+    [Fact]
+    public void ValidateComfyWorkflowTemplateAcceptsAWellFormedWorkflow()
+    {
+        const string json = """{"3":{"class_type":"KSampler","inputs":{"seed":{{SEED}}}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{PROMPT}}"}}}""";
+
+        var result = LibraryRules.ValidateComfyWorkflowTemplate(json, GenerationMode.Image);
+
+        Assert.Equal(json, result);
+    }
+
+    [Theory]
+    [InlineData("57:8")]
+    [InlineData("48:35:43")]
+    public void ValidateComfyWorkflowTemplateAcceptsColonSeparatedSubgraphNodeKeys(string nodeKey)
+    {
+        // Real Comfy Cloud API-format exports use compound "parent:child" node IDs for nodes nested
+        // inside a subgraph (confirmed against a real export) — not just bare integers.
+        var json = "{\"" + nodeKey + "\":{\"class_type\":\"CLIPTextEncode\",\"inputs\":{\"text\":\"{{PROMPT}}\"}}}";
+
+        var result = LibraryRules.ValidateComfyWorkflowTemplate(json, GenerationMode.Image);
+
+        Assert.Equal(json, result);
+    }
+
+    [Fact]
+    public void ValidateComfyWorkflowTemplateRejectsAColonSeparatedKeyWithANonNumericSegment()
+    {
+        const string json = """{"57:clip":{"class_type":"CLIPTextEncode","inputs":{"text":"{{PROMPT}}"}}}""";
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateComfyWorkflowTemplate(json, GenerationMode.Image));
+    }
+
+    [Fact]
+    public void EveryBuiltInComfyWorkflowValidates()
+    {
+        foreach (var workflow in ComfyBuiltInWorkflows.All)
+        {
+            var result = LibraryRules.ValidateComfyWorkflowTemplate(workflow.WorkflowTemplate, GenerationMode.Image);
+            Assert.Equal(workflow.WorkflowTemplate, result);
+        }
+    }
+
+    [Fact]
+    public void EveryBuiltInComfyWorkflowDeclaresAConsistentReferenceImageCount()
+    {
+        foreach (var workflow in ComfyBuiltInWorkflows.All)
+        {
+            var expectedFilenameTokenCount = workflow.WorkflowTemplate.Contains("{{UPLOADED_IMAGE_FILENAME_2}}", StringComparison.Ordinal) ? 2
+                : workflow.WorkflowTemplate.Contains("{{UPLOADED_IMAGE_FILENAME}}", StringComparison.Ordinal) ? 1
+                : 0;
+            Assert.Equal(expectedFilenameTokenCount, workflow.ReferenceImageCount);
+        }
     }
 }

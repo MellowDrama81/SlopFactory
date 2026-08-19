@@ -444,6 +444,42 @@ internal static class OpenAiCompatibleProtocol
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
+    /// <summary>
+    /// Builds the multipart/form-data body for OpenAI's confirmed <c>POST /images/edits</c> contract
+    /// (image-to-image editing): repeated <c>image</c> file fields (one per source image), plus
+    /// <c>prompt</c>/<c>model</c>/<c>n</c>/<c>response_format</c> fields — the same fields
+    /// <see cref="BuildImageGenerationRequestBody"/> sends as JSON for the no-source-image
+    /// <c>images/generations</c> path. The response shape (<c>data[].b64_json</c>) is identical, so
+    /// <see cref="ParseImageGenerationBytes"/> handles both.
+    /// </summary>
+    public static MultipartFormDataContent BuildImageEditMultipartContent(string providerModelId, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage> sourceImages)
+    {
+        var content = new MultipartFormDataContent
+        {
+            { new StringContent(providerModelId), "model" },
+            { new StringContent(prompt), "prompt" },
+            { new StringContent(resultCount.ToString(System.Globalization.CultureInfo.InvariantCulture)), "n" },
+            { new StringContent("b64_json"), "response_format" }
+        };
+        foreach (var image in sourceImages)
+        {
+            var imageContent = new ByteArrayContent(image.Bytes);
+            imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(image.MediaType);
+            content.Add(imageContent, "image", $"source{ImageFileExtension(image.MediaType)}");
+        }
+
+        return content;
+    }
+
+    private static string ImageFileExtension(string mediaType) => mediaType.ToLowerInvariant() switch
+    {
+        "image/png" => ".png",
+        "image/jpeg" => ".jpg",
+        "image/webp" => ".webp",
+        "image/gif" => ".gif",
+        _ => ".bin"
+    };
+
     public static IReadOnlyList<byte[]> ParseImageGenerationBytes(string json)
     {
         try

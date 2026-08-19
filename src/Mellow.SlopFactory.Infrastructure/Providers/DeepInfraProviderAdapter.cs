@@ -8,10 +8,11 @@ namespace Mellow.SlopFactory.Infrastructure.Providers;
 
 /// <summary>
 /// DeepInfra's OpenAI-compatible surface (https://api.deepinfra.com/v1/openai) covers chat, model
-/// listing and image generation with the exact same request/response shapes and relative paths as
-/// OpenAI's own API (confirmed: POST {base}/chat/completions, POST {base}/images/generations,
-/// GET {base}/models), so this adapter reuses <see cref="OpenAiCompatibleProtocol"/> identically to
-/// <see cref="OpenAiProviderAdapter"/> for those three operations. Audio and video generation live
+/// listing and image generation (including image-to-image editing) with the exact same request/response
+/// shapes and relative paths as OpenAI's own API (confirmed: POST {base}/chat/completions,
+/// POST {base}/images/generations, POST {base}/images/edits, GET {base}/models), so this adapter
+/// reuses <see cref="OpenAiCompatibleProtocol"/> identically to <see cref="OpenAiProviderAdapter"/> for
+/// those operations. Audio and video generation live
 /// under a different absolute path root (https://api.deepinfra.com/v1/audio/speech,
 /// https://api.deepinfra.com/v1/videos) rather than under the OpenAI-compatible base, so those two
 /// operations build absolute request URIs from the connection's scheme/host/port instead of
@@ -41,7 +42,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         var host = TryGetHost(connection.BaseUrl);
         try
         {
-            var models = await ListModelsAsync(connection, apiKey, cancellationToken).ConfigureAwait(false);
+            var models = await ListModelsAsync(connection, apiKey, cancellationToken: cancellationToken).ConfigureAwait(false);
             return new ConnectionTestResult(true, "Connection succeeded.", host, true, models);
         }
         catch (ProviderAdapterException exception)
@@ -54,7 +55,7 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         }
     }
 
-    public async Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, GenerationMode? mode = null, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "models"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
@@ -85,12 +86,40 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseChatCompletionResult(body);
     }
 
-    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default)
+    /// <summary>Confirmed against DeepInfra's per-model API reference pages (e.g.
+    /// https://deepinfra.com/black-forest-labs/FLUX.1-Kontext-dev/api,
+    /// https://deepinfra.com/Qwen/Qwen-Image-Edit/api): <c>POST {base}/images/edits</c> exists under
+    /// the same OpenAI-compatible base as <c>images/generations</c>, multipart/form-data with an
+    /// <c>image</c> field, <c>model</c>/<c>n</c>/<c>size</c> — the identical shape OpenAI's own
+    /// <c>images/edits</c> uses, so this reuses <see cref="OpenAiCompatibleProtocol.BuildImageEditMultipartContent"/>
+    /// exactly like <see cref="OpenAiProviderAdapter"/>, repeating the <c>image</c> field once per source
+    /// image the same way for every model — no per-model capability check happens here or in
+    /// <see cref="LibraryRules.GetInputSlotCapabilities"/>.
+    /// <para>
+    /// Whether a given DeepInfra model actually uses more than one supplied image is <b>not
+    /// guaranteed</b> and varies by model, live-tested (2026-08-19) by sending two distinctly-colored
+    /// solid images in both orderings: <c>black-forest-labs/FLUX.1-Kontext-dev</c> silently discarded the
+    /// first image every time (the second always won, never combined; an <c>image[]</c> array-style
+    /// field name was also rejected outright with HTTP 422 rather than working as an alternative), while
+    /// <c>black-forest-labs/FLUX-2-klein-9b</c> genuinely used both — order-sensitive output drawing on
+    /// both source colors — but with real run-to-run result-quality variance confirmed in a later round
+    /// with real-content images (same request repeated twice produced very different results). None of
+    /// this is enforced or special-cased at the capability level: every DeepInfra image model is offered
+    /// the same up-to-3 <c>ReferenceImage</c> slots as OpenAI/OpenRouter, and a model whose backend can't
+    /// really use them either silently keeps only its last image (Kontext-dev's behavior) or surfaces a
+    /// normal, already-handled provider error/quality issue — not something this adapter or the
+    /// capability schema tries to predict per model ID.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "images/generations"));
+        var hasSourceImages = sourceImages is { Count: > 0 };
+        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, hasSourceImages ? "images/edits" : "images/generations"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
+        request.Content = hasSourceImages
+            ? OpenAiCompatibleProtocol.BuildImageEditMultipartContent(model.ProviderModelId, prompt, resultCount, sourceImages!)
+            : new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);

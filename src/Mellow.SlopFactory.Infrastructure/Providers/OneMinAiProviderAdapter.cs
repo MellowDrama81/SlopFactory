@@ -27,6 +27,23 @@ namespace Mellow.SlopFactory.Infrastructure.Providers;
 /// <c>async: true</c> + <c>GET /api/results/{uuid}</c> path that would fit it was never live-tested.
 /// Model discovery is not implemented either — no models-listing endpoint is documented anywhere in
 /// 1min.ai's API reference.
+/// <para>
+/// Image-conditioned text generation (<see cref="GenerateTextAsync"/>'s <c>sourceImages</c>) is
+/// confirmed live (2026-08-19) via a two-step flow: each source image is uploaded to
+/// <c>POST /api/assets</c> (multipart/form-data, single field <c>asset</c>) to get back a storage
+/// path (<c>fileContent.path</c>), then the chat call switches from <c>type: "UNIFY_CHAT_WITH_AI"</c>
+/// to <c>type: "CHAT_WITH_IMAGE"</c> with those paths listed under
+/// <c>promptObject.attachments.images</c>. Two other candidate fields were tried and confirmed
+/// <b>not</b> to work: a bare <c>imageList</c> array is rejected outright by <c>/api/features</c>
+/// (<c>HTTP 400 "Unsupported feature type: CHAT_WITH_IMAGE"</c> — that type isn't valid there at all)
+/// and, when sent to <c>/api/chat-with-ai</c> instead, is accepted with <c>HTTP 200</c> but silently
+/// ignored — the model responds "I'm unable to see images directly" and bills the same low
+/// text-only credit cost as a no-image request. <c>attachments.images</c>, by contrast, produced
+/// accurate, verifiable descriptions of two genuinely different uploaded images in the same request
+/// (correctly distinguishing an illustrated character from a real photo) and billed roughly 25x more
+/// input credit per image, consistent with real image-token processing. No explicit maximum image
+/// count is documented; two was the highest tested live.
+/// </para>
 /// </summary>
 internal sealed class OneMinAiProviderAdapter : IProviderAdapter
 {
@@ -49,15 +66,25 @@ internal sealed class OneMinAiProviderAdapter : IProviderAdapter
     public Task<ConnectionTestResult> TestConnectionAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default) =>
         Task.FromResult(new ConnectionTestResult(true, "1min.ai has no documented lightweight connectivity check; the connection will be validated on first use.", TryGetHost(connection.BaseUrl), false));
 
-    public Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<ProviderModelInfo>> ListModelsAsync(Connection connection, string? apiKey, GenerationMode? mode = null, CancellationToken cancellationToken = default) =>
         throw new ProviderAdapterException("Model discovery is not available for 1min.ai: no model-listing endpoint is documented. The connection can still be saved and used manually.");
 
     public async Task<TextGenerationResult> GenerateTextAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? systemInstructions = null, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, GenerationSettings? settings = null, CancellationToken cancellationToken = default)
     {
         if (resultCount < 1) throw new ProviderAdapterException("At least one text result must be requested.");
+
+        // Uploaded once and reused across every resultCount iteration below — the same reference
+        // images apply to every candidate, so re-uploading identical bytes per candidate would waste
+        // requests and credits for no benefit.
+        IReadOnlyList<string>? imagePaths = null;
         if (sourceImages is { Count: > 0 })
         {
-            throw new ProviderAdapterException("Image-conditioned text generation is not supported for 1min.ai: its attachment upload format was not confirmed by live testing.");
+            var paths = new List<string>(sourceImages.Count);
+            foreach (var image in sourceImages)
+            {
+                paths.Add(await UploadAssetAsync(connection, apiKey, image, cancellationToken).ConfigureAwait(false));
+            }
+            imagePaths = paths;
         }
 
         var effectivePrompt = string.IsNullOrWhiteSpace(systemInstructions) ? prompt : $"{systemInstructions}\n\n{prompt}";
@@ -67,7 +94,7 @@ internal sealed class OneMinAiProviderAdapter : IProviderAdapter
             using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "api/chat-with-ai"));
             OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
             OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-            request.Content = new StringContent(BuildChatRequestBody(model.ProviderModelId, effectivePrompt), Encoding.UTF8, "application/json");
+            request.Content = new StringContent(BuildChatRequestBody(model.ProviderModelId, effectivePrompt, imagePaths), Encoding.UTF8, "application/json");
             var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
             if (!isSuccess) throw new ProviderAdapterException(DescribeChatFailure(body, statusCode));
             texts.Add(ParseChatResultText(body));
@@ -76,7 +103,7 @@ internal sealed class OneMinAiProviderAdapter : IProviderAdapter
         return new TextGenerationResult(texts, null, null);
     }
 
-    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default)
     {
         if (resultCount < 1) throw new ProviderAdapterException("At least one image result must be requested.");
         var results = new List<byte[]>(resultCount);
@@ -306,16 +333,80 @@ internal sealed class OneMinAiProviderAdapter : IProviderAdapter
         string.Equals(connectionUri.Host, resultUri.Host, StringComparison.OrdinalIgnoreCase) &&
         connectionUri.Port == resultUri.Port;
 
-    private static string BuildChatRequestBody(string providerModelId, string prompt)
+    /// <summary>Confirmed live (2026-08-19): POST /api/assets, multipart/form-data with a single
+    /// field named "asset" (the image file), same API-KEY auth header as every other 1min.ai request.
+    /// Response shape: <c>{"asset": {...upload metadata...}, "fileContent": {"path": "images/...",
+    /// ...}}</c> — <c>fileContent.path</c> is the value later passed as one entry of
+    /// <c>promptObject.attachments.images</c> in a <c>CHAT_WITH_IMAGE</c> chat request (see this
+    /// class's remarks). The error response shape for a failed upload was never exercised live, so
+    /// this falls back to <see cref="DescribeFeatureFailure"/>'s general-purpose 1min.ai error
+    /// parsing rather than a guessed asset-specific shape.</summary>
+    private async Task<string> UploadAssetAsync(Connection connection, string? apiKey, TextGenerationSourceImage image, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "api/assets"));
+        OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
+        OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
+        var content = new MultipartFormDataContent();
+        var imageContent = new ByteArrayContent(image.Bytes);
+        imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(image.MediaType);
+        content.Add(imageContent, "asset", $"source{ImageFileExtension(image.MediaType)}");
+        request.Content = content;
+
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
+        if (!isSuccess) throw new ProviderAdapterException(DescribeFeatureFailure(body, statusCode));
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (!document.RootElement.TryGetProperty("fileContent", out var fileContent) || fileContent.ValueKind != JsonValueKind.Object ||
+                !fileContent.TryGetProperty("path", out var pathElement) || pathElement.ValueKind != JsonValueKind.String ||
+                pathElement.GetString() is not { Length: > 0 } path)
+            {
+                throw new ProviderAdapterException("The provider's asset upload response did not include a usable file path.");
+            }
+
+            return path;
+        }
+        catch (JsonException)
+        {
+            throw new ProviderAdapterException("The provider's asset upload response was not valid JSON.");
+        }
+    }
+
+    private static string ImageFileExtension(string mediaType) => mediaType.ToLowerInvariant() switch
+    {
+        "image/png" => ".png",
+        "image/jpeg" => ".jpg",
+        "image/webp" => ".webp",
+        "image/gif" => ".gif",
+        _ => ".bin"
+    };
+
+    /// <summary><paramref name="imagePaths"/> non-empty switches the request from a plain
+    /// <c>UNIFY_CHAT_WITH_AI</c> call to <c>CHAT_WITH_IMAGE</c> with those (already-uploaded, see
+    /// <see cref="UploadAssetAsync"/>) storage paths listed under
+    /// <c>promptObject.attachments.images</c> — see this class's remarks for what was tried and ruled
+    /// out (a bare <c>imageList</c> field) before landing on this shape.</summary>
+    private static string BuildChatRequestBody(string providerModelId, string prompt, IReadOnlyList<string>? imagePaths = null)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartObject();
-            writer.WriteString("type", "UNIFY_CHAT_WITH_AI");
+            writer.WriteString("type", imagePaths is { Count: > 0 } ? "CHAT_WITH_IMAGE" : "UNIFY_CHAT_WITH_AI");
             writer.WriteString("model", providerModelId);
             writer.WriteStartObject("promptObject");
             writer.WriteString("prompt", prompt);
+            if (imagePaths is { Count: > 0 })
+            {
+                writer.WriteStartObject("attachments");
+                writer.WriteStartArray("images");
+                foreach (var path in imagePaths) writer.WriteStringValue(path);
+                writer.WriteEndArray();
+                writer.WriteStartArray("files");
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+            }
             writer.WriteEndObject();
             writer.WriteEndObject();
         }

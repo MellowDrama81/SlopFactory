@@ -2,7 +2,9 @@
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-         IgnorableNamespaces="uap rescap">
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+         IgnorableNamespaces="uap rescap desktop com">
   <Identity Name="Mellow.SlopFactory" Publisher="CN=Mellow" Version="0.1.0.0" />
   <Properties>
     <DisplayName>SlopFactory</DisplayName>
@@ -21,6 +23,16 @@
         <uap:SplashScreen Image="splashSplashScreen.png" BackgroundColor="#171A21" />
       </uap:VisualElements>
       <Extensions>
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="5F1E91AD-204B-4C4F-A6EF-2B28274232F9" />
+        </desktop:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="Mellow.SlopFactory.Gui.exe" Arguments="----AppNotificationActivated:" DisplayName="SlopFactory notification activator">
+              <com:Class Id="5F1E91AD-204B-4C4F-A6EF-2B28274232F9" DisplayName="SlopFactory notification activator" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
         <uap:Extension Category="windows.fileTypeAssociation">
           <uap:FileTypeAssociation Name="slopfactory-import">
             <uap:DisplayName>Import into SlopFactory</uap:DisplayName>

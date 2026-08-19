@@ -9,7 +9,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 38;
+    public const int SchemaVersion = 39;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -203,15 +203,48 @@ public static class LibraryRules
 
     /// <summary>
     /// Which named source-input slot roles a model accepts, and how many. Deliberately a small
-    /// switch, not a stored/persisted schema: only two capabilities are actually confirmed today
-    /// (text generation's up-to-3 reference images, any provider; DeepInfra video's optional
-    /// first-frame image), so there is nothing else to represent. Adding a third confirmed provider
-    /// capability later is one more arm here, not a data migration — see
+    /// switch, not a stored/persisted schema: only the capabilities actually confirmed against a
+    /// provider's real API are represented here (text generation's up-to-3 reference images, any
+    /// provider; image-to-image editing for OpenAI's, DeepInfra's, and OpenRouter's confirmed
+    /// contracts — OpenAI and DeepInfra share the identical <c>images/edits</c> multipart shape,
+    /// OpenRouter uses its own <c>input_references</c> field; DeepInfra video's optional first-frame
+    /// image). 1min.ai and the generic OpenAI-compatible adapter have no confirmed image-editing
+    /// contract, so Image mode declares nothing for them — their <c>GenerateImageAsync</c> ignores any
+    /// source images that reach it regardless (see
+    /// <see cref="Application.IProviderAdapter.GenerateImageAsync"/>). Adding a further confirmed
+    /// provider capability later is one more arm here, not a data migration — see
     /// <see cref="GenerationInputSlotRole"/>'s own remarks.
+    /// <para>
+    /// DeepInfra's image-edit <c>MaxCount</c> is a flat 3, same as OpenAI/OpenRouter, deliberately not
+    /// keyed per model: live testing (2026-08-19, see <c>DeepInfraProviderAdapter.GenerateImageAsync</c>'s
+    /// remarks) found actual multi-image behavior varies a lot by model and even by run —
+    /// <c>black-forest-labs/FLUX.1-Kontext-dev</c> reliably keeps only the last image, while
+    /// <c>black-forest-labs/FLUX-2-klein-9b</c> genuinely uses more than one but with real run-to-run
+    /// quality variance — and a per-model allowlist here proved to be exactly the kind of unverifiable,
+    /// high-maintenance special-casing this schema is meant to avoid (any new or unlisted DeepInfra
+    /// image-edit model would silently get the conservative default rather than what its own API
+    /// actually supports). Offering the slots and letting a per-model quirk surface as an ordinary
+    /// generation-quality or provider-error outcome is preferred over trying to hard-code every model's
+    /// behavior in this switch.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<GenerationInputSlotCapability> GetInputSlotCapabilities(ProviderType providerType, GenerationMode mode) => mode switch
     {
-        GenerationMode.Text => [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 3, Required: false)],
+        // Anthropic, Gemini and Cohere all genuinely support image input in chat (vision), but none of
+        // their bespoke adapters translate TextGenerationSourceImage into that provider's own
+        // content-block shape in this pass — offering the slot here without that translation would let
+        // a user attach an image that silently never reaches the provider, which is worse than not
+        // offering the slot at all. Revisit once translation is implemented for one of them.
+        GenerationMode.Text when providerType is not (ProviderType.Anthropic or ProviderType.Gemini or ProviderType.Cohere) =>
+            [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 3, Required: false)],
+        GenerationMode.Image when providerType is ProviderType.OpenAi or ProviderType.OpenRouter or ProviderType.DeepInfra => [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 3, Required: false)],
+        // ComfyUi's real per-slot capability lives in the model's own workflow JSON (whether it wires a
+        // LoadImage node to {{UPLOADED_IMAGE_FILENAME}}/{{UPLOADED_IMAGE_FILENAME_2}} or not), which this
+        // flat (provider, mode) switch cannot see. This declares a fixed upper bound instead (Comfy.md
+        // section 3.3, option (a)) — a pure text-to-image workflow with no such node simply ignores an
+        // offered slot. 2 is the highest reference-image count any built-in workflow template actually
+        // uses today (see ComfyBuiltInWorkflows) — a dual-image-edit graph with two LoadImage nodes.
+        GenerationMode.Image when providerType == ProviderType.ComfyUi => [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 2, Required: false)],
         GenerationMode.Video when providerType == ProviderType.DeepInfra => [new GenerationInputSlotCapability(GenerationInputSlotRole.FirstFrame, 0, 1, Required: false)],
         _ => []
     };
@@ -268,19 +301,27 @@ public static class LibraryRules
     /// <summary>
     /// Which <see cref="GenerationSettings"/> fields a provider+mode combination actually transmits.
     /// Deliberately a small switch, not a stored/persisted schema, mirroring
-    /// <see cref="GetInputSlotCapabilities"/>: only Text mode through the shared
-    /// OpenAI-compatible protocol (OpenAI, the generic OpenAI-compatible adapter, OpenRouter and
-    /// DeepInfra all reuse <c>OpenAiCompatibleProtocol.BuildChatCompletionRequestBody</c>, which
-    /// sends every one of these fields when present) actually honors any of them today. 1min.AI's
-    /// native chat endpoint accepts a <c>GenerationSettings</c> parameter but never reads it — these
-    /// fields have no effect there and were silently ignored before this capability schema existed.
-    /// No adapter's Image/Audio/Video request builder accepts <see cref="GenerationSettings"/> at
-    /// all, so every non-Text mode has no capabilities regardless of provider.
+    /// <see cref="GetInputSlotCapabilities"/>: every OpenAI-compatible-shaped adapter (OpenAI, the
+    /// generic OpenAI-compatible adapter, OpenRouter, DeepInfra, and the Mistral/Groq/Together
+    /// AI/Fireworks AI/DeepSeek/Perplexity/xAI/AI21 batch) reuses
+    /// <c>OpenAiCompatibleProtocol.BuildChatCompletionRequestBody</c>, which sends every one of these
+    /// fields when present. 1min.AI's native chat endpoint accepts a <see cref="GenerationSettings"/>
+    /// parameter but never reads it. Anthropic and Gemini's bespoke request shapes have no
+    /// frequency/presence-penalty equivalent, so those two flags are withheld for them; Cohere's v1
+    /// chat request does support both (<c>frequency_penalty</c>/<c>presence_penalty</c>), so it gets
+    /// the full set like the OpenAI-compatible group. No adapter's Image/Audio/Video request builder
+    /// accepts <see cref="GenerationSettings"/> at all, so every non-Text mode has no capabilities
+    /// regardless of provider.
     /// </summary>
     public static GenerationSettingsCapability GetGenerationSettingsCapabilities(ProviderType providerType, GenerationMode mode)
     {
         if (mode != GenerationMode.Text) return GenerationSettingsCapability.None;
         if (providerType == ProviderType.OneMinAi) return GenerationSettingsCapability.None;
+        if (providerType is ProviderType.Anthropic or ProviderType.Gemini)
+        {
+            return GenerationSettingsCapability.Temperature | GenerationSettingsCapability.TopP | GenerationSettingsCapability.MaxTokens
+                | GenerationSettingsCapability.AdvancedJson;
+        }
         return GenerationSettingsCapability.Temperature | GenerationSettingsCapability.TopP | GenerationSettingsCapability.MaxTokens
             | GenerationSettingsCapability.FrequencyPenalty | GenerationSettingsCapability.PresencePenalty | GenerationSettingsCapability.AdvancedJson;
     }
@@ -289,11 +330,118 @@ public static class LibraryRules
     /// Whether a provider's Audio-mode adapter accepts a caller-chosen preset voice identifier.
     /// Deliberately a small switch, not a stored/persisted schema, mirroring
     /// <see cref="GetInputSlotCapabilities"/> and <see cref="GetGenerationSettingsCapabilities"/>:
-    /// today only DeepInfra's confirmed <c>POST /v1/audio/speech</c> contract documents an optional
-    /// <c>voice</c> field (`docs/developer/deepinfra-audio-video-contract.md`); no other adapter's
-    /// audio request documents one.
+    /// DeepInfra's, OpenAI's, and Groq's confirmed <c>POST .../audio/speech</c> contracts (the OpenAI
+    /// Audio API shape, reused verbatim by <see cref="Infrastructure.Providers.OpenAiProviderAdapter"/>/
+    /// <see cref="Infrastructure.Providers.OpenRouterProviderAdapter"/>/
+    /// <see cref="Infrastructure.Providers.DeepInfraProviderAdapter"/>/
+    /// <see cref="Infrastructure.Providers.GroqProviderAdapter"/>) all document an optional/required
+    /// <c>voice</c> field; Gemini's TTS accepts a <c>speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName</c>
+    /// (see <see cref="Infrastructure.Providers.GoogleGeminiProviderAdapter.GenerateAudioAsync"/>) —
+    /// conceptually the same "pick a preset voice" capability, just a different field path. No other
+    /// adapter's audio request documents one.
     /// </summary>
-    public static bool SupportsAudioVoiceSelection(ProviderType providerType) => providerType == ProviderType.DeepInfra;
+    public static bool SupportsAudioVoiceSelection(ProviderType providerType) =>
+        providerType is ProviderType.DeepInfra or ProviderType.OpenAi or ProviderType.OpenRouter or ProviderType.Groq or ProviderType.Gemini;
+
+    /// <summary>
+    /// Whether a provider has any model-listing endpoint at all. Deliberately a small switch, not a
+    /// stored/persisted schema, mirroring <see cref="GetInputSlotCapabilities"/>/
+    /// <see cref="SupportsAudioVoiceSelection"/>: only 1min.ai has no documented model-listing
+    /// endpoint anywhere in its API reference (see
+    /// <c>OneMinAiProviderAdapter.ListModelsAsync</c>, which always throws) — every other adapter
+    /// implements a real <c>GET</c> equivalent. Lets <c>ModelEdit.razor</c> disable the discovery
+    /// button and dropdown up front, with an explanation, instead of letting the user trigger a call
+    /// that is guaranteed to fail.
+    /// </summary>
+    public static bool SupportsModelDiscovery(ProviderType providerType) => providerType is not (ProviderType.OneMinAi or ProviderType.ComfyUi);
+
+    /// <summary>
+    /// Validates a <see cref="Model.ComfyWorkflowTemplate"/> value: must be present (non-null/non-blank)
+    /// whenever <paramref name="providerType"/> is <see cref="ProviderType.ComfyUi"/> (every ComfyUi
+    /// model needs a workflow to submit), must parse as a JSON object keyed by numeric-string ComfyUI
+    /// node IDs each holding <c>class_type</c>/<c>inputs</c> (the documented API-format shape a user
+    /// exports via ComfyUI's "Save (API format)" button — see Comfy.md section 3.2), must contain the
+    /// required <c>{{PROMPT}}</c> placeholder token at least once, and is bounded by the same
+    /// <see cref="MaximumGenerationTextUtf8Bytes"/> size used for prompts/candidates elsewhere in this
+    /// file — a workflow JSON can legitimately be large (many nodes), but an unbounded one is still a
+    /// mistake to accept silently. For every non-ComfyUi provider, the value must be null (this field
+    /// has no meaning outside ComfyUi and is never persisted for another provider's models).
+    /// <para>
+    /// The structural JSON check parses a <b>probe</b> string with every placeholder token replaced by
+    /// a harmless dummy literal, not <paramref name="value"/> itself — <c>{{SEED}}</c> is meant to sit
+    /// in an unquoted numeric position (e.g. <c>"seed": {{SEED}}</c>), which is not valid JSON on its
+    /// own before substitution. The stored/returned value is always the original, unsubstituted text.
+    /// </para>
+    /// </summary>
+    public static string? ValidateComfyWorkflowTemplate(string? value, GenerationMode mode)
+    {
+        _ = mode;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new LibraryValidationException("A ComfyUI model requires a workflow template.");
+        }
+
+        if (Encoding.UTF8.GetByteCount(value) > MaximumGenerationTextUtf8Bytes)
+        {
+            throw new LibraryValidationException($"Workflow template cannot exceed {MaximumGenerationTextUtf8Bytes} UTF-8 bytes.");
+        }
+
+        var probe = value
+            .Replace("{{PROMPT}}", "probe-prompt", StringComparison.Ordinal)
+            .Replace("{{NEGATIVE_PROMPT}}", "probe-negative-prompt", StringComparison.Ordinal)
+            .Replace("{{UPLOADED_IMAGE_FILENAME}}", "probe-image.png", StringComparison.Ordinal)
+            .Replace("{{SEED}}", "0", StringComparison.Ordinal);
+
+        JsonElement root;
+        try
+        {
+            root = JsonDocument.Parse(probe).RootElement;
+        }
+        catch (JsonException)
+        {
+            throw new LibraryValidationException("Workflow template must be valid JSON.");
+        }
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new LibraryValidationException("Workflow template must be a JSON object keyed by ComfyUI node IDs.");
+        }
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!IsValidComfyNodeKey(property.Name))
+            {
+                throw new LibraryValidationException($"Workflow template node key '{property.Name}' is not a numeric ComfyUI node ID.");
+            }
+
+            if (property.Value.ValueKind != JsonValueKind.Object || !property.Value.TryGetProperty("class_type", out _) || !property.Value.TryGetProperty("inputs", out _))
+            {
+                throw new LibraryValidationException($"Workflow template node '{property.Name}' must be an object with 'class_type' and 'inputs'.");
+            }
+        }
+
+        if (!value.Contains("{{PROMPT}}", StringComparison.Ordinal))
+        {
+            throw new LibraryValidationException("Workflow template must contain the {{PROMPT}} placeholder at least once.");
+        }
+
+        return value;
+    }
+
+    /// <summary>A real ComfyUI API-format export doesn't always use a bare integer as a node ID — a
+    /// node inside a subgraph gets a colon-separated compound key instead (e.g. <c>"57:8"</c> for a
+    /// node nested one subgraph deep, <c>"48:35:43"</c> for two deep — confirmed against real Comfy
+    /// Cloud template exports). Accepts any key that is one or more colon-separated non-negative
+    /// integer segments, rejecting only genuinely non-numeric keys.</summary>
+    private static bool IsValidComfyNodeKey(string key)
+    {
+        foreach (var segment in key.Split(':'))
+        {
+            if (!int.TryParse(segment, NumberStyles.None, CultureInfo.InvariantCulture, out _)) return false;
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Computes a pre-generation cost estimate from real, just-fetched provider pricing — never

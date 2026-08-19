@@ -1277,20 +1277,28 @@ public sealed class GenerationQueueService
             var stagedForRecovery = false;
             if (snapshot.Mode == GenerationMode.Image)
             {
+                var referenceImageSlots = (snapshot.SourceSlots ?? []).Where(slot => slot.Role == GenerationInputSlotRole.ReferenceImage).OrderBy(slot => slot.Order).ToArray();
+                var sourceImages = new List<TextGenerationSourceImage>(referenceImageSlots.Length);
+                foreach (var slot in referenceImageSlots)
+                {
+                    var sourceContent = await job.Workspace.ReadImageFileAsync(slot.FileId, cancellationToken).ConfigureAwait(false);
+                    sourceImages.Add(new TextGenerationSourceImage(sourceContent.MediaType, sourceContent.Bytes));
+                }
+
                 IReadOnlyList<byte[]>? images = null;
                 string? errorMessage = null;
                 try
                 {
                     AdvanceLocked(job, GenerationStatus.Submitting);
                     job.SubmissionAttempted = true;
-                    images = await adapter.GenerateImageAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, cancellationToken: cancellationToken).ConfigureAwait(false);
+                    images = await adapter.GenerateImageAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, sourceImages, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
                 {
                     errorMessage = exception.Message;
                 }
 
-                record = await job.Workspace.RecordImageGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, images, errorMessage, snapshot.AcceptedImprovementRecordId, existingGenerationRecordId: job.GenerationRecordId, cancellationToken: cancellationToken).ConfigureAwait(false);
+                record = await job.Workspace.RecordImageGenerationResultAsync(model.Id, snapshot.Prompt, snapshot.ResultCount, snapshot.DestinationFolderId, images, errorMessage, snapshot.AcceptedImprovementRecordId, existingGenerationRecordId: job.GenerationRecordId, sourceSlots: snapshot.SourceSlots, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             else if (snapshot.Mode == GenerationMode.Audio)
             {

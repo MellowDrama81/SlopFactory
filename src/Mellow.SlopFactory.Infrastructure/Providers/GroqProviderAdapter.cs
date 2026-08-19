@@ -5,18 +5,30 @@ using Mellow.SlopFactory.Domain;
 
 namespace Mellow.SlopFactory.Infrastructure.Providers;
 
-internal sealed class OpenAiProviderAdapter : IProviderAdapter
+/// <summary>
+/// Groq (`api.groq.com/openai/v1`) exposes an OpenAI-compatible `chat/completions` endpoint — its
+/// entire value proposition is inference speed (custom LPU hardware) on hosted open-weight text
+/// models, not model novelty, so this adapter reuses <see cref="OpenAiCompatibleProtocol"/> exactly
+/// like <see cref="OpenAiProviderAdapter"/>. Groq does not host any image-generation model at all
+/// (unlike Mistral/xAI, there is no partial-capability caveat here — it is simply absent). Audio is
+/// implemented as text-to-speech only, via Groq's documented OpenAI-compatible `POST /audio/speech`
+/// endpoint (PlayAI-based TTS models) — the same shape <see cref="OpenAiProviderAdapter"/>/
+/// <see cref="OpenRouterProviderAdapter"/>/<see cref="DeepInfraProviderAdapter"/> already implement.
+/// Groq's hosted Whisper models are speech-to-text (input direction), which this app's
+/// <see cref="GenerateAudioAsync"/> has no surface for, so they stay out of scope here regardless.
+/// </summary>
+internal sealed class GroqProviderAdapter : IProviderAdapter
 {
     private readonly HttpClient _httpClient;
     private readonly IConnectionRateLimitTracker? _rateLimitTracker;
 
-    public OpenAiProviderAdapter(HttpClient httpClient, IConnectionRateLimitTracker? rateLimitTracker = null)
+    public GroqProviderAdapter(HttpClient httpClient, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         _httpClient = httpClient;
         _rateLimitTracker = rateLimitTracker;
     }
 
-    public ProviderType ProviderType => ProviderType.OpenAi;
+    public ProviderType ProviderType => ProviderType.Groq;
 
     public async Task<ConnectionTestResult> TestConnectionAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default)
     {
@@ -58,25 +70,9 @@ internal sealed class OpenAiProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseChatCompletionResult(body);
     }
 
-    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default)
-    {
-        var hasSourceImages = sourceImages is { Count: > 0 };
-        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, hasSourceImages ? "images/edits" : "images/generations"));
-        OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
-        OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = hasSourceImages
-            ? OpenAiCompatibleProtocol.BuildImageEditMultipartContent(model.ProviderModelId, prompt, resultCount, sourceImages!)
-            : new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
-        if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
-        return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
-    }
+    public Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default) =>
+        throw new ProviderAdapterException("Image generation is not available for Groq: it does not host any image-generation models.");
 
-    /// <summary>`POST /v1/audio/speech` — the same OpenAI-documented Audio API shape
-    /// <see cref="OpenRouterProviderAdapter"/> and <see cref="DeepInfraProviderAdapter"/> already
-    /// implement against this exact provider family, so this reuses the identical request/response
-    /// handling rather than the "not yet verified" caution that previously left this adapter's audio
-    /// unimplemented.</summary>
     public async Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default)
     {
         if (resultCount < 1) throw new ProviderAdapterException("At least one audio result must be requested.");
@@ -96,14 +92,11 @@ internal sealed class OpenAiProviderAdapter : IProviderAdapter
         return results;
     }
 
-    // Sora's video-generation API exists but is newer, more access-gated, and carries a materially
-    // different (async, multi-step) request shape than this pass had confidence to guess at without
-    // live verification — unlike audio/speech above, which reuses an already-proven shape.
     public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default) =>
-        throw new ProviderAdapterException("Video generation is not yet implemented for the OpenAI adapter.");
+        throw new ProviderAdapterException("Video generation is not available for Groq: it does not offer a video-generation API.");
 
     public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default) =>
-        throw new ProviderAdapterException("Video generation is not yet implemented for the OpenAI adapter.");
+        throw new ProviderAdapterException("Video generation is not available for Groq: it does not offer a video-generation API.");
 
     private static string BuildAudioSpeechRequestBody(string providerModelId, string prompt, string? voice)
     {
@@ -113,13 +106,15 @@ internal sealed class OpenAiProviderAdapter : IProviderAdapter
             writer.WriteStartObject();
             writer.WriteString("model", providerModelId);
             writer.WriteString("input", prompt);
-            writer.WriteString("response_format", "mp3");
-            if (!string.IsNullOrWhiteSpace(voice)) writer.WriteString("voice", voice);
+            writer.WriteString("response_format", "wav");
+            writer.WriteString("voice", string.IsNullOrWhiteSpace(voice) ? DefaultVoice : voice);
             writer.WriteEndObject();
         }
 
         return Encoding.UTF8.GetString(stream.ToArray());
     }
+
+    private const string DefaultVoice = "Fritz-PlayAI";
 
     private static string? TryGetHost(string baseUrl) => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) ? uri.Host : null;
 }

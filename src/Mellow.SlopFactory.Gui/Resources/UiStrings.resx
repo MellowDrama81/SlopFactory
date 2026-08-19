@@ -609,6 +609,23 @@
   <data name="ProviderOpenRouter" xml:space="preserve"><value>OpenRouter</value></data>
   <data name="ProviderDeepInfra" xml:space="preserve"><value>DeepInfra</value></data>
   <data name="ProviderOneMinAi" xml:space="preserve"><value>1min.AI</value></data>
+  <data name="ProviderComfyUi" xml:space="preserve"><value>ComfyUI</value></data>
+  <data name="ProviderMistral" xml:space="preserve"><value>Mistral AI</value></data>
+  <data name="ProviderGroq" xml:space="preserve"><value>Groq</value></data>
+  <data name="ProviderTogetherAi" xml:space="preserve"><value>Together AI</value></data>
+  <data name="ProviderFireworksAi" xml:space="preserve"><value>Fireworks AI</value></data>
+  <data name="ProviderDeepSeek" xml:space="preserve"><value>DeepSeek</value></data>
+  <data name="ProviderPerplexity" xml:space="preserve"><value>Perplexity</value></data>
+  <data name="ProviderXAi" xml:space="preserve"><value>xAI (Grok)</value></data>
+  <data name="ProviderAnthropic" xml:space="preserve"><value>Anthropic (Claude)</value></data>
+  <data name="ProviderGemini" xml:space="preserve"><value>Google Gemini</value></data>
+  <data name="ProviderCohere" xml:space="preserve"><value>Cohere</value></data>
+  <data name="ProviderAI21" xml:space="preserve"><value>AI21 (Jamba)</value></data>
+  <data name="ComfyWorkflowTemplate" xml:space="preserve"><value>Workflow template (JSON)</value></data>
+  <data name="ComfyWorkflowTemplateHelp" xml:space="preserve"><value>Paste the API-format workflow JSON exported from ComfyUI's "Save (API format)" button, with literal values replaced by placeholder tokens: {{PROMPT}} (required) for the positive prompt text, {{SEED}} (optional) for a fresh random seed per generation, and {{UPLOADED_IMAGE_FILENAME}} / {{UPLOADED_IMAGE_FILENAME_2}} (optional, up to two) where a LoadImage node should receive an uploaded reference image. Or pick a built-in workflow below to start from one.</value></data>
+  <data name="ComfyBuiltInWorkflowPicker" xml:space="preserve"><value>Start from a built-in workflow</value></data>
+  <data name="ComfyBuiltInWorkflowPickerPlaceholder" xml:space="preserve"><value>None — write or paste your own</value></data>
+  <data name="ComfyBuiltInWorkflowReferenceImageCount" xml:space="preserve"><value>Reference images used by this workflow: {0}</value></data>
   <data name="ModeAudio" xml:space="preserve"><value>Audio</value></data>
   <data name="ModeVideo" xml:space="preserve"><value>Video</value></data>
   <data name="ConnectionsPageTitle" xml:space="preserve"><value>Connections · SlopFactory</value></data>
@@ -670,6 +687,7 @@
   <data name="NoModelsDiscovered" xml:space="preserve"><value>No models were returned by this connection. Enter a provider model ID manually.</value></data>
   <data name="DiscoveredModels" xml:space="preserve"><value>Discovered models</value></data>
   <data name="SelectDiscoveredModel" xml:space="preserve"><value>Select a discovered model…</value></data>
+  <data name="ModelDiscoveryNotAvailableForProvider" xml:space="preserve"><value>This provider has no documented model-listing endpoint, so models can't be discovered automatically. Enter the provider model ID manually.</value></data>
   <data name="SupportsSystemInstructions" xml:space="preserve"><value>Supports system instructions</value></data>
   <data name="NavGenerate" xml:space="preserve"><value>Generate</value></data>
   <data name="NavGenerationHistory" xml:space="preserve"><value>Generation history</value></data>

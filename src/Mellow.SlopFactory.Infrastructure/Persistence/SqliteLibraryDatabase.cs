@@ -204,7 +204,8 @@ internal sealed class SqliteLibraryDatabase
                 modified_at TEXT NOT NULL,
                 recycled_at TEXT NULL,
                 needs_review INTEGER NOT NULL DEFAULT 0,
-                text_format INTEGER NOT NULL DEFAULT 0
+                text_format INTEGER NOT NULL DEFAULT 0,
+                comfy_workflow_template TEXT NULL
             );
             CREATE UNIQUE INDEX ux_models_active_label ON models(label_key) WHERE state = 0;
             CREATE INDEX ix_models_connection_state ON models(connection_id, state);
@@ -768,6 +769,14 @@ internal sealed class SqliteLibraryDatabase
                     $"INSERT INTO generation_source_slots(id,owner_type,owner_id,role,ordinal,file_id,snapshot_display_name,snapshot_media_type,snapshot_content_hash) SELECT lower(hex(randomblob(16))),2,id,0,{ordinal},NULL,{tombstoneName},{tombstoneMedia},{tombstoneHash} FROM generation_records WHERE {sourceColumn} IS NULL AND {tombstoneName} IS NOT NULL;",
                     cancellationToken, transaction).ConfigureAwait(false);
             }
+        }
+        if (fromVersion < 39)
+        {
+            // Nullable, populated only for ProviderType.ComfyUi models — see LibraryModels.cs's
+            // remarks on Model.ComfyWorkflowTemplate. Plain ADD COLUMN, not a table rebuild, per this
+            // file's established additive-migration discipline (a rebuild-via-rename was found earlier
+            // in this file's history to silently corrupt a dependent table's foreign key).
+            await AddColumnIfMissingAsync(connection, transaction, "models", "comfy_workflow_template", "TEXT NULL", cancellationToken).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -2401,7 +2410,7 @@ internal sealed class SqliteLibraryDatabase
         return await GetModelAsync(connection, modelId, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat, CancellationToken cancellationToken)
+    public async Task<Model> CreateModelAsync(string label, string connectionId, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat, string? comfyWorkflowTemplate, CancellationToken cancellationToken)
     {
         var normalizedLabel = LibraryRules.NormalizeShortLabel(label, "Model label");
         var normalizedProviderModelId = LibraryRules.NormalizeShortLabel(providerModelId, "Provider model ID");
@@ -2410,24 +2419,27 @@ internal sealed class SqliteLibraryDatabase
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var owningConnection = await GetConnectionAsync(connection, connectionId, cancellationToken).ConfigureAwait(false);
         if (owningConnection.State != LibraryRecordState.Active) throw new LibraryValidationException("Models can only be added to an active connection.");
+        var normalizedWorkflowTemplate = owningConnection.ProviderType == ProviderType.ComfyUi
+            ? LibraryRules.ValidateComfyWorkflowTemplate(comfyWorkflowTemplate, mode)
+            : null;
         try
         {
             await ExecuteNonQueryAsync(connection,
-                "INSERT INTO models(id,connection_id,label,label_key,provider_model_id,mode,supports_system_instructions,state,created_at,modified_at,text_format) VALUES($id,$connection,$label,$key,$providerModel,$mode,$sysInstr,0,$now,$now,$textFormat);",
+                "INSERT INTO models(id,connection_id,label,label_key,provider_model_id,mode,supports_system_instructions,state,created_at,modified_at,text_format,comfy_workflow_template) VALUES($id,$connection,$label,$key,$providerModel,$mode,$sysInstr,0,$now,$now,$textFormat,$workflow);",
                 cancellationToken, null,
                 ("$id", id), ("$connection", connectionId), ("$label", normalizedLabel), ("$key", LibraryRules.ComparisonKey(normalizedLabel)),
                 ("$providerModel", normalizedProviderModelId), ("$mode", (int)mode), ("$sysInstr", supportsSystemInstructions), ("$now", Format(now)),
-                ("$textFormat", (int)textFormat)).ConfigureAwait(false);
+                ("$textFormat", (int)textFormat), ("$workflow", (object?)normalizedWorkflowTemplate ?? DBNull.Value)).ConfigureAwait(false);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
         {
             throw new NameConflictException($"An active model labelled '{normalizedLabel}' already exists.");
         }
 
-        return new Model(id, connectionId, normalizedLabel, normalizedProviderModelId, mode, supportsSystemInstructions, LibraryRecordState.Active, now, now, null, false, textFormat);
+        return new Model(id, connectionId, normalizedLabel, normalizedProviderModelId, mode, supportsSystemInstructions, LibraryRecordState.Active, now, now, null, false, textFormat, normalizedWorkflowTemplate);
     }
 
-    public async Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat, CancellationToken cancellationToken)
+    public async Task<Model> UpdateModelAsync(string modelId, string label, string providerModelId, GenerationMode mode, bool supportsSystemInstructions, TextResultFormat textFormat, string? comfyWorkflowTemplate, CancellationToken cancellationToken)
     {
         var normalizedLabel = LibraryRules.NormalizeShortLabel(label, "Model label");
         var normalizedProviderModelId = LibraryRules.NormalizeShortLabel(providerModelId, "Provider model ID");
@@ -2435,15 +2447,21 @@ internal sealed class SqliteLibraryDatabase
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var existing = await GetModelAsync(connection, modelId, cancellationToken, transaction).ConfigureAwait(false);
         if (existing.State != LibraryRecordState.Active) throw new LibraryValidationException("Only an active model can be edited.");
-        var needsReview = existing.NeedsReview || !string.Equals(existing.ProviderModelId, normalizedProviderModelId, StringComparison.Ordinal) || existing.Mode != mode;
+        var owningConnection = await GetConnectionAsync(connection, existing.ConnectionId, cancellationToken, transaction).ConfigureAwait(false);
+        var normalizedWorkflowTemplate = owningConnection.ProviderType == ProviderType.ComfyUi
+            ? LibraryRules.ValidateComfyWorkflowTemplate(comfyWorkflowTemplate, mode)
+            : null;
+        var needsReview = existing.NeedsReview || !string.Equals(existing.ProviderModelId, normalizedProviderModelId, StringComparison.Ordinal) || existing.Mode != mode
+            || !string.Equals(existing.ComfyWorkflowTemplate, normalizedWorkflowTemplate, StringComparison.Ordinal);
         var modified = DateTimeOffset.UtcNow;
         try
         {
             await ExecuteNonQueryAsync(connection,
-                "UPDATE models SET label=$label,label_key=$key,provider_model_id=$providerModel,mode=$mode,supports_system_instructions=$sysInstr,needs_review=$needsReview,text_format=$textFormat,modified_at=$modified WHERE id=$id AND state=0;",
+                "UPDATE models SET label=$label,label_key=$key,provider_model_id=$providerModel,mode=$mode,supports_system_instructions=$sysInstr,needs_review=$needsReview,text_format=$textFormat,comfy_workflow_template=$workflow,modified_at=$modified WHERE id=$id AND state=0;",
                 cancellationToken, transaction,
                 ("$label", normalizedLabel), ("$key", LibraryRules.ComparisonKey(normalizedLabel)), ("$providerModel", normalizedProviderModelId),
-                ("$mode", (int)mode), ("$sysInstr", supportsSystemInstructions), ("$needsReview", needsReview), ("$textFormat", (int)textFormat), ("$modified", Format(modified)), ("$id", modelId)).ConfigureAwait(false);
+                ("$mode", (int)mode), ("$sysInstr", supportsSystemInstructions), ("$needsReview", needsReview), ("$textFormat", (int)textFormat),
+                ("$workflow", (object?)normalizedWorkflowTemplate ?? DBNull.Value), ("$modified", Format(modified)), ("$id", modelId)).ConfigureAwait(false);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
         {
@@ -2457,7 +2475,7 @@ internal sealed class SqliteLibraryDatabase
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return existing with { Label = normalizedLabel, ProviderModelId = normalizedProviderModelId, Mode = mode, SupportsSystemInstructions = supportsSystemInstructions, NeedsReview = needsReview, TextFormat = textFormat, ModifiedAt = modified };
+        return existing with { Label = normalizedLabel, ProviderModelId = normalizedProviderModelId, Mode = mode, SupportsSystemInstructions = supportsSystemInstructions, NeedsReview = needsReview, TextFormat = textFormat, ComfyWorkflowTemplate = normalizedWorkflowTemplate, ModifiedAt = modified };
     }
 
     public async Task<Model> MarkModelReviewedAsync(string modelId, CancellationToken cancellationToken)
@@ -3653,7 +3671,7 @@ internal sealed class SqliteLibraryDatabase
     }
 
     private const string ConnectionSelect = "SELECT id,label,provider_type,base_url,credential_header_name,auth_prefix,has_credential,last_test_status,last_tested_at,last_test_message,state,created_at,modified_at,recycled_at,timeout_seconds,generic_models_enabled,generic_models_path,generic_text_enabled,generic_text_path,generic_image_enabled,generic_image_path,credential_revision_id,credential_requires_repair FROM connections";
-    private const string ModelSelect = "SELECT id,connection_id,label,provider_model_id,mode,supports_system_instructions,state,created_at,modified_at,recycled_at,needs_review,text_format FROM models";
+    private const string ModelSelect = "SELECT id,connection_id,label,provider_model_id,mode,supports_system_instructions,state,created_at,modified_at,recycled_at,needs_review,text_format,comfy_workflow_template FROM models";
 
     private static async Task<Connection> GetConnectionAsync(SqliteConnection connection, string connectionId, CancellationToken cancellationToken, SqliteTransaction? transaction = null)
     {
@@ -3750,7 +3768,7 @@ internal sealed class SqliteLibraryDatabase
     private static Model ReadModel(SqliteDataReader reader) => new(
         reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), (GenerationMode)reader.GetInt32(4), reader.GetBoolean(5),
         (LibraryRecordState)reader.GetInt32(6), Parse(reader.GetString(7)), Parse(reader.GetString(8)), reader.IsDBNull(9) ? null : Parse(reader.GetString(9)),
-        reader.GetBoolean(10), (TextResultFormat)reader.GetInt32(11));
+        reader.GetBoolean(10), (TextResultFormat)reader.GetInt32(11), reader.IsDBNull(12) ? null : reader.GetString(12));
 
     private static FolderRecord ReadFolder(SqliteDataReader reader) => new(
         reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), (LibraryRecordState)reader.GetInt32(3),

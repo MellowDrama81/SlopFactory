@@ -2,7 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/Mellow.SlopFactory.Core/Mellow.SlopFactory.Core.csproj" />
     <Project Path="src/Mellow.SlopFactory.Infrastructure/Mellow.SlopFactory.Infrastructure.csproj" />
-    <Project Path="src/Mellow.SlopFactory.Gui/Mellow.SlopFactory.Gui.csproj" />
+    <Project Path="src/Mellow.SlopFactory.Gui/Mellow.SlopFactory.Gui.csproj">
+      <Deploy Solution="Debug|*" />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Mellow.SlopFactory.Tests/Mellow.SlopFactory.Tests.csproj" />

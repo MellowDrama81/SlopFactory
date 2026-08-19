@@ -19,11 +19,31 @@ SlopFactory runs on Windows and Android, sharing one .NET MAUI Blazor Hybrid cod
 ## Generation
 
 - **Providers**: OpenAI, a generic OpenAI-compatible endpoint (for gateways and self-hosted
-  OpenAI-shaped APIs), OpenRouter, DeepInfra, and 1min.AI — each with its own connection, secure
-  credential storage, and per-provider capability rules rather than one-size-fits-all behavior.
+  OpenAI-shaped APIs), OpenRouter, DeepInfra, 1min.AI, ComfyUI (self-hosted or Comfy Cloud), Mistral AI,
+  Groq, Together AI, Fireworks AI, DeepSeek, Perplexity, xAI (Grok), Anthropic (Claude), Google Gemini,
+  Cohere, and AI21 (Jamba) — each with its own connection, secure credential storage, and per-provider
+  capability rules rather than one-size-fits-all behavior. ComfyUI is image-generation only: a model's
+  provider-model ID is paired with a workflow-JSON template (exported from ComfyUI's "Save (API
+  format)" button, with a few placeholder tokens for the prompt/seed/reference image(s)) instead of a
+  plain model name — a built-in library of 11 ready-to-use workflows (SD/Flux/Qwen text-to-image and
+  image-edit variants) is available to start from when adding a ComfyUI model, though none of them have
+  been independently re-verified against a live Comfy Cloud account. Every other newly-added provider is
+  text-only in this app except Together AI,
+  Fireworks AI, and xAI, which also support plain (non-reference) image generation, and Google Gemini,
+  which supports both image and text-to-speech audio generation; OpenAI and Groq also gained
+  text-to-speech audio generation via the standard OpenAI Audio API shape. None of these eleven
+  providers have been live-verified against a real account — see `providers.md`.
 - **Modes**: text, image, audio, and video, with per-model capability tracking (which modes a
   connection actually supports, whether a model accepts system instructions, and which source-input
   roles — reference image, DeepInfra video's first frame, and so on — it declares).
+- **DeepInfra multi-reference image editing is provider-dependent, not app-limited**: SlopFactory
+  offers up to three reference images to every DeepInfra image model, same as OpenAI/OpenRouter, but
+  DeepInfra's own backend behavior varies by model and isn't always intuitive — some models silently
+  keep only the last supplied image rather than combining them, others genuinely use more than one
+  but with real run-to-run quality variance, and at least one observed model favors whichever image
+  is supplied *second* over how a prompt's own "Image 1"/"Image 2" wording is phrased. This isn't
+  something the app can normalize away, so treat DeepInfra multi-image results as provider-quality-
+  dependent and worth a quick retry (or reordering your source images) if a result looks off.
 - **A real submission queue**: generation requests go through a per-connection FIFO queue with a
   device-wide submission cap and an adjustable per-connection concurrency limit, so multiple
   concurrent generation tabs schedule fairly instead of blocking each other. Offline and metered

@@ -34,7 +34,7 @@ else
         <InputText id="model-label" @bind-Value="_form.Label" maxlength="100" />
 
         <label for="model-connection">@Strings["Connection"]</label>
-        <InputSelect id="model-connection" @bind-Value="_form.ConnectionId" disabled="@(!IsNew)">
+        <InputSelect id="model-connection" @bind-Value="_form.ConnectionId" @bind-Value:after="OnConnectionChangedAsync" disabled="@(!IsNew)">
             @foreach (var connection in _activeConnections)
             {
                 <option value="@connection.Id">@connection.Label</option>
@@ -50,45 +50,56 @@ else
         }
 
         <label for="model-mode">@Strings["GenerationMode"]</label>
-        <InputSelect id="model-mode" @bind-Value="_form.Mode">
+        <InputSelect id="model-mode" @bind-Value="_form.Mode" @bind-Value:after="OnModeChanged">
             <option value="@GenerationMode.Text">@Strings["ModeText"]</option>
             <option value="@GenerationMode.Image">@Strings["ModeImage"]</option>
             <option value="@GenerationMode.Audio">@Strings["ModeAudio"]</option>
             <option value="@GenerationMode.Video">@Strings["ModeVideo"]</option>
         </InputSelect>
 
-        <label for="model-provider-id">@Strings["ProviderModelId"]</label>
-        <InputText id="model-provider-id" @bind-Value="_form.ProviderModelId" maxlength="100" />
-        @if (_catalogue is not null)
+        @if (!SelectedConnectionIsComfyUi)
         {
-            <p class="muted">
-                @(_catalogue.RetrievedAt is { } retrievedAt ? Strings["ModelCatalogueLastRefreshed", retrievedAt.ToLocalTime().ToString("g")] : Strings["ModelCatalogueNeverRefreshed"])
-                @if (_catalogue.PossiblyStale)
-                {
-                    <span class="notice error">@Strings["ModelCataloguePossiblyStale"]</span>
-                }
-                else if (_catalogue.RetrievedAt is { } lastRefreshed && DateTimeOffset.UtcNow - lastRefreshed > LibraryRules.ModelCatalogueStalenessPeriod)
-                {
-                    <span class="notice">@Strings["ModelCatalogueStale"]</span>
-                }
-            </p>
-        }
-        <button type="button" class="secondary" disabled="@_busy" @onclick="LoadModelsAsync">@(_loadingModels ? Strings["LoadingModels"] : Strings["LoadModels"])</button>
-        @if (_discoveredModels is not null)
-        {
-            @if (_discoveredModels.Count == 0)
+            <label for="model-provider-id">@Strings["ProviderModelId"]</label>
+            <InputText id="model-provider-id" @bind-Value="_form.ProviderModelId" maxlength="100" />
+            @if (_catalogue is not null)
             {
-                <p class="muted">@Strings["NoModelsDiscovered"]</p>
+                <p class="muted">
+                    @(_catalogue.RetrievedAt is { } retrievedAt ? Strings["ModelCatalogueLastRefreshed", retrievedAt.ToLocalTime().ToString("g")] : Strings["ModelCatalogueNeverRefreshed"])
+                    @if (_catalogue.PossiblyStale)
+                    {
+                        <span class="notice error">@Strings["ModelCataloguePossiblyStale"]</span>
+                    }
+                    else if (_catalogue.RetrievedAt is { } lastRefreshed && DateTimeOffset.UtcNow - lastRefreshed > LibraryRules.ModelCatalogueStalenessPeriod)
+                    {
+                        <span class="notice">@Strings["ModelCatalogueStale"]</span>
+                    }
+                </p>
+            }
+            @if (SelectedConnectionSupportsModelDiscovery)
+            {
+                <button type="button" class="secondary" disabled="@_busy" @onclick="LoadModelsAsync">@(_loadingModels ? Strings["LoadingModels"] : Strings["LoadModels"])</button>
+                @if (_discoveredModels is not null)
+                {
+                    @if (_discoveredModels.Count == 0)
+                    {
+                        <p class="muted">@Strings["NoModelsDiscovered"]</p>
+                    }
+                    else
+                    {
+                        <select aria-label="@Strings["DiscoveredModels"]" @onchange="ChooseDiscoveredModel">
+                            <option value="">@Strings["SelectDiscoveredModel"]</option>
+                            @foreach (var discovered in _discoveredModels)
+                            {
+                                <option value="@discovered.ProviderModelId">@(discovered.DisplayLabel ?? discovered.ProviderModelId)</option>
+                            }
+                        </select>
+                    }
+                }
             }
             else
             {
-                <select aria-label="@Strings["DiscoveredModels"]" @onchange="ChooseDiscoveredModel">
-                    <option value="">@Strings["SelectDiscoveredModel"]</option>
-                    @foreach (var discovered in _discoveredModels)
-                    {
-                        <option value="@discovered.ProviderModelId">@(discovered.DisplayLabel ?? discovered.ProviderModelId)</option>
-                    }
-                </select>
+                <button type="button" class="secondary" disabled>@Strings["LoadModels"]</button>
+                <p class="muted">@Strings["ModelDiscoveryNotAvailableForProvider"]</p>
             }
         }
 
@@ -101,6 +112,30 @@ else
                 <option value="@TextResultFormat.Markdown">@Strings["TextResultFormatMarkdown"]</option>
                 <option value="@TextResultFormat.PlainText">@Strings["TextResultFormatPlainText"]</option>
             </InputSelect>
+        }
+
+        @if (SelectedConnectionIsComfyUi)
+        {
+            @if (_form.Mode == GenerationMode.Image)
+            {
+                <label for="model-comfy-builtin-workflow">@Strings["ComfyBuiltInWorkflowPicker"]</label>
+                <select id="model-comfy-builtin-workflow" @onchange="ChooseBuiltInWorkflow">
+                    <option value="">@Strings["ComfyBuiltInWorkflowPickerPlaceholder"]</option>
+                    @foreach (var builtIn in ComfyBuiltInWorkflows.All)
+                    {
+                        <option value="@builtIn.Id">@builtIn.Name</option>
+                    }
+                </select>
+                @if (_selectedBuiltInWorkflow is not null)
+                {
+                    <p class="muted">@_selectedBuiltInWorkflow.Description</p>
+                    <p class="muted">@Strings["ComfyBuiltInWorkflowReferenceImageCount", _selectedBuiltInWorkflow.ReferenceImageCount]</p>
+                }
+            }
+
+            <label for="model-comfy-workflow">@Strings["ComfyWorkflowTemplate"]</label>
+            <textarea id="model-comfy-workflow" rows="12" @bind="_form.ComfyWorkflowTemplate" placeholder="{...}"></textarea>
+            <p class="muted">@Strings["ComfyWorkflowTemplateHelp"]</p>
         }
 
         @if (_pendingReviewConfirmation)
@@ -136,6 +171,8 @@ else
     [Parameter] public string Id { get; set; } = string.Empty;
     private bool IsNew => string.IsNullOrEmpty(Id);
 
+    private const string ComfyUiPlaceholderProviderModelId = "workflow";
+
     private ModelForm _form = new();
     private IReadOnlyList<Connection> _activeConnections = [];
     private IReadOnlyList<ProviderModelInfo>? _discoveredModels;
@@ -149,6 +186,7 @@ else
     private bool _existingNeedsReview;
     private bool _pendingReviewConfirmation;
     private IReadOnlyList<SavedGenerationSetting> _affectedSavedSettings = [];
+    private ComfyBuiltInWorkflow? _selectedBuiltInWorkflow;
 
     protected override async Task OnInitializedAsync()
     {
@@ -167,6 +205,7 @@ else
                 _form.ProviderModelId = existing.ProviderModelId;
                 _form.SupportsSystemInstructions = existing.SupportsSystemInstructions;
                 _form.TextFormat = existing.TextFormat;
+                _form.ComfyWorkflowTemplate = existing.ComfyWorkflowTemplate ?? string.Empty;
                 _originalProviderModelId = existing.ProviderModelId;
                 _originalMode = existing.Mode;
                 _existingNeedsReview = existing.NeedsReview;
@@ -182,17 +221,53 @@ else
             _form.ConnectionId = _activeConnections[0].Id;
         }
 
-        if (!string.IsNullOrEmpty(_form.ConnectionId))
+        await LoadCatalogueAsync();
+    }
+
+    private async Task LoadCatalogueAsync()
+    {
+        var workspace = LibraryState.Workspace;
+        if (workspace is null || string.IsNullOrEmpty(_form.ConnectionId)) return;
+        try
         {
-            try
-            {
-                _catalogue = await workspace.GetModelCatalogueAsync(_form.ConnectionId);
-            }
-            catch (SlopFactoryException)
-            {
-                _catalogue = null;
-            }
+            _catalogue = await workspace.GetModelCatalogueAsync(_form.ConnectionId);
         }
+        catch (SlopFactoryException)
+        {
+            _catalogue = null;
+        }
+    }
+
+    /// <summary>Whether the currently selected connection's provider has any model-listing endpoint at
+    /// all — see <see cref="LibraryRules.SupportsModelDiscovery"/>. Gates both the discovery button and
+    /// the discovered-models dropdown so a provider with no such endpoint (1min.ai today) never lets the
+    /// user trigger a call that is guaranteed to fail.</summary>
+    private bool SelectedConnectionSupportsModelDiscovery =>
+        _activeConnections.FirstOrDefault(candidate => candidate.Id == _form.ConnectionId) is { } connection
+        && LibraryRules.SupportsModelDiscovery(connection.ProviderType);
+
+    /// <summary>Gates the workflow-JSON textarea (see Comfy.md section 3.2) — only ComfyUi models
+    /// carry a <see cref="Model.ComfyWorkflowTemplate"/>, and only such a connection's models require
+    /// entering one to be usable at all.</summary>
+    private bool SelectedConnectionIsComfyUi =>
+        _activeConnections.FirstOrDefault(candidate => candidate.Id == _form.ConnectionId) is { ProviderType: ProviderType.ComfyUi };
+
+    /// <summary>Clears the previously discovered list and reloads the catalogue for the newly selected
+    /// connection — the old list/catalogue belonged to a different connection (and possibly a provider
+    /// with no discovery support at all) and would otherwise linger stale on screen.</summary>
+    private async Task OnConnectionChangedAsync()
+    {
+        _discoveredModels = null;
+        await LoadCatalogueAsync();
+    }
+
+    /// <summary>Clears the previously discovered list when the mode changes — that list may have been
+    /// filtered to a different <see cref="GenerationMode"/> (OpenRouter's confirmed
+    /// <c>output_modalities</c> query parameter, see <see cref="LoadModelsAsync"/>), so it no longer
+    /// reflects what the newly selected mode should offer.</summary>
+    private void OnModeChanged()
+    {
+        _discoveredModels = null;
     }
 
     private async Task LoadModelsAsync()
@@ -207,8 +282,20 @@ else
         {
             var adapter = AdapterResolver.Resolve(connection.ProviderType);
             var apiKey = connection is { HasCredential: true, CredentialRevisionId: { } revisionId } ? await Credentials.GetActiveAsync(workspace.Descriptor.LibraryId, connection.Id, revisionId) : null;
-            _discoveredModels = await adapter.ListModelsAsync(connection, apiKey);
-            _catalogue = await workspace.RefreshModelCatalogueAsync(connection.Id, _discoveredModels);
+            var discovered = await adapter.ListModelsAsync(connection, apiKey, _form.Mode);
+            _discoveredModels = discovered
+                .OrderBy(model => model.DisplayLabel ?? model.ProviderModelId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // The catalogue is one per-connection cache spanning every mode — Models.razor's stale-model
+            // check depends on it listing every modality, not just whichever one is being added/edited
+            // right now. Only OpenRouter's ListModelsAsync actually narrows by mode (see
+            // OpenRouterProviderAdapter), so only it needs a second, unfiltered fetch to keep that
+            // shared cache correct; every other provider already returned its full catalogue above.
+            var catalogueSource = connection.ProviderType == ProviderType.OpenRouter
+                ? await adapter.ListModelsAsync(connection, apiKey)
+                : discovered;
+            _catalogue = await workspace.RefreshModelCatalogueAsync(connection.Id, catalogueSource);
             if (_discoveredModels.Count == 0) _message = Strings["NoModelsDiscovered"];
         }
         catch (Exception exception) when (exception is HttpRequestException or SlopFactoryException)
@@ -236,6 +323,17 @@ else
     {
         var selected = args.Value?.ToString();
         if (!string.IsNullOrEmpty(selected)) _form.ProviderModelId = selected;
+    }
+
+    /// <summary>Populates the (still-editable) workflow textarea from the chosen built-in template —
+    /// deliberately does not auto-save, mirroring <see cref="ChooseDiscoveredModel"/>'s
+    /// pick-then-review pattern, since a built-in template may still need hand-editing (e.g. swapping
+    /// a checkpoint name not installed on the user's own Comfy account).</summary>
+    private void ChooseBuiltInWorkflow(ChangeEventArgs args)
+    {
+        var selectedId = args.Value?.ToString();
+        _selectedBuiltInWorkflow = string.IsNullOrEmpty(selectedId) ? null : ComfyBuiltInWorkflows.All.FirstOrDefault(workflow => workflow.Id == selectedId);
+        if (_selectedBuiltInWorkflow is not null) _form.ComfyWorkflowTemplate = _selectedBuiltInWorkflow.WorkflowTemplate;
     }
 
     private async Task SaveAsync()
@@ -267,13 +365,21 @@ else
         _busy = true;
         try
         {
+            var comfyWorkflowTemplate = SelectedConnectionIsComfyUi ? _form.ComfyWorkflowTemplate : null;
+            // The Provider Model ID field is hidden for ComfyUi (see SelectedConnectionIsComfyUi's
+            // remarks — ComfyUiProviderAdapter never reads Model.ProviderModelId at all), but the
+            // domain layer still requires a non-empty value, so a new ComfyUi model gets a fixed
+            // placeholder here rather than surfacing a meaningless field just to satisfy validation.
+            var providerModelId = SelectedConnectionIsComfyUi && string.IsNullOrWhiteSpace(_form.ProviderModelId)
+                ? ComfyUiPlaceholderProviderModelId
+                : _form.ProviderModelId;
             if (IsNew)
             {
-                await workspace.CreateModelAsync(_form.Label, _form.ConnectionId, _form.ProviderModelId, _form.Mode, _form.SupportsSystemInstructions, _form.TextFormat);
+                await workspace.CreateModelAsync(_form.Label, _form.ConnectionId, providerModelId, _form.Mode, _form.SupportsSystemInstructions, _form.TextFormat, comfyWorkflowTemplate);
             }
             else
             {
-                await workspace.UpdateModelAsync(Id, _form.Label, _form.ProviderModelId, _form.Mode, _form.SupportsSystemInstructions, _form.TextFormat);
+                await workspace.UpdateModelAsync(Id, _form.Label, providerModelId, _form.Mode, _form.SupportsSystemInstructions, _form.TextFormat, comfyWorkflowTemplate);
             }
 
             Navigation.NavigateTo("/models");
@@ -314,5 +420,6 @@ else
         public string ProviderModelId { get; set; } = string.Empty;
         public bool SupportsSystemInstructions { get; set; }
         public TextResultFormat TextFormat { get; set; } = TextResultFormat.Markdown;
+        public string ComfyWorkflowTemplate { get; set; } = string.Empty;
     }
 }

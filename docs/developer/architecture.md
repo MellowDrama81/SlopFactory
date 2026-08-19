@@ -117,11 +117,11 @@ Text-mode generation carries an optional **System Instructions** field (schema v
 
 ## Vision source image
 
-`/generate` offers optional source images (from the active library's image-media files) when the selected model is Text-mode. `LibraryState`'s workspace reads each one through the existing `ReadImageFileAsync` verified-read pipeline (hash-checked, same as the file viewer) rather than a raw path, and passes the bytes/media type to `IProviderAdapter.GenerateTextAsync` as an ordered list of `TextGenerationSourceImage`. `OpenAiCompatibleProtocol.BuildChatCompletionRequestBody` switches the user message from a plain string to a `[{type:"text"},{type:"image_url", image_url:{url:"data:<mediaType>;base64,..."}}]` array with one part per supplied image — the OpenAI vision content-part shape, supported by every OpenAI-compatible adapter. This originally shipped as a single fixed field (schema v14: `source_file_id`), then three fixed, generically-labeled slots (schema v28: `secondary_source_file_id`/`tertiary_source_file_id`); both are superseded by the named-slot model below. Image-mode generation still accepts no source input at all.
+`/generate` offers optional source images (from the active library's image-media files) when the selected model's provider+mode declares the `ReferenceImage` capability (see [Named source-input slots](#named-source-input-slots)) — Text mode for any provider, or Image mode for OpenAI/OpenRouter/DeepInfra. `LibraryState`'s workspace reads each one through the existing `ReadImageFileAsync` verified-read pipeline (hash-checked, same as the file viewer) rather than a raw path, and passes the bytes/media type to `IProviderAdapter.GenerateTextAsync`/`GenerateImageAsync` as an ordered list of `TextGenerationSourceImage`. For Text mode, `OpenAiCompatibleProtocol.BuildChatCompletionRequestBody` switches the user message from a plain string to a `[{type:"text"},{type:"image_url", image_url:{url:"data:<mediaType>;base64,..."}}]` array with one part per supplied image — the OpenAI vision content-part shape, supported by every OpenAI-compatible adapter. For Image mode, source images mean image-to-image editing rather than vision input, and the three confirmed providers split into two real contracts: `OpenAiProviderAdapter` and `DeepInfraProviderAdapter` both switch from `POST images/generations` (JSON) to `POST images/edits` (multipart/form-data, repeated `image` file parts) when any source image is present, sharing `OpenAiCompatibleProtocol.BuildImageEditMultipartContent` — DeepInfra's OpenAI-compatible surface exposes the identical endpoint under the same base (confirmed against its per-model API reference pages, e.g. `black-forest-labs/FLUX.1-Kontext-dev`/`Qwen/Qwen-Image-Edit`), not just OpenAI's own published reference. Unlike OpenAI, DeepInfra's actual multi-image behavior isn't a flat provider-wide constant and varies (and even varies run-to-run) by specific model: sending two distinctly-colored images to `black-forest-labs/FLUX.1-Kontext-dev` in both orderings showed the second `image` multipart field always silently overwrote the first rather than both being used (an `image[]` array-style field name was also tried and rejected outright with HTTP 422), while `black-forest-labs/FLUX-2-klein-9b` genuinely used both — order-sensitive output drawing on both source colors — but with real run-to-run result-quality variance, confirmed with real-content images where the identical request run twice produced very different results. An early design tried encoding this as a per-model allowlist (`GetInputSlotCapabilities` gaining a `providerModelId` parameter and a small `ConfirmedDeepInfraMultiImageEditModelIds` set), but that was reverted: hard-coding which specific DeepInfra models "really" support multi-image turned into exactly the kind of unverifiable, high-maintenance special-casing the capability schema is meant to avoid — any new or untested DeepInfra image-edit model would silently get the conservative default regardless of what its own API actually supports. DeepInfra's Image-mode `ReferenceImage` capability is therefore a flat `MaxCount: 3`, identical to OpenAI/OpenRouter and not keyed by model at all; a model whose backend can't really use more than one image either silently keeps only the last (Kontext-dev's behavior) or produces an inconsistent-quality result, both accepted as ordinary provider-side outcomes rather than something this schema tries to predict per model ID. `Generate.razor` renders only as many source-image pickers as the resolved `MaxCount` allows — while `OpenRouterProviderAdapter` adds an `input_references` array (`{"type":"image_url","image_url":{"url":"data:<mediaType>;base64,..."}}` per image — the same nested content-part shape as its chat vision input, not a flat `{"url":...}`, which OpenRouter rejects with HTTP 400) to its existing JSON `images` request body, confirmed against openrouter.ai's docs. 1min.ai and the generic OpenAI-compatible adapter have no confirmed image-editing contract, so `LibraryRules.GetInputSlotCapabilities` declares nothing for Image mode on those providers and their `GenerateImageAsync` ignores any source images that reach it, mirroring the `FirstFrame` precedent below. This originally shipped as a single fixed field (schema v14: `source_file_id`), then three fixed, generically-labeled slots (schema v28: `secondary_source_file_id`/`tertiary_source_file_id`); both are superseded by the named-slot model below.
 
 ## Named source-input slots
 
-The original fixed 3-slot model (three independently-chosen "Source 1/2/3" dropdowns, always the `ReferenceImage` role, always image-only) is replaced by a capability-driven, role-aware slot list. `GenerationInputSlotRole` (`Domain/LibraryModels.cs`) enumerates `ReferenceImage`, `Mask`, `FirstFrame`, `LastFrame`, `SourceAudio`, `SourceVideo`; `GenerationSourceSlot(Role, FileId, Order)` is an ordered list carried by `GenerationDraft`, `SavedGenerationSetting`, `GenerationRecord`, and `GenerationJobSnapshot` in place of the old fixed columns. `LibraryRules.GetInputSlotCapabilities(providerType, mode)` is the capability schema — a small switch, not a stored/persisted schema, mirroring [Typed generation settings](#typed-generation-settings)' `GetGenerationSettingsCapabilities`: Text mode declares up to 3 `ReferenceImage` slots for any provider (identical behavior to the old 3 fixed slots, just represented as data), and DeepInfra video declares one optional `FirstFrame` slot (`SubmitVideoGenerationAsync`'s `firstFrame` parameter, sent as a `data:` URI, per `docs/developer/deepinfra-audio-video-contract.md`). `Mask`/`LastFrame`/`SourceAudio`/`SourceVideo` exist in the vocabulary for forward compatibility only — no adapter documents them yet, so no capability assigns them today.
+The original fixed 3-slot model (three independently-chosen "Source 1/2/3" dropdowns, always the `ReferenceImage` role, always image-only) is replaced by a capability-driven, role-aware slot list. `GenerationInputSlotRole` (`Domain/LibraryModels.cs`) enumerates `ReferenceImage`, `Mask`, `FirstFrame`, `LastFrame`, `SourceAudio`, `SourceVideo`; `GenerationSourceSlot(Role, FileId, Order)` is an ordered list carried by `GenerationDraft`, `SavedGenerationSetting`, `GenerationRecord`, and `GenerationJobSnapshot` in place of the old fixed columns. `LibraryRules.GetInputSlotCapabilities(providerType, mode)` is the capability schema — a small switch, not a stored/persisted schema, mirroring [Typed generation settings](#typed-generation-settings)' `GetGenerationSettingsCapabilities`, keyed only on provider+mode, deliberately not per specific model (see [Vision source image](#vision-source-image) for why a per-model allowlist was tried and reverted). Text mode declares up to 3 `ReferenceImage` slots for any provider (identical behavior to the old 3 fixed slots, just represented as data); Image mode declares the same `ReferenceImage` role and the same up-to-3 `MaxCount`, but only for OpenAI, OpenRouter, and DeepInfra, the providers with a confirmed image-editing contract (`Generate.razor` renders only as many pickers as the resolved `MaxCount` allows); and DeepInfra video declares one optional `FirstFrame` slot (`SubmitVideoGenerationAsync`'s `firstFrame` parameter, sent as a `data:` URI, per `docs/developer/deepinfra-audio-video-contract.md`). `Mask`/`LastFrame`/`SourceAudio`/`SourceVideo` exist in the vocabulary for forward compatibility only — no adapter documents them yet, so no capability assigns them today.
 
 Persistence uses a new normalized `generation_source_slots` table (schema v38) — `owner_type`/`owner_id`/`role`/`ordinal`/`file_id`, replacing the three parallel fixed-role FK columns per table — plus a `snapshot_display_name`/`snapshot_media_type`/`snapshot_content_hash` triple per row. For `generation_records` specifically, that snapshot is captured once at write time (queued creation, then re-captured at finalize), giving a true immutable "what was actually sent" record even after the source file is later deleted; the old tombstone columns are unused after this migration (kept in place per this codebase's additive-only migration convention) since the FK's `ON DELETE SET NULL` plus the snapshot now do that job together. The migration backfills every existing `source_file_id`/`secondary_.../tertiary_...` value as a `role=ReferenceImage` slot at its original ordinal (0/1/2) — identical role and order to what those columns already meant.
 
@@ -275,7 +275,7 @@ Connection-label-change independence from dependent models required no code chan
 
 ## Model catalogue caching
 
-Each connection persists its latest discovered-model catalogue (schema v15: `connections.catalogue_retrieved_at`/`catalogue_possibly_stale` plus a `connection_model_catalogue` table of `(connection_id, provider_model_id, display_label)`, replaced wholesale on every refresh). `ILibraryWorkspace.GetModelCatalogueAsync` reads it; `RefreshModelCatalogueAsync` replaces the cached entries and sets the retrieval timestamp while clearing the possibly-stale flag; `MarkModelCatalogueRefreshFailedAsync` sets the possibly-stale flag without touching the retained entries or timestamp. `ModelEdit.razor`'s **Load Models** action calls the adapter directly for its own discovery dropdown (`_discoveredModels`, unchanged) and separately persists the same result into the cache — a successful call refreshes it, a failed one marks it possibly stale — then displays the cache's retrieval timestamp/age plus a **Possibly Stale** (immediate, from a failed refresh) or **Stale** (`DateTimeOffset.UtcNow - RetrievedAt > LibraryRules.ModelCatalogueStalenessPeriod`, 7 days) label. `Models.razor` loads each distinct connection's catalogue once per page load and marks a configured model **Not Currently Listed** when its `ProviderModelId` is absent from that connection's cached entries and a catalogue has actually been retrieved (`RetrievedAt is not null`) — a connection with no catalogue yet renders no judgment either way. None of this ever triggers a network request, deletes, or disables a configured model; it is a passive label only. The catalogue is refreshed solely through the explicit **Load Models** action — not automatically during initial connection setup or connection retesting — and there is no per-adapter override of the 7-day staleness period.
+Each connection persists its latest discovered-model catalogue (schema v15: `connections.catalogue_retrieved_at`/`catalogue_possibly_stale` plus a `connection_model_catalogue` table of `(connection_id, provider_model_id, display_label)`, replaced wholesale on every refresh). `ILibraryWorkspace.GetModelCatalogueAsync` reads it; `RefreshModelCatalogueAsync` replaces the cached entries and sets the retrieval timestamp while clearing the possibly-stale flag; `MarkModelCatalogueRefreshFailedAsync` sets the possibly-stale flag without touching the retained entries or timestamp. `LibraryRules.SupportsModelDiscovery(providerType)` gates the whole feature up front — only 1min.ai has no documented model-listing endpoint at all (`OneMinAiProviderAdapter.ListModelsAsync` always throws), so `ModelEdit.razor` hides the **Load Models** button and discovered-models dropdown behind that check and shows an explanatory note instead, rather than letting the user trigger a call guaranteed to fail. For every other provider, `ModelEdit.razor`'s **Load Models** action calls the adapter directly for its own discovery dropdown (`_discoveredModels`), passing the form's currently selected `GenerationMode` — honored only by `OpenRouterProviderAdapter`, which narrows the request via `ListModelsAsync`'s confirmed `output_modalities` query parameter (see [Vision source image](#vision-source-image)'s sibling `GetInputSlotCapabilities` pattern; here it's `ListModelsAsync` itself, not a capability declaration, since every other adapter simply ignores the parameter and returns its full catalogue). The dropdown is cleared whenever the mode dropdown changes, since a previously discovered list may have been filtered to a different mode. For the shared per-connection cache, the mode-filtered result is **not** reused directly — that cache backs `Models.razor`'s stale-model check across every model on the connection regardless of mode, so persisting a filtered subset there would wrongly flag other-mode models as no longer listed. Non-OpenRouter providers reuse the dropdown's already-unfiltered result for both; OpenRouter alone issues one further unfiltered `ListModelsAsync` call specifically to refresh the cache. A successful cache refresh replaces its entries, a failed one marks it possibly stale, and `ModelEdit.razor` displays the cache's retrieval timestamp/age plus a **Possibly Stale** (immediate, from a failed refresh) or **Stale** (`DateTimeOffset.UtcNow - RetrievedAt > LibraryRules.ModelCatalogueStalenessPeriod`, 7 days) label. `Models.razor` loads each distinct connection's catalogue once per page load and marks a configured model **Not Currently Listed** when its `ProviderModelId` is absent from that connection's cached entries and a catalogue has actually been retrieved (`RetrievedAt is not null`) — a connection with no catalogue yet renders no judgment either way. None of this ever triggers a network request, deletes, or disables a configured model; it is a passive label only. The catalogue is refreshed solely through the explicit **Load Models** action — not automatically during initial connection setup or connection retesting — and there is no per-adapter override of the 7-day staleness period.
 
 ## Per-model system-instructions capability
 
@@ -452,7 +452,7 @@ The sections above predate asynchronous provider jobs; several of their closing 
 
 `DeepInfraProviderAdapter`'s OpenAI-compatible surface (confirmed base `https://api.deepinfra.com/v1/openai`) uses the exact same relative paths and request/response shapes as OpenAI for chat, model listing and image generation, so it reuses `OpenAiCompatibleProtocol` identically to `OpenAiProviderAdapter` for those three operations. Audio and video generation are now implemented against a contract confirmed live (`docs/developer/deepinfra-audio-video-contract.md`, ~$0.04 of an approved test budget): `GenerateAudioAsync` posts to the absolute `POST /v1/audio/speech` path (a different path root than the `/v1/openai/...` chat/image base, so the request URI is built from the connection's scheme/host/port rather than `OpenAiCompatibleProtocol.CombineUrl`) and returns the raw MP3 response body directly. `SubmitVideoGenerationAsync`/`PollVideoGenerationAsync` implement DeepInfra's submit-then-poll job API (`POST /v1/videos`, `GET /v1/videos/{id}`): only `succeeded` is treated as success, `queued`/`processing` as in-progress, and any other status (including an unrecognized one) as a terminal failure rather than risking an infinite poll, since DeepInfra never documents an exhaustive status enum. A completed job's result is fetched from DeepInfra's own same-host `GET /v1/videos/{id}/content?variant=video` endpoint rather than the third-party CDN URL the poll response also reports, which returns bytes directly with no redirect and so needs none of `OpenRouterProviderAdapter`'s redirect/DNS-rebinding validation machinery. The alternate synchronous `/v1/inference/{model}` path some DeepInfra video models require instead is not implemented — its response contract was never independently confirmed, so an unsupported model fails clearly rather than guessing at that endpoint's shape.
 
-1min.AI (`ProviderType.OneMinAi`) is implemented against its confirmed contract (`docs/developer/1minai-contract.md`) for text, image, and audio. Chat uses `POST /api/chat-with-ai` (`type: UNIFY_CHAT_WITH_AI`, text read from `aiRecord.aiRecordDetail.resultObject[0]`); image and audio share the `POST /api/features` envelope (`IMAGE_GENERATOR`/`TEXT_TO_SPEECH`), downloading the completed result from the response's `temporaryUrl` (a third-party S3 host) through the same redirect-bounded, SSRF-validated download path `OpenRouterProviderAdapter`'s video downloader uses. Two distinct provider error envelopes are handled: chat's nested `{"error":{"message":...}}` and features' top-level `{"errorCode":...,"message":...}`. Image generation is deliberately scoped to the one live-verified `promptObject` shape (Stable Diffusion XL, fixed at `1024x1024`) — the other ~40 image models and 9 of 10 video models each use their own undocumented `promptObject` field set, so a request to one of those surfaces as a clear provider error rather than a guess. Video is not implemented: 1min.AI's default video behavior is genuinely synchronous (confirmed live — a non-`async` request blocks the HTTP connection for the whole render), which doesn't fit this app's submit-then-poll adapter contract, and the `async: true` alternative was never live-tested. Model discovery (`ListModelsAsync`/`TestConnectionAsync`) is also not implemented, since no models-listing endpoint is documented anywhere in 1min.AI's API reference.
+1min.AI (`ProviderType.OneMinAi`) is implemented against its confirmed contract (`docs/developer/1minai-contract.md`) for text, image, and audio. Chat uses `POST /api/chat-with-ai` (`type: UNIFY_CHAT_WITH_AI`, text read from `aiRecord.aiRecordDetail.resultObject[0]`); image and audio share the `POST /api/features` envelope (`IMAGE_GENERATOR`/`TEXT_TO_SPEECH`), downloading the completed result from the response's `temporaryUrl` (a third-party S3 host) through the same redirect-bounded, SSRF-validated download path `OpenRouterProviderAdapter`'s video downloader uses. Text-mode source images (this app's `ReferenceImage` slot) are supported via a two-step flow confirmed live: each image is uploaded to `POST /api/assets` (multipart, field `asset`) to get a storage path, then chat switches to `type: CHAT_WITH_IMAGE` with those paths listed under `promptObject.attachments.images` — a bare `imageList` field found in some third-party documentation was tried and confirmed to be silently ignored (accepted, no error, but no image understanding actually happens), so the adapter never uses it. Image-mode reference images were separately tested against `black-forest-labs/flux-2-klein-4b`'s `IMAGE_GENERATOR` feature and found non-functional the same way (`imageUrl`/`imageUrls` accepted but ignored), so `LibraryRules.GetInputSlotCapabilities` declares no `ReferenceImage` capability for 1min.ai Image mode. Two distinct provider error envelopes are handled: chat's nested `{"error":{"message":...}}` and features' top-level `{"errorCode":...,"message":...}`. Image generation is deliberately scoped to the one live-verified `promptObject` shape (Stable Diffusion XL, fixed at `1024x1024`) — the other ~40 image models and 9 of 10 video models each use their own undocumented `promptObject` field set, so a request to one of those surfaces as a clear provider error rather than a guess. Video is not implemented: 1min.AI's default video behavior is genuinely synchronous (confirmed live — a non-`async` request blocks the HTTP connection for the whole render), which doesn't fit this app's submit-then-poll adapter contract, and the `async: true` alternative was never live-tested. Model discovery (`ListModelsAsync`/`TestConnectionAsync`) is also not implemented, since no models-listing endpoint is documented anywhere in 1min.AI's API reference.
 
 Provider contract fixtures for the OpenAI-shaped adapters are pinned as named, version-suffixed constants in `tests/Mellow.SlopFactory.Tests/ProviderContractFixtures.cs` (e.g. `OpenRouterVideoPollCompletedV1`) with placeholder tokens substituted per test, rather than inline JSON literals scattered across the test file — a confirmed API change gets a new `V2` constant alongside the old one instead of a silent edit, so a reviewer sees the exact shape that changed via a normal diff. 1min.AI's non-OpenAI-shaped fixtures live alongside them in the same file, following the same versioned-constant convention.
 
@@ -464,7 +464,7 @@ Provider contract fixtures for the OpenAI-shaped adapters are pinned as named, v
 
 Audio generation ships with no source inputs (matching image generation's own no-source-input default) since no adapter's `GenerateAudioAsync` accepts one. Video generation now has one, for the one confirmed case: see [Named source-input slots](#named-source-input-slots) for DeepInfra's `FirstFrame` capability. The remaining named-slot roles (`Mask`, `LastFrame`, `SourceAudio`, `SourceVideo`) stay unassigned to any provider pending documentation. Static waveform thumbnails for audio files in the library grid also remain open — extracting one needs actual PCM decoding, unlike the video-poster case, which was already solved before this milestone by `PreviewCacheService.GetVideoPosterAsync`.
 
-`IProviderAdapter.GenerateAudioAsync` also gained an optional `voice` parameter — a provider-specific preset voice identifier, threaded through all five adapters but only ever sent by `DeepInfraProviderAdapter` (its confirmed `POST /v1/audio/speech` contract documents an optional `voice` field). `LibraryRules.SupportsAudioVoiceSelection(providerType)` is the capability gate, following the same small-switch convention as the other capability schemas in this file; `Generate.razor` shows a plain text **Voice** input only when it's true for the selected Audio-mode model's connection. Deliberately not persisted through `GenerationDraft`/saved settings/history/**Use Again** in this pass — it lives only in the in-memory `GenerationJobSnapshot` for one submission, the same kind of explicit, documented scope cut as `FirstFrame`'s missing picker control above.
+`IProviderAdapter.GenerateAudioAsync` also gained an optional `voice` parameter — a provider-specific preset voice identifier, threaded through every adapter but only honored by the ones whose confirmed `POST .../audio/speech` (or equivalent) contract documents a `voice`-shaped field: `DeepInfraProviderAdapter`, `OpenAiProviderAdapter`, `OpenRouterProviderAdapter`, `GroqProviderAdapter` (all four reuse the identical OpenAI Audio API request shape), and `GoogleGeminiProviderAdapter` (maps it to `speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName` on its bespoke `generateContent`-based TTS — see the "Seven directly-OpenAI-compatible providers"/"Four bespoke-shape providers" sections below for each adapter's exact shape). `LibraryRules.SupportsAudioVoiceSelection(providerType)` is the capability gate, following the same small-switch convention as the other capability schemas in this file; `Generate.razor` shows a plain text **Voice** input only when it's true for the selected Audio-mode model's connection. Deliberately not persisted through `GenerationDraft`/saved settings/history/**Use Again** in this pass — it lives only in the in-memory `GenerationJobSnapshot` for one submission, the same kind of explicit, documented scope cut as `FirstFrame`'s missing picker control above.
 
 ## Asynchronous remote jobs and queue-slot release
 
@@ -543,3 +543,180 @@ A `ResumeQueue()` call needs to actually let a job start on the same `Pump()` pa
 There is no separate **Resume All for This Connection** action distinct from **Resume Queue**: connectivity/metered state is a device-wide condition observed once per `Pump()` call, not tracked per connection, so a second button with the identical effect would be redundant — resuming clears both latches for every connection at once. "Per-job revalidation" needed no new mechanism: `ExecuteAsync` already re-resolves each job's model and connection fresh from the workspace immediately before submitting (to handle a model/connection recycled while queued), so a job resumed after being offline is naturally revalidated by that existing lookup rather than assumed still valid — if genuinely still offline, the provider call fails cleanly through the same error handling every other network failure already goes through.
 
 `MeteredNetworkTransferPolicy` (`Allow`/`Ask`/`WifiOnly`) is a device-wide preference (`GenerationQueueService.MeteredNetworkPolicy`/`SetMeteredNetworkPolicy`, `IAppPreferenceStore`-backed, mirroring `DeviceCap` exactly), exposed as a select control on `LibrarySettings.razor`'s existing **Generation queue** panel. `GenerationQueue.razor` shows a **Paused — Connection Lost** or metered-pause notice with a **Resume queue** button whenever either latch (`IsPausedForConnectionLost`/`IsPausedForMeteredNetwork`) is active.
+
+## ComfyUI provider (Image mode only)
+
+`ProviderType.ComfyUi` covers both a self-hosted ComfyUI instance and the official `cloud.comfy.org`
+API through one `ComfyUiProviderAdapter` (`Infrastructure/Providers/`) — the two deployment targets
+differ only in `Connection.BaseUrl`/credential, exactly like `GenericOpenAiCompatibleProviderAdapter`'s
+"base URL determines the real service" posture above. Confirmed live contract:
+`docs/developer/comfycloud-contract.md`.
+
+`Model` gained a nullable `ComfyWorkflowTemplate` (schema version 39, plain `ADD COLUMN`) holding the
+raw API-format workflow JSON a user exports from ComfyUI's "Save (API format)" button, with three
+literal placeholder tokens substituted per generation: `{{PROMPT}}` (required — the positive prompt
+text), `{{SEED}}` (optional — a fresh random seed, written unquoted so it must sit in a numeric JSON
+position), and up to two `{{UPLOADED_IMAGE_FILENAME}}`/`{{UPLOADED_IMAGE_FILENAME_2}}` tokens (optional
+— the server-assigned filenames returned by uploading the model's `ReferenceImage` slot(s) before
+submission). `LibraryRules.ValidateComfyWorkflowTemplate` requires the value for every `ComfyUi` model
+(and forbids it for every other provider), checks the node-ID-keyed `{class_type, inputs}` shape (node
+keys may be a bare integer or a colon-separated compound ID like `"57:8"`/`"48:35:43"` for a node nested
+inside a subgraph — confirmed against real exports) and the `{{PROMPT}}` token, and validates a **probe**
+copy with every token replaced by a dummy literal rather than the raw value — `{{SEED}}`'s unquoted
+numeric placement is not valid JSON on its own, only after substitution. `LibraryRules.GetInputSlotCapabilities`
+declares ComfyUi Image mode as a flat `0..2 ReferenceImage` (2 is the highest count any built-in workflow
+template uses), since the real per-workflow capability (whether a given workflow actually wires a
+`LoadImage` node, and how many) is invisible to this (provider, mode) switch — the same "offer the slot,
+let a workflow that doesn't use it just ignore it" posture DeepInfra's per-model image-edit variance
+already established. `LibraryRules.SupportsModelDiscovery` excludes ComfyUi alongside 1min.AI: there is
+no comparable model catalogue, only an installed-node/checkpoint listing (`GET /api/object_info`,
+~9.6 MB, not fetched by this app).
+
+Only `GenerateImageAsync` is implemented; every other adapter method throws
+`ProviderAdapterException`. It submits one job per requested result (`POST /api/prompt`), polls
+`GET /api/job/{id}/status` until a terminal state, fetches output filenames from `GET /api/jobs/{id}`
+(plural — confirmed live; the singular/history endpoints are not real) and downloads bytes via
+`GET /api/view`, which redirects to a signed, time-limited `storage.googleapis.com` URL — the same
+third-party-result shape as OpenRouter/1min.AI, so `ComfyUiProviderAdapter` gets the same
+`ResultUrlValidator` host revalidation and `DependencyInjection.CreateOpenRouterHttpHandler`. Reference-image
+upload (`POST /api/upload/image`) was not exercised in the live verification pass and remains
+unconfirmed — see the adapter's own remarks.
+
+### Built-in workflow library
+
+`ComfyBuiltInWorkflows` (`Core/Domain/ComfyBuiltInWorkflows.cs`) is a small static catalog of 11
+ready-to-use `ComfyWorkflowTemplate` values — SD/Flux/Qwen text-to-image, single- and dual-reference
+image edits, mask inpainting, and two ComfyUI "API Node" workflows that proxy to a hosted third-party
+model — so a user doesn't have to hand-export and placeholder-tag their own workflow to get started.
+`ModelEdit.razor` shows a picker (only for a ComfyUi connection's Image-mode models) that populates the
+still-editable workflow textarea from the chosen entry, mirroring the discovered-models
+pick-then-review pattern elsewhere on the same page — it never auto-saves, since a built-in template may
+still need hand-editing (e.g. a checkpoint name not installed on the user's own account).
+
+Every template's JSON was supplied by the user already in ComfyUI API-format — this app only located
+and substituted the placeholder tokens (`{{PROMPT}}`/`{{SEED}}`/`{{UPLOADED_IMAGE_FILENAME}}`[`_2`]) at
+whichever node/field each workflow's own prompt, seed, and reference-image slot(s) actually live at,
+leaving every other field (checkpoints, LoRAs, samplers, negative prompts) exactly as supplied. **None of
+the 11 were independently re-verified against a live Comfy Cloud account by this app's own testing** —
+unlike the original minimal SD1.5 workflow that verified `comfycloud-contract.md` and predates this
+library, these are included on the basis of the user's own working exports, the same risk posture as the
+provider-adapter batches added earlier in this document. Every template passes
+`ValidateComfyWorkflowTemplate` (`LibraryRulesTests.EveryBuiltInComfyWorkflowValidates`), which confirms
+they're structurally well-formed, not that they'll actually run successfully on a given account. Two
+entries (ByteDance Seedream, Google's Gemini image model via "Nano Banana Pro") use ComfyUI's built-in
+API Nodes, which proxy to a hosted third-party model rather than running on local/Cloud GPU compute —
+these need that integration separately authorized/credited on the user's own Comfy account, on top of
+the Comfy Cloud API key this app's `Connection` already uses.
+
+## Seven directly-OpenAI-compatible providers (Mistral, Groq, Together AI, Fireworks AI, DeepSeek, Perplexity, xAI)
+
+`providers.md`'s "Directly OpenAI-compatible" section identified these as reusing the same
+`chat/completions`/`images/generations` shape `OpenAiProviderAdapter` already speaks, so each gets a
+thin dedicated adapter (`MistralProviderAdapter`, `GroqProviderAdapter`, `TogetherAiProviderAdapter`,
+`FireworksAiProviderAdapter`, `DeepSeekProviderAdapter`, `PerplexityProviderAdapter`,
+`XAiProviderAdapter` — `Infrastructure/Providers/`) built on `OpenAiCompatibleProtocol`'s shared
+helpers exactly like `OpenAiProviderAdapter`, registered in `DependencyInjection.AddSlopFactoryInfrastructure`
+with the default (non-cross-origin) HTTP handler. `ProviderType` gained matching values `Mistral`(6)
+through `XAi`(12); `ConnectionEdit.razor` gained per-provider `BaseUrl`/`Authorization`/`Bearer`
+defaults for each.
+
+None of the seven were live-verified with a real API key (unlike DeepInfra/1min.AI/Comfy Cloud
+elsewhere in this document) — each only implements the parts providers.md's research pass could
+confirm from published documentation, and throws a clear `ProviderAdapterException` naming the reason
+for everything else, rather than guessing at an unconfirmed shape:
+
+- **Text** (`chat/completions`) is implemented for all seven — this is the well-established,
+  widely-standardized OpenAI-compatible shape the other four adapters already assume without
+  per-provider live verification.
+- **Image** (`images/generations`) is implemented for Together AI and Fireworks AI (the two
+  providers.md confirms host image models behind a plain OpenAI-compatible endpoint) and, separately,
+  for xAI (Grok Imagine, via its own `images/generations`-shaped endpoint — see below). None of the
+  three accept source images: no image-edit shape was confirmed for any of them, so
+  `LibraryRules.GetInputSlotCapabilities` declares no `ReferenceImage` slot for their Image mode, and
+  `GenerateImageAsync` throws if source images somehow arrive anyway. Mistral's image generation goes
+  through a separate agent-tool/Conversations-API flow (multi-step, not a single endpoint call — too
+  speculative to implement without live verification) and Groq/DeepSeek(direct)/Perplexity have no
+  image-generation surface reachable the way the other three are — DeepSeek's Janus-Pro model family in
+  particular is not confirmed to be exposed through `api.deepseek.com` at all, as opposed to only via
+  third-party inference hosts (DeepInfra, Together AI, etc., which already carry it). All four throw a
+  provider-specific explanation.
+  - **xAI** (`api.x.ai/v1`): `POST /v1/images/generations`, body `{"model","prompt","n"}` — no
+    `response_format` field is sent, since xAI's documented behavior is to always return a hosted `url`
+    per result (never `b64_json`, unlike OpenAI's endpoint of the same name). Each URL is a
+    provider-hosted result, the same third-party-download shape as OpenRouter/1min.AI/ComfyUI, so
+    `XAiProviderAdapter` gained a `resolveHost` constructor parameter and its `HttpClient` registration
+    switched to `DependencyInjection.CreateOpenRouterHttpHandler` to match.
+- **Audio** is implemented for Groq only, via the same OpenAI Audio API shape (`POST /audio/speech`)
+  `OpenAiProviderAdapter`/`OpenRouterProviderAdapter`/`DeepInfraProviderAdapter` already implement —
+  Groq's PlayAI-based TTS models are documented against exactly this endpoint. The other six have no
+  reachable audio-generation surface: Mistral's Voxtral is TTS in name but has no confirmed public REST
+  shape, Groq's own Whisper hosting is speech-to-text (input direction, no surface in this app),
+  Together AI/Fireworks AI's audio offerings have no confirmed shape, and DeepSeek V4's reported speech
+  generation isn't confirmed stable GA — all four (Mistral, Together AI, Fireworks AI, DeepSeek) still
+  throw a provider-specific explanation; Perplexity has no audio at all; xAI's audio is bundled only
+  into video, not standalone.
+- **Video** is not implemented for any of the seven — none has a confirmed, single-endpoint video API
+  this pass had enough confidence to guess at (xAI's Grok Imagine video rides on an endpoint shape that
+  was never verified).
+
+## Four bespoke-shape providers (Anthropic, Google Gemini, Cohere, AI21)
+
+`providers.md`'s "Custom shape required" section covers these four; three of them (`AnthropicProviderAdapter`,
+`GoogleGeminiProviderAdapter`, `CohereProviderAdapter` — `Infrastructure/Providers/`) speak a genuinely
+different wire shape from `OpenAiCompatibleProtocol` and implement their own request/response handling,
+while `AI21ProviderAdapter` reuses the shared protocol like the batch above (AI21's shape is documented
+as "OpenAI-adjacent" in providers.md). `ProviderType` gained `Anthropic`(13), `Gemini`(14), `Cohere`(15),
+`AI21`(16); `ConnectionEdit.razor` gained matching connection defaults. **None of the four were
+live-verified with a real API key** — each follows only its provider's public API reference, same
+caveat as the seven-provider batch above but with materially higher shape-mismatch risk since none of
+these reuse the well-exercised OpenAI-compatible path.
+
+Anthropic, Cohere and AI21 are **Text only** — none offers native image/audio/video generation this app
+can use. Gemini also gets **Image** (Imagen's separate `models/{id}:predict` endpoint) and **Audio**
+(text-to-speech, reusing `generateContent` itself with `responseModalities:["AUDIO"]` — see below). Veo
+(video) remains unimplemented: it is a genuinely separate, asynchronous long-running-operation API this
+pass did not have enough confidence in to guess at field-for-field. All three bespoke Text adapters also
+decline reference images
+in chat: Anthropic, Gemini and Cohere all genuinely support image input in chat (vision), but none of
+the three adapters translate `TextGenerationSourceImage` into that provider's own content-block shape in
+this pass, so `LibraryRules.GetInputSlotCapabilities` withholds the Text-mode `ReferenceImage` slot for
+exactly these three (unlike every other Text-mode provider, where the slot is offered unconditionally)
+and `GenerateTextAsync` throws a clear error if a source image reaches it anyway — the same
+"don't offer what isn't wired up" posture as the Together AI/Fireworks AI image-edit rejection above.
+Gemini's `GenerateImageAsync` rejects source images the same way, since Imagen's own reference-image/edit
+request variants are not implemented either.
+
+Provider-specific shape notes:
+- **Anthropic** (`api.anthropic.com/v1`): `POST /v1/messages`, `x-api-key` auth plus a required
+  `anthropic-version` header the adapter always sends (a protocol constant, not user-configurable), a
+  top-level `system` field, and no candidate-count parameter — `resultCount` means one independent
+  request per result. `max_tokens` is required by the API (unlike OpenAI's optional field); the adapter
+  defaults to 4096 when `GenerationSettings.MaxTokens` is unset. Model listing uses `display_name`, not
+  `name`, so it gets its own parser rather than reusing `OpenAiCompatibleProtocol.ParseModelList`.
+- **Google Gemini** (`generativelanguage.googleapis.com/v1beta`): the model ID lives in the URL path
+  (`models/{id}:generateContent`), not the body; request shape is `contents`/`systemInstruction`/
+  `generationConfig`, auth via `x-goog-api-key`. Unlike Anthropic/Cohere, `generationConfig.candidateCount`
+  genuinely supports multiple results in one call, so `resultCount` maps directly onto it rather than
+  looping. Model listing returns names prefixed `models/`, stripped before being stored as
+  `ProviderModelInfo.ProviderModelId` and re-added when building the generate URL. Image generation uses
+  the same base URL/auth but a different path/verb entirely — `POST /v1beta/models/{id}:predict`, body
+  `{"instances":[{"prompt"}],"parameters":{"sampleCount":N}}`, response
+  `{"predictions":[{"bytesBase64Encoded","mimeType"}]}` — a genuinely separate Imagen API family that
+  happens to share transport with `generateContent`, not a variant of it. Audio (text-to-speech) instead
+  reuses `generateContent` unchanged, just with `generationConfig.responseModalities:["AUDIO"]` and a
+  `speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName`; there's no confirmed candidate-count support
+  for audio responses, so `resultCount` means one independent request per result here too. The response's
+  `inlineData` carries **raw 16-bit PCM**, not a self-describing container — `GoogleGeminiProviderAdapter`
+  wraps it in a minimal 44-byte WAV header (`WrapPcmAsWav`), parsing the sample rate out of the declared
+  MIME type (`audio/L16;rate=24000`-shaped) when present, defaulting to Gemini's documented 24 kHz
+  otherwise, so the returned bytes are an actually playable file rather than a raw sample dump.
+- **Cohere** (`api.cohere.com/v1`): `POST /v1/chat` takes a single `message` string plus an empty
+  `chat_history` array (this app has no multi-turn chat concept) and a top-level `preamble` field for
+  system instructions. No candidate-count parameter — one independent request per result, like
+  Anthropic. Cohere's chat request does support `frequency_penalty`/`presence_penalty` (unlike
+  Anthropic/Gemini), so `GetGenerationSettingsCapabilities` gives it the same full field set as the
+  OpenAI-compatible group rather than withholding the penalty flags.
+- **AI21** (`api.ai21.com/studio/v1`): reuses `OpenAiCompatibleProtocol.BuildChatCompletionRequestBody`/
+  `ParseChatCompletionResult` exactly like the Mistral/Groq/etc. batch, on the same "standard enough to
+  implement without live verification" basis — but providers.md's own research flagged AI21 as
+  "OpenAI-adjacent but not identical," a real risk this adapter accepts rather than resolves.

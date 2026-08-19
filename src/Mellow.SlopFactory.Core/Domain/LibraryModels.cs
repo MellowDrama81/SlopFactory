@@ -209,11 +209,11 @@ public sealed record FileDerivationProvenance(
 public sealed record FileIdentitySnapshot(string DisplayName, string MediaType, string ContentHash);
 
 /// <summary>
-/// Named source-input slot roles. Only <see cref="ReferenceImage"/> (text generation, up to 3, any
-/// provider) and <see cref="FirstFrame"/> (DeepInfra video only) are ever assignable to a model
-/// today — see <see cref="LibraryRules.GetInputSlotCapabilities"/>. The remaining values exist so a
-/// future confirmed provider capability is additive (one more capability entry and adapter wiring),
-/// not a schema rework; no adapter documents them today.
+/// Named source-input slot roles. Only <see cref="ReferenceImage"/> (text generation, any provider;
+/// image generation, OpenAI/OpenRouter/DeepInfra only) and <see cref="FirstFrame"/> (DeepInfra video only)
+/// are ever assignable to a model today — see <see cref="LibraryRules.GetInputSlotCapabilities"/>. The
+/// remaining values exist so a future confirmed provider capability is additive (one more capability
+/// entry and adapter wiring), not a schema rework; no adapter documents them today.
 /// </summary>
 public enum GenerationInputSlotRole
 {
@@ -697,7 +697,61 @@ public enum ProviderType
     GenericOpenAiCompatible = 1,
     OneMinAi = 2,
     OpenRouter = 3,
-    DeepInfra = 4
+    DeepInfra = 4,
+    ComfyUi = 5,
+    /// <summary>`api.mistral.ai` — OpenAI-compatible chat/completions. Image (agent-tool based, not a
+    /// plain endpoint) and audio (Voxtral, unconfirmed public API shape) are not implemented — see
+    /// providers.md.</summary>
+    Mistral = 6,
+    /// <summary>`api.groq.com/openai/v1` — OpenAI-compatible chat/completions, no hosted image models.
+    /// Audio (text-to-speech via PlayAI models on the documented `POST /audio/speech` endpoint) is
+    /// implemented; Whisper (speech-to-text, input direction) has no surface in this app.</summary>
+    Groq = 7,
+    /// <summary>`api.together.xyz/v1` — OpenAI-compatible chat/completions and a plain
+    /// images/generations-shaped endpoint. Audio/video are not implemented — shapes unconfirmed.</summary>
+    TogetherAi = 8,
+    /// <summary>`api.fireworks.ai/inference/v1` — OpenAI-compatible chat/completions and a plain
+    /// images/generations-shaped endpoint. Audio (limited STT)/video are not implemented.</summary>
+    FireworksAi = 9,
+    /// <summary>`api.deepseek.com` — OpenAI-compatible chat/completions. Image generation ships under
+    /// a separate Janus-Pro model family (not the chat API) and is not implemented; audio/video are
+    /// not confirmed GA public API surfaces.</summary>
+    DeepSeek = 10,
+    /// <summary>`api.perplexity.ai` — OpenAI-compatible chat/completions (Sonar model tiers). No image,
+    /// audio or video generation exists; grounded web search/citations has no home in this app's
+    /// adapter surface today.</summary>
+    Perplexity = 11,
+    /// <summary>`api.x.ai/v1` — OpenAI-compatible chat/completions plus a separate
+    /// `images/generations`-shaped endpoint for Grok Imagine (text-to-image only, no reference-image
+    /// editing). Audio (bundled only into video, not standalone) and video are not implemented — their
+    /// endpoint shapes were not verified.</summary>
+    XAi = 12,
+    /// <summary>`api.anthropic.com/v1` — bespoke Messages API (`POST /v1/messages`), not OpenAI-shaped:
+    /// `x-api-key` auth (plus a required `anthropic-version` header), a top-level `system` field
+    /// (maps to <see cref="Model.SupportsSystemInstructions"/> cleanly), and no `n`/candidate-count
+    /// parameter (one request per requested result). No native image/audio/video generation exists.
+    /// Text-mode reference-image (vision) input is not implemented in this pass despite Anthropic
+    /// supporting it — see providers.md.</summary>
+    Anthropic = 13,
+    /// <summary>`generativelanguage.googleapis.com/v1beta` — bespoke `generateContent` API: the model
+    /// ID is embedded in the URL path (`models/{id}:generateContent`), not the body; request shape is
+    /// `contents`/`systemInstruction`/`generationConfig` (which does support a `candidateCount` for
+    /// multiple results in one call), auth via `x-goog-api-key`. Text, Image (Imagen, via a separate
+    /// `models/{id}:predict` endpoint, text-to-image only) and Audio (text-to-speech, reusing
+    /// `generateContent` itself with `responseModalities:["AUDIO"]`) are implemented — Veo (video) is a
+    /// genuinely separate, asynchronous API family not covered here. Text-mode reference-image input is
+    /// not implemented in this pass despite Gemini supporting it.</summary>
+    Gemini = 14,
+    /// <summary>`api.cohere.com/v1` — bespoke Chat API (`POST /v1/chat`): `message`/`chat_history`
+    /// request shape (not `messages`) with a `preamble` field for system instructions, no
+    /// candidate-count parameter (one request per requested result). No image generation; audio is
+    /// input-only (Transcribe/STT, no TTS) and not implemented. Text-mode reference-image input is not
+    /// implemented in this pass.</summary>
+    Cohere = 15,
+    /// <summary>`api.ai21.com/studio/v1` — documented as an OpenAI-adjacent `chat/completions` shape;
+    /// reuses <see cref="Infrastructure.Providers.OpenAiCompatibleProtocol"/> like the Mistral/Groq/etc.
+    /// batch above. Text only — no image/audio/video generation exists.</summary>
+    AI21 = 16
 }
 
 public enum GenerationMode
@@ -774,6 +828,13 @@ public enum TextResultFormat
     PlainText = 1
 }
 
+/// <param name="ComfyWorkflowTemplate">The raw API-format ComfyUI workflow JSON (exported from
+/// ComfyUI's web UI via "Save (API format)"), with placeholder tokens (<c>{{PROMPT}}</c> required,
+/// <c>{{SEED}}</c>/<c>{{UPLOADED_IMAGE_FILENAME}}</c> optional — see
+/// <see cref="LibraryRules.ValidateComfyWorkflowTemplate"/>) substituted per generation by
+/// <c>ComfyUiProviderAdapter</c>. Populated only when the owning connection's
+/// <see cref="ProviderType"/> is <see cref="ProviderType.ComfyUi"/>; null for every other provider,
+/// since no other adapter has a per-model workflow concept.</param>
 public sealed record Model(
     string Id,
     string ConnectionId,
@@ -786,7 +847,8 @@ public sealed record Model(
     DateTimeOffset ModifiedAt,
     DateTimeOffset? RecycledAt,
     bool NeedsReview = false,
-    TextResultFormat TextFormat = TextResultFormat.Markdown);
+    TextResultFormat TextFormat = TextResultFormat.Markdown,
+    string? ComfyWorkflowTemplate = null);
 
 /// <summary>Per-token pricing for one model, as reported by a provider's own model-listing endpoint
 /// at the moment it was fetched — never bundled/guessed data (`docs/developer/architecture.md`'s

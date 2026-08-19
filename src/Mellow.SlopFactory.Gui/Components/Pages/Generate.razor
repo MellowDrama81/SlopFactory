@@ -213,7 +213,10 @@ else
             {
                 <p class="muted">@Strings["ModelDoesNotSupportSystemInstructions"]</p>
             }
+        }
 
+        @if (SupportsReferenceImageInputs)
+        {
             <label for="generate-source-image">@Strings["SourceImageSlot1"]</label>
             <InputSelect id="generate-source-image" @bind-Value="_form.SourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
                 <option value="">@Strings["NoSourceImage"]</option>
@@ -223,29 +226,38 @@ else
                 }
             </InputSelect>
 
-            <label for="generate-source-image-2">@Strings["SourceImageSlot2"]</label>
-            <InputSelect id="generate-source-image-2" @bind-Value="_form.SecondarySourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
-                <option value="">@Strings["NoSourceImage"]</option>
-                @foreach (var file in _activeImageFiles)
-                {
-                    <option value="@file.Id">@file.DisplayName</option>
-                }
-            </InputSelect>
+            @if (ReferenceImageMaxCount >= 2)
+            {
+                <label for="generate-source-image-2">@Strings["SourceImageSlot2"]</label>
+                <InputSelect id="generate-source-image-2" @bind-Value="_form.SecondarySourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
+                    <option value="">@Strings["NoSourceImage"]</option>
+                    @foreach (var file in _activeImageFiles)
+                    {
+                        <option value="@file.Id">@file.DisplayName</option>
+                    }
+                </InputSelect>
+            }
 
-            <label for="generate-source-image-3">@Strings["SourceImageSlot3"]</label>
-            <InputSelect id="generate-source-image-3" @bind-Value="_form.TertiarySourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
-                <option value="">@Strings["NoSourceImage"]</option>
-                @foreach (var file in _activeImageFiles)
-                {
-                    <option value="@file.Id">@file.DisplayName</option>
-                }
-            </InputSelect>
+            @if (ReferenceImageMaxCount >= 3)
+            {
+                <label for="generate-source-image-3">@Strings["SourceImageSlot3"]</label>
+                <InputSelect id="generate-source-image-3" @bind-Value="_form.TertiarySourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
+                    <option value="">@Strings["NoSourceImage"]</option>
+                    @foreach (var file in _activeImageFiles)
+                    {
+                        <option value="@file.Id">@file.DisplayName</option>
+                    }
+                </InputSelect>
+            }
 
             @if (HasDuplicateSourceSelection)
             {
                 <p class="notice error" role="alert">@Strings["DuplicateSourceSelectionError"]</p>
             }
+        }
 
+        @if (SelectedModelMode == GenerationMode.Text)
+        {
             @if (CurrentSettingsCapabilities == GenerationSettingsCapability.None)
             {
                 <p class="muted">@Strings["GenerationSettingsUnsupportedByProvider"]</p>
@@ -1027,7 +1039,7 @@ else
         {
             _saveStatus = SaveStatus.Saving;
             var systemInstructions = SelectedModel?.SupportsSystemInstructions == true && !string.IsNullOrWhiteSpace(_form.SystemInstructions) ? _form.SystemInstructions : null;
-            var sourceSlots = SelectedModelMode == GenerationMode.Text ? BuildSourceSlots() : [];
+            var sourceSlots = SupportsReferenceImageInputs ? BuildSourceSlots() : [];
             var improvementModelId = string.IsNullOrEmpty(_improvementModelId) ? null : _improvementModelId;
             var improvementGuidance = string.IsNullOrWhiteSpace(_improvementGuidance) ? null : _improvementGuidance;
             var updated = await workspace.ReplaceDraftStateAsync(draftId, _tabTitleInput, string.IsNullOrEmpty(_form.ModelId) ? null : _form.ModelId, _form.Prompt, systemInstructions, _form.ResultCount, _form.DestinationFolderId, improvementModelId, improvementGuidance, CurrentGenerationSettings(), sourceSlots);
@@ -1090,6 +1102,17 @@ else
         _pricingRetrievedAt = null;
         var modelId = _form.ModelId;
         _pricingSnapshotModelId = modelId;
+
+        // A source-image selection left over from a previously selected model whose provider+mode no
+        // longer accepts that role (or accepts fewer slots — e.g. switching from OpenAI/OpenRouter's
+        // 3-image Image mode to DeepInfra's 1-image Image mode) would otherwise survive as a hidden,
+        // stale value and fail LibraryRules.ValidateSourceSlots at actual submission time — clearing
+        // here keeps the pickers' visibility/count and the form's real state in sync the moment the
+        // model changes, not just at submit.
+        var maxCount = ReferenceImageMaxCount;
+        if (maxCount < 1) _form.SourceFileId = string.Empty;
+        if (maxCount < 2) _form.SecondarySourceFileId = string.Empty;
+        if (maxCount < 3) _form.TertiarySourceFileId = string.Empty;
 
         var model = SelectedModel;
         var connection = SelectedConnection;
@@ -1345,9 +1368,11 @@ else
         return (systemInstructions, sourceSlots);
     }
 
-    /// <summary>The three ReferenceImage pickers (<c>SourceImageSlot1/2/3</c>) are today's only
-    /// source-input UI — they map to ordinal <see cref="GenerationInputSlotRole.ReferenceImage"/>
-    /// slots. DeepInfra video's FirstFrame capability (see <c>LibraryRules.GetInputSlotCapabilities</c>)
+    /// <summary>The three ReferenceImage pickers (<c>SourceImageSlot1/2/3</c>, shown when
+    /// <see cref="SupportsReferenceImageInputs"/> is true) are today's only source-input UI — they map
+    /// to ordinal <see cref="GenerationInputSlotRole.ReferenceImage"/> slots, for either text
+    /// generation's multimodal input or image generation's image-to-image editing (OpenAI, OpenRouter,
+    /// DeepInfra only). DeepInfra video's FirstFrame capability (see <c>LibraryRules.GetInputSlotCapabilities</c>)
     /// has no picker here yet; it's reachable only via a saved setting or history record created
     /// through some other path, not through this form.</summary>
     private IReadOnlyList<GenerationSourceSlot> BuildSourceSlots()
@@ -1417,6 +1442,23 @@ else
         SelectedModelMode is { } mode && SelectedConnection is { } connection
             ? LibraryRules.GetGenerationSettingsCapabilities(connection.ProviderType, mode)
             : GenerationSettingsCapability.None;
+
+    /// <summary>Whether the three source-image pickers should be shown for the current provider+mode —
+    /// text generation (any provider) and image generation (OpenAI, OpenRouter, DeepInfra only; see
+    /// <see cref="LibraryRules.GetInputSlotCapabilities"/>).</summary>
+    private bool SupportsReferenceImageInputs => ReferenceImageMaxCount > 0;
+
+    /// <summary>How many of the three source-image pickers to actually render, per
+    /// <see cref="LibraryRules.GetInputSlotCapabilities"/>'s declared <c>MaxCount</c> for the current
+    /// provider+mode. Not every model that gets offered all 3 slots actually uses more than one of them
+    /// (DeepInfra's <c>images/edits</c> contract varies by model — some silently keep only the last
+    /// image rather than combining them — see <c>DeepInfraProviderAdapter.GenerateImageAsync</c>'s
+    /// remarks), a known, accepted limitation rather than something this capability schema tries to
+    /// special-case per model.</summary>
+    private int ReferenceImageMaxCount =>
+        SelectedModelMode is { } mode && SelectedConnection is { } connection
+            ? LibraryRules.GetInputSlotCapabilities(connection.ProviderType, mode).FirstOrDefault(capability => capability.Role == GenerationInputSlotRole.ReferenceImage)?.MaxCount ?? 0
+            : 0;
 
     private GenerationSettings CurrentGenerationSettings()
     {

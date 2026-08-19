@@ -64,12 +64,24 @@ else
         <InputText id="connection-label" @bind-Value="_form.Label" maxlength="100" />
 
         <label for="connection-provider">@Strings["ProviderType"]</label>
-        <InputSelect id="connection-provider" @bind-Value="_form.ProviderType" disabled="@(!IsNew && _hasDependentModels)">
+        <InputSelect id="connection-provider" @bind-Value="_form.ProviderType" @bind-Value:after="OnProviderTypeChanged" disabled="@(!IsNew && _hasDependentModels)">
             <option value="@ProviderType.OpenAi">@Strings["ProviderOpenAi"]</option>
             <option value="@ProviderType.GenericOpenAiCompatible">@Strings["ProviderGenericOpenAiCompatible"]</option>
             <option value="@ProviderType.OpenRouter">@Strings["ProviderOpenRouter"]</option>
             <option value="@ProviderType.DeepInfra">@Strings["ProviderDeepInfra"]</option>
             <option value="@ProviderType.OneMinAi">@Strings["ProviderOneMinAi"]</option>
+            <option value="@ProviderType.ComfyUi">@Strings["ProviderComfyUi"]</option>
+            <option value="@ProviderType.Mistral">@Strings["ProviderMistral"]</option>
+            <option value="@ProviderType.Groq">@Strings["ProviderGroq"]</option>
+            <option value="@ProviderType.TogetherAi">@Strings["ProviderTogetherAi"]</option>
+            <option value="@ProviderType.FireworksAi">@Strings["ProviderFireworksAi"]</option>
+            <option value="@ProviderType.DeepSeek">@Strings["ProviderDeepSeek"]</option>
+            <option value="@ProviderType.Perplexity">@Strings["ProviderPerplexity"]</option>
+            <option value="@ProviderType.XAi">@Strings["ProviderXAi"]</option>
+            <option value="@ProviderType.Anthropic">@Strings["ProviderAnthropic"]</option>
+            <option value="@ProviderType.Gemini">@Strings["ProviderGemini"]</option>
+            <option value="@ProviderType.Cohere">@Strings["ProviderCohere"]</option>
+            <option value="@ProviderType.AI21">@Strings["ProviderAI21"]</option>
         </InputSelect>
         @if (!IsNew && _hasDependentModels)
         {
@@ -241,10 +253,40 @@ else
         }
         else
         {
-            _form.CredentialHeaderName = "Authorization";
-            _form.AuthPrefix = "Bearer";
-            _form.BaseUrl = "https://api.openai.com/v1";
+            ApplyProviderDefaults(_form.ProviderType);
         }
+    }
+
+    private void OnProviderTypeChanged()
+    {
+        if (IsNew) ApplyProviderDefaults(_form.ProviderType);
+    }
+
+    private void ApplyProviderDefaults(ProviderType providerType)
+    {
+        var (baseUrl, headerName, authPrefix) = providerType switch
+        {
+            ProviderType.OpenAi => ("https://api.openai.com/v1", "Authorization", "Bearer"),
+            ProviderType.OpenRouter => ("https://openrouter.ai/api/v1", "Authorization", "Bearer"),
+            ProviderType.DeepInfra => ("https://api.deepinfra.com/v1/openai", "Authorization", "Bearer"),
+            ProviderType.OneMinAi => ("https://api.1min.ai", "API-KEY", ""),
+            ProviderType.ComfyUi => ("https://cloud.comfy.org", "X-API-Key", ""),
+            ProviderType.Mistral => ("https://api.mistral.ai/v1", "Authorization", "Bearer"),
+            ProviderType.Groq => ("https://api.groq.com/openai/v1", "Authorization", "Bearer"),
+            ProviderType.TogetherAi => ("https://api.together.xyz/v1", "Authorization", "Bearer"),
+            ProviderType.FireworksAi => ("https://api.fireworks.ai/inference/v1", "Authorization", "Bearer"),
+            ProviderType.DeepSeek => ("https://api.deepseek.com", "Authorization", "Bearer"),
+            ProviderType.Perplexity => ("https://api.perplexity.ai", "Authorization", "Bearer"),
+            ProviderType.XAi => ("https://api.x.ai/v1", "Authorization", "Bearer"),
+            ProviderType.Anthropic => ("https://api.anthropic.com/v1", "x-api-key", ""),
+            ProviderType.Gemini => ("https://generativelanguage.googleapis.com/v1beta", "x-goog-api-key", ""),
+            ProviderType.Cohere => ("https://api.cohere.com/v1", "Authorization", "Bearer"),
+            ProviderType.AI21 => ("https://api.ai21.com/studio/v1", "Authorization", "Bearer"),
+            _ => (string.Empty, "Authorization", "Bearer"),
+        };
+        _form.BaseUrl = baseUrl;
+        _form.CredentialHeaderName = headerName;
+        _form.AuthPrefix = authPrefix;
     }
 
     private async Task TestConnectionAsync()

@@ -1,22 +1,29 @@
 using System.Text;
-using System.Text.Json;
 using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
 
 namespace Mellow.SlopFactory.Infrastructure.Providers;
 
-internal sealed class OpenAiProviderAdapter : IProviderAdapter
+/// <summary>
+/// Fireworks AI (`api.fireworks.ai/inference/v1`) exposes an OpenAI-compatible `chat/completions`
+/// endpoint plus a plain `images/generations`-shaped endpoint (hosting SDXL/FLUX-class models) — see
+/// providers.md. Only text-to-image generation is confirmed there; no image-edit (reference-image)
+/// shape was documented, so <see cref="Mellow.SlopFactory.Domain.LibraryRules.GetInputSlotCapabilities"/>
+/// does not offer a reference-image slot for this provider's Image mode. Audio is limited to some STT
+/// per providers.md with no confirmed request shape and is not implemented; there is no video offering.
+/// </summary>
+internal sealed class FireworksAiProviderAdapter : IProviderAdapter
 {
     private readonly HttpClient _httpClient;
     private readonly IConnectionRateLimitTracker? _rateLimitTracker;
 
-    public OpenAiProviderAdapter(HttpClient httpClient, IConnectionRateLimitTracker? rateLimitTracker = null)
+    public FireworksAiProviderAdapter(HttpClient httpClient, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
         _httpClient = httpClient;
         _rateLimitTracker = rateLimitTracker;
     }
 
-    public ProviderType ProviderType => ProviderType.OpenAi;
+    public ProviderType ProviderType => ProviderType.FireworksAi;
 
     public async Task<ConnectionTestResult> TestConnectionAsync(Connection connection, string? apiKey, CancellationToken cancellationToken = default)
     {
@@ -60,66 +67,28 @@ internal sealed class OpenAiProviderAdapter : IProviderAdapter
 
     public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default)
     {
-        var hasSourceImages = sourceImages is { Count: > 0 };
-        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, hasSourceImages ? "images/edits" : "images/generations"));
+        if (sourceImages is { Count: > 0 })
+        {
+            throw new ProviderAdapterException("Fireworks AI's image-edit request shape has not been confirmed; this model only supports plain text-to-image generation.");
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "images/generations"));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = hasSourceImages
-            ? OpenAiCompatibleProtocol.BuildImageEditMultipartContent(model.ProviderModelId, prompt, resultCount, sourceImages!)
-            : new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
+        request.Content = new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
     }
 
-    /// <summary>`POST /v1/audio/speech` — the same OpenAI-documented Audio API shape
-    /// <see cref="OpenRouterProviderAdapter"/> and <see cref="DeepInfraProviderAdapter"/> already
-    /// implement against this exact provider family, so this reuses the identical request/response
-    /// handling rather than the "not yet verified" caution that previously left this adapter's audio
-    /// unimplemented.</summary>
-    public async Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default)
-    {
-        if (resultCount < 1) throw new ProviderAdapterException("At least one audio result must be requested.");
-        var results = new List<byte[]>(resultCount);
-        for (var index = 0; index < resultCount; index++)
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "audio/speech"));
-            OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
-            OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-            request.Content = new StringContent(BuildAudioSpeechRequestBody(model.ProviderModelId, prompt, voice), Encoding.UTF8, "application/json");
-            var (isSuccess, statusCode, bytes) = await OpenAiCompatibleProtocol.SendForBytesAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
-            if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
-            if (bytes.Length == 0) throw new ProviderAdapterException("The provider returned an empty audio result.");
-            results.Add(bytes);
-        }
+    public Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default) =>
+        throw new ProviderAdapterException("Audio generation is not implemented for Fireworks AI: its limited STT offering has no confirmed request shape.");
 
-        return results;
-    }
-
-    // Sora's video-generation API exists but is newer, more access-gated, and carries a materially
-    // different (async, multi-step) request shape than this pass had confidence to guess at without
-    // live verification — unlike audio/speech above, which reuses an already-proven shape.
     public Task<AsyncGenerationSubmission> SubmitVideoGenerationAsync(Connection connection, Model model, string? apiKey, string prompt, TextGenerationSourceImage? firstFrame = null, CancellationToken cancellationToken = default) =>
-        throw new ProviderAdapterException("Video generation is not yet implemented for the OpenAI adapter.");
+        throw new ProviderAdapterException("Video generation is not available for Fireworks AI: it does not offer a video-generation API.");
 
     public Task<AsyncGenerationPollResult> PollVideoGenerationAsync(Connection connection, string? apiKey, string providerJobId, CancellationToken cancellationToken = default) =>
-        throw new ProviderAdapterException("Video generation is not yet implemented for the OpenAI adapter.");
-
-    private static string BuildAudioSpeechRequestBody(string providerModelId, string prompt, string? voice)
-    {
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream))
-        {
-            writer.WriteStartObject();
-            writer.WriteString("model", providerModelId);
-            writer.WriteString("input", prompt);
-            writer.WriteString("response_format", "mp3");
-            if (!string.IsNullOrWhiteSpace(voice)) writer.WriteString("voice", voice);
-            writer.WriteEndObject();
-        }
-
-        return Encoding.UTF8.GetString(stream.ToArray());
-    }
+        throw new ProviderAdapterException("Video generation is not available for Fireworks AI: it does not offer a video-generation API.");
 
     private static string? TryGetHost(string baseUrl) => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) ? uri.Host : null;
 }
