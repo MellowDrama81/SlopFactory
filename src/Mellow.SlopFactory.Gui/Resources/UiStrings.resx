@@ -210,6 +210,16 @@
   <data name="CopyUserMetadata" xml:space="preserve"><value>Copy user metadata</value></data>
   <data name="SaveEditedCopy" xml:space="preserve"><value>Save edited copy</value></data>
   <data name="SystemInformation" xml:space="preserve"><value>System information</value></data>
+  <data name="Tags" xml:space="preserve"><value>Tags</value></data>
+  <data name="NoTags" xml:space="preserve"><value>No tags.</value></data>
+  <data name="AddTag" xml:space="preserve"><value>Add tag</value></data>
+  <data name="RemoveTagAria" xml:space="preserve"><value>Remove tag {0}</value></data>
+  <data name="ChooseSourceImage" xml:space="preserve"><value>Choose…</value></data>
+  <data name="ChangeSourceImage" xml:space="preserve"><value>Change…</value></data>
+  <data name="SourceImagePickerSearchPlaceholder" xml:space="preserve"><value>Search by name…</value></data>
+  <data name="SourceImagePickerNoResults" xml:space="preserve"><value>No files match your search.</value></data>
+  <data name="SourceImagePickerNoCandidates" xml:space="preserve"><value>No eligible source images are available yet.</value></data>
+  <data name="SourceImagePickerTitle" xml:space="preserve"><value>Choose a source image</value></data>
   <data name="UserMetadata" xml:space="preserve"><value>User metadata</value></data>
   <data name="NoUserMetadata" xml:space="preserve"><value>No user metadata.</value></data>
   <data name="Value" xml:space="preserve"><value>Value</value></data>
@@ -744,6 +754,7 @@
   <data name="GenerationCancellationRequested" xml:space="preserve"><value>Cancellation requested</value></data>
   <data name="GenerationCompletedBeforeCancellation" xml:space="preserve"><value>Completed before cancellation</value></data>
   <data name="OpenGeneratedFile" xml:space="preserve"><value>Open generated file</value></data>
+  <data name="OpenSourceFile" xml:space="preserve"><value>Open source file</value></data>
   <data name="GenerationHistoryPageTitle" xml:space="preserve"><value>Generation history · SlopFactory</value></data>
   <data name="GenerationHistoryHeading" xml:space="preserve"><value>Generation history</value></data>
   <data name="GenerationHistoryDescription" xml:space="preserve"><value>Review past generation attempts and their results.</value></data>

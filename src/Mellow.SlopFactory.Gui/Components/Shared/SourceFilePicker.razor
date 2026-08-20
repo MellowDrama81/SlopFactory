@@ -1,0 +1,163 @@
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+@inject IStringLocalizer<UiStrings> Strings
+@inject AppLibraryState LibraryState
+@inject PreviewCacheService PreviewCache
+
+<div class="source-picker-current">
+    <span class="thumbnail-frame">
+        @if (SelectedFile is not null && _currentThumbnail?.DataUri is not null)
+        {
+            <img src="@_currentThumbnail.DataUri" alt="" />
+        }
+        else if (SelectedFile is not null)
+        {
+            <span class="file-type-icon" aria-hidden="true">@ImageIconLabel</span>
+        }
+    </span>
+    <span>@(SelectedFile?.DisplayName ?? Strings["NoSourceImage"])</span>
+    <button type="button" class="secondary" aria-labelledby="@LabelledBy" disabled="@Disabled" @onclick="OpenAsync">@(SelectedFile is null ? Strings["ChooseSourceImage"] : Strings["ChangeSourceImage"])</button>
+</div>
+
+@if (_open)
+{
+    <div class="source-picker-modal" role="dialog" aria-label="@Strings["SourceImagePickerTitle"]">
+        <div class="source-picker-filters">
+            <input type="search" aria-label="@Strings["SourceImagePickerSearchPlaceholder"]" placeholder="@Strings["SourceImagePickerSearchPlaceholder"]" @bind="_searchText" @bind:event="oninput" />
+            <button type="button" class="secondary" @onclick="() => SelectAsync(null)">@Strings["NoSourceImage"]</button>
+            <button type="button" class="secondary" @onclick="() => _open = false">@Strings["Cancel"]</button>
+        </div>
+
+        @if (AllTags.Count > 0)
+        {
+            <div class="source-picker-tags">
+                @foreach (var tag in AllTags)
+                {
+                    <button type="button" class="source-picker-tag @(_selectedTagIds.Contains(tag.Id) ? "selected" : "")" @onclick="() => ToggleTag(tag.Id)">@tag.Name</button>
+                }
+            </div>
+        }
+
+        @{ var filtered = FilteredCandidates(); }
+        @if (filtered.Count == 0)
+        {
+            <p class="empty">@(Candidates.Count == 0 ? Strings["SourceImagePickerNoCandidates"] : Strings["SourceImagePickerNoResults"])</p>
+        }
+        else
+        {
+            <div class="source-picker-grid">
+                @foreach (var file in filtered)
+                {
+                    <button type="button" class="source-picker-cell @(file.Id == SelectedFileId ? "selected" : "")" @onclick="() => SelectAsync(file.Id)">
+                        <span class="thumbnail-frame">
+                            @if (_thumbnails.TryGetValue(file.Id, out var thumbnail) && thumbnail.DataUri is not null)
+                            {
+                                <img src="@thumbnail.DataUri" alt="" />
+                            }
+                            else
+                            {
+                                <span class="file-type-icon" aria-hidden="true" title="@thumbnail?.Error">@ImageIconLabel</span>
+                            }
+                        </span>
+                        <span class="source-picker-cell-name">@file.DisplayName</span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string SelectedFileId { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> SelectedFileIdChanged { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<FileRecord> Candidates { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? LabelledBy { get; set; }
+
+    private bool _open;
+    private string _searchText = string.Empty;
+    private readonly HashSet<string> _selectedTagIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<Tag>> _tagsByFile = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PreviewThumbnail> _thumbnails = new(StringComparer.Ordinal);
+    private CancellationTokenSource? _loadCancellation;
+    private PreviewThumbnail? _currentThumbnail;
+    private string? _loadedForFileId;
+
+    private const string ImageIconLabel = "IMG";
+
+    private FileRecord? SelectedFile => Candidates.FirstOrDefault(file => file.Id == SelectedFileId);
+
+    private IReadOnlyList<Tag> AllTags => _tagsByFile.Values.SelectMany(tags => tags).DistinctBy(tag => tag.Id).OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (LibraryState.Workspace is null || SelectedFileId == _loadedForFileId) return;
+        _loadedForFileId = SelectedFileId;
+        if (SelectedFile is null) { _currentThumbnail = null; return; }
+        try { _currentThumbnail = await PreviewCache.GetThumbnailAsync(LibraryState.Workspace, SelectedFile); }
+        catch (Exception) { _currentThumbnail = null; }
+    }
+
+    private async Task OpenAsync()
+    {
+        if (Disabled) return;
+        _open = true;
+        _searchText = string.Empty;
+        _selectedTagIds.Clear();
+        await LoadTagsAndThumbnailsAsync();
+    }
+
+    private async Task LoadTagsAndThumbnailsAsync()
+    {
+        if (LibraryState.Workspace is null) return;
+        var workspace = LibraryState.Workspace;
+        _tagsByFile.Clear();
+        try
+        {
+            var byFile = await workspace.GetTagsForFilesAsync(Candidates.Select(file => file.Id).ToArray());
+            foreach (var (fileId, tags) in byFile) _tagsByFile[fileId] = tags;
+        }
+        catch (Exception) { }
+
+        _loadCancellation?.Cancel();
+        _loadCancellation?.Dispose();
+        _loadCancellation = new CancellationTokenSource();
+        var token = _loadCancellation.Token;
+        foreach (var file in Candidates)
+        {
+            if (_thumbnails.ContainsKey(file.Id)) continue;
+            _ = LoadThumbnailAsync(workspace, file, token);
+        }
+    }
+
+    private async Task LoadThumbnailAsync(ILibraryWorkspace workspace, FileRecord file, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var thumbnail = await PreviewCache.GetThumbnailAsync(workspace, file, cancellationToken);
+            if (cancellationToken.IsCancellationRequested || LibraryState.Workspace != workspace) return;
+            _thumbnails[file.Id] = thumbnail;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (Exception) { }
+    }
+
+    private void ToggleTag(string tagId)
+    {
+        if (!_selectedTagIds.Add(tagId)) _selectedTagIds.Remove(tagId);
+    }
+
+    private IReadOnlyList<FileRecord> FilteredCandidates() => Candidates
+        .Where(file => string.IsNullOrWhiteSpace(_searchText) || file.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+        .Where(file => _selectedTagIds.Count == 0 || (_tagsByFile.TryGetValue(file.Id, out var tags) && tags.Any(tag => _selectedTagIds.Contains(tag.Id))))
+        .ToArray();
+
+    private async Task SelectAsync(string? fileId)
+    {
+        SelectedFileId = fileId ?? string.Empty;
+        _open = false;
+        await SelectedFileIdChanged.InvokeAsync(SelectedFileId);
+    }
+}

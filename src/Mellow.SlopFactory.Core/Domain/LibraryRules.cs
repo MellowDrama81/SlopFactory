@@ -9,11 +9,12 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 39;
+    public const int SchemaVersion = 40;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
     public const int MaximumLabelScalars = 100;
+    public const int MaximumTagNameScalars = 60;
     public const int MaximumMetadataEntriesPerFile = 1_000;
     public const int MaximumMetadataValueUtf8Bytes = 1_048_576;
     public const int MaximumEditableTextUtf8Bytes = 4_194_304;
@@ -598,6 +599,9 @@ public static class LibraryRules
 
     public static string NormalizeShortLabel(string value, string fieldName) =>
         NormalizeLabel(value, MaximumLabelScalars, fieldName, allowLineBreaks: false);
+
+    public static string NormalizeTagName(string value) =>
+        NormalizeLabel(value, MaximumTagNameScalars, "Tag name", allowLineBreaks: false);
 
     public static string? NormalizeDraftCustomTitle(string? value)
     {

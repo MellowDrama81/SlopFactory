@@ -153,7 +153,7 @@ else if (_record is not null)
             <ul class="metadata-list">
                 @foreach (var fileId in _record.ResultFileIds)
                 {
-                    <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
+                    <li><GenerationResultThumbnail FileId="@fileId" /></li>
                 }
                 @foreach (var tombstone in _record.TombstonedResults)
                 {

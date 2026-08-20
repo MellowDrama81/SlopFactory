@@ -263,7 +263,8 @@ public sealed record LibraryFileBrowseQuery(
     LibraryFileSort Sort,
     int Offset = 0,
     int PageSize = 48,
-    UserMetadataFilter? MetadataFilter = null);
+    UserMetadataFilter? MetadataFilter = null,
+    IReadOnlyList<string>? TagIds = null);
 
 public sealed record UserMetadataFilter(
     string Key,
@@ -294,6 +295,8 @@ public sealed record MetadataEntry(
     MetadataValueKind Kind,
     string SerializedValue,
     bool IsSensitive);
+
+public sealed record Tag(string Id, string Name);
 
 public sealed record BulkFileOperationItemResult(
     string FileId,

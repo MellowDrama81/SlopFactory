@@ -1535,6 +1535,30 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.RenameMetadataAsync(fileId, currentKey, newKey, cancellationToken), cancellationToken);
     }
 
+    public Task<IReadOnlyList<Tag>> GetAllTagsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetAllTagsAsync(cancellationToken);
+    }
+
+    public Task<IReadOnlyList<Tag>> GetTagsForFileAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetTagsForFileAsync(fileId, cancellationToken);
+    }
+
+    public Task<IReadOnlyDictionary<string, IReadOnlyList<Tag>>> GetTagsForFilesAsync(IReadOnlyCollection<string> fileIds, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.GetTagsForFilesAsync(fileIds, cancellationToken);
+    }
+
+    public Task SetTagsForFileAsync(string fileId, IReadOnlyList<string> tagNames, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.SetTagsForFileAsync(fileId, tagNames, cancellationToken), cancellationToken);
+    }
+
     public Task<IReadOnlyList<FileLink>> GetLinksAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

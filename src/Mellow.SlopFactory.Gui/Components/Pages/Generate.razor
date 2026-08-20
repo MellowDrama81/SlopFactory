@@ -217,37 +217,19 @@ else
 
         @if (SupportsReferenceImageInputs)
         {
-            <label for="generate-source-image">@Strings["SourceImageSlot1"]</label>
-            <InputSelect id="generate-source-image" @bind-Value="_form.SourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
-                <option value="">@Strings["NoSourceImage"]</option>
-                @foreach (var file in _activeImageFiles)
-                {
-                    <option value="@file.Id">@file.DisplayName</option>
-                }
-            </InputSelect>
+            <label id="generate-source-image-label">@Strings["SourceImageSlot1"]</label>
+            <SourceFilePicker Candidates="_activeImageFiles" Disabled="FormDisabled" LabelledBy="generate-source-image-label" @bind-SelectedFileId="_form.SourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
 
             @if (ReferenceImageMaxCount >= 2)
             {
-                <label for="generate-source-image-2">@Strings["SourceImageSlot2"]</label>
-                <InputSelect id="generate-source-image-2" @bind-Value="_form.SecondarySourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
-                    <option value="">@Strings["NoSourceImage"]</option>
-                    @foreach (var file in _activeImageFiles)
-                    {
-                        <option value="@file.Id">@file.DisplayName</option>
-                    }
-                </InputSelect>
+                <label id="generate-source-image-2-label">@Strings["SourceImageSlot2"]</label>
+                <SourceFilePicker Candidates="_activeImageFiles" Disabled="FormDisabled" LabelledBy="generate-source-image-2-label" @bind-SelectedFileId="_form.SecondarySourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
             }
 
             @if (ReferenceImageMaxCount >= 3)
             {
-                <label for="generate-source-image-3">@Strings["SourceImageSlot3"]</label>
-                <InputSelect id="generate-source-image-3" @bind-Value="_form.TertiarySourceFileId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled">
-                    <option value="">@Strings["NoSourceImage"]</option>
-                    @foreach (var file in _activeImageFiles)
-                    {
-                        <option value="@file.Id">@file.DisplayName</option>
-                    }
-                </InputSelect>
+                <label id="generate-source-image-3-label">@Strings["SourceImageSlot3"]</label>
+                <SourceFilePicker Candidates="_activeImageFiles" Disabled="FormDisabled" LabelledBy="generate-source-image-3-label" @bind-SelectedFileId="_form.TertiarySourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
             }
 
             @if (HasDuplicateSourceSelection)
@@ -536,14 +518,14 @@ else
                     }
                     @foreach (var slot in record.SourceSlots.Where(slot => slot.Role == GenerationInputSlotRole.ReferenceImage).OrderBy(slot => slot.Order))
                     {
-                        <p class="muted">@Strings["SourceImageSlotUsed", slot.Order + 1] <a href="@($"/file/{slot.FileId}")">@Strings["OpenGeneratedFile"]</a></p>
+                        <p class="muted">@Strings["SourceImageSlotUsed", slot.Order + 1] <a href="@($"/file/{slot.FileId}")">@Strings["OpenSourceFile"]</a></p>
                     }
                     @if (record.ResultFileIds.Count > 0)
                     {
                         <ul class="metadata-list">
                             @foreach (var fileId in record.ResultFileIds)
                             {
-                                <li><a href="@($"/file/{fileId}")">@Strings["OpenGeneratedFile"]</a></li>
+                                <li><GenerationResultThumbnail FileId="@fileId" /></li>
                             }
                         </ul>
                     }

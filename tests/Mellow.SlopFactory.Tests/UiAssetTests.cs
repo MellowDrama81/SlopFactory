@@ -656,10 +656,10 @@ public sealed class UiAssetTests
                  {
                      "GeneratePageTitle", "GenerateEyebrow", "GenerateHeading", "GenerateDescription", "AddModelFirst",
                      "Model", "Prompt", "ResultCount", "Generate", "Generating", "GenerationCompleted", "GenerationFailed",
-                     "OpenGeneratedFile", "ConnectionUnavailableForModel", "ModeText", "ModeImage", "SaveSettingsHeading",
+                     "ConnectionUnavailableForModel", "ModeText", "ModeImage", "SaveSettingsHeading",
                      "SaveSettingsDescription", "SettingsTitle", "SaveSettingsAction", "SavedSettingsSaved", "SavedSettingsModelUnavailable",
                      "SavedSettingsHeading", "SystemInstructions", "TokenUsage", "EstimatedTokenCount", "SourceImageSlot1", "SourceImageSlot2", "SourceImageSlot3",
-                     "NoSourceImage", "SourceImageSlotUsed", "DuplicateSourceSelectionError",
+                     "SourceImageSlotUsed", "OpenSourceFile", "DuplicateSourceSelectionError",
                      "CancelGeneration", "GenerationCancelledByUser", "PromptImprovementHeading", "PromptImprovementDescription",
                      "ImprovementModel", "NoImprovementModel", "ImprovementGuidance", "ImprovePromptAction", "ImprovingPrompt",
                      "NoImprovementCandidates", "UseThisCandidate", "GenerationBlockedCredentialsRequired", "AddApiKey",
@@ -753,7 +753,7 @@ public sealed class UiAssetTests
                      "GenerationHistoryDetailPageTitle", "GenerationHistoryDetailHeading", "BackToGenerationHistory",
                      "GenerationRecordSummary", "GenerationCompleted", "GenerationFailed", "GenerationPartiallyCompleted",
                      "GenerationPartiallyCompletedDetail", "SafetyBlockedResultsDetail", "ShowSystemInstructions", "TokenUsage", "SourceImageSlotUsed",
-                     "OpenGeneratedFile", "PromptImprovementUsed", "UseAgain", "Recycle", "ConfirmRecycleGenerationRecord",
+                     "PromptImprovementUsed", "UseAgain", "Recycle", "ConfirmRecycleGenerationRecord",
                      "RecycleGenerationRecordWarning", "Cancel", "SourceFilePermanentlyDeletedSlot", "ResultFilePermanentlyDeleted",
                      "ResultPendingReview", "RetainAsUnverifiedBinary", "DiscardUnverifiedResult"
                  })

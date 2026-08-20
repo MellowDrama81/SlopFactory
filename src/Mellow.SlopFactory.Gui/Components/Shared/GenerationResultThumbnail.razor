@@ -1,0 +1,56 @@
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+@inject IStringLocalizer<UiStrings> Strings
+@inject AppLibraryState LibraryState
+@inject PreviewCacheService PreviewCache
+
+<a href="@($"/file/{FileId}")" class="result-thumbnail-link">
+    @if (_file is not null && CanShowThumbnail(_file))
+    {
+        <span class="thumbnail-frame">
+            @if (_thumbnail?.DataUri is not null)
+            {
+                <img src="@_thumbnail.DataUri" alt="" />
+            }
+            else
+            {
+                <span class="file-type-icon" aria-hidden="true" title="@_thumbnail?.Error">@MediaIconLabel(_file.MediaType)</span>
+            }
+        </span>
+    }
+    <span>@Strings["OpenGeneratedFile"]</span>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public string FileId { get; set; } = string.Empty;
+
+    private FileRecord? _file;
+    private PreviewThumbnail? _thumbnail;
+    private string? _loadedForFileId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (LibraryState.Workspace is null || FileId == _loadedForFileId) return;
+        _loadedForFileId = FileId;
+        var workspace = LibraryState.Workspace;
+        try
+        {
+            var file = await workspace.GetFileAsync(FileId);
+            if (LibraryState.Workspace != workspace) return;
+            _file = file;
+            if (CanShowThumbnail(file)) _thumbnail = await PreviewCache.GetThumbnailAsync(workspace, file);
+        }
+        catch (Exception)
+        {
+            if (workspace == LibraryState.Workspace) _file = null;
+        }
+    }
+
+    private static bool CanShowThumbnail(FileRecord file) =>
+        (file.MediaType.StartsWith("image/", StringComparison.Ordinal) && file.MediaType != "image/svg+xml") || file.MediaType == "video/mp4";
+
+    private static string MediaIconLabel(string mediaType) => mediaType.StartsWith("video/", StringComparison.Ordinal) ? VideoLabel : ImageLabel;
+
+    private const string ImageLabel = "IMG";
+    private const string VideoLabel = "VID";
+}

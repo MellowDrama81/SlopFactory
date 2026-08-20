@@ -18,7 +18,13 @@
 
 @if (_file is null)
 {
-    <section class="center-state"><h1>@Strings["LoadingFile"]</h1></section>
+    <section class="center-state">
+        <h1>@Strings["LoadingFile"]</h1>
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="notice error" role="alert">@_message</div>
+        }
+    </section>
 }
 else
 {
@@ -383,6 +389,31 @@ else
         }
 
         <article class="panel">
+            <h2>@Strings["Tags"]</h2>
+            @if (_fileTags.Count == 0)
+            {
+                <p class="empty">@Strings["NoTags"]</p>
+            }
+            else
+            {
+                <ul class="tag-list">
+                    @foreach (var tag in _fileTags)
+                    {
+                        <li class="tag-chip">@tag.Name <button class="ghost" aria-label="@Strings["RemoveTagAria", tag.Name]" @onclick="() => RemoveTagAsync(tag)">&times;</button></li>
+                    }
+                </ul>
+            }
+            <div class="inline-form">
+                <label for="new-tag-name">@Strings["AddTag"]</label>
+                <input id="new-tag-name" list="known-tags" maxlength="60" @bind="_newTagName" @bind:event="oninput" @onkeydown="@(async e => { if (e.Key == "Enter") await AddTagAsync(); })" />
+                <datalist id="known-tags">
+                    @foreach (var tag in _allTags) { <option value="@tag.Name" /> }
+                </datalist>
+                <button type="button" disabled="@string.IsNullOrWhiteSpace(_newTagName)" @onclick="AddTagAsync">@Strings["AddTag"]</button>
+            </div>
+        </article>
+
+        <article class="panel">
             <h2>@Strings["UserMetadata"]</h2>
             @if (_metadata.Count == 0)
             {
@@ -503,6 +534,9 @@ else
     [Parameter] public string Id { get; set; } = string.Empty;
     private FileRecord? _file;
     private IReadOnlyList<MetadataEntry> _metadata = [];
+    private IReadOnlyList<Tag> _fileTags = [];
+    private IReadOnlyList<Tag> _allTags = [];
+    private string _newTagName = string.Empty;
     private IReadOnlyList<FileLink> _links = [];
     private IReadOnlyList<FileRecord> _availableFiles = [];
     private IReadOnlyList<FolderRecord> _availableFolders = [];
@@ -658,11 +692,14 @@ else
                 catch (SlopFactoryException exception) { _textError = exception.Message; }
             }
             _metadata = await LibraryState.Workspace.GetMetadataAsync(Id);
+            _fileTags = await LibraryState.Workspace.GetTagsForFileAsync(Id);
+            _allTags = await LibraryState.Workspace.GetAllTagsAsync();
             _links = await LibraryState.Workspace.GetLinksAsync(Id);
             _availableFiles = (await LibraryState.Workspace.GetActiveFilesAsync()).Where(file => file.Id != Id).ToArray();
             _availableFolders = await LibraryState.Workspace.GetActiveFoldersAsync();
         }
         catch (SlopFactoryException exception) { _message = exception.Message; }
+        catch (Exception exception) { _message = $"{exception.GetType().Name}: {exception.Message}"; }
     }
 
     private async Task VerifyContentAsync()
@@ -845,6 +882,27 @@ else
     {
         if (LibraryState.Workspace is null) return;
         await LibraryState.Workspace.RemoveMetadataAsync(Id, key);
+        await ReloadAsync();
+    }
+
+    private async Task AddTagAsync()
+    {
+        if (LibraryState.Workspace is null || string.IsNullOrWhiteSpace(_newTagName)) return;
+        try
+        {
+            var names = _fileTags.Select(tag => tag.Name).Append(_newTagName).ToArray();
+            await LibraryState.Workspace.SetTagsForFileAsync(Id, names);
+            _newTagName = string.Empty;
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+
+    private async Task RemoveTagAsync(Tag tag)
+    {
+        if (LibraryState.Workspace is null) return;
+        var names = _fileTags.Where(existing => existing.Id != tag.Id).Select(existing => existing.Name).ToArray();
+        await LibraryState.Workspace.SetTagsForFileAsync(Id, names);
         await ReloadAsync();
     }
 

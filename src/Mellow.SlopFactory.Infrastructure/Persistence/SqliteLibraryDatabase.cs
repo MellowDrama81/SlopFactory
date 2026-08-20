@@ -97,6 +97,21 @@ internal sealed class SqliteLibraryDatabase
                 UNIQUE(file_id, key_key)
             );
 
+            CREATE TABLE tags (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                name_key TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX ux_tags_name ON tags(name_key);
+
+            CREATE TABLE file_tags (
+                file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+                PRIMARY KEY(file_id, tag_id)
+            );
+            CREATE INDEX ix_file_tags_tag ON file_tags(tag_id);
+
             CREATE TABLE file_content_provenance (
                 file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
                 original_content_hash TEXT NOT NULL,
@@ -778,6 +793,29 @@ internal sealed class SqliteLibraryDatabase
             // in this file's history to silently corrupt a dependent table's foreign key).
             await AddColumnIfMissingAsync(connection, transaction, "models", "comfy_workflow_template", "TEXT NULL", cancellationToken).ConfigureAwait(false);
         }
+        if (fromVersion < 40)
+        {
+            // A first-class multi-value tag vocabulary for files, distinct from the existing
+            // single-value metadata_entries table — see LibraryModels.cs's Tag record.
+            await ExecuteNonQueryAsync(connection,
+                """
+                CREATE TABLE IF NOT EXISTS tags (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    name_key TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_tags_name ON tags(name_key);
+
+                CREATE TABLE IF NOT EXISTS file_tags (
+                    file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                    tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+                    PRIMARY KEY(file_id, tag_id)
+                );
+                CREATE INDEX IF NOT EXISTS ix_file_tags_tag ON file_tags(tag_id);
+                """,
+                cancellationToken, transaction).ConfigureAwait(false);
+        }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -897,6 +935,9 @@ internal sealed class SqliteLibraryDatabase
         if (query.Origin is not null) conditions.Add("f.origin=$origin");
         if (query.ImportedFromInclusive is not null) conditions.Add("f.imported_at>=$from");
         if (query.ImportedBeforeExclusive is not null) conditions.Add("f.imported_at<$before");
+        var tagIds = query.TagIds?.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToArray() ?? [];
+        var tagParameterNames = tagIds.Select((_, index) => $"$tag{index}").ToArray();
+        if (tagIds.Length > 0) conditions.Add($"EXISTS (SELECT 1 FROM file_tags ft WHERE ft.file_id=f.id AND ft.tag_id IN ({string.Join(",", tagParameterNames)}))");
         var baseWhere = string.Join(" AND ", conditions);
         if (metadataFilter is not null) conditions.Add(MetadataFilterCondition(metadataFilter));
         var where = string.Join(" AND ", conditions);
@@ -908,6 +949,7 @@ internal sealed class SqliteLibraryDatabase
             if (query.Origin is not null) command.Parameters.AddWithValue("$origin", (int)query.Origin.Value);
             if (query.ImportedFromInclusive is not null) command.Parameters.AddWithValue("$from", Format(query.ImportedFromInclusive.Value));
             if (query.ImportedBeforeExclusive is not null) command.Parameters.AddWithValue("$before", Format(query.ImportedBeforeExclusive.Value));
+            for (var index = 0; index < tagIds.Length; index++) command.Parameters.AddWithValue(tagParameterNames[index], tagIds[index]);
             if (metadataFilter is not null)
             {
                 command.Parameters.AddWithValue("$metadataKey", LibraryRules.ComparisonKey(metadataFilter.Key));
@@ -1785,6 +1827,91 @@ internal sealed class SqliteLibraryDatabase
         }
         var entries = await GetMetadataAsync(fileId, cancellationToken).ConfigureAwait(false);
         return entries.Single(entry => LibraryRules.ComparisonKey(entry.Key) == newKeyValue);
+    }
+
+    public async Task<IReadOnlyList<Tag>> GetAllTagsAsync(CancellationToken cancellationToken)
+    {
+        var results = new List<Tag>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id,name FROM tags ORDER BY name_key;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(new Tag(reader.GetString(0), reader.GetString(1)));
+        return results;
+    }
+
+    public async Task<IReadOnlyList<Tag>> GetTagsForFileAsync(string fileId, CancellationToken cancellationToken)
+    {
+        var results = new List<Tag>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        _ = await GetFileAsync(connection, fileId, cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT t.id,t.name FROM tags t JOIN file_tags ft ON ft.tag_id=t.id WHERE ft.file_id=$file ORDER BY t.name_key;";
+        command.Parameters.AddWithValue("$file", fileId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(new Tag(reader.GetString(0), reader.GetString(1)));
+        return results;
+    }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<Tag>>> GetTagsForFilesAsync(IReadOnlyCollection<string> fileIds, CancellationToken cancellationToken)
+    {
+        var results = new Dictionary<string, IReadOnlyList<Tag>>();
+        if (fileIds.Count == 0) return results;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        var parameterNames = fileIds.Select((_, index) => $"$file{index}").ToArray();
+        command.CommandText = $"SELECT ft.file_id,t.id,t.name FROM tags t JOIN file_tags ft ON ft.tag_id=t.id WHERE ft.file_id IN ({string.Join(",", parameterNames)}) ORDER BY t.name_key;";
+        var index2 = 0;
+        foreach (var fileId in fileIds)
+        {
+            command.Parameters.AddWithValue(parameterNames[index2], fileId);
+            index2++;
+        }
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var fileId = reader.GetString(0);
+            var tag = new Tag(reader.GetString(1), reader.GetString(2));
+            if (!results.TryGetValue(fileId, out var list))
+            {
+                list = new List<Tag>();
+                results[fileId] = list;
+            }
+            ((List<Tag>)list).Add(tag);
+        }
+        return results;
+    }
+
+    public async Task SetTagsForFileAsync(string fileId, IReadOnlyList<string> tagNames, CancellationToken cancellationToken)
+    {
+        var normalized = tagNames.Select(LibraryRules.NormalizeTagName).Distinct(StringComparer.Ordinal).ToArray();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var file = await GetFileAsync(connection, fileId, cancellationToken, transaction).ConfigureAwait(false);
+        if (file.State != LibraryRecordState.Active) throw new LibraryValidationException("Tags can be changed only on an active file.");
+
+        var tagIds = new List<string>(normalized.Length);
+        foreach (var name in normalized)
+        {
+            var nameKey = LibraryRules.ComparisonKey(name);
+            await ExecuteNonQueryAsync(connection,
+                "INSERT INTO tags(id,name,name_key,created_at) VALUES($id,$name,$nameKey,$createdAt) ON CONFLICT(name_key) DO NOTHING;",
+                cancellationToken, transaction,
+                ("$id", LibraryRules.NewId()), ("$name", name), ("$nameKey", nameKey), ("$createdAt", Format(DateTimeOffset.UtcNow))).ConfigureAwait(false);
+            await using var idCommand = connection.CreateCommand();
+            idCommand.Transaction = transaction;
+            idCommand.CommandText = "SELECT id FROM tags WHERE name_key=$nameKey;";
+            idCommand.Parameters.AddWithValue("$nameKey", nameKey);
+            tagIds.Add((string)(await idCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!);
+        }
+
+        await ExecuteNonQueryAsync(connection, "DELETE FROM file_tags WHERE file_id=$file;", cancellationToken, transaction, ("$file", fileId)).ConfigureAwait(false);
+        foreach (var tagId in tagIds)
+        {
+            await ExecuteNonQueryAsync(connection, "INSERT INTO file_tags(file_id,tag_id) VALUES($file,$tag);", cancellationToken, transaction, ("$file", fileId), ("$tag", tagId)).ConfigureAwait(false);
+        }
+        await TouchFileAsync(connection, transaction, fileId, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<FileLink>> GetLinksAsync(string fileId, CancellationToken cancellationToken)

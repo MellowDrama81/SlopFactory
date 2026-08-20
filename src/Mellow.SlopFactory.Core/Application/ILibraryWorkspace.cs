@@ -71,6 +71,10 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<MetadataNormalizationPreview> PreviewMetadataNormalizationAsync(IReadOnlyCollection<string> fileIds, string key, MetadataValueKind targetKind, CancellationToken cancellationToken = default);
     Task<BulkFileOperationResult> CommitMetadataNormalizationAsync(MetadataNormalizationPreview preview, CancellationToken cancellationToken = default);
     Task<BulkFileOperationResult> RemoveMetadataFromFilesAsync(IReadOnlyCollection<string> fileIds, string key, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Tag>> GetAllTagsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Tag>> GetTagsForFileAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<string, IReadOnlyList<Tag>>> GetTagsForFilesAsync(IReadOnlyCollection<string> fileIds, CancellationToken cancellationToken = default);
+    Task SetTagsForFileAsync(string fileId, IReadOnlyList<string> tagNames, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileLink>> GetLinksAsync(string fileId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileLink>> GetRecycledLinksAsync(CancellationToken cancellationToken = default);
     Task<FileLink> CreateLinkAsync(string sourceFileId, string targetFileId, string label, CancellationToken cancellationToken = default);
