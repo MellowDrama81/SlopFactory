@@ -5,18 +5,33 @@
 @inject PreviewCacheService PreviewCache
 
 <div class="source-picker-current">
-    <span class="thumbnail-frame">
-        @if (SelectedFile is not null && _currentThumbnail?.DataUri is not null)
-        {
-            <img src="@_currentThumbnail.DataUri" alt="" />
-        }
-        else if (SelectedFile is not null)
-        {
-            <span class="file-type-icon" aria-hidden="true">@ImageIconLabel</span>
-        }
-    </span>
-    <span>@(SelectedFile?.DisplayName ?? Strings["NoSourceImage"])</span>
-    <button type="button" class="secondary" aria-labelledby="@LabelledBy" disabled="@Disabled" @onclick="OpenAsync">@(SelectedFile is null ? Strings["ChooseSourceImage"] : Strings["ChangeSourceImage"])</button>
+    @if (SelectedFileIds.Count == 0)
+    {
+        <span>@Strings["NoSourceImage"]</span>
+    }
+    else
+    {
+        <ul class="metadata-list">
+            @foreach (var file in SelectedFiles)
+            {
+                <li>
+                    <span class="thumbnail-frame">
+                        @if (_thumbnails.TryGetValue(file.Id, out var thumbnail) && thumbnail.DataUri is not null)
+                        {
+                            <img src="@thumbnail.DataUri" alt="" />
+                        }
+                        else
+                        {
+                            <span class="file-type-icon" aria-hidden="true">@ImageIconLabel</span>
+                        }
+                    </span>
+                    <span>@file.DisplayName</span>
+                    <button type="button" class="secondary" disabled="@Disabled" @onclick="() => RemoveAsync(file.Id)">@Strings["BatchRemoveFile"]</button>
+                </li>
+            }
+        </ul>
+    }
+    <button type="button" class="secondary" aria-labelledby="@LabelledBy" disabled="@Disabled" @onclick="OpenAsync">@Strings["ChooseSourceImage"]</button>
 </div>
 
 @if (_open)
@@ -32,8 +47,7 @@
                     <button type="button" class="secondary @(_viewMode == PickerViewMode.Flat ? "selected" : "")" @onclick="() => _viewMode = PickerViewMode.Flat">@Strings["SourceImagePickerFlatView"]</button>
                 </div>
             }
-            <button type="button" class="secondary" @onclick="() => SelectAsync(null)">@Strings["NoSourceImage"]</button>
-            <button type="button" class="secondary" @onclick="() => _open = false">@Strings["Cancel"]</button>
+            <button type="button" class="secondary" @onclick="() => _open = false">@Strings["BatchPickerDone"]</button>
         </div>
 
         @if (AllTags.Count > 0)
@@ -49,7 +63,7 @@
         @{
             var filtered = FilteredCandidates();
             RenderFragment<FileRecord> fileCellTemplate = file =>
-                @<button type="button" class="source-picker-cell @(file.Id == SelectedFileId ? "selected" : "")" @onclick="() => SelectAsync(file.Id)">
+                @<button type="button" class="source-picker-cell @(SelectedFileIds.Contains(file.Id) ? "selected" : "")" @onclick="() => ToggleFileAsync(file.Id)">
                     <span class="thumbnail-frame">
                         @if (_thumbnails.TryGetValue(file.Id, out var thumbnail) && thumbnail.DataUri is not null)
                         {
@@ -141,8 +155,8 @@
 }
 
 @code {
-    [Parameter] public string SelectedFileId { get; set; } = string.Empty;
-    [Parameter] public EventCallback<string> SelectedFileIdChanged { get; set; }
+    [Parameter] public IReadOnlyList<string> SelectedFileIds { get; set; } = [];
+    [Parameter] public EventCallback<IReadOnlyList<string>> SelectedFileIdsChanged { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<FileRecord> Candidates { get; set; } = [];
     [Parameter] public IReadOnlyList<FolderRecord> Folders { get; set; } = [];
     [Parameter] public bool Disabled { get; set; }
@@ -158,23 +172,12 @@
     private readonly Dictionary<string, IReadOnlyList<Tag>> _tagsByFile = new(StringComparer.Ordinal);
     private readonly Dictionary<string, PreviewThumbnail> _thumbnails = new(StringComparer.Ordinal);
     private CancellationTokenSource? _loadCancellation;
-    private PreviewThumbnail? _currentThumbnail;
-    private string? _loadedForFileId;
 
     private const string ImageIconLabel = "IMG";
 
-    private FileRecord? SelectedFile => Candidates.FirstOrDefault(file => file.Id == SelectedFileId);
+    private IReadOnlyList<FileRecord> SelectedFiles => Candidates.Where(file => SelectedFileIds.Contains(file.Id)).ToArray();
 
     private IReadOnlyList<Tag> AllTags => _tagsByFile.Values.SelectMany(tags => tags).DistinctBy(tag => tag.Id).OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase).ToArray();
-
-    protected override async Task OnParametersSetAsync()
-    {
-        if (LibraryState.Workspace is null || SelectedFileId == _loadedForFileId) return;
-        _loadedForFileId = SelectedFileId;
-        if (SelectedFile is null) { _currentThumbnail = null; return; }
-        try { _currentThumbnail = await PreviewCache.GetThumbnailAsync(LibraryState.Workspace, SelectedFile); }
-        catch (Exception) { _currentThumbnail = null; }
-    }
 
     private async Task OpenAsync()
     {
@@ -268,10 +271,14 @@
 
     private void NavigateTo(string? folderId) => _currentFolderId = folderId;
 
-    private async Task SelectAsync(string? fileId)
+    private async Task ToggleFileAsync(string fileId)
     {
-        SelectedFileId = fileId ?? string.Empty;
-        _open = false;
-        await SelectedFileIdChanged.InvokeAsync(SelectedFileId);
+        var next = SelectedFileIds.Contains(fileId)
+            ? SelectedFileIds.Where(id => id != fileId).ToArray()
+            : [.. SelectedFileIds, fileId];
+        SelectedFileIds = next;
+        await SelectedFileIdsChanged.InvokeAsync(next);
     }
+
+    private async Task RemoveAsync(string fileId) => await ToggleFileAsync(fileId);
 }

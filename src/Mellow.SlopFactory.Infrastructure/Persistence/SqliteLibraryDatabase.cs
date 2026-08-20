@@ -101,7 +101,8 @@ internal sealed class SqliteLibraryDatabase
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 name_key TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                is_inheritable INTEGER NOT NULL DEFAULT 0
             );
             CREATE UNIQUE INDEX ux_tags_name ON tags(name_key);
 
@@ -815,6 +816,12 @@ internal sealed class SqliteLibraryDatabase
                 CREATE INDEX IF NOT EXISTS ix_file_tags_tag ON file_tags(tag_id);
                 """,
                 cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 41)
+        {
+            // Inheritable tags: a source file carrying an inheritable tag passes it on to every file a
+            // generation produces from it — see CreateGenerationRecordAsync's tag-propagation step.
+            await AddColumnIfMissingAsync(connection, transaction, "tags", "is_inheritable", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -1834,9 +1841,9 @@ internal sealed class SqliteLibraryDatabase
         var results = new List<Tag>();
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id,name FROM tags ORDER BY name_key;";
+        command.CommandText = "SELECT id,name,is_inheritable FROM tags ORDER BY name_key;";
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(new Tag(reader.GetString(0), reader.GetString(1)));
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(new Tag(reader.GetString(0), reader.GetString(1), reader.GetInt32(2) != 0));
         return results;
     }
 
@@ -1846,10 +1853,10 @@ internal sealed class SqliteLibraryDatabase
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         _ = await GetFileAsync(connection, fileId, cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT t.id,t.name FROM tags t JOIN file_tags ft ON ft.tag_id=t.id WHERE ft.file_id=$file ORDER BY t.name_key;";
+        command.CommandText = "SELECT t.id,t.name,t.is_inheritable FROM tags t JOIN file_tags ft ON ft.tag_id=t.id WHERE ft.file_id=$file ORDER BY t.name_key;";
         command.Parameters.AddWithValue("$file", fileId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(new Tag(reader.GetString(0), reader.GetString(1)));
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) results.Add(new Tag(reader.GetString(0), reader.GetString(1), reader.GetInt32(2) != 0));
         return results;
     }
 
@@ -1860,7 +1867,7 @@ internal sealed class SqliteLibraryDatabase
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         var parameterNames = fileIds.Select((_, index) => $"$file{index}").ToArray();
-        command.CommandText = $"SELECT ft.file_id,t.id,t.name FROM tags t JOIN file_tags ft ON ft.tag_id=t.id WHERE ft.file_id IN ({string.Join(",", parameterNames)}) ORDER BY t.name_key;";
+        command.CommandText = $"SELECT ft.file_id,t.id,t.name,t.is_inheritable FROM tags t JOIN file_tags ft ON ft.tag_id=t.id WHERE ft.file_id IN ({string.Join(",", parameterNames)}) ORDER BY t.name_key;";
         var index2 = 0;
         foreach (var fileId in fileIds)
         {
@@ -1871,7 +1878,7 @@ internal sealed class SqliteLibraryDatabase
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var fileId = reader.GetString(0);
-            var tag = new Tag(reader.GetString(1), reader.GetString(2));
+            var tag = new Tag(reader.GetString(1), reader.GetString(2), reader.GetInt32(3) != 0);
             if (!results.TryGetValue(fileId, out var list))
             {
                 list = new List<Tag>();
@@ -1912,6 +1919,34 @@ internal sealed class SqliteLibraryDatabase
         }
         await TouchFileAsync(connection, transaction, fileId, cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task SetTagInheritableAsync(string tagId, bool isInheritable, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var affected = await ExecuteNonQueryWithCountAsync(connection, "UPDATE tags SET is_inheritable=$inheritable WHERE id=$id;", cancellationToken, null, ("$inheritable", isInheritable ? 1 : 0), ("$id", tagId)).ConfigureAwait(false);
+        if (affected == 0) throw new RecordNotFoundException("Tag not found.");
+    }
+
+    /// <summary>Applies every inheritable tag carried by any of <paramref name="sourceFileIds"/> to
+    /// every file in <paramref name="resultFileIds"/> — called once per generation, inside the same
+    /// transaction that commits the generation's result files, so a generation's tag inheritance is
+    /// atomic with the generation itself. <c>INSERT OR IGNORE</c> because the same tag can be
+    /// inheritable from more than one source slot, and because a result file could in principle
+    /// already carry a tag it's about to inherit (both would otherwise collide on the
+    /// <c>file_tags</c> composite primary key).</summary>
+    private static async Task PropagateInheritableTagsAsync(SqliteConnection connection, SqliteTransaction transaction, string[] sourceFileIds, IReadOnlyList<string> resultFileIds, CancellationToken cancellationToken)
+    {
+        if (sourceFileIds.Length == 0 || resultFileIds.Count == 0) return;
+        var sourceParameterNames = sourceFileIds.Select((_, index) => $"$source{index}").ToArray();
+        var sourceParameters = sourceFileIds.Select((sourceFileId, index) => (sourceParameterNames[index], (object)sourceFileId)).ToArray();
+        foreach (var resultFileId in resultFileIds)
+        {
+            await ExecuteNonQueryAsync(connection,
+                $"INSERT OR IGNORE INTO file_tags(file_id,tag_id) SELECT $result,ft.tag_id FROM file_tags ft JOIN tags t ON t.id=ft.tag_id WHERE t.is_inheritable=1 AND ft.file_id IN ({string.Join(",", sourceParameterNames)});",
+                cancellationToken, transaction,
+                [("$result", resultFileId), .. sourceParameters]).ConfigureAwait(false);
+        }
     }
 
     public async Task<IReadOnlyList<FileLink>> GetLinksAsync(string fileId, CancellationToken cancellationToken)
@@ -3495,6 +3530,18 @@ internal sealed class SqliteLibraryDatabase
         else
         {
             await InsertGenerationStatusTransitionAsync(connection, transaction, id, null, status, null, null, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        // resultFileIds, not committedFiles: Text-mode results are written via InsertImportedFileAsync
+        // before this method is even called (no committedFiles at all), while Image/Video mode's
+        // resultFileIds is populated in the same loop as committedFiles — so resultFileIds is the one
+        // list that identifies this call's result files across every generation mode. INSERT OR IGNORE
+        // inside PropagateInheritableTagsAsync makes a redundant re-tag (e.g. a later re-finalizing
+        // call for the same generation) a harmless no-op rather than a duplicate-key error.
+        if (resultFileIds.Count > 0)
+        {
+            var sourceFileIds = normalizedSlots.Select(slot => slot.FileId).Distinct(StringComparer.Ordinal).ToArray();
+            await PropagateInheritableTagsAsync(connection, transaction, sourceFileIds, resultFileIds, cancellationToken).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

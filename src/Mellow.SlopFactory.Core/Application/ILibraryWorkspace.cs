@@ -75,6 +75,7 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<IReadOnlyList<Tag>> GetTagsForFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<IReadOnlyDictionary<string, IReadOnlyList<Tag>>> GetTagsForFilesAsync(IReadOnlyCollection<string> fileIds, CancellationToken cancellationToken = default);
     Task SetTagsForFileAsync(string fileId, IReadOnlyList<string> tagNames, CancellationToken cancellationToken = default);
+    Task SetTagInheritableAsync(string tagId, bool isInheritable, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileLink>> GetLinksAsync(string fileId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FileLink>> GetRecycledLinksAsync(CancellationToken cancellationToken = default);
     Task<FileLink> CreateLinkAsync(string sourceFileId, string targetFileId, string label, CancellationToken cancellationToken = default);

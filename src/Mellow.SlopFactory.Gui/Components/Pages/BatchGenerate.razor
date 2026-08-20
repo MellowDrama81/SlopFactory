@@ -1,0 +1,350 @@
+@page "/batch-generate"
+@implements IDisposable
+@inject AppLibraryState LibraryState
+@inject GenerationQueueService Queue
+@inject IStringLocalizer<UiStrings> Strings
+@using Microsoft.Extensions.Localization
+@using Mellow.SlopFactory.Gui.Resources
+@using Mellow.SlopFactory.Infrastructure.Providers
+
+<PageTitle>@Strings["BatchGeneratePageTitle"]</PageTitle>
+
+<header class="page-header">
+    <div><p class="eyebrow">@Strings["BatchGenerateEyebrow"]</p><h1>@Strings["BatchGenerateHeading"]</h1><p class="muted">@Strings["BatchGenerateDescription"]</p></div>
+    <a class="button" href="/generate">@Strings["NavGenerate"]</a>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="notice @(_isError ? "error" : "")" role="@(_isError ? "alert" : "status")">@_message</div>
+}
+
+@if (LibraryState.Workspace is null)
+{
+    <p class="empty">@Strings["NoLocationOpen"]</p>
+}
+else if (_models.Count == 0 && _hasNeedsReviewModels)
+{
+    <p class="empty">@Strings["AllModelsNeedReview"] <a href="/models">@Strings["ModelsHeading"]</a></p>
+}
+else if (_models.Count == 0)
+{
+    <p class="empty">@Strings["AddModelFirst"] <a href="/models/new">@Strings["AddModel"]</a></p>
+}
+else
+{
+    <EditForm Model="this" OnValidSubmit="EnqueueBatch" class="stack-form">
+        <label for="batch-model">@Strings["Model"]</label>
+        <select id="batch-model" @bind="_modelId" @bind:after="OnModelSelectionChanged" disabled="@FormDisabled">
+            <option value="">@Strings["ChooseReplacementModel"]</option>
+            @foreach (var model in _models)
+            {
+                <option value="@model.Id">@model.Label (@ModeLabel(model.Mode))</option>
+            }
+        </select>
+
+        @if (SelectedConnection is not null && CredentialBlocked(SelectedConnection))
+        {
+            <div class="notice error" role="alert">@(SelectedConnection.CredentialRequiresRepair ? Strings["CredentialRequiresRepairBanner"] : Strings["GenerationBlockedCredentialsRequired"]) <a href="@($"/connections/{SelectedConnection.Id}")">@Strings["AddApiKey"]</a></div>
+        }
+        else if (SelectedConnection is not null && SelectedConnection.IsUnverified)
+        {
+            <div class="notice" role="status">@Strings["ConnectionUnverifiedWarning"]</div>
+        }
+
+        @if (SelectedModel is not null)
+        {
+            @if (SelectedModelMode == GenerationMode.Text)
+            {
+                @if (SelectedModel.SupportsSystemInstructions)
+                {
+                    <label for="batch-system-instructions">@Strings["SystemInstructions"]</label>
+                    <textarea id="batch-system-instructions" rows="3" maxlength="1048576" @bind="_systemInstructions" @bind:event="oninput" disabled="@FormDisabled"></textarea>
+                }
+                else
+                {
+                    <p class="muted">@Strings["ModelDoesNotSupportSystemInstructions"]</p>
+                }
+            }
+
+            @foreach (var capability in CurrentSlotCapabilities)
+            {
+                @for (var order = 0; order < capability.MaxCount; order++)
+                {
+                    var role = capability.Role;
+                    var slotOrder = order;
+                    <label id="@($"batch-slot-{role}-{slotOrder}-label")">@Strings["BatchSourceSlotLabel", slotOrder + 1] @(capability.Required && slotOrder == 0 ? Strings["BatchRequiredSuffix"] : "")</label>
+                    <MultiSourceFilePicker Candidates="_activeImageFiles" Folders="_activeFolders" Disabled="FormDisabled" LabelledBy="@($"batch-slot-{role}-{slotOrder}-label")"
+                        SelectedFileIds="SlotSelection(role, slotOrder)" SelectedFileIdsChanged="ids => SetSlotSelection(role, slotOrder, ids)" />
+                }
+            }
+
+            <label id="batch-prompts-label">@Strings["BatchPromptsLabel"]</label>
+            @foreach (var promptEntry in _promptEntries)
+            {
+                <div class="inline-form" @key="promptEntry.Id">
+                    <textarea aria-labelledby="batch-prompts-label" rows="3" maxlength="1048576" @bind="promptEntry.Text" @bind:event="oninput" disabled="@FormDisabled" placeholder="@Strings["BatchPromptPlaceholder"]"></textarea>
+                    <button type="button" class="secondary" disabled="@(FormDisabled || _promptEntries.Count <= 1)" @onclick="() => RemovePrompt(promptEntry)">@Strings["BatchRemovePrompt"]</button>
+                </div>
+            }
+            <button type="button" class="secondary" disabled="@FormDisabled" @onclick="AddPrompt">@Strings["BatchAddPrompt"]</button>
+            <p class="muted">@Strings["BatchPromptsHelp", Prompts.Count]</p>
+
+            @if (SelectedModelMode == GenerationMode.Audio && SelectedConnection is not null && LibraryRules.SupportsAudioVoiceSelection(SelectedConnection.ProviderType))
+            {
+                <label for="batch-voice">@Strings["Voice"]</label>
+                <input id="batch-voice" type="text" maxlength="256" @bind="_voice" disabled="@FormDisabled" />
+            }
+
+            <label for="batch-result-count">@Strings["ResultCount"]</label>
+            <InputNumber id="batch-result-count" @bind-Value="_resultCount" min="1" max="4" disabled="@FormDisabled" />
+
+            <label for="batch-folder">@Strings["DestinationFolder"]</label>
+            <select id="batch-folder" @bind="_destinationFolderId" disabled="@FormDisabled">
+                @foreach (var folder in _activeFolders)
+                {
+                    <option value="@folder.Id">@FolderPath(folder.Id)</option>
+                }
+            </select>
+
+            <p class="muted">@Strings["BatchCombinationCount", TotalCombinationCount]</p>
+            @if (TotalCombinationCount > MaxBatchJobs)
+            {
+                <p class="notice error" role="alert">@Strings["BatchTooManyCombinations", TotalCombinationCount, MaxBatchJobs]</p>
+            }
+
+            <div class="actions">
+                <button type="submit" disabled="@(FormDisabled || string.IsNullOrEmpty(_modelId) || (SelectedConnection is not null && CredentialBlocked(SelectedConnection)) || TotalCombinationCount == 0 || TotalCombinationCount > MaxBatchJobs)">
+                    @Strings["BatchEnqueueAction"]
+                </button>
+            </div>
+        }
+    </EditForm>
+}
+
+@code {
+    private const int MaxBatchJobs = 200;
+
+    private IReadOnlyList<Model> _models = [];
+    private IReadOnlyList<Connection> _activeConnections = [];
+    private IReadOnlyList<FolderRecord> _activeFolders = [];
+    private IReadOnlyList<FileRecord> _activeImageFiles = [];
+    private bool _hasNeedsReviewModels;
+
+    private sealed class PromptEntry
+    {
+        public string Id { get; } = Guid.NewGuid().ToString("N");
+        public string Text { get; set; } = string.Empty;
+    }
+
+    private string _modelId = string.Empty;
+    private string _systemInstructions = string.Empty;
+    private List<PromptEntry> _promptEntries = [new PromptEntry()];
+    private string _voice = string.Empty;
+    private int _resultCount = 1;
+    private string _destinationFolderId = string.Empty;
+    private readonly Dictionary<(GenerationInputSlotRole Role, int Order), List<string>> _slotSelections = new();
+    private string _batchRunId = Guid.NewGuid().ToString("N");
+
+    private bool _busy;
+    private string? _message;
+    private bool _isError;
+
+    private bool FormDisabled => _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Queue.Changed += OnQueueChanged;
+        await LibraryState.InitializeAsync();
+        var workspace = LibraryState.Workspace;
+        if (workspace is null) return;
+        var activeModels = await workspace.GetActiveModelsAsync();
+        _hasNeedsReviewModels = activeModels.Any(model => model.NeedsReview);
+        _models = activeModels.Where(model => !model.NeedsReview).ToArray();
+        _activeConnections = await workspace.GetActiveConnectionsAsync();
+        _activeFolders = await workspace.GetActiveFoldersAsync();
+        var activeFiles = await workspace.GetActiveFilesAsync();
+        _activeImageFiles = activeFiles.Where(file => file.MediaType is "image/png" or "image/jpeg" or "image/webp" or "image/gif").ToArray();
+        _destinationFolderId = _activeFolders.FirstOrDefault()?.Id ?? string.Empty;
+    }
+
+    private void OnQueueChanged(object? sender, EventArgs args) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Queue.Changed -= OnQueueChanged;
+
+    private static bool CredentialBlocked(Connection connection) => !connection.HasCredential || connection.CredentialRequiresRepair;
+
+    private Model? SelectedModel => _models.FirstOrDefault(candidate => candidate.Id == _modelId);
+    private GenerationMode? SelectedModelMode => SelectedModel?.Mode;
+    private Connection? SelectedConnection => SelectedModel is { } selectedModel
+        ? _activeConnections.FirstOrDefault(candidate => candidate.Id == selectedModel.ConnectionId)
+        : null;
+
+    private IReadOnlyList<GenerationInputSlotCapability> CurrentSlotCapabilities =>
+        SelectedModel is { } model && SelectedConnection is { } connection
+            ? LibraryRules.GetInputSlotCapabilities(connection.ProviderType, model.Mode)
+            : [];
+
+    private IReadOnlyList<string> Prompts => _promptEntries
+        .Select(entry => entry.Text.Trim())
+        .Where(text => text.Length > 0)
+        .ToArray();
+
+    private void AddPrompt() => _promptEntries.Add(new PromptEntry());
+
+    private void RemovePrompt(PromptEntry entry)
+    {
+        if (_promptEntries.Count <= 1) return;
+        _promptEntries.Remove(entry);
+    }
+
+    private void OnModelSelectionChanged()
+    {
+        _message = null;
+        _isError = false;
+        var capabilities = CurrentSlotCapabilities;
+        var validKeys = capabilities.SelectMany(capability => Enumerable.Range(0, capability.MaxCount).Select(order => (capability.Role, order))).ToHashSet();
+        foreach (var key in _slotSelections.Keys.Where(key => !validKeys.Contains(key)).ToArray())
+        {
+            _slotSelections.Remove(key);
+        }
+    }
+
+    private IReadOnlyList<string> SlotSelection(GenerationInputSlotRole role, int order) =>
+        _slotSelections.TryGetValue((role, order), out var ids) ? ids : [];
+
+    private void SetSlotSelection(GenerationInputSlotRole role, int order, IReadOnlyList<string> ids)
+    {
+        _slotSelections[(role, order)] = ids.ToList();
+    }
+
+    /// <summary>Cross product of every filled source slot's candidate files, times the prompt list —
+    /// a slot with no files selected is simply omitted from every combination (not treated as a
+    /// zero-multiplier), mirroring how <see cref="LibraryRules.ValidateSourceSlots"/> treats an
+    /// optional role with no assignment.</summary>
+    private IReadOnlyList<IReadOnlyList<GenerationSourceSlot>> BuildSourceSlotCombinations()
+    {
+        var axes = new List<(GenerationInputSlotRole Role, int Order, IReadOnlyList<string> FileIds)>();
+        foreach (var capability in CurrentSlotCapabilities)
+        {
+            for (var order = 0; order < capability.MaxCount; order++)
+            {
+                if (_slotSelections.TryGetValue((capability.Role, order), out var ids) && ids.Count > 0)
+                {
+                    axes.Add((capability.Role, order, ids));
+                }
+            }
+        }
+
+        IEnumerable<IReadOnlyList<GenerationSourceSlot>> combinations = new[] { (IReadOnlyList<GenerationSourceSlot>)Array.Empty<GenerationSourceSlot>() };
+        foreach (var axis in axes)
+        {
+            combinations = combinations.SelectMany(prefix => axis.FileIds.Select(fileId =>
+                (IReadOnlyList<GenerationSourceSlot>)[.. prefix, new GenerationSourceSlot(axis.Role, fileId, axis.Order)]));
+        }
+
+        // The same file selected for two different slots within one combination is never valid
+        // (LibraryRules.ValidateNoDuplicateSourceSlotFiles) — dropped here rather than surfaced as an
+        // error, since it only affects specific combinations, not the whole batch.
+        return combinations.Where(slots => slots.Select(slot => slot.FileId).Distinct().Count() == slots.Count).ToArray();
+    }
+
+    private bool RequiredSlotsSatisfied => CurrentSlotCapabilities.Where(capability => capability.Required).All(capability =>
+        Enumerable.Range(0, capability.MaxCount).Any(order => _slotSelections.TryGetValue((capability.Role, order), out var ids) && ids.Count > 0));
+
+    private int TotalCombinationCount => RequiredSlotsSatisfied ? BuildSourceSlotCombinations().Count * Prompts.Count : 0;
+
+    private void EnqueueBatch()
+    {
+        _busy = true;
+        try
+        {
+            var model = SelectedModel;
+            if (model is null) return;
+            var connection = SelectedConnection;
+            if (connection is null)
+            {
+                _message = Strings["ConnectionUnavailableForModel"];
+                _isError = true;
+                return;
+            }
+            if (CredentialBlocked(connection))
+            {
+                _message = connection.CredentialRequiresRepair ? Strings["CredentialRequiresRepairBanner"] : Strings["GenerationBlockedCredentialsRequired"];
+                _isError = true;
+                return;
+            }
+            if (!RequiredSlotsSatisfied)
+            {
+                _message = Strings["BatchRequiredSlotMissing"];
+                _isError = true;
+                return;
+            }
+
+            var prompts = Prompts;
+            if (prompts.Count == 0)
+            {
+                _message = Strings["BatchNoPrompts"];
+                _isError = true;
+                return;
+            }
+
+            var sourceCombinations = BuildSourceSlotCombinations();
+            var total = sourceCombinations.Count * prompts.Count;
+            if (total == 0)
+            {
+                _message = Strings["BatchNoCombinations"];
+                _isError = true;
+                return;
+            }
+            if (total > MaxBatchJobs)
+            {
+                _message = Strings["BatchTooManyCombinations", total, MaxBatchJobs];
+                _isError = true;
+                return;
+            }
+
+            var systemInstructions = model.SupportsSystemInstructions && !string.IsNullOrWhiteSpace(_systemInstructions) ? _systemInstructions : null;
+            var voice = model.Mode == GenerationMode.Audio && !string.IsNullOrWhiteSpace(_voice) ? _voice : null;
+
+            _batchRunId = Guid.NewGuid().ToString("N");
+            var index = 0;
+            foreach (var prompt in prompts)
+            {
+                foreach (var slots in sourceCombinations)
+                {
+                    index++;
+                    var draftId = $"batch-{_batchRunId}-{index}";
+                    var title = Strings["BatchJobTitle", index, total];
+                    var snapshot = new GenerationJobSnapshot(draftId, title, model.Mode, model.Id, prompt, systemInstructions, _resultCount, _destinationFolderId, null, null, slots, voice);
+                    Queue.Enqueue(snapshot, connection.Id);
+                }
+            }
+
+            _message = Strings["BatchEnqueuedMessage", total];
+            _isError = false;
+        }
+        finally { _busy = false; }
+    }
+
+    private string FolderPath(string folderId)
+    {
+        var names = new Stack<string>();
+        var current = _activeFolders.FirstOrDefault(folder => folder.Id == folderId);
+        while (current is not null)
+        {
+            names.Push(current.Name);
+            current = current.ParentId is { } parentId ? _activeFolders.FirstOrDefault(folder => folder.Id == parentId) : null;
+        }
+        return names.Count == 0 ? Strings["UnknownFolder"] : string.Join(" / ", names);
+    }
+
+    private string ModeLabel(GenerationMode mode) => mode switch
+    {
+        GenerationMode.Text => Strings["ModeText"],
+        GenerationMode.Image => Strings["ModeImage"],
+        GenerationMode.Audio => Strings["ModeAudio"],
+        GenerationMode.Video => Strings["ModeVideo"],
+        _ => mode.ToString()
+    };
+}

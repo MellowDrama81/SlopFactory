@@ -218,18 +218,18 @@ else
         @if (SupportsReferenceImageInputs)
         {
             <label id="generate-source-image-label">@Strings["SourceImageSlot1"]</label>
-            <SourceFilePicker Candidates="_activeImageFiles" Disabled="FormDisabled" LabelledBy="generate-source-image-label" @bind-SelectedFileId="_form.SourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
+            <SourceFilePicker Candidates="_activeImageFiles" Folders="_activeFolders" Disabled="FormDisabled" LabelledBy="generate-source-image-label" @bind-SelectedFileId="_form.SourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
 
             @if (ReferenceImageMaxCount >= 2)
             {
                 <label id="generate-source-image-2-label">@Strings["SourceImageSlot2"]</label>
-                <SourceFilePicker Candidates="_activeImageFiles" Disabled="FormDisabled" LabelledBy="generate-source-image-2-label" @bind-SelectedFileId="_form.SecondarySourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
+                <SourceFilePicker Candidates="_activeImageFiles" Folders="_activeFolders" Disabled="FormDisabled" LabelledBy="generate-source-image-2-label" @bind-SelectedFileId="_form.SecondarySourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
             }
 
             @if (ReferenceImageMaxCount >= 3)
             {
                 <label id="generate-source-image-3-label">@Strings["SourceImageSlot3"]</label>
-                <SourceFilePicker Candidates="_activeImageFiles" Disabled="FormDisabled" LabelledBy="generate-source-image-3-label" @bind-SelectedFileId="_form.TertiarySourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
+                <SourceFilePicker Candidates="_activeImageFiles" Folders="_activeFolders" Disabled="FormDisabled" LabelledBy="generate-source-image-3-label" @bind-SelectedFileId="_form.TertiarySourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
             }
 
             @if (HasDuplicateSourceSelection)

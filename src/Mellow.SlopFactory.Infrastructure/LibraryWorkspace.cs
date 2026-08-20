@@ -1559,6 +1559,12 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return RunMutationAsync(() => _database.SetTagsForFileAsync(fileId, tagNames, cancellationToken), cancellationToken);
     }
 
+    public Task SetTagInheritableAsync(string tagId, bool isInheritable, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.SetTagInheritableAsync(tagId, isInheritable, cancellationToken), cancellationToken);
+    }
+
     public Task<IReadOnlyList<FileLink>> GetLinksAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

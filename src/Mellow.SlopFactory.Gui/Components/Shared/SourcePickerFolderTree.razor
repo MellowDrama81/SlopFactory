@@ -1,0 +1,37 @@
+@if (HasContent)
+{
+    <div class="source-picker-folder-group" style="margin-inline-start: @(Depth * 1.1)rem">
+        <h4 class="source-picker-folder-name">@Folder.Name</h4>
+        @if (Files.Count > 0)
+        {
+            <div class="source-picker-grid">
+                @foreach (var file in Files)
+                {
+                    @FileTemplate(file)
+                }
+            </div>
+        }
+        @foreach (var child in ChildFolders)
+        {
+            <SourcePickerFolderTree Folder="child" AllFolders="AllFolders" FilesByFolder="FilesByFolder" FileTemplate="FileTemplate" Depth="Depth + 1" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public FolderRecord Folder { get; set; } = null!;
+    [Parameter, EditorRequired] public IReadOnlyList<FolderRecord> AllFolders { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyDictionary<string, List<FileRecord>> FilesByFolder { get; set; } = new Dictionary<string, List<FileRecord>>();
+    [Parameter, EditorRequired] public RenderFragment<FileRecord> FileTemplate { get; set; } = null!;
+    [Parameter] public int Depth { get; set; }
+
+    private IReadOnlyList<FileRecord> Files => FilesByFolder.TryGetValue(Folder.Id, out var list) ? list : [];
+    private IReadOnlyList<FolderRecord> ChildFolders => AllFolders.Where(candidate => candidate.ParentId == Folder.Id).OrderBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    private bool HasContent => Files.Count > 0 || ChildFolders.Any(HasDescendantContent);
+
+    private bool HasDescendantContent(FolderRecord folder)
+    {
+        if (FilesByFolder.TryGetValue(folder.Id, out var list) && list.Count > 0) return true;
+        return AllFolders.Where(candidate => candidate.ParentId == folder.Id).Any(HasDescendantContent);
+    }
+}

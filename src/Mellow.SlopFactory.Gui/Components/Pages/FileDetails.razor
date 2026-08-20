@@ -399,7 +399,11 @@ else
                 <ul class="tag-list">
                     @foreach (var tag in _fileTags)
                     {
-                        <li class="tag-chip">@tag.Name <button class="ghost" aria-label="@Strings["RemoveTagAria", tag.Name]" @onclick="() => RemoveTagAsync(tag)">&times;</button></li>
+                        <li class="tag-chip @(tag.IsInheritable ? "inheritable" : "")">
+                            @tag.Name
+                            <button type="button" class="ghost tag-inherit-toggle" aria-pressed="@tag.IsInheritable" title="@Strings["TagInheritableHelp"]" @onclick="() => ToggleTagInheritableAsync(tag)">@(tag.IsInheritable ? Strings["TagInheritableOn"] : Strings["TagInheritableOff"])</button>
+                            <button class="ghost" aria-label="@Strings["RemoveTagAria", tag.Name]" @onclick="() => RemoveTagAsync(tag)">&times;</button>
+                        </li>
                     }
                 </ul>
             }
@@ -904,6 +908,19 @@ else
         var names = _fileTags.Where(existing => existing.Id != tag.Id).Select(existing => existing.Name).ToArray();
         await LibraryState.Workspace.SetTagsForFileAsync(Id, names);
         await ReloadAsync();
+    }
+
+    /// <summary>Inheritable is a property of the tag itself, not of this file's assignment of it — so
+    /// this flips it for every file carrying the tag, not just <see cref="_file"/>.</summary>
+    private async Task ToggleTagInheritableAsync(Tag tag)
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.SetTagInheritableAsync(tag.Id, !tag.IsInheritable);
+            await ReloadAsync();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
     }
 
     private void BeginRename(MetadataEntry entry)

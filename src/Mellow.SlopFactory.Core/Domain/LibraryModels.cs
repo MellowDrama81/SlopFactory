@@ -296,7 +296,9 @@ public sealed record MetadataEntry(
     string SerializedValue,
     bool IsSensitive);
 
-public sealed record Tag(string Id, string Name);
+/// <param name="IsInheritable">When true, generating a file using a source file carrying this tag
+/// automatically applies the tag to every resulting generated file too.</param>
+public sealed record Tag(string Id, string Name, bool IsInheritable = false);
 
 public sealed record BulkFileOperationItemResult(
     string FileId,

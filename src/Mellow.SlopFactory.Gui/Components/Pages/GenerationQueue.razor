@@ -114,8 +114,14 @@ else
     private string ConnectionLabel(string connectionId) => _connections.FirstOrDefault(connection => connection.Id == connectionId)?.Label ?? Strings["Unknown"];
     private string ModelLabel(string modelId) => _models.FirstOrDefault(model => model.Id == modelId)?.Label ?? Strings["Unknown"];
 
-    private bool IsFirstQueued(GenerationQueueEntry entry) => QueuedIdsFor(entry.ConnectionId).First() == entry.JobId;
-    private bool IsLastQueued(GenerationQueueEntry entry) => QueuedIdsFor(entry.ConnectionId).Last() == entry.JobId;
+    /// <summary>FirstOrDefault/LastOrDefault, not First/Last: <c>_entries</c> can be swapped out by a
+    /// concurrent <see cref="GenerationQueueService.Changed"/> notification (the background queue pump
+    /// moving this same job out of <see cref="GenerationJobPhase.Queued"/>) between the render check
+    /// that gated this call and the call itself, so the recomputed queued-id list can come back empty
+    /// even though <paramref name="entry"/> was queued moments ago. Treating that transient case as
+    /// "not first/last" is harmless — a stale-armed move button is a no-op in <see cref="MoveJob"/>.</summary>
+    private bool IsFirstQueued(GenerationQueueEntry entry) => QueuedIdsFor(entry.ConnectionId).FirstOrDefault() == entry.JobId;
+    private bool IsLastQueued(GenerationQueueEntry entry) => QueuedIdsFor(entry.ConnectionId).LastOrDefault() == entry.JobId;
 
     private List<string> QueuedIdsFor(string connectionId) =>
         _entries.Where(entry => entry.ConnectionId == connectionId && entry.Phase == GenerationJobPhase.Queued)
