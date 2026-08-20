@@ -516,16 +516,22 @@ else
                     {
                         <p class="muted">@Strings["TokenUsage", record.PromptTokens?.ToString() ?? Strings["Unknown"], record.CompletionTokens?.ToString() ?? Strings["Unknown"]]</p>
                     }
-                    @foreach (var slot in record.SourceSlots.Where(slot => slot.Role == GenerationInputSlotRole.ReferenceImage).OrderBy(slot => slot.Order))
+                    var sourceSlots = record.SourceSlots.Where(slot => slot.Role == GenerationInputSlotRole.ReferenceImage).OrderBy(slot => slot.Order).ToArray();
+                    @if (sourceSlots.Length > 0)
                     {
-                        <p class="muted">@Strings["SourceImageSlotUsed", slot.Order + 1] <a href="@($"/file/{slot.FileId}")">@Strings["OpenSourceFile"]</a></p>
+                        <ul class="metadata-list">
+                            @foreach (var slot in sourceSlots)
+                            {
+                                <li><GenerationResultThumbnail FileId="@slot.FileId" LinkText="@Strings["SourceImageSlotUsed", slot.Order + 1].Value" /></li>
+                            }
+                        </ul>
                     }
                     @if (record.ResultFileIds.Count > 0)
                     {
                         <ul class="metadata-list">
-                            @foreach (var fileId in record.ResultFileIds)
+                            @foreach (var result in record.ResultFileIds.Select((fileId, index) => new { fileId, index }))
                             {
-                                <li><GenerationResultThumbnail FileId="@fileId" /></li>
+                                <li><GenerationResultThumbnail FileId="@result.fileId" LinkText="@Strings["ResultPositionLabel", result.index + 1].Value" /></li>
                             }
                         </ul>
                     }

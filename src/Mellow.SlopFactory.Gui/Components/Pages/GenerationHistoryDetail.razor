@@ -102,7 +102,7 @@ else if (_record is not null)
                 {
                     @if (slot.FileId is not null)
                     {
-                        <li><a href="@($"/file/{slot.FileId}")">@Strings["SourceImageSlotUsed", slot.Position]</a></li>
+                        <li><GenerationResultThumbnail FileId="@slot.FileId" LinkText="@Strings["SourceImageSlotUsed", slot.Position].Value" /></li>
                     }
                     else if (slot.Tombstone is { } tombstone)
                     {
@@ -151,9 +151,9 @@ else if (_record is not null)
         @if (_record.ResultFileIds.Count > 0 || _record.TombstonedResults.Count > 0)
         {
             <ul class="metadata-list">
-                @foreach (var fileId in _record.ResultFileIds)
+                @foreach (var result in _record.ResultFileIds.Select((fileId, index) => new { fileId, index }))
                 {
-                    <li><GenerationResultThumbnail FileId="@fileId" /></li>
+                    <li><GenerationResultThumbnail FileId="@result.fileId" LinkText="@Strings["ResultPositionLabel", result.index + 1].Value" /></li>
                 }
                 @foreach (var tombstone in _record.TombstonedResults)
                 {

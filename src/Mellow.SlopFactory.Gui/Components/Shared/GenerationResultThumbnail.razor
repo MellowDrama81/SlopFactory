@@ -18,11 +18,12 @@
             }
         </span>
     }
-    <span>@Strings["OpenGeneratedFile"]</span>
+    <span>@(LinkText ?? Strings["OpenGeneratedFile"])</span>
 </a>
 
 @code {
     [Parameter, EditorRequired] public string FileId { get; set; } = string.Empty;
+    [Parameter] public string? LinkText { get; set; }
 
     private FileRecord? _file;
     private PreviewThumbnail? _thumbnail;
