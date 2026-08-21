@@ -29,6 +29,11 @@ public interface IProviderAdapter
     /// non-null value should ever reach them.</summary>
     Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default);
 
+    /// <summary>Image editing with one private mask attachment. Adapters must override this only
+    /// when their documented edit contract accepts a mask.</summary>
+    Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages, TextGenerationSourceImage? mask, CancellationToken cancellationToken = default) =>
+        mask is null ? GenerateImageAsync(connection, model, apiKey, prompt, resultCount, sourceImages, cancellationToken) : throw new NotSupportedException("This provider does not support masked image editing.");
+
     /// <summary>Throws <see cref="Infrastructure.Providers.ProviderAdapterException"/> for a provider
     /// adapter with no verified audio generation API. <paramref name="voice"/> is a provider-specific
     /// preset voice identifier; only adapters that declare

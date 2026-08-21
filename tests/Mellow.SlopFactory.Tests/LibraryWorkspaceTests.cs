@@ -1540,7 +1540,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 1", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 1", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1548,7 +1548,7 @@ public sealed class LibraryWorkspaceTests
         Assert.Empty(await upgraded.GetRecycledLinksAsync());
         Assert.Empty(await upgraded.GetRecycleBinEntriesAsync());
         Assert.False(File.Exists(databasePath + ".upgrade-backup"));
-        Assert.Contains("\"schemaVersion\": 41", await File.ReadAllTextAsync(manifestPath));
+        Assert.Contains("\"schemaVersion\": 46", await File.ReadAllTextAsync(manifestPath));
     }
 
     [Fact]
@@ -1569,7 +1569,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 2", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 2", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1603,7 +1603,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 3", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 3", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1636,7 +1636,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 4", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 4", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1672,7 +1672,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 5", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 5", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1705,7 +1705,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 14", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 14", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1741,7 +1741,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 15", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 15", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1775,7 +1775,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 16", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 16", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1809,7 +1809,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 17", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 17", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1848,7 +1848,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 18", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 18", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1884,7 +1884,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 19", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 19", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1919,7 +1919,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 20", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 20", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1954,7 +1954,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 21", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 21", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -1990,7 +1990,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 22", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 22", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -2029,7 +2029,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 23", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 23", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -2071,7 +2071,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 24", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 24", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
 
@@ -2124,7 +2124,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 25", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 25", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2189,7 +2189,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 26", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 26", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2258,7 +2258,10 @@ public sealed class LibraryWorkspaceTests
     {
         using var temporary = new TemporaryDirectory();
         var sourcePath = temporary.Child("source.png");
-        await File.WriteAllBytesAsync(sourcePath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0]);
+        // Unlike the other stub PNGs in this file, this slot's bytes are actually read back
+        // (CreateQueuedGenerationRecordAsync captures a reference-image snapshot), which validates
+        // real dimensions — a bare signature is not enough here, so this uses MinimalValidPng.
+        await File.WriteAllBytesAsync(sourcePath, MinimalValidPng());
         var factory = new LibraryWorkspaceFactory();
         await using var workspace = await factory.CreateAsync(temporary.Child("library"));
         var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
@@ -2316,7 +2319,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 27", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 27", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2366,7 +2369,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 28", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 28", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2403,7 +2406,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 29", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 29", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2442,7 +2445,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 30", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 30", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2484,7 +2487,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 31", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 31", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2524,7 +2527,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 32", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 32", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2565,7 +2568,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 33", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 33", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2603,7 +2606,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 34", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 34", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2646,7 +2649,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 36", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 36", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2727,7 +2730,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 37", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 37", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2776,7 +2779,7 @@ public sealed class LibraryWorkspaceTests
         }
         var manifestPath = Path.Combine(root, "slopfactory-library.json");
         var manifest = await File.ReadAllTextAsync(manifestPath);
-        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 41", "\"schemaVersion\": 39", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 39", StringComparison.Ordinal));
 
         await using var upgraded = await factory.OpenAsync(root);
         Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
@@ -2788,6 +2791,237 @@ public sealed class LibraryWorkspaceTests
         Assert.Equal(2, (await upgraded.GetAllTagsAsync()).Count);
         var byFile = await upgraded.GetTagsForFilesAsync([fileId]);
         Assert.Equal(2, byFile[fileId].Count);
+    }
+
+    [Fact]
+    public async Task OpeningVersionFortyOneLibraryAddsPrivateMasksAndSnapshotSupport()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var factory = new LibraryWorkspaceFactory();
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, MinimalValidPng());
+        string fileId;
+        string modelId;
+        await using (var created = await factory.CreateAsync(root))
+        {
+            fileId = Assert.Single(await created.ImportAsync([sourcePath], created.Descriptor.RootFolderId)).File!.Id;
+            var connection = await created.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+            var model = await created.CreateModelAsync("Image model", connection.Id, "gpt-image-1", GenerationMode.Image, false);
+            modelId = model.Id;
+        }
+
+        var databasePath = Path.Combine(root, "library.sqlite3");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString();
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            // Strips everything migrations 42-46 added, simulating a pre-mask-feature library.
+            command.CommandText = """
+                DROP TABLE image_masks;
+                DROP TABLE generation_input_snapshots;
+                ALTER TABLE generation_source_slots DROP COLUMN attachment_id;
+                ALTER TABLE generation_source_slots DROP COLUMN attachment_snapshot_bytes;
+                ALTER TABLE generation_source_slots DROP COLUMN snapshot_source_generation_id;
+                UPDATE library_info SET schema_version=41 WHERE singleton=1;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+        var manifestPath = Path.Combine(root, "slopfactory-library.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"schemaVersion\": 46", "\"schemaVersion\": 41", StringComparison.Ordinal));
+
+        await using var upgraded = await factory.OpenAsync(root);
+        Assert.Equal(LibraryRules.SchemaVersion, upgraded.Descriptor.SchemaVersion);
+
+        var mask = await upgraded.CreateImageMaskAsync(fileId, "Mask", MinimalValidPng(), 1, 1);
+        IReadOnlyList<GenerationSourceSlot> slots = [new(GenerationInputSlotRole.ReferenceImage, fileId, 0), new(GenerationInputSlotRole.Mask, fileId, 0, mask.Id)];
+        var record = await upgraded.CreateQueuedGenerationRecordAsync(modelId, "a prompt", 1, upgraded.Descriptor.GeneratedFolderId, sourceSlots: slots);
+
+        Assert.Equal(2, record.SourceSlots.Count);
+        var maskBytes = await upgraded.ReadGenerationMaskSnapshotAsync(record.Id, mask.Id);
+        Assert.NotEmpty(maskBytes);
+    }
+
+    [Fact]
+    public async Task CreateImageMaskRejectsDimensionsThatDoNotMatchTheOwnerImage()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, MinimalValidPng(1, 1));
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateImageMaskAsync(sourceFile.Id, "Mask", MinimalValidPng(2, 2), 2, 2));
+    }
+
+    [Fact]
+    public async Task CreateImageMaskRejectsAnEmptyOrStructurallyInvalidPng()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, MinimalValidPng());
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateImageMaskAsync(sourceFile.Id, "Mask", [], 1, 1));
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateImageMaskAsync(sourceFile.Id, "Mask", [0x00, 0x01, 0x02], 1, 1));
+    }
+
+    [Fact]
+    public async Task CreateImageMaskRejectsAPngOverTheOpenAiFourMebibyteMaskLimit()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, MinimalValidPng());
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        // Oversized padding after a structurally valid header — the size limit is checked before
+        // full PNG validation, so this doesn't need to be a real decodable image past its IHDR.
+        var oversized = new byte[LibraryRules.MaximumMaskPngBytes + 1];
+        MinimalValidPng().CopyTo(oversized, 0);
+
+        var exception = await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.CreateImageMaskAsync(sourceFile.Id, "Mask", oversized, 1, 1));
+        Assert.Contains("4", exception.Message);
+    }
+
+    [Fact]
+    public async Task ReadImageMaskRejectsAMaskWhoseOwnerImageContentHasSinceChanged()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, MinimalValidPng(1, 1));
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var mask = await workspace.CreateImageMaskAsync(sourceFile.Id, "Mask", MinimalValidPng(1, 1), 1, 1);
+
+        // Replaces the owner's managed bytes with different (but still 1x1 PNG) content, so its
+        // content hash moves on without changing its dimensions or media type.
+        await File.WriteAllBytesAsync(workspace.GetManagedFilePath(sourceFile), [.. MinimalValidPng(1, 1), 0xFF]);
+        await workspace.RevalidateFileContentAsync(sourceFile.Id);
+        var review = await workspace.ReviewManagedContentReplacementAsync(sourceFile.Id, null);
+        await workspace.CommitManagedContentReplacementAsync(review, null, true, false);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.ReadImageMaskAsync(mask.Id));
+    }
+
+    [Fact]
+    public async Task DeleteImageMaskRemovesAnUnusedMaskButRejectsOneUsedByGenerationHistory()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, MinimalValidPng());
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var unusedMask = await workspace.CreateImageMaskAsync(sourceFile.Id, "Unused mask", MinimalValidPng(), 1, 1);
+        var usedMask = await workspace.CreateImageMaskAsync(sourceFile.Id, "Used mask", MinimalValidPng(), 1, 1);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Image model", connection.Id, "gpt-image-1", GenerationMode.Image, false);
+        IReadOnlyList<GenerationSourceSlot> slots = [new(GenerationInputSlotRole.ReferenceImage, sourceFile.Id, 0), new(GenerationInputSlotRole.Mask, sourceFile.Id, 0, usedMask.Id)];
+        await workspace.CreateQueuedGenerationRecordAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: slots);
+
+        await workspace.DeleteImageMaskAsync(unusedMask.Id);
+        Assert.DoesNotContain(await workspace.GetImageMasksAsync(sourceFile.Id), candidate => candidate.Id == unusedMask.Id);
+
+        await Assert.ThrowsAsync<LibraryValidationException>(() => workspace.DeleteImageMaskAsync(usedMask.Id));
+        Assert.Contains(await workspace.GetImageMasksAsync(sourceFile.Id), candidate => candidate.Id == usedMask.Id);
+    }
+
+    [Fact]
+    public async Task UseAgainAfterPermanentSourceDeletionClonesAndUsesRetainedSnapshots()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourcePath = temporary.Child("source.png");
+        var sourceBytes = MinimalValidPng();
+        await File.WriteAllBytesAsync(sourcePath, sourceBytes);
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var maskBytes = MinimalValidPng();
+        var mask = await workspace.CreateImageMaskAsync(sourceFile.Id, "Mask", maskBytes, 1, 1);
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Image model", connection.Id, "gpt-image-1", GenerationMode.Image, false);
+
+        IReadOnlyList<GenerationSourceSlot> originalSlots = [new(GenerationInputSlotRole.ReferenceImage, sourceFile.Id, 0), new(GenerationInputSlotRole.Mask, sourceFile.Id, 0, mask.Id)];
+        var original = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: originalSlots);
+
+        await workspace.RecycleFileAsync(sourceFile.Id);
+        await workspace.PermanentlyDeleteFileAsync(sourceFile.Id);
+
+        var historyReloaded = await workspace.GetGenerationRecordAsync(original.Id);
+        Assert.Empty(historyReloaded.SourceSlots);
+        Assert.Equal(2, historyReloaded.SourceSlotSnapshots.Count);
+        Assert.All(historyReloaded.SourceSlotSnapshots, snapshot => Assert.Null(snapshot.FileId));
+
+        // Mirrors how Generate.razor's BuildReplaySourceSlots reconstructs Use Again's carried-forward
+        // slots from a historical record whose live sources are gone.
+        var replaySlots = historyReloaded.SourceSlotSnapshots
+            .Select(snapshot => new GenerationSourceSlot(snapshot.Role, null, snapshot.Order, snapshot.AttachmentId, historyReloaded.Id))
+            .ToArray();
+
+        var replay = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: replaySlots);
+
+        Assert.Equal(2, replay.SourceSlots.Count);
+        Assert.All(replay.SourceSlots, slot => Assert.Null(slot.FileId));
+        Assert.All(replay.SourceSlots, slot => Assert.Equal(original.Id, slot.SnapshotSourceGenerationId));
+
+        var replayReferenceSlot = Assert.Single(replay.SourceSlots, slot => slot.Role == GenerationInputSlotRole.ReferenceImage);
+        var clonedImage = await workspace.ReadGenerationInputSnapshotAsync(replay.Id, replayReferenceSlot.Role, replayReferenceSlot.Order);
+        Assert.Equal(sourceBytes, clonedImage.Bytes);
+
+        var replayMaskSlot = Assert.Single(replay.SourceSlots, slot => slot.Role == GenerationInputSlotRole.Mask);
+        var clonedMask = await workspace.ReadGenerationMaskSnapshotAsync(replay.Id, replayMaskSlot.AttachmentId!);
+        Assert.Equal(maskBytes, clonedMask);
+
+        // The replay's own copy must be fully independent — permanently deleting the original record
+        // (whose snapshots the replay was cloned from) must not affect the replay's own retained bytes.
+        await workspace.RecycleGenerationRecordAsync(original.Id);
+        await workspace.PermanentlyDeleteGenerationRecordAsync(original.Id);
+
+        var clonedImageAfterSourceGenerationGone = await workspace.ReadGenerationInputSnapshotAsync(replay.Id, replayReferenceSlot.Role, replayReferenceSlot.Order);
+        Assert.Equal(sourceBytes, clonedImageAfterSourceGenerationGone.Bytes);
+        var clonedMaskAfterSourceGenerationGone = await workspace.ReadGenerationMaskSnapshotAsync(replay.Id, replayMaskSlot.AttachmentId!);
+        Assert.Equal(maskBytes, clonedMaskAfterSourceGenerationGone);
+    }
+
+    [Fact]
+    public async Task PermanentlyDeletingAGenerationRecordClearsSnapshotReferencesHeldByDraftsAndDeletesItsOwnInputSnapshots()
+    {
+        using var temporary = new TemporaryDirectory();
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(temporary.Child("library"));
+        var sourcePath = temporary.Child("source.png");
+        await File.WriteAllBytesAsync(sourcePath, MinimalValidPng());
+        var sourceFile = Assert.Single(await workspace.ImportAsync([sourcePath], workspace.Descriptor.RootFolderId)).File!;
+        var connection = await workspace.CreateConnectionAsync("Connection", ProviderType.OpenAi, "https://api.openai.com/v1", "Authorization", "Bearer");
+        var model = await workspace.CreateModelAsync("Image model", connection.Id, "gpt-image-1", GenerationMode.Image, false);
+
+        IReadOnlyList<GenerationSourceSlot> originalSlots = [new(GenerationInputSlotRole.ReferenceImage, sourceFile.Id, 0)];
+        var original = await workspace.CreateQueuedGenerationRecordAsync(model.Id, "a prompt", 1, workspace.Descriptor.GeneratedFolderId, sourceSlots: originalSlots);
+        await workspace.RecycleFileAsync(sourceFile.Id);
+        await workspace.PermanentlyDeleteFileAsync(sourceFile.Id);
+
+        var historyReloaded = await workspace.GetGenerationRecordAsync(original.Id);
+        IReadOnlyList<GenerationSourceSlot> draftSlots = historyReloaded.SourceSlotSnapshots
+            .Select(snapshot => new GenerationSourceSlot(snapshot.Role, null, snapshot.Order, snapshot.AttachmentId, historyReloaded.Id))
+            .ToArray();
+        var draft = await workspace.CreateDraftAsync();
+        draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, model.Id, "a prompt", null, 1, workspace.Descriptor.GeneratedFolderId, null, null, sourceSlots: draftSlots);
+        Assert.Single(draft.SourceSlots);
+
+        await workspace.RecycleGenerationRecordAsync(original.Id);
+        await workspace.PermanentlyDeleteGenerationRecordAsync(original.Id);
+
+        // The source generation is gone: the draft's snapshot-backed slot can no longer be resolved
+        // and is dropped, rather than left dangling at a now-unrecoverable generation ID.
+        var draftReloaded = await workspace.GetDraftAsync(draft.Id);
+        Assert.Empty(draftReloaded.SourceSlots);
     }
 
     [Fact]
@@ -4178,6 +4412,16 @@ public sealed class LibraryWorkspaceTests
         }
         public void ValidateNoOverlap(string candidatePath) { }
     }
+
+    /// <summary>A structurally minimal but genuinely valid PNG (signature + a truncated IHDR chunk
+    /// carrying real width/height) — unlike the bare-signature stub used elsewhere in this file, bytes
+    /// built by this helper pass <c>ImageSafetyInspector.Validate</c>, so they're safe to use wherever
+    /// a test actually reads the image back (e.g. reference-image/mask snapshot capture).</summary>
+    private static byte[] MinimalValidPng(int width = 1, int height = 1) =>
+    [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, (byte)'I', (byte)'H', (byte)'D', (byte)'R',
+        0, 0, (byte)(width >> 8), (byte)width, 0, 0, (byte)(height >> 8), (byte)height
+    ];
 
     private static void DirectoryCopy(string sourcePath, string destinationPath)
     {

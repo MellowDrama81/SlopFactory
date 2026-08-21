@@ -408,6 +408,68 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         return new ImageFileContent(file.MediaType, file.MediaType == "image/svg+xml" ? SvgSanitizer.Sanitize(bytes) : bytes);
     }
 
+    public async Task<IReadOnlyList<ImageMask>> GetImageMasksAsync(string ownerFileId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var owner = await GetVerifiedContentFileAsync(ownerFileId, cancellationToken).ConfigureAwait(false);
+        if (!IsImageMediaType(owner.MediaType) || owner.MediaType == "image/svg+xml") throw new LibraryValidationException("Masks are available only for raster images.");
+        return await _database.GetImageMasksAsync(ownerFileId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<ImageMask> CreateImageMaskAsync(string ownerFileId, string label, byte[] pngBytes, int width, int height, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(pngBytes);
+        return RunMutationAsync(() => CreateImageMaskCoreAsync(ownerFileId, label, pngBytes, width, height, cancellationToken), cancellationToken);
+    }
+
+    private async Task<ImageMask> CreateImageMaskCoreAsync(string ownerFileId, string label, byte[] pngBytes, int width, int height, CancellationToken cancellationToken)
+    {
+        var owner = await GetVerifiedContentFileAsync(ownerFileId, cancellationToken).ConfigureAwait(false);
+        if (!IsImageMediaType(owner.MediaType) || owner.MediaType == "image/svg+xml") throw new LibraryValidationException("Masks are available only for raster images.");
+        // OpenAI's images/edits contract caps the mask file itself at 4 MiB regardless of which GPT
+        // image model is selected — see LibraryRules.MaximumMaskPngBytes's own remarks.
+        if (pngBytes.Length > LibraryRules.MaximumMaskPngBytes)
+        {
+            throw new LibraryValidationException($"A mask cannot exceed {LibraryRules.MaximumMaskPngBytes / 1_048_576} MiB.");
+        }
+        // Masks are always PNG, so the stored alpha semantics remain unambiguous for providers.
+        ImageSafetyInspector.Validate(pngBytes, "image/png");
+        var maskDimensions = ImageSafetyInspector.ReadDimensions(pngBytes, "image/png");
+        if (maskDimensions.Width != width || maskDimensions.Height != height) throw new LibraryValidationException("The declared mask dimensions do not match its PNG bytes.");
+        var ownerDimensions = await GetImageTechnicalPropertiesAsync(ownerFileId, cancellationToken).ConfigureAwait(false);
+        if (ownerDimensions.Width != width || ownerDimensions.Height != height) throw new LibraryValidationException("A mask must have the same dimensions as its owner image.");
+        return await _database.CreateImageMaskAsync(ownerFileId, label, owner.ContentHash, width, height, pngBytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<byte[]> ReadImageMaskAsync(string maskId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var (mask, bytes) = await _database.ReadImageMaskAsync(maskId, cancellationToken).ConfigureAwait(false);
+        var owner = await GetVerifiedContentFileAsync(mask.OwnerFileId, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(mask.BaseContentHash, owner.ContentHash, StringComparison.Ordinal)) throw new LibraryValidationException("This mask belongs to an older revision of its image and cannot be used.");
+        if (!string.Equals(mask.ContentHash, Convert.ToHexStringLower(SHA256.HashData(bytes)), StringComparison.Ordinal)) throw new LibraryValidationException("The stored mask bytes no longer match their record.");
+        ImageSafetyInspector.Validate(bytes, "image/png");
+        return bytes;
+    }
+
+    public Task<byte[]> ReadGenerationMaskSnapshotAsync(string generationRecordId, string maskId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.ReadGenerationMaskSnapshotAsync(generationRecordId, maskId, cancellationToken);
+    }
+
+    public Task<ImageFileContent> ReadGenerationInputSnapshotAsync(string generationRecordId, GenerationInputSlotRole role, int order, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _database.ReadGenerationInputSnapshotAsync(generationRecordId, role, order, cancellationToken);
+    }
+
+    public Task DeleteImageMaskAsync(string maskId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return RunMutationAsync(() => _database.DeleteImageMaskAsync(maskId, cancellationToken), cancellationToken);
+    }
+
     public async Task<ImageTechnicalProperties> GetImageTechnicalPropertiesAsync(string fileId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -2291,7 +2353,26 @@ internal sealed class LibraryWorkspace : ILibraryWorkspace
         // it — the same "UI discipline, not a guarantee" gap this session already fixed for system
         // instructions in section 2.
         LibraryRules.ValidateSourceSlots(sourceSlots ?? [], LibraryRules.GetInputSlotCapabilities(connectionRecord.ProviderType, model.Mode));
-        return await _database.CreateQueuedGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, destinationFolderId, sourceSlots, settings, promptImprovementRecordId, cancellationToken).ConfigureAwait(false);
+        var record = await _database.CreateQueuedGenerationRecordAsync(model, connectionRecord.ProviderType, prompt, systemInstructions, resultCount, destinationFolderId, sourceSlots, settings, promptImprovementRecordId, cancellationToken).ConfigureAwait(false);
+        foreach (var slot in (sourceSlots ?? []).Where(slot => slot.Role is GenerationInputSlotRole.ReferenceImage or GenerationInputSlotRole.FirstFrame))
+        {
+            if (slot.SnapshotSourceGenerationId is { } sourceGenerationId)
+            {
+                // Use Again replaying a slot whose original live file is already permanently deleted:
+                // clone the bytes the source generation itself already captured into this new record's
+                // own snapshot storage, so the new record never depends on the source record surviving.
+                var sourceSnapshot = await _database.ReadGenerationInputSnapshotAsync(sourceGenerationId, slot.Role, slot.Order, cancellationToken).ConfigureAwait(false);
+                var hash = Convert.ToHexStringLower(SHA256.HashData(sourceSnapshot.Bytes));
+                await _database.StoreGenerationInputSnapshotAsync(record.Id, slot.Role, slot.Order, sourceSnapshot.MediaType, hash, sourceSnapshot.Bytes, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var image = await ReadImageFileAsync(slot.FileId!, cancellationToken).ConfigureAwait(false);
+                var file = await _database.GetFileAsync(slot.FileId!, cancellationToken).ConfigureAwait(false);
+                await _database.StoreGenerationInputSnapshotAsync(record.Id, slot.Role, slot.Order, image.MediaType, file.ContentHash, image.Bytes, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        return record;
     }
 
     public Task<GenerationRecord> AdvanceGenerationStatusAsync(string generationRecordId, GenerationStatus status, GenerationHoldReason? holdReason = null, GenerationFailureReason? failureReason = null, int? position = null, CancellationToken cancellationToken = default)

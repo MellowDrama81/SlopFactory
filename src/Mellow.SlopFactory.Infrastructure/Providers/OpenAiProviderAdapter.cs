@@ -72,6 +72,19 @@ internal sealed class OpenAiProviderAdapter : IProviderAdapter
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
     }
 
+    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages, TextGenerationSourceImage? mask, CancellationToken cancellationToken = default)
+    {
+        if (mask is null) return await GenerateImageAsync(connection, model, apiKey, prompt, resultCount, sourceImages, cancellationToken).ConfigureAwait(false);
+        if (sourceImages is not { Count: > 0 }) throw new ProviderAdapterException("A mask requires a source image.");
+        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "images/edits"));
+        OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
+        OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
+        request.Content = OpenAiCompatibleProtocol.BuildImageEditMultipartContent(model.ProviderModelId, prompt, resultCount, sourceImages, mask);
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
+        if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
+        return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
+    }
+
     /// <summary>`POST /v1/audio/speech` — the same OpenAI-documented Audio API shape
     /// <see cref="OpenRouterProviderAdapter"/> and <see cref="DeepInfraProviderAdapter"/> already
     /// implement against this exact provider family, so this reuses the identical request/response

@@ -86,6 +86,21 @@ internal sealed class SqliteLibraryDatabase
             CREATE INDEX ix_files_content_hash ON files(content_hash, byte_size);
             CREATE INDEX ix_files_folder_state ON files(folder_id, state);
 
+            CREATE TABLE image_masks (
+                id TEXT PRIMARY KEY,
+                owner_file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                label TEXT NOT NULL,
+                label_key TEXT NOT NULL,
+                base_content_hash TEXT NOT NULL,
+                width INTEGER NOT NULL CHECK(width > 0),
+                height INTEGER NOT NULL CHECK(height > 0),
+                content_hash TEXT NOT NULL,
+                png_bytes BLOB NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(owner_file_id, label_key)
+            );
+            CREATE INDEX ix_image_masks_owner ON image_masks(owner_file_id, created_at);
+
             CREATE TABLE metadata_entries (
                 id TEXT PRIMARY KEY,
                 file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
@@ -411,11 +426,24 @@ internal sealed class SqliteLibraryDatabase
                 role INTEGER NOT NULL,
                 ordinal INTEGER NOT NULL,
                 file_id TEXT NULL REFERENCES files(id) ON DELETE SET NULL,
+                attachment_id TEXT NULL,
+                attachment_snapshot_bytes BLOB NULL,
                 snapshot_display_name TEXT NULL,
                 snapshot_media_type TEXT NULL,
-                snapshot_content_hash TEXT NULL
+                snapshot_content_hash TEXT NULL,
+                snapshot_source_generation_id TEXT NULL
             );
             CREATE INDEX ix_generation_source_slots_owner ON generation_source_slots(owner_type, owner_id);
+
+            CREATE TABLE generation_input_snapshots (
+                generation_id TEXT NOT NULL,
+                role INTEGER NOT NULL,
+                ordinal INTEGER NOT NULL,
+                media_type TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                bytes BLOB NOT NULL,
+                PRIMARY KEY(generation_id, role, ordinal)
+            );
             """;
         await ExecuteNonQueryAsync(connection, schema, cancellationToken, transaction).ConfigureAwait(false);
 
@@ -822,6 +850,52 @@ internal sealed class SqliteLibraryDatabase
             // Inheritable tags: a source file carrying an inheritable tag passes it on to every file a
             // generation produces from it — see CreateGenerationRecordAsync's tag-propagation step.
             await AddColumnIfMissingAsync(connection, transaction, "tags", "is_inheritable", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 42)
+        {
+            // Masks are private image-owned editing attachments, deliberately separate from files.
+            await ExecuteNonQueryAsync(connection,
+                """
+                CREATE TABLE IF NOT EXISTS image_masks (
+                    id TEXT PRIMARY KEY,
+                    owner_file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                    label TEXT NOT NULL,
+                    label_key TEXT NOT NULL,
+                    base_content_hash TEXT NOT NULL,
+                    width INTEGER NOT NULL CHECK(width > 0),
+                    height INTEGER NOT NULL CHECK(height > 0),
+                    content_hash TEXT NOT NULL,
+                    png_bytes BLOB NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(owner_file_id, label_key)
+                );
+                CREATE INDEX IF NOT EXISTS ix_image_masks_owner ON image_masks(owner_file_id, created_at);
+                """, cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 43)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "generation_source_slots", "attachment_id", "TEXT NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 44)
+        {
+            await AddColumnIfMissingAsync(connection, transaction, "generation_source_slots", "attachment_snapshot_bytes", "BLOB NULL", cancellationToken).ConfigureAwait(false);
+        }
+        if (fromVersion < 45)
+        {
+            await ExecuteNonQueryAsync(connection, "CREATE TABLE IF NOT EXISTS generation_input_snapshots (generation_id TEXT NOT NULL, role INTEGER NOT NULL, ordinal INTEGER NOT NULL, media_type TEXT NOT NULL, content_hash TEXT NOT NULL, bytes BLOB NOT NULL, PRIMARY KEY(generation_id, role, ordinal));", cancellationToken, transaction).ConfigureAwait(false);
+        }
+        if (fromVersion < 46)
+        {
+            // Lets a source slot be reconstructed from another generation's own already-captured
+            // snapshot (Use Again after the original live file/mask is gone) instead of a live file —
+            // see GenerationSourceSlot.SnapshotSourceGenerationId. Deliberately no REFERENCES clause;
+            // cleared explicitly by PermanentlyDeleteGenerationRecordAsync instead of ON DELETE SET
+            // NULL, so permanently deleting the source generation record is never blocked on a draft
+            // that merely still references its snapshot (such a draft's slot simply becomes
+            // unrecoverable at that point) — and so a rename-based table rebuild of generation_records
+            // (used by several schema-migration tests) can never leave this column referencing a
+            // since-renamed table name.
+            await AddColumnIfMissingAsync(connection, transaction, "generation_source_slots", "snapshot_source_generation_id", "TEXT NULL", cancellationToken).ConfigureAwait(false);
         }
         await ExecuteNonQueryAsync(connection, "UPDATE library_info SET schema_version=$version WHERE singleton=1;", cancellationToken, transaction, ("$version", LibraryRules.SchemaVersion)).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -2895,18 +2969,19 @@ internal sealed class SqliteLibraryDatabase
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        // file_id IS NULL means the file this slot pointed to was permanently deleted (the FK's own
-        // ON DELETE SET NULL clears it automatically) — a GenerationSourceSlot always names a live
-        // file, so such a row is excluded here; its identity survives separately in
-        // LoadSourceSlotSnapshotsAsync for generation records.
-        command.CommandText = "SELECT role,ordinal,file_id FROM generation_source_slots WHERE owner_type=$ownerType AND owner_id=$ownerId AND file_id IS NOT NULL ORDER BY role,ordinal;";
+        // file_id IS NULL and snapshot_source_generation_id IS NULL means the file this slot pointed
+        // to was permanently deleted (the FK's own ON DELETE SET NULL clears it automatically) with no
+        // retained snapshot to fall back on either — a GenerationSourceSlot always names either a live
+        // file or a retained snapshot, so such a row is excluded here; its identity survives separately
+        // in LoadSourceSlotSnapshotsAsync for generation records.
+        command.CommandText = "SELECT role,ordinal,file_id,attachment_id,snapshot_source_generation_id FROM generation_source_slots WHERE owner_type=$ownerType AND owner_id=$ownerId AND (file_id IS NOT NULL OR snapshot_source_generation_id IS NOT NULL) ORDER BY role,ordinal;";
         command.Parameters.AddWithValue("$ownerType", ownerType);
         command.Parameters.AddWithValue("$ownerId", ownerId);
         var results = new List<GenerationSourceSlot>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            results.Add(new GenerationSourceSlot((GenerationInputSlotRole)reader.GetInt32(0), reader.GetString(2), reader.GetInt32(1)));
+            results.Add(new GenerationSourceSlot((GenerationInputSlotRole)reader.GetInt32(0), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt32(1), reader.IsDBNull(3) ? null : reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4)));
         }
         return results;
     }
@@ -2915,7 +2990,7 @@ internal sealed class SqliteLibraryDatabase
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "SELECT role,ordinal,file_id,snapshot_display_name,snapshot_media_type,snapshot_content_hash FROM generation_source_slots WHERE owner_type=$ownerType AND owner_id=$ownerId ORDER BY role,ordinal;";
+        command.CommandText = "SELECT role,ordinal,file_id,snapshot_display_name,snapshot_media_type,snapshot_content_hash,attachment_id FROM generation_source_slots WHERE owner_type=$ownerType AND owner_id=$ownerId ORDER BY role,ordinal;";
         command.Parameters.AddWithValue("$ownerType", SourceSlotOwnerTypeGenerationRecord);
         command.Parameters.AddWithValue("$ownerId", generationRecordId);
         var results = new List<GenerationSourceSlotSnapshot>();
@@ -2927,7 +3002,7 @@ internal sealed class SqliteLibraryDatabase
             // fabricate one.
             if (reader.IsDBNull(3)) continue;
             results.Add(new GenerationSourceSlotSnapshot((GenerationInputSlotRole)reader.GetInt32(0), reader.GetInt32(1), reader.IsDBNull(2) ? null : reader.GetString(2),
-                new FileIdentitySnapshot(reader.GetString(3), reader.GetString(4), reader.GetString(5))));
+                new FileIdentitySnapshot(reader.GetString(3), reader.GetString(4), reader.GetString(5)), reader.IsDBNull(6) ? null : reader.GetString(6)));
         }
         return results;
     }
@@ -2946,19 +3021,57 @@ internal sealed class SqliteLibraryDatabase
             string? displayName = null;
             string? mediaType = null;
             string? contentHash = null;
+            byte[]? attachmentSnapshot = null;
             if (captureSnapshot)
             {
-                var file = await GetFileAsync(connection, slot.FileId, cancellationToken, transaction).ConfigureAwait(false);
-                displayName = file.DisplayName;
-                mediaType = file.MediaType;
-                contentHash = file.ContentHash;
+                if (slot.SnapshotSourceGenerationId is { } sourceGenerationId)
+                {
+                    // Use Again (or a saved setting/draft built from it) replaying a slot whose
+                    // original live file is already gone — clone identity (and, for a mask, bytes)
+                    // from the source generation's own already-captured row instead of resolving a
+                    // live FileRecord, which no longer exists for this slot.
+                    await using var sourceCommand = connection.CreateCommand();
+                    sourceCommand.Transaction = transaction;
+                    sourceCommand.CommandText = "SELECT snapshot_display_name,snapshot_media_type,snapshot_content_hash,attachment_snapshot_bytes FROM generation_source_slots WHERE owner_type=$ownerType AND owner_id=$sourceId AND role=$role AND ordinal=$ordinal;";
+                    sourceCommand.Parameters.AddWithValue("$ownerType", SourceSlotOwnerTypeGenerationRecord);
+                    sourceCommand.Parameters.AddWithValue("$sourceId", sourceGenerationId);
+                    sourceCommand.Parameters.AddWithValue("$role", (int)slot.Role);
+                    sourceCommand.Parameters.AddWithValue("$ordinal", slot.Order);
+                    await using var sourceReader = await sourceCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                    if (!await sourceReader.ReadAsync(cancellationToken).ConfigureAwait(false) || sourceReader.IsDBNull(0))
+                        throw new LibraryValidationException("The retained generation snapshot for this source slot is no longer available.");
+                    displayName = sourceReader.GetString(0);
+                    mediaType = sourceReader.GetString(1);
+                    contentHash = sourceReader.GetString(2);
+                    if (slot.AttachmentId is not null)
+                    {
+                        attachmentSnapshot = sourceReader.IsDBNull(3) ? null : (byte[])sourceReader[3];
+                        if (attachmentSnapshot is null) throw new LibraryValidationException("The retained mask snapshot for this source slot is no longer available.");
+                    }
+                }
+                else
+                {
+                    var file = await GetFileAsync(connection, slot.FileId!, cancellationToken, transaction).ConfigureAwait(false);
+                    displayName = file.DisplayName;
+                    mediaType = file.MediaType;
+                    contentHash = file.ContentHash;
+                    if (slot.AttachmentId is { } attachmentId)
+                    {
+                        await using var maskCommand = connection.CreateCommand();
+                        maskCommand.Transaction = transaction;
+                        maskCommand.CommandText = "SELECT png_bytes FROM image_masks WHERE id=$id;";
+                        maskCommand.Parameters.AddWithValue("$id", attachmentId);
+                        attachmentSnapshot = (byte[]?)await maskCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
+                            ?? throw new LibraryValidationException("The selected private mask is no longer available.");
+                    }
+                }
             }
 
             await ExecuteNonQueryAsync(connection,
-                "INSERT INTO generation_source_slots(id,owner_type,owner_id,role,ordinal,file_id,snapshot_display_name,snapshot_media_type,snapshot_content_hash) VALUES($id,$ownerType,$ownerId,$role,$ordinal,$fileId,$name,$media,$hash);",
+                "INSERT INTO generation_source_slots(id,owner_type,owner_id,role,ordinal,file_id,attachment_id,attachment_snapshot_bytes,snapshot_display_name,snapshot_media_type,snapshot_content_hash,snapshot_source_generation_id) VALUES($id,$ownerType,$ownerId,$role,$ordinal,$fileId,$attachmentId,$attachmentBytes,$name,$media,$hash,$snapshotSource);",
                 cancellationToken, transaction,
-                ("$id", LibraryRules.NewId()), ("$ownerType", ownerType), ("$ownerId", ownerId), ("$role", (int)slot.Role), ("$ordinal", slot.Order), ("$fileId", slot.FileId),
-                ("$name", (object?)displayName ?? DBNull.Value), ("$media", (object?)mediaType ?? DBNull.Value), ("$hash", (object?)contentHash ?? DBNull.Value)).ConfigureAwait(false);
+                ("$id", LibraryRules.NewId()), ("$ownerType", ownerType), ("$ownerId", ownerId), ("$role", (int)slot.Role), ("$ordinal", slot.Order), ("$fileId", (object?)slot.FileId ?? DBNull.Value), ("$attachmentId", (object?)slot.AttachmentId ?? DBNull.Value), ("$attachmentBytes", (object?)attachmentSnapshot ?? DBNull.Value),
+                ("$name", (object?)displayName ?? DBNull.Value), ("$media", (object?)mediaType ?? DBNull.Value), ("$hash", (object?)contentHash ?? DBNull.Value), ("$snapshotSource", (object?)slot.SnapshotSourceGenerationId ?? DBNull.Value)).ConfigureAwait(false);
         }
     }
 
@@ -3424,6 +3537,15 @@ internal sealed class SqliteLibraryDatabase
         var deleted = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM generation_records WHERE id=$id;", cancellationToken, null, ("$id", generationId)).ConfigureAwait(false);
         if (deleted == 0) throw new RecordNotFoundException("Generation record not found.");
         await ExecuteNonQueryAsync(connection, "DELETE FROM generation_source_slots WHERE owner_type=$ownerType AND owner_id=$id;", cancellationToken, null, ("$ownerType", SourceSlotOwnerTypeGenerationRecord), ("$id", generationId)).ConfigureAwait(false);
+        // generation_input_snapshots and generation_source_slots.snapshot_source_generation_id have no
+        // real foreign key to generation_records (see their schema comments), so both need explicit
+        // cleanup here instead of an automatic ON DELETE action: the former this record's own retained
+        // reference-image/first-frame bytes, the latter any other draft/saved setting/generation record
+        // that still names this one as the source of a retained (snapshot-backed) slot — such a
+        // reference simply becomes unrecoverable once its source is gone, same as any other dangling
+        // slot in this table.
+        await ExecuteNonQueryAsync(connection, "DELETE FROM generation_input_snapshots WHERE generation_id=$id;", cancellationToken, null, ("$id", generationId)).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "UPDATE generation_source_slots SET snapshot_source_generation_id=NULL WHERE snapshot_source_generation_id=$id;", cancellationToken, null, ("$id", generationId)).ConfigureAwait(false);
     }
 
     public async Task<GenerationRecord> CreateGenerationRecordAsync(Model model, ProviderType providerType, string prompt, string? systemInstructions, int resultCount, GenerationStatus status, string? errorMessage, string destinationFolderId, IReadOnlyList<string> resultFileIds, int? promptTokens, int? completionTokens, IReadOnlyList<GenerationSourceSlot>? sourceSlots, string? promptImprovementRecordId, TextResultFormat? textFormat, GenerationSettings? settings, int safetyBlockedCount, CancellationToken cancellationToken, double? actualCost = null, string? actualCostCurrency = null, IReadOnlyList<GenerationResultEntry>? results = null, IReadOnlyList<FileRecord>? committedFiles = null, IReadOnlyList<(int Position, string StagedFileName, long ByteSize, string ContentHash, string DetectedMediaType)>? pendingResults = null, string? existingGenerationRecordId = null)
@@ -3540,7 +3662,10 @@ internal sealed class SqliteLibraryDatabase
         // call for the same generation) a harmless no-op rather than a duplicate-key error.
         if (resultFileIds.Count > 0)
         {
-            var sourceFileIds = normalizedSlots.Select(slot => slot.FileId).Distinct(StringComparer.Ordinal).ToArray();
+            // A snapshot-backed slot (Use Again after its original file was permanently deleted) has
+            // no live file to inherit tags from, so it's simply excluded rather than propagating from
+            // a file identity that no longer exists.
+            var sourceFileIds = normalizedSlots.Select(slot => slot.FileId).OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
             await PropagateInheritableTagsAsync(connection, transaction, sourceFileIds, resultFileIds, cancellationToken).ConfigureAwait(false);
         }
 
@@ -3809,6 +3934,88 @@ internal sealed class SqliteLibraryDatabase
         connection.CreateFunction<string, string, bool>("slopfactory_json_equal", JsonStructurallyEquals, isDeterministic: true);
         await ExecuteNonQueryAsync(connection, "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;", cancellationToken).ConfigureAwait(false);
         return connection;
+    }
+
+    public async Task<IReadOnlyList<ImageMask>> GetImageMasksAsync(string ownerFileId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id,owner_file_id,label,base_content_hash,width,height,content_hash,created_at FROM image_masks WHERE owner_file_id=$owner ORDER BY created_at;";
+        command.Parameters.AddWithValue("$owner", ownerFileId);
+        var masks = new List<ImageMask>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            masks.Add(new ImageMask(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetString(6), DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture)));
+        }
+        return masks;
+    }
+
+    public async Task<ImageMask> CreateImageMaskAsync(string ownerFileId, string label, string baseContentHash, int width, int height, byte[] pngBytes, CancellationToken cancellationToken)
+    {
+        var normalizedLabel = LibraryRules.NormalizeShortLabel(label, "Mask label");
+        if (width < 1 || height < 1) throw new LibraryValidationException("Mask dimensions must be positive.");
+        if (pngBytes.Length == 0) throw new LibraryValidationException("Mask bytes are empty.");
+        var now = DateTimeOffset.UtcNow;
+        var mask = new ImageMask(LibraryRules.NewId(), ownerFileId, normalizedLabel, baseContentHash, width, height,
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(pngBytes)), now);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection,
+            "INSERT INTO image_masks(id,owner_file_id,label,label_key,base_content_hash,width,height,content_hash,png_bytes,created_at) VALUES($id,$owner,$label,$key,$baseHash,$width,$height,$hash,$bytes,$created);",
+            cancellationToken, null, ("$id", mask.Id), ("$owner", ownerFileId), ("$label", mask.Label), ("$key", mask.Label.ToUpperInvariant()), ("$baseHash", mask.BaseContentHash), ("$width", mask.Width), ("$height", mask.Height), ("$hash", mask.ContentHash), ("$bytes", pngBytes), ("$created", mask.CreatedAt.ToString("O", CultureInfo.InvariantCulture))).ConfigureAwait(false);
+        return mask;
+    }
+
+    public async Task<(ImageMask Mask, byte[] Bytes)> ReadImageMaskAsync(string maskId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id,owner_file_id,label,base_content_hash,width,height,content_hash,created_at,png_bytes FROM image_masks WHERE id=$id;";
+        command.Parameters.AddWithValue("$id", maskId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Image mask not found.");
+        var mask = new ImageMask(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetString(6), DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture));
+        return (mask, (byte[])reader[8]);
+    }
+
+    public async Task DeleteImageMaskAsync(string maskId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using (var referenceCheck = connection.CreateCommand())
+        {
+            referenceCheck.CommandText = "SELECT EXISTS(SELECT 1 FROM generation_source_slots WHERE attachment_id=$id);";
+            referenceCheck.Parameters.AddWithValue("$id", maskId);
+            if (Convert.ToInt64(await referenceCheck.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) != 0)
+                throw new LibraryValidationException("This mask is retained because it is used by generation history.");
+        }
+        var affected = await ExecuteNonQueryWithCountAsync(connection, "DELETE FROM image_masks WHERE id=$id;", cancellationToken, null, ("$id", maskId)).ConfigureAwait(false);
+        if (affected == 0) throw new RecordNotFoundException("Image mask not found.");
+    }
+
+    public async Task<byte[]> ReadGenerationMaskSnapshotAsync(string generationRecordId, string maskId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT attachment_snapshot_bytes FROM generation_source_slots WHERE owner_type=2 AND owner_id=$recordId AND attachment_id=$maskId;";
+        command.Parameters.AddWithValue("$recordId", generationRecordId); command.Parameters.AddWithValue("$maskId", maskId);
+        return (byte[]?)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) ?? throw new RecordNotFoundException("Generation mask snapshot not found.");
+    }
+
+    public async Task StoreGenerationInputSnapshotAsync(string generationId, GenerationInputSlotRole role, int order, string mediaType, string contentHash, byte[] bytes, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "INSERT OR REPLACE INTO generation_input_snapshots(generation_id,role,ordinal,media_type,content_hash,bytes) VALUES($generation,$role,$ordinal,$media,$hash,$bytes);", cancellationToken, null, ("$generation", generationId), ("$role", (int)role), ("$ordinal", order), ("$media", mediaType), ("$hash", contentHash), ("$bytes", bytes)).ConfigureAwait(false);
+    }
+
+    public async Task<ImageFileContent> ReadGenerationInputSnapshotAsync(string generationId, GenerationInputSlotRole role, int order, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT media_type,bytes FROM generation_input_snapshots WHERE generation_id=$generation AND role=$role AND ordinal=$ordinal;";
+        command.Parameters.AddWithValue("$generation", generationId); command.Parameters.AddWithValue("$role", (int)role); command.Parameters.AddWithValue("$ordinal", order);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) throw new RecordNotFoundException("Generation input snapshot not found.");
+        return new ImageFileContent(reader.GetString(0), (byte[])reader[1]);
     }
 
     private static async Task<FolderRecord> GetFolderAsync(SqliteConnection connection, string folderId, CancellationToken cancellationToken, SqliteTransaction? transaction = null)

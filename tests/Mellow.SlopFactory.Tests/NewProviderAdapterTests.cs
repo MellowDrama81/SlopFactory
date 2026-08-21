@@ -1,6 +1,9 @@
 using System.Net;
+using System.Text.Json;
 using Mellow.SlopFactory.Domain;
 using Mellow.SlopFactory.Infrastructure.Providers;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
 
 namespace Mellow.SlopFactory.Tests;
@@ -13,6 +16,13 @@ public sealed class NewProviderAdapterTests
 
     private static Model CreateModel(string providerModelId) =>
         new("model-1", "connection-1", "Test Model", providerModelId, GenerationMode.Image, true, LibraryRecordState.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
+
+    private static byte[] ToPngBytes(Image<Rgba32> image)
+    {
+        using var stream = new MemoryStream();
+        image.SaveAsPng(stream);
+        return stream.ToArray();
+    }
 
     [Fact]
     public async Task OpenRouterAdapterGeneratesImageAgainstTheImagesEndpointAndDecodesBase64Results()
@@ -523,13 +533,93 @@ public sealed class NewProviderAdapterTests
             Assert.Contains("name=model", body, StringComparison.Ordinal);
             Assert.Contains("black-forest-labs/FLUX.1-Kontext-dev", body, StringComparison.Ordinal);
             Assert.Contains("name=image; filename=source.png", body, StringComparison.Ordinal);
+            Assert.Contains("name=image; filename=source.jpg", body, StringComparison.Ordinal);
+            Assert.Contains("name=image; filename=source.webp", body, StringComparison.Ordinal);
             return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.DeepInfraImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
         });
         var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
         var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
-        TextGenerationSourceImage[] sourceImages = [new("image/png", sourceBytes)];
+        TextGenerationSourceImage[] sourceImages =
+        [
+            new("image/png", sourceBytes),
+            new("image/jpeg", [40, 50, 60]),
+            new("image/webp", [70, 80, 90]),
+        ];
 
         var images = await adapter.GenerateImageAsync(connection, CreateModel("black-forest-labs/FLUX.1-Kontext-dev"), "secret-key", "Make it watercolor", 1, sourceImages);
+
+        Assert.Equal(pngBytes, Assert.Single(images));
+    }
+
+    [Fact]
+    public async Task OpenRouterAdapterConvertsTheMaskToFirstReferenceTransparencyAndAddsTheMaskInstruction()
+    {
+        byte[] pngBytes = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3];
+        using var source = new Image<Rgba32>(2, 1);
+        source[0, 0] = new Rgba32(10, 20, 30, 255);
+        source[1, 0] = new Rgba32(40, 50, 60, 255);
+        using var mask = new Image<Rgba32>(2, 1);
+        mask[0, 0] = new Rgba32(0, 0, 0, 255);
+        mask[1, 0] = new Rgba32(0, 0, 0, 0);
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            using var document = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var root = document.RootElement;
+            Assert.Equal("The first reference image is the source image. Its transparent pixels are the edit mask. Fill only the transparent area according to the request; preserve all opaque pixels of the first reference image unchanged. Replace the tie", root.GetProperty("prompt").GetString());
+            var dataUrl = root.GetProperty("input_references")[0].GetProperty("image_url").GetProperty("url").GetString();
+            Assert.StartsWith("data:image/png;base64,", dataUrl, StringComparison.Ordinal);
+            using var maskedSource = Image.Load<Rgba32>(Convert.FromBase64String(dataUrl!["data:image/png;base64,".Length..]));
+            Assert.Equal((byte)0, maskedSource[0, 0].A);
+            Assert.Equal(new Rgba32(10, 20, 30, 0), maskedSource[0, 0]);
+            Assert.Equal(new Rgba32(40, 50, 60, 255), maskedSource[1, 0]);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenRouterImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
+        });
+        var adapter = new OpenRouterProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenRouter, "https://openrouter.ai/api/v1");
+
+        var images = await adapter.GenerateImageAsync(connection, CreateModel("qwen/qwen-image-3"), "secret-key", "Replace the tie", 1,
+            [new TextGenerationSourceImage("image/png", ToPngBytes(source))], new TextGenerationSourceImage("image/png", ToPngBytes(mask)));
+
+        Assert.Equal(pngBytes, Assert.Single(images));
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterUsesCompatibleEditRouteForMultipleReferenceImages()
+    {
+        byte[] pngBytes = [0x89, 0x50, 0x4E, 0x47, 9, 9];
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.deepinfra.com/v1/openai/images/edits", request.RequestUri!.ToString());
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.Contains("name=image; filename=source.png", body, StringComparison.Ordinal);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.DeepInfraImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+
+        var images = await adapter.GenerateImageAsync(connection, CreateModel("Qwen/Qwen-Image-Edit"), "secret-key", "Combine the references", 1,
+            [new TextGenerationSourceImage("image/png", [1, 2, 3]), new TextGenerationSourceImage("image/png", [4, 5, 6])]);
+
+        Assert.Equal(pngBytes, Assert.Single(images));
+    }
+
+    [Fact]
+    public async Task DeepInfraAdapterIncludesPrivateMaskInImagesEditsMultipartRequest()
+    {
+        byte[] pngBytes = [0x89, 0x50, 0x4E, 0x47, 9, 9];
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.deepinfra.com/v1/openai/images/edits", request.RequestUri!.ToString());
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.Contains("name=image; filename=source.png", body, StringComparison.Ordinal);
+            Assert.Contains("name=mask; filename=mask.png", body, StringComparison.Ordinal);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.DeepInfraImageResponseV1.Replace("__BASE64__", Convert.ToBase64String(pngBytes)));
+        });
+        var adapter = new DeepInfraProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.DeepInfra, "https://api.deepinfra.com/v1/openai");
+
+        var images = await adapter.GenerateImageAsync(connection, CreateModel("Qwen/Qwen-Image-Edit"), "secret-key", "Replace the sky", 1,
+            [new TextGenerationSourceImage("image/png", [1, 2, 3])], new TextGenerationSourceImage("image/png", [4, 5, 6]));
 
         Assert.Equal(pngBytes, Assert.Single(images));
     }

@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace Mellow.SlopFactory.Infrastructure.Providers;
 
@@ -101,6 +103,32 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
         request.Content = new StringContent(BuildImageRequestBody(model.ProviderModelId, prompt, resultCount, sourceImages), Encoding.UTF8, "application/json");
+        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
+        if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
+        return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
+    }
+
+    /// <summary>
+    /// OpenRouter's Image API accepts reference images but has no documented mask field. When the
+    /// user supplies a private mask, encode its painted pixels as transparency in the first
+    /// reference image and explicitly tell the model to fill that transparent area. This is a
+    /// best-effort image-to-image convention, not a provider-guaranteed pixel-perfect inpaint
+    /// contract; the original source and mask are never persisted or altered.
+    /// </summary>
+    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages, TextGenerationSourceImage? mask, CancellationToken cancellationToken = default)
+    {
+        if (mask is null) return await GenerateImageAsync(connection, model, apiKey, prompt, resultCount, sourceImages, cancellationToken).ConfigureAwait(false);
+        if (sourceImages is not { Count: > 0 }) throw new ProviderAdapterException("A mask requires a source image.");
+
+        var transparentSource = ApplyMaskAsTransparency(sourceImages[0], mask);
+        var references = new TextGenerationSourceImage[sourceImages.Count];
+        references[0] = transparentSource;
+        for (var index = 1; index < sourceImages.Count; index++) references[index] = sourceImages[index];
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "images"));
+        OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
+        OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
+        request.Content = new StringContent(BuildImageRequestBody(model.ProviderModelId, BuildTransparentMaskPrompt(prompt), resultCount, references), Encoding.UTF8, "application/json");
         var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
@@ -320,6 +348,42 @@ internal sealed class OpenRouterProviderAdapter : IProviderAdapter
         }
 
         return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static string BuildTransparentMaskPrompt(string prompt) =>
+        "The first reference image is the source image. Its transparent pixels are the edit mask. Fill only the transparent area according to the request; preserve all opaque pixels of the first reference image unchanged. " + prompt;
+
+    private static TextGenerationSourceImage ApplyMaskAsTransparency(TextGenerationSourceImage source, TextGenerationSourceImage mask)
+    {
+        try
+        {
+            using var sourceImage = Image.Load<Rgba32>(source.Bytes);
+            using var maskImage = Image.Load<Rgba32>(mask.Bytes);
+            if (sourceImage.Width != maskImage.Width || sourceImage.Height != maskImage.Height)
+                throw new ProviderAdapterException("The mask dimensions must match its source image.");
+
+            for (var y = 0; y < sourceImage.Height; y++)
+            {
+                for (var x = 0; x < sourceImage.Width; x++)
+                {
+                    var pixel = sourceImage[x, y];
+                    pixel.A = (byte)(pixel.A * (255 - maskImage[x, y].A) / 255);
+                    sourceImage[x, y] = pixel;
+                }
+            }
+
+            using var output = new MemoryStream();
+            sourceImage.SaveAsPng(output);
+            return new TextGenerationSourceImage("image/png", output.ToArray());
+        }
+        catch (ProviderAdapterException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is InvalidImageContentException or UnknownImageFormatException or NotSupportedException)
+        {
+            throw new ProviderAdapterException("The source image or mask could not be converted into an alpha-masked PNG.");
+        }
     }
 
     private static string BuildAudioSpeechRequestBody(string providerModelId, string prompt, string? voice)

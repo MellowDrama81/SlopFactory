@@ -218,18 +218,55 @@ else
         @if (SupportsReferenceImageInputs)
         {
             <label id="generate-source-image-label">@Strings["SourceImageSlot1"]</label>
-            <SourceFilePicker Candidates="_activeImageFiles" Folders="_activeFolders" Disabled="FormDisabled" LabelledBy="generate-source-image-label" @bind-SelectedFileId="_form.SourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
+            <SourceFilePicker Candidates="_activeImageFiles" Folders="_activeFolders" Disabled="FormDisabled" LabelledBy="generate-source-image-label" @bind-SelectedFileId="_form.SourceFileId" @bind-SelectedFileId:after="OnPrimarySourceChangedAsync" />
+            @if (!string.IsNullOrEmpty(_form.SourceFileId))
+            {
+                <a class="secondary" href="@($"/file/{_form.SourceFileId}")">@Strings["OpenSourceFile"]</a>
+            }
+            @if (RetainedPrimarySlot is not null)
+            {
+                <p class="notice" role="status">@Strings["RetainedSourceSnapshotNotice"] <button type="button" class="secondary" disabled="@FormDisabled" @onclick="() => RemoveRetainedSlot(GenerationInputSlotRole.ReferenceImage, 0)">@Strings["RemoveRetainedSnapshot"]</button></p>
+            }
+            @if (SupportsMaskInputs && (_ownedMasks.Count > 0 || RetainedMaskSlot is not null))
+            {
+                @if (_ownedMasks.Count > 0)
+                {
+                    <label for="generate-mask">@Strings["InpaintingMask"]</label>
+                    <InputSelect id="generate-mask" @bind-Value="_form.MaskId" @bind-Value:after="ScheduleAutosave" disabled="@FormDisabled"><option value="">@Strings["NoMask"]</option>@foreach (var mask in _ownedMasks) { <option value="@mask.Id">@mask.Label</option> }</InputSelect>
+                    <p class="muted">@Strings["InpaintingMaskProviderHelp"]</p>
+                }
+                @if (RetainedMaskSlot is not null)
+                {
+                    <p class="notice" role="status">@Strings["RetainedMaskSnapshotNotice"] <button type="button" class="secondary" disabled="@FormDisabled" @onclick="() => RemoveRetainedSlot(GenerationInputSlotRole.Mask, 0)">@Strings["RemoveRetainedSnapshot"]</button></p>
+                }
+            }
 
             @if (ReferenceImageMaxCount >= 2)
             {
                 <label id="generate-source-image-2-label">@Strings["SourceImageSlot2"]</label>
                 <SourceFilePicker Candidates="_activeImageFiles" Folders="_activeFolders" Disabled="FormDisabled" LabelledBy="generate-source-image-2-label" @bind-SelectedFileId="_form.SecondarySourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
+                @if (!string.IsNullOrEmpty(_form.SecondarySourceFileId))
+                {
+                    <a class="secondary" href="@($"/file/{_form.SecondarySourceFileId}")">@Strings["OpenSourceFile"]</a>
+                }
+                @if (RetainedSecondarySlot is not null)
+                {
+                    <p class="notice" role="status">@Strings["RetainedSourceSnapshotNotice"] <button type="button" class="secondary" disabled="@FormDisabled" @onclick="() => RemoveRetainedSlot(GenerationInputSlotRole.ReferenceImage, 1)">@Strings["RemoveRetainedSnapshot"]</button></p>
+                }
             }
 
             @if (ReferenceImageMaxCount >= 3)
             {
                 <label id="generate-source-image-3-label">@Strings["SourceImageSlot3"]</label>
                 <SourceFilePicker Candidates="_activeImageFiles" Folders="_activeFolders" Disabled="FormDisabled" LabelledBy="generate-source-image-3-label" @bind-SelectedFileId="_form.TertiarySourceFileId" @bind-SelectedFileId:after="ScheduleAutosave" />
+                @if (!string.IsNullOrEmpty(_form.TertiarySourceFileId))
+                {
+                    <a class="secondary" href="@($"/file/{_form.TertiarySourceFileId}")">@Strings["OpenSourceFile"]</a>
+                }
+                @if (RetainedTertiarySlot is not null)
+                {
+                    <p class="notice" role="status">@Strings["RetainedSourceSnapshotNotice"] <button type="button" class="secondary" disabled="@FormDisabled" @onclick="() => RemoveRetainedSlot(GenerationInputSlotRole.ReferenceImage, 2)">@Strings["RemoveRetainedSnapshot"]</button></p>
+                }
             }
 
             @if (HasDuplicateSourceSelection)
@@ -552,6 +589,13 @@ else
     private IReadOnlyList<Connection> _activeConnections = [];
     private IReadOnlyList<FolderRecord> _activeFolders = [];
     private IReadOnlyList<FileRecord> _activeImageFiles = [];
+    private IReadOnlyList<ImageMask> _ownedMasks = [];
+    /// <summary>Slots carried into the active draft by <b>Use Again</b> whose original file (or, for
+    /// a mask, owning image) has since been permanently deleted — see
+    /// <see cref="GenerationSourceSlot.SnapshotSourceGenerationId"/>. These have no picker to bind to
+    /// (there is no live file left to select), so they're tracked here instead of through
+    /// <see cref="GenerateForm"/>'s picker-bound fields and merged back in by <see cref="BuildSourceSlots"/>.</summary>
+    private IReadOnlyList<GenerationSourceSlot> _retainedSourceSlots = [];
     private IReadOnlyList<GenerationDraft> _drafts = [];
     private string? _activeDraftId;
     private string _tabTitleInput = string.Empty;
@@ -688,7 +732,7 @@ else
                 await FlushPendingAutosaveAsync();
                 var model = history.ModelId is not null ? _models.FirstOrDefault(candidate => candidate.Id == history.ModelId) : null;
                 var modelId = model?.Id ?? (_models.Count > 0 ? _models[0].Id : null);
-                var (sourceSlots, sourcesDroppedForCapability) = FilterSlotsForEffectiveModel(history.SourceSlots, modelId);
+                var (sourceSlots, sourcesDroppedForCapability) = FilterSlotsForEffectiveModel(BuildReplaySourceSlots(history), modelId);
                 var draft = await workspace.CreateDraftAsync();
                 draft = await workspace.ReplaceDraftStateAsync(draft.Id, null, modelId, history.Prompt, history.SystemInstructions, history.ResultCount, history.DestinationFolderId, null, null, history.Settings, sourceSlots);
                 _drafts = [.. _drafts, draft];
@@ -757,7 +801,10 @@ else
             }
         }
 
-        var draftFormActiveSlots = ExtractSourceFileIds(FilterActiveSourceSlots(draft.SourceSlots));
+        var liveDraftSlots = FilterActiveSourceSlots(draft.SourceSlots);
+        _retainedSourceSlots = liveDraftSlots.Where(slot => slot.SnapshotSourceGenerationId is not null).ToArray();
+        var draftFormActiveSlots = ExtractSourceFileIds(liveDraftSlots);
+        var draftMask = liveDraftSlots.FirstOrDefault(slot => slot.Role == GenerationInputSlotRole.Mask && slot.FileId is not null)?.AttachmentId;
         // A recycled/deleted destination folder was previously carried into the form unchanged, with
         // no explicit fallback — the <select> below only ever lists _activeFolders, so a stale ID not
         // among them left the actual bound value to whatever the browser's default <select> behavior
@@ -779,6 +826,7 @@ else
             SourceFileId = draftFormActiveSlots.Primary ?? string.Empty,
             SecondarySourceFileId = draftFormActiveSlots.Secondary ?? string.Empty,
             TertiarySourceFileId = draftFormActiveSlots.Tertiary ?? string.Empty,
+            MaskId = draftMask ?? string.Empty,
             ResultCount = draft.ResultCount,
             DestinationFolderId = resolvedDestinationFolderId,
             Temperature = draft.Settings.Temperature,
@@ -788,6 +836,9 @@ else
             PresencePenalty = draft.Settings.PresencePenalty,
             AdvancedJson = draft.Settings.AdvancedJson ?? string.Empty
         };
+        _ownedMasks = LibraryState.Workspace is not null && !string.IsNullOrEmpty(_form.SourceFileId)
+            ? await LibraryState.Workspace.GetImageMasksAsync(_form.SourceFileId) : [];
+        if (!_ownedMasks.Any(mask => mask.Id == _form.MaskId)) _form.MaskId = string.Empty;
         _improvementModelId = draft.ImprovementModelId is not null && _models.Any(candidate => candidate.Id == draft.ImprovementModelId) ? draft.ImprovementModelId : string.Empty;
         _improvementGuidance = draft.ImprovementGuidance ?? string.Empty;
         _improvementCandidates = null;
@@ -1367,16 +1418,62 @@ else
     {
         var slots = new List<GenerationSourceSlot>();
         if (!string.IsNullOrEmpty(_form.SourceFileId)) slots.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, _form.SourceFileId, 0));
+        else slots.AddRange(RetainedSlotsAt(GenerationInputSlotRole.ReferenceImage, 0));
         if (!string.IsNullOrEmpty(_form.SecondarySourceFileId)) slots.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, _form.SecondarySourceFileId, 1));
+        else slots.AddRange(RetainedSlotsAt(GenerationInputSlotRole.ReferenceImage, 1));
         if (!string.IsNullOrEmpty(_form.TertiarySourceFileId)) slots.Add(new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, _form.TertiarySourceFileId, 2));
+        else slots.AddRange(RetainedSlotsAt(GenerationInputSlotRole.ReferenceImage, 2));
+        if (!string.IsNullOrEmpty(_form.SourceFileId) && !string.IsNullOrEmpty(_form.MaskId)) slots.Add(new GenerationSourceSlot(GenerationInputSlotRole.Mask, _form.SourceFileId, 0, _form.MaskId));
+        else if (string.IsNullOrEmpty(_form.SourceFileId)) slots.AddRange(_retainedSourceSlots.Where(slot => slot.Role == GenerationInputSlotRole.Mask));
         return slots;
+    }
+
+    /// <summary>The retained (snapshot-backed) slots at a given ReferenceImage ordinal — suppressed
+    /// once the corresponding picker gains a live value, without discarding <see cref="_retainedSourceSlots"/>
+    /// itself, so clearing the picker again brings the retained slot back rather than losing it for good.</summary>
+    private IEnumerable<GenerationSourceSlot> RetainedSlotsAt(GenerationInputSlotRole role, int order) =>
+        _retainedSourceSlots.Where(slot => slot.Role == role && slot.Order == order);
+
+    private GenerationSourceSlot? RetainedPrimarySlot => string.IsNullOrEmpty(_form.SourceFileId) ? RetainedSlotsAt(GenerationInputSlotRole.ReferenceImage, 0).FirstOrDefault() : null;
+    private GenerationSourceSlot? RetainedSecondarySlot => string.IsNullOrEmpty(_form.SecondarySourceFileId) ? RetainedSlotsAt(GenerationInputSlotRole.ReferenceImage, 1).FirstOrDefault() : null;
+    private GenerationSourceSlot? RetainedTertiarySlot => string.IsNullOrEmpty(_form.TertiarySourceFileId) ? RetainedSlotsAt(GenerationInputSlotRole.ReferenceImage, 2).FirstOrDefault() : null;
+    private GenerationSourceSlot? RetainedMaskSlot => string.IsNullOrEmpty(_form.SourceFileId) ? _retainedSourceSlots.FirstOrDefault(slot => slot.Role == GenerationInputSlotRole.Mask) : null;
+
+    private void RemoveRetainedSlot(GenerationInputSlotRole role, int order)
+    {
+        _retainedSourceSlots = _retainedSourceSlots.Where(slot => slot.Role != role || slot.Order != order).ToArray();
+        ScheduleAutosave();
     }
 
     /// <summary>Drops any slot whose file is no longer active — mirrors this form's pre-existing
     /// silent-drop behavior for a single missing source image, just generalized across the whole
-    /// slot list.</summary>
+    /// slot list. A snapshot-backed slot (<see cref="GenerationSourceSlot.SnapshotSourceGenerationId"/>
+    /// — Use Again replaying a slot whose original file was already permanently deleted) is always
+    /// kept: it has no live file to check liveness against, by design.</summary>
     private IReadOnlyList<GenerationSourceSlot> FilterActiveSourceSlots(IReadOnlyList<GenerationSourceSlot> slots) =>
-        slots.Where(slot => _activeImageFiles.Any(file => file.Id == slot.FileId)).ToArray();
+        slots.Where(slot => slot.SnapshotSourceGenerationId is not null || _activeImageFiles.Any(file => file.Id == slot.FileId)).ToArray();
+
+    /// <summary>Reconstructs <b>Use Again</b>'s carried-forward slot list from a historical
+    /// <see cref="GenerationRecord"/>: starts from its still-live <see cref="GenerationRecord.SourceSlots"/>,
+    /// then adds a snapshot-backed <see cref="GenerationSourceSlot"/> (see
+    /// <see cref="GenerationSourceSlot.SnapshotSourceGenerationId"/>) for every
+    /// <see cref="GenerationRecord.SourceSlotSnapshots"/> entry whose original file (or, for a mask,
+    /// owning image) has since been permanently deleted — rather than silently dropping it, which is
+    /// what a plain live-file filter alone would do. The new slot names <paramref name="history"/>
+    /// itself as the snapshot source: its own <c>generation_input_snapshots</c>/mask bytes are always
+    /// independently retained there regardless of how the original file was lost.</summary>
+    private static IReadOnlyList<GenerationSourceSlot> BuildReplaySourceSlots(GenerationRecord history)
+    {
+        var liveRoleOrders = new HashSet<(GenerationInputSlotRole Role, int Order)>(history.SourceSlots.Select(slot => (slot.Role, slot.Order)));
+        var slots = new List<GenerationSourceSlot>(history.SourceSlots);
+        foreach (var snapshot in history.SourceSlotSnapshots)
+        {
+            if (snapshot.FileId is not null) continue;
+            if (!liveRoleOrders.Add((snapshot.Role, snapshot.Order))) continue;
+            slots.Add(new GenerationSourceSlot(snapshot.Role, null, snapshot.Order, snapshot.AttachmentId, history.Id));
+        }
+        return slots;
+    }
 
     /// <summary>Re-validates a carried-forward slot list against the model **actually** being reused
     /// into — for **Use Again**, that may not be the original record's model at all: if it was
@@ -1435,6 +1532,14 @@ else
     /// text generation (any provider) and image generation (OpenAI, OpenRouter, DeepInfra only; see
     /// <see cref="LibraryRules.GetInputSlotCapabilities"/>).</summary>
     private bool SupportsReferenceImageInputs => ReferenceImageMaxCount > 0;
+    private bool SupportsMaskInputs => SelectedModelMode == GenerationMode.Image && SelectedConnection?.ProviderType is ProviderType.OpenAi or ProviderType.DeepInfra or ProviderType.OpenRouter;
+
+    private async Task OnPrimarySourceChangedAsync()
+    {
+        _ownedMasks = LibraryState.Workspace is not null && !string.IsNullOrEmpty(_form.SourceFileId) ? await LibraryState.Workspace.GetImageMasksAsync(_form.SourceFileId) : [];
+        if (!_ownedMasks.Any(mask => mask.Id == _form.MaskId)) _form.MaskId = string.Empty;
+        ScheduleAutosave();
+    }
 
     /// <summary>How many of the three source-image pickers to actually render, per
     /// <see cref="LibraryRules.GetInputSlotCapabilities"/>'s declared <c>MaxCount</c> for the current
@@ -1611,6 +1716,7 @@ else
         public string SourceFileId { get; set; } = string.Empty;
         public string SecondarySourceFileId { get; set; } = string.Empty;
         public string TertiarySourceFileId { get; set; } = string.Empty;
+        public string MaskId { get; set; } = string.Empty;
         public int ResultCount { get; set; } = 1;
         public string DestinationFolderId { get; set; } = string.Empty;
         public double? Temperature { get; set; }

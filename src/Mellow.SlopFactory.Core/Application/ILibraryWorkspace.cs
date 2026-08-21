@@ -21,6 +21,14 @@ public interface ILibraryWorkspace : IAsyncDisposable
     Task<TextSearchResult> SearchTextFileAsync(string fileId, string searchText, bool matchCase = false, int maximumResults = 200, CancellationToken cancellationToken = default);
     Task<RenderedMarkdownContent> RenderMarkdownFileAsync(string fileId, CancellationToken cancellationToken = default);
     Task<ImageFileContent> ReadImageFileAsync(string fileId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ImageMask>> GetImageMasksAsync(string ownerFileId, CancellationToken cancellationToken = default);
+    /// <summary>Stores a private PNG mask for an image. The mask remains owned by the image and is
+    /// never imported as a library file.</summary>
+    Task<ImageMask> CreateImageMaskAsync(string ownerFileId, string label, byte[] pngBytes, int width, int height, CancellationToken cancellationToken = default);
+    Task<byte[]> ReadImageMaskAsync(string maskId, CancellationToken cancellationToken = default);
+    Task<byte[]> ReadGenerationMaskSnapshotAsync(string generationRecordId, string maskId, CancellationToken cancellationToken = default);
+    Task<ImageFileContent> ReadGenerationInputSnapshotAsync(string generationRecordId, GenerationInputSlotRole role, int order, CancellationToken cancellationToken = default);
+    Task DeleteImageMaskAsync(string maskId, CancellationToken cancellationToken = default);
     Task<ImageTechnicalProperties> GetImageTechnicalPropertiesAsync(string fileId, CancellationToken cancellationToken = default);
     Task<MediaTechnicalProperties> GetMediaTechnicalPropertiesAsync(string fileId, CancellationToken cancellationToken = default);
     Task<FileSystemMetadata> GetSystemMetadataAsync(string fileId, CancellationToken cancellationToken = default);

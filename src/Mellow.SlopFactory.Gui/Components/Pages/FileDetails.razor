@@ -225,6 +225,36 @@ else
                         }
                     </div>
                     <p class="muted">@Strings["ViewingDoesNotModify"]</p>
+                    <div class="actions"><button class="secondary" @onclick="BeginMaskAsync">@Strings["CreateMask"]</button></div>
+                    @if (_editingMask)
+                    {
+                        <div class="mask-editor">
+                            <p class="muted">@Strings["MaskCanvasHelp"]</p>
+                            <div class="mask-toolbar">
+                                <label>@Strings["BrushSize"] <input type="range" min="1" max="200" @bind="_maskBrushSize" @bind:event="oninput" @bind:after="UpdateMaskBrushAsync" /></label>
+                                <label class="check"><input type="checkbox" @bind="_maskErasing" @bind:after="UpdateMaskBrushAsync" />@Strings["EraseMask"]</label>
+                                <label>@Strings["Zoom"] <input type="range" min="25" max="400" step="25" @bind="_maskZoom" @bind:event="oninput" @bind:after="UpdateMaskZoomAsync" /> @_maskZoom%</label>
+                                <label class="check"><input type="checkbox" @bind="_maskPreviewOpacity" @bind:after="UpdateMaskPreviewOpacityAsync" />@Strings["MaskPreviewOpacity"]</label>
+                                <button type="button" class="secondary" disabled="@(!_maskCanUndo)" @onclick="UndoMaskAsync">@Strings["Undo"]</button>
+                                <button type="button" class="secondary" disabled="@(!_maskCanRedo)" @onclick="RedoMaskAsync">@Strings["Redo"]</button>
+                                <button type="button" class="secondary" @onclick="ClearMaskAsync">@Strings["Clear"]</button>
+                            </div>
+                            <div class="mask-canvas-viewport">
+                                <canvas @ref="_maskCanvas" width="@_imageTechnicalProperties?.Width" height="@_imageTechnicalProperties?.Height" tabindex="0" role="img" aria-label="@Strings["MaskCanvas"]"></canvas>
+                            </div>
+                            <p class="mask-legend">
+                                <span class="mask-legend-swatch painted"></span> @Strings["MaskLegendPainted"]
+                                <span class="mask-legend-swatch transparent"></span> @Strings["MaskLegendTransparent"]
+                            </p>
+                            <p class="muted">@Strings["MaskKeyboardHelp"]</p>
+                            <label>@Strings["MaskName"] <InputText @bind-Value="_maskLabel" /></label>
+                            <div class="actions">
+                                <button type="button" @onclick="SaveMaskAsync">@Strings["Save"]</button>
+                                <button type="button" class="secondary" @onclick="CancelMask">@Strings["Cancel"]</button>
+                            </div>
+                        </div>
+                    }
+                    @if (_masks.Count > 0) { <ul class="metadata-list">@foreach (var mask in _masks) { <li>@mask.Label <button class="ghost" @onclick="() => DeleteMaskAsync(mask.Id)">@Strings["DeletePermanently"]</button></li> }</ul> }
                 }
             </article>
         }
@@ -555,6 +585,17 @@ else
     private TextSearchForm _textSearchForm = new();
     private MarkdownExternalLink? _pendingExternalLink;
     private string? _imageDataUri;
+    private IReadOnlyList<ImageMask> _masks = [];
+    private bool _editingMask;
+    private bool _initializeMaskCanvas;
+    private string _maskLabel = "Mask 1";
+    private int _maskBrushSize = 32;
+    private bool _maskErasing;
+    private int _maskZoom = 100;
+    private bool _maskPreviewOpacity;
+    private bool _maskCanUndo;
+    private bool _maskCanRedo;
+    private ElementReference _maskCanvas;
     private string? _imageError;
     private ImageTechnicalProperties? _imageTechnicalProperties;
     private FileSystemMetadata? _systemMetadata;
@@ -622,6 +663,13 @@ else
             _registerMediaElement = false;
             await JavaScript.InvokeVoidAsync("slopFactoryMedia.register", _mediaElement);
         }
+        if (_initializeMaskCanvas && _imageDataUri is not null)
+        {
+            _initializeMaskCanvas = false;
+            await JavaScript.InvokeVoidAsync("slopFactoryMask.initialize", _maskCanvas, _imageDataUri, _maskBrushSize, _maskErasing);
+            await JavaScript.InvokeVoidAsync("slopFactoryMask.setZoom", _maskCanvas, _maskZoom);
+            await JavaScript.InvokeVoidAsync("slopFactoryMask.setPreviewOpacity", _maskCanvas, _maskPreviewOpacity);
+        }
     }
 
     private async Task ReloadAsync()
@@ -675,6 +723,7 @@ else
                     _imageTechnicalProperties = await LibraryState.Workspace.GetImageTechnicalPropertiesAsync(Id);
                     var image = await LibraryState.Workspace.ReadImageFileAsync(Id);
                     _imageDataUri = $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}";
+                    _masks = await LibraryState.Workspace.GetImageMasksAsync(Id);
                     if (_file.MediaType == "image/gif")
                     {
                         var poster = await PreviewCache.GetImageThumbnailAsync(LibraryState.Workspace, _file);
@@ -1217,6 +1266,67 @@ else
     }
 
     private void ToggleReveal(string id) => SensitiveReveals.Toggle(id);
+    private Task BeginMaskAsync()
+    {
+        _maskLabel = $"Mask {_masks.Count + 1}";
+        _maskZoom = 100;
+        _maskPreviewOpacity = false;
+        _maskCanUndo = false;
+        _maskCanRedo = false;
+        _editingMask = true;
+        _initializeMaskCanvas = true;
+        return Task.CompletedTask;
+    }
+    private void CancelMask() => _editingMask = false;
+    private Task UpdateMaskBrushAsync() => JavaScript.InvokeVoidAsync("slopFactoryMask.setBrush", _maskCanvas, _maskBrushSize, _maskErasing).AsTask();
+    private Task UpdateMaskZoomAsync() => JavaScript.InvokeVoidAsync("slopFactoryMask.setZoom", _maskCanvas, _maskZoom).AsTask();
+    private Task UpdateMaskPreviewOpacityAsync() => JavaScript.InvokeVoidAsync("slopFactoryMask.setPreviewOpacity", _maskCanvas, _maskPreviewOpacity).AsTask();
+    private async Task RefreshMaskHistoryStateAsync()
+    {
+        _maskCanUndo = await JavaScript.InvokeAsync<bool>("slopFactoryMask.canUndo", _maskCanvas);
+        _maskCanRedo = await JavaScript.InvokeAsync<bool>("slopFactoryMask.canRedo", _maskCanvas);
+    }
+    private async Task ClearMaskAsync()
+    {
+        await JavaScript.InvokeVoidAsync("slopFactoryMask.clear", _maskCanvas);
+        await RefreshMaskHistoryStateAsync();
+    }
+    private async Task UndoMaskAsync()
+    {
+        await JavaScript.InvokeVoidAsync("slopFactoryMask.undo", _maskCanvas);
+        await RefreshMaskHistoryStateAsync();
+    }
+    private async Task RedoMaskAsync()
+    {
+        await JavaScript.InvokeVoidAsync("slopFactoryMask.redo", _maskCanvas);
+        await RefreshMaskHistoryStateAsync();
+    }
+    private async Task SaveMaskAsync()
+    {
+        if (LibraryState.Workspace is null || _imageTechnicalProperties?.Width is not int width || _imageTechnicalProperties.Height is not int height) return;
+        try
+        {
+            if (!await JavaScript.InvokeAsync<bool>("slopFactoryMask.hasPixels", _maskCanvas))
+            {
+                _message = Strings["MaskEmpty"];
+                return;
+            }
+            var base64 = await JavaScript.InvokeAsync<string>("slopFactoryMask.toPng", _maskCanvas);
+            _masks = [.. _masks, await LibraryState.Workspace.CreateImageMaskAsync(Id, _maskLabel, Convert.FromBase64String(base64), width, height)];
+            _editingMask = false;
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
+    private async Task DeleteMaskAsync(string maskId)
+    {
+        if (LibraryState.Workspace is null) return;
+        try
+        {
+            await LibraryState.Workspace.DeleteImageMaskAsync(maskId);
+            _masks = _masks.Where(mask => mask.Id != maskId).ToArray();
+        }
+        catch (SlopFactoryException exception) { _message = exception.Message; }
+    }
 
     private async Task CopySensitiveMetadataAsync(string value)
     {

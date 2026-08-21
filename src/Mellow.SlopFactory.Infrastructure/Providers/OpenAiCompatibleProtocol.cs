@@ -452,7 +452,7 @@ internal static class OpenAiCompatibleProtocol
     /// <c>images/generations</c> path. The response shape (<c>data[].b64_json</c>) is identical, so
     /// <see cref="ParseImageGenerationBytes"/> handles both.
     /// </summary>
-    public static MultipartFormDataContent BuildImageEditMultipartContent(string providerModelId, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage> sourceImages)
+    public static MultipartFormDataContent BuildImageEditMultipartContent(string providerModelId, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage> sourceImages, TextGenerationSourceImage? mask = null)
     {
         var content = new MultipartFormDataContent
         {
@@ -466,6 +466,12 @@ internal static class OpenAiCompatibleProtocol
             var imageContent = new ByteArrayContent(image.Bytes);
             imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(image.MediaType);
             content.Add(imageContent, "image", $"source{ImageFileExtension(image.MediaType)}");
+        }
+        if (mask is not null)
+        {
+            var maskContent = new ByteArrayContent(mask.Bytes);
+            maskContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mask.MediaType);
+            content.Add(maskContent, "mask", "mask.png");
         }
 
         return content;

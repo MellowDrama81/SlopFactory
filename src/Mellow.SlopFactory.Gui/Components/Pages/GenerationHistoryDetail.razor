@@ -100,7 +100,11 @@ else if (_record is not null)
             <ul class="metadata-list">
                 @foreach (var slot in sourceSlots)
                 {
-                    @if (slot.FileId is not null)
+                    @if (slot.IsMask)
+                    {
+                        <li>@(slot.Tombstone is { } maskTombstone ? Strings["InpaintingMaskUsedSourceDeleted", maskTombstone.DisplayName] : Strings["InpaintingMaskUsed"])</li>
+                    }
+                    else if (slot.FileId is not null)
                     {
                         <li><GenerationResultThumbnail FileId="@slot.FileId" LinkText="@Strings["SourceImageSlotUsed", slot.Position].Value" /></li>
                     }
@@ -375,7 +379,7 @@ else if (_record is not null)
         _ => status.ToString()
     };
 
-    private sealed record SourceSlotView(int Position, string? FileId, FileIdentitySnapshot? Tombstone);
+    private sealed record SourceSlotView(int Position, string? FileId, FileIdentitySnapshot? Tombstone, bool IsMask);
 
     /// <summary>Built from <see cref="GenerationRecord.SourceSlotSnapshots"/> — the immutable
     /// identity captured at submission time — rather than the live <see cref="GenerationRecord.SourceSlots"/>,
@@ -388,7 +392,7 @@ else if (_record is not null)
         if (_record is null) return [];
         return _record.SourceSlotSnapshots
             .OrderBy(slot => slot.Role).ThenBy(slot => slot.Order)
-            .Select((slot, index) => new SourceSlotView(index + 1, slot.FileId, slot.FileId is null ? slot.Identity : null))
+            .Select((slot, index) => new SourceSlotView(index + 1, slot.FileId, slot.FileId is null ? slot.Identity : null, slot.Role == GenerationInputSlotRole.Mask))
             .ToList();
     }
 }

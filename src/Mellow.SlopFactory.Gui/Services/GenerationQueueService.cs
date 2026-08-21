@@ -998,14 +998,14 @@ public sealed class GenerationQueueService
         foreach (var jobId in toCancel) Cancel(jobId);
     }
 
-    private void MarkDependencyRecycled(string dependencyId, Func<GenerationJobSnapshot, string, bool> references)
+    private void MarkDependencyRecycled(string dependencyId, Func<GenerationJobSnapshot, string, bool> references, bool ignoreWhenSnapshotted = false)
     {
         var changed = false;
         lock (_gate)
         {
             foreach (var job in _jobsById.Values)
             {
-                if (!IsPreSubmissionPhase(job.Phase) || !references(job.Snapshot, dependencyId)) continue;
+                if (!IsPreSubmissionPhase(job.Phase) || !references(job.Snapshot, dependencyId) || (ignoreWhenSnapshotted && job.GenerationRecordId is not null && job.Snapshot.Mode == GenerationMode.Image)) continue;
                 if (job.RecycledDependencyIds.Add(dependencyId)) changed = true;
                 if (job.Phase != GenerationJobPhase.DependencyRecycled) { job.Phase = GenerationJobPhase.DependencyRecycled; changed = true; }
             }
@@ -1028,14 +1028,14 @@ public sealed class GenerationQueueService
         if (changed) { RaiseChanged(); Pump(); }
     }
 
-    private void MarkDependencyPermanentlyDeleted(string dependencyId, Func<GenerationJobSnapshot, string, bool> references)
+    private void MarkDependencyPermanentlyDeleted(string dependencyId, Func<GenerationJobSnapshot, string, bool> references, bool ignoreWhenSnapshotted = false)
     {
         var changed = false;
         lock (_gate)
         {
             foreach (var job in _jobsById.Values)
             {
-                if (!IsPreSubmissionPhase(job.Phase) || !references(job.Snapshot, dependencyId)) continue;
+                if (!IsPreSubmissionPhase(job.Phase) || !references(job.Snapshot, dependencyId) || (ignoreWhenSnapshotted && job.GenerationRecordId is not null && job.Snapshot.Mode == GenerationMode.Image)) continue;
                 job.NonRunnable = true;
                 if (job.Phase != GenerationJobPhase.DependencyRecycled) job.Phase = GenerationJobPhase.DependencyRecycled;
                 changed = true;
@@ -1046,7 +1046,7 @@ public sealed class GenerationQueueService
 
     /// <summary>Pauses every still-queued job whose source-image slot references this file —
     /// called after a source file is recycled.</summary>
-    public void NotifyFileRecycled(string fileId) => MarkDependencyRecycled(fileId, ReferencesFile);
+    public void NotifyFileRecycled(string fileId) => MarkDependencyRecycled(fileId, ReferencesFile, ignoreWhenSnapshotted: true);
 
     /// <summary>Resumes a paused job once every dependency it was waiting on (this file included) is
     /// restored — called after a source file is restored from the recycle bin.</summary>
@@ -1054,7 +1054,7 @@ public sealed class GenerationQueueService
 
     /// <summary>Marks every job referencing this file as permanently non-runnable —
     /// called after a source file is permanently deleted.</summary>
-    public void NotifyFilePermanentlyDeleted(string fileId) => MarkDependencyPermanentlyDeleted(fileId, ReferencesFile);
+    public void NotifyFilePermanentlyDeleted(string fileId) => MarkDependencyPermanentlyDeleted(fileId, ReferencesFile, ignoreWhenSnapshotted: true);
 
     /// <summary>Same as <see cref="NotifyFileRecycled"/> but for a destination folder.</summary>
     public void NotifyFolderRecycled(string folderId) => MarkDependencyRecycled(folderId, ReferencesFolder);
@@ -1256,6 +1256,30 @@ public sealed class GenerationQueueService
         Pump();
     }
 
+    /// <summary>Resolves a reference-image/first-frame source slot's bytes for submission. Prefers
+    /// this job's own durable record's already-captured snapshot (populated at creation time for both
+    /// live-file and retained-snapshot slots alike — see
+    /// <c>LibraryWorkspace.CreateQueuedGenerationRecordCoreAsync</c>) so submission never re-reads a
+    /// live file that might have been recycled/deleted since the job was queued. Falls back to a live
+    /// file read only if this job's own record was never durably created (a transient storage failure
+    /// at enqueue time), and further falls back to reading straight from the slot's own retained
+    /// snapshot source when even the live file is unavailable because the slot was already
+    /// snapshot-backed (Use Again after the original file was permanently deleted).</summary>
+    private static Task<ImageFileContent> ReadReferenceSourceContentAsync(QueuedJob job, GenerationSourceSlot slot, CancellationToken cancellationToken) =>
+        job.GenerationRecordId is { } sourceRecordId
+            ? job.Workspace.ReadGenerationInputSnapshotAsync(sourceRecordId, slot.Role, slot.Order, cancellationToken)
+            : slot.FileId is { } liveFileId
+                ? job.Workspace.ReadImageFileAsync(liveFileId, cancellationToken)
+                : job.Workspace.ReadGenerationInputSnapshotAsync(slot.SnapshotSourceGenerationId!, slot.Role, slot.Order, cancellationToken);
+
+    /// <summary>The mask counterpart of <see cref="ReadReferenceSourceContentAsync"/>.</summary>
+    private static Task<byte[]> ReadMaskContentAsync(QueuedJob job, GenerationSourceSlot maskSlot, string maskId, CancellationToken cancellationToken) =>
+        job.GenerationRecordId is { } recordId
+            ? job.Workspace.ReadGenerationMaskSnapshotAsync(recordId, maskId, cancellationToken)
+            : maskSlot.FileId is not null
+                ? job.Workspace.ReadImageMaskAsync(maskId, cancellationToken)
+                : job.Workspace.ReadGenerationMaskSnapshotAsync(maskSlot.SnapshotSourceGenerationId!, maskId, cancellationToken);
+
     private async Task<GenerationJobOutcome> ExecuteAsync(QueuedJob job, CancellationToken cancellationToken)
     {
         var snapshot = job.Snapshot;
@@ -1281,9 +1305,13 @@ public sealed class GenerationQueueService
                 var sourceImages = new List<TextGenerationSourceImage>(referenceImageSlots.Length);
                 foreach (var slot in referenceImageSlots)
                 {
-                    var sourceContent = await job.Workspace.ReadImageFileAsync(slot.FileId, cancellationToken).ConfigureAwait(false);
+                    var sourceContent = await ReadReferenceSourceContentAsync(job, slot, cancellationToken).ConfigureAwait(false);
                     sourceImages.Add(new TextGenerationSourceImage(sourceContent.MediaType, sourceContent.Bytes));
                 }
+                var maskSlot = (snapshot.SourceSlots ?? []).SingleOrDefault(slot => slot.Role == GenerationInputSlotRole.Mask);
+                TextGenerationSourceImage? mask = maskSlot?.AttachmentId is { } maskId
+                    ? new TextGenerationSourceImage("image/png", await ReadMaskContentAsync(job, maskSlot, maskId, cancellationToken).ConfigureAwait(false))
+                    : null;
 
                 IReadOnlyList<byte[]>? images = null;
                 string? errorMessage = null;
@@ -1291,7 +1319,7 @@ public sealed class GenerationQueueService
                 {
                     AdvanceLocked(job, GenerationStatus.Submitting);
                     job.SubmissionAttempted = true;
-                    images = await adapter.GenerateImageAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, sourceImages, cancellationToken).ConfigureAwait(false);
+                    images = await adapter.GenerateImageAsync(connection, model, apiKey, snapshot.Prompt, snapshot.ResultCount, sourceImages, mask, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is ProviderAdapterException or HttpRequestException)
                 {
@@ -1327,7 +1355,7 @@ public sealed class GenerationQueueService
                 var sourceImages = new List<TextGenerationSourceImage>(referenceImageSlots.Length);
                 foreach (var slot in referenceImageSlots)
                 {
-                    var sourceContent = await job.Workspace.ReadImageFileAsync(slot.FileId, cancellationToken).ConfigureAwait(false);
+                    var sourceContent = await ReadReferenceSourceContentAsync(job, slot, cancellationToken).ConfigureAwait(false);
                     sourceImages.Add(new TextGenerationSourceImage(sourceContent.MediaType, sourceContent.Bytes));
                 }
 
@@ -1435,7 +1463,7 @@ public sealed class GenerationQueueService
         TextGenerationSourceImage? firstFrame = null;
         if (firstFrameSlot is not null)
         {
-            var firstFrameContent = await job.Workspace.ReadImageFileAsync(firstFrameSlot.FileId, cancellationToken).ConfigureAwait(false);
+            var firstFrameContent = await ReadReferenceSourceContentAsync(job, firstFrameSlot, cancellationToken).ConfigureAwait(false);
             firstFrame = new TextGenerationSourceImage(firstFrameContent.MediaType, firstFrameContent.Bytes);
         }
 

@@ -9,7 +9,7 @@ public static class LibraryRules
 {
     public const string FormatIdentity = "mellow.slopfactory.library";
     public const int ManifestVersion = 1;
-    public const int SchemaVersion = 41;
+    public const int SchemaVersion = 46;
     public const int MaximumDisplayNameScalars = 255;
     public const int MaximumMetadataKeyScalars = 100;
     public const int MaximumLinkLabelScalars = 200;
@@ -238,7 +238,7 @@ public static class LibraryRules
         // offering the slot at all. Revisit once translation is implemented for one of them.
         GenerationMode.Text when providerType is not (ProviderType.Anthropic or ProviderType.Gemini or ProviderType.Cohere) =>
             [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 3, Required: false)],
-        GenerationMode.Image when providerType is ProviderType.OpenAi or ProviderType.OpenRouter or ProviderType.DeepInfra => [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 3, Required: false)],
+        GenerationMode.Image when providerType is ProviderType.OpenAi or ProviderType.DeepInfra or ProviderType.OpenRouter => [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 3, Required: false), new GenerationInputSlotCapability(GenerationInputSlotRole.Mask, 0, 1, Required: false)],
         // ComfyUi's real per-slot capability lives in the model's own workflow JSON (whether it wires a
         // LoadImage node to {{UPLOADED_IMAGE_FILENAME}}/{{UPLOADED_IMAGE_FILENAME_2}} or not), which this
         // flat (provider, mode) switch cannot see. This declares a fixed upper bound instead (Comfy.md
@@ -253,12 +253,18 @@ public static class LibraryRules
     /// <summary>The same file selected in more than one source slot is always rejected, independent
     /// of any model's capabilities — this still applies even when no model is selected yet (e.g. a
     /// draft with no model chosen), unlike the role/count checks in <see cref="ValidateSourceSlots"/>
-    /// which need a model's capabilities to mean anything.</summary>
+    /// which need a model's capabilities to mean anything. A snapshot-backed slot (see
+    /// <see cref="GenerationSourceSlot.SnapshotSourceGenerationId"/>) has no live <c>FileId</c> to
+    /// compare and is skipped here entirely.</summary>
     public static void ValidateNoDuplicateSourceSlotFiles(IReadOnlyList<GenerationSourceSlot> slots)
     {
         var seenFileIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var slot in slots)
         {
+            // A private mask is owned by its source image, so the Mask slot intentionally repeats
+            // that owner's FileId. It is not a second selection of the library file.
+            if (slot.Role == GenerationInputSlotRole.Mask && !string.IsNullOrEmpty(slot.AttachmentId)) continue;
+            if (slot.FileId is null) continue;
             if (!seenFileIds.Add(slot.FileId))
             {
                 throw new LibraryValidationException("The same source file cannot be selected in more than one source slot.");
@@ -273,7 +279,31 @@ public static class LibraryRules
     /// file selected in more than one slot.</summary>
     public static void ValidateSourceSlots(IReadOnlyList<GenerationSourceSlot> slots, IReadOnlyList<GenerationInputSlotCapability> capabilities)
     {
+        foreach (var slot in slots)
+        {
+            if (slot.FileId is not null && slot.SnapshotSourceGenerationId is not null)
+                throw new LibraryValidationException("A source slot cannot name both a live file and a retained generation snapshot.");
+            if (slot.FileId is null && slot.SnapshotSourceGenerationId is null)
+                throw new LibraryValidationException("A source slot must name either a live file or a retained generation snapshot.");
+        }
+
         ValidateNoDuplicateSourceSlotFiles(slots);
+
+        foreach (var mask in slots.Where(slot => slot.Role == GenerationInputSlotRole.Mask))
+        {
+            if (string.IsNullOrEmpty(mask.AttachmentId))
+                throw new LibraryValidationException("A mask must be a private attachment of a selected reference image.");
+            // A live mask pairs with the reference-image slot naming the same owner file; a
+            // snapshot-backed mask (owner file already permanently deleted — see
+            // GenerationSourceSlot.SnapshotSourceGenerationId) instead pairs with the reference-image
+            // slot cloned from the same historical generation at the same ordinal, since neither has a
+            // live FileId left to compare.
+            var hasOwnerReferenceImage = slots.Any(slot => slot.Role == GenerationInputSlotRole.ReferenceImage && (mask.SnapshotSourceGenerationId is not null
+                ? slot.SnapshotSourceGenerationId == mask.SnapshotSourceGenerationId && slot.Order == mask.Order
+                : slot.FileId == mask.FileId));
+            if (!hasOwnerReferenceImage)
+                throw new LibraryValidationException("A mask must be a private attachment of a selected reference image.");
+        }
 
         foreach (var group in slots.GroupBy(slot => slot.Role))
         {
@@ -558,6 +588,17 @@ public static class LibraryRules
     }
 
     public const int MaximumInlineImageBytes = 33_554_432;
+
+    /// <summary>OpenAI's documented <c>images/edits</c> mask constraint (a valid PNG under 4 MiB) —
+    /// confirmed against the current API reference (August 2026) and applied regardless of which
+    /// specific GPT image model is selected, since every documented GPT image model shares this exact
+    /// mask limit even where their own source-image size/count limits differ. Deliberately not
+    /// extended to a per-model reference-image size cap here: this app's capability model
+    /// (<see cref="GetInputSlotCapabilities"/>) is keyed by (provider, mode), not by the specific
+    /// model ID, so a model-specific image limit (e.g. legacy dall-e-2's narrower single-square-image
+    /// contract) cannot be enforced client-side without that keying changing first — see
+    /// <c>docs/developer/inpainting-handoff.md</c>.</summary>
+    public const int MaximumMaskPngBytes = 4_194_304;
 
     public static string NewId() => Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
 

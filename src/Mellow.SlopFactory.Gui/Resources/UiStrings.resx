@@ -181,6 +181,27 @@
   <data name="PlaybackSpeed" xml:space="preserve"><value>Playback speed</value></data>
   <data name="Normal" xml:space="preserve"><value>Normal</value></data>
   <data name="ImageViewer" xml:space="preserve"><value>Image viewer</value></data>
+  <data name="CreateMask" xml:space="preserve"><value>Create mask</value></data>
+  <data name="MaskName" xml:space="preserve"><value>Mask name</value></data>
+  <data name="MaskEmpty" xml:space="preserve"><value>Paint an area before saving the mask.</value></data>
+  <data name="MaskCanvas" xml:space="preserve"><value>Inpainting mask canvas</value></data>
+  <data name="MaskCanvasHelp" xml:space="preserve"><value>Paint the area that the image model may replace.</value></data>
+  <data name="BrushSize" xml:space="preserve"><value>Brush size</value></data>
+  <data name="EraseMask" xml:space="preserve"><value>Erase mask</value></data>
+  <data name="InpaintingMask" xml:space="preserve"><value>Inpainting mask</value></data>
+  <data name="InpaintingMaskUsed" xml:space="preserve"><value>Inpainting mask used</value></data>
+  <data name="InpaintingMaskProviderHelp" xml:space="preserve"><value>Masked editing is sent through the selected image-edit model. Provider image and mask limits still apply.</value></data>
+  <data name="NoMask" xml:space="preserve"><value>No mask</value></data>
+  <data name="Undo" xml:space="preserve"><value>Undo</value></data>
+  <data name="Redo" xml:space="preserve"><value>Redo</value></data>
+  <data name="MaskPreviewOpacity" xml:space="preserve"><value>Preview underlying image</value></data>
+  <data name="MaskLegendPainted" xml:space="preserve"><value>Painted — will be edited</value></data>
+  <data name="MaskLegendTransparent" xml:space="preserve"><value>Transparent — kept unchanged</value></data>
+  <data name="MaskKeyboardHelp" xml:space="preserve"><value>Keyboard: focus the canvas, use the arrow keys (hold Shift to move faster) to move the brush cursor, and press Enter or Space to paint or erase at that position.</value></data>
+  <data name="RetainedSourceSnapshotNotice" xml:space="preserve"><value>The original source image was permanently deleted. A retained copy from that generation will be resubmitted.</value></data>
+  <data name="RetainedMaskSnapshotNotice" xml:space="preserve"><value>The original source image was permanently deleted. A retained copy of its inpainting mask will be resubmitted.</value></data>
+  <data name="RemoveRetainedSnapshot" xml:space="preserve"><value>Remove retained copy</value></data>
+  <data name="InpaintingMaskUsedSourceDeleted" xml:space="preserve"><value>Inpainting mask used — the source image ({0}) was permanently deleted; a retained copy is still available for Use Again</value></data>
   <data name="ImageViewControls" xml:space="preserve"><value>Image view controls</value></data>
   <data name="PauseAnimation" xml:space="preserve"><value>Pause animation</value></data>
   <data name="PlayAnimation" xml:space="preserve"><value>Play animation</value></data>
@@ -799,7 +820,7 @@
   <data name="ConfirmAbandonGenerationOutcome" xml:space="preserve"><value>Confirm abandon generation outcome</value></data>
   <data name="AbandonGenerationOutcomeWarning" xml:space="preserve"><value>Whether this request reached the provider may never be known. Abandoning marks it Failed and stops waiting for its outcome to resolve.</value></data>
   <data name="GenerationRecordKind" xml:space="preserve"><value>Generation record</value></data>
-  <data name="SourceFilePermanentlyDeletedSlot" xml:space="preserve"><value>Source {0}: {1} ({2}) — permanently deleted</value></data>
+  <data name="SourceFilePermanentlyDeletedSlot" xml:space="preserve"><value>Source {0}: {1} ({2}) — permanently deleted; a retained copy is still available for Use Again</value></data>
   <data name="ResultFilePermanentlyDeleted" xml:space="preserve"><value>{0} ({1}) — permanently deleted</value></data>
   <data name="NavSavedSettings" xml:space="preserve"><value>Saved settings</value></data>
   <data name="NewGeneration" xml:space="preserve"><value>New generation</value></data>

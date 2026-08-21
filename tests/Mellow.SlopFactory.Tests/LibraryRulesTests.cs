@@ -192,11 +192,16 @@ public sealed class LibraryRulesTests
         // as OpenAI/OpenRouter and any per-model quirk surfaces as an ordinary generation outcome.
         var capabilities = LibraryRules.GetInputSlotCapabilities(providerType, GenerationMode.Image);
 
-        var capability = Assert.Single(capabilities);
+        var capability = Assert.Single(capabilities, item => item.Role == GenerationInputSlotRole.ReferenceImage);
         Assert.Equal(GenerationInputSlotRole.ReferenceImage, capability.Role);
         Assert.Equal(0, capability.MinCount);
         Assert.Equal(3, capability.MaxCount);
         Assert.False(capability.Required);
+        if (providerType is ProviderType.OpenAi or ProviderType.DeepInfra or ProviderType.OpenRouter)
+        {
+            var mask = Assert.Single(capabilities, item => item.Role == GenerationInputSlotRole.Mask);
+            Assert.Equal(1, mask.MaxCount);
+        }
     }
 
     [Theory]
@@ -313,6 +318,78 @@ public sealed class LibraryRulesTests
         ];
 
         Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsAcceptsPrivateMaskPairedWithItsReferenceImage()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Image);
+        GenerationSourceSlot[] slots = [new(GenerationInputSlotRole.ReferenceImage, "image-1", 0), new(GenerationInputSlotRole.Mask, "image-1", 0, "mask-1")];
+        LibraryRules.ValidateSourceSlots(slots, capabilities);
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsRejectsMaskWithoutItsReferenceImage()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Image);
+        GenerationSourceSlot[] slots = [new(GenerationInputSlotRole.Mask, "image-1", 0, "mask-1")];
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsAcceptsASnapshotBackedReferenceImageAndItsPairedMask()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Image);
+        GenerationSourceSlot[] slots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, null, 0, SnapshotSourceGenerationId: "generation-1"),
+            new(GenerationInputSlotRole.Mask, null, 0, "mask-1", "generation-1"),
+        ];
+
+        LibraryRules.ValidateSourceSlots(slots, capabilities);
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsRejectsASnapshotBackedMaskPairedWithAnUnrelatedSnapshotSource()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Image);
+        GenerationSourceSlot[] slots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, null, 0, SnapshotSourceGenerationId: "generation-1"),
+            new(GenerationInputSlotRole.Mask, null, 0, "mask-1", "generation-2"),
+        ];
+
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsRejectsASlotNamingBothALiveFileAndASnapshotSource()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Text);
+        GenerationSourceSlot[] slots = [new(GenerationInputSlotRole.ReferenceImage, "file-1", 0, SnapshotSourceGenerationId: "generation-1")];
+
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
+
+    [Fact]
+    public void ValidateSourceSlotsRejectsASlotNamingNeitherALiveFileNorASnapshotSource()
+    {
+        var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.OpenAi, GenerationMode.Text);
+        GenerationSourceSlot[] slots = [new(GenerationInputSlotRole.ReferenceImage, null, 0)];
+
+        Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateSourceSlots(slots, capabilities));
+    }
+
+    [Fact]
+    public void ValidateNoDuplicateSourceSlotFilesIgnoresSnapshotBackedSlotsWithNoLiveFileToCompare()
+    {
+        GenerationSourceSlot[] slots =
+        [
+            new(GenerationInputSlotRole.ReferenceImage, null, 0, SnapshotSourceGenerationId: "generation-1"),
+            new(GenerationInputSlotRole.ReferenceImage, null, 1, SnapshotSourceGenerationId: "generation-1"),
+        ];
+
+        LibraryRules.ValidateNoDuplicateSourceSlotFiles(slots);
     }
 
     [Fact]

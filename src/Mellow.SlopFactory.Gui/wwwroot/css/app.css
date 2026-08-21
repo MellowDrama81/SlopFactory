@@ -232,3 +232,13 @@ audio.media-viewer { min-height: 3.5rem; }
 .source-picker-cell-name { font-size: .78rem; overflow-wrap: anywhere; }
 .result-thumbnail-link { display: inline-flex; align-items: center; gap: .5rem; color: inherit; }
 .result-thumbnail-link .thumbnail-frame { width: 3rem; height: 3rem; flex: 0 0 3rem; }
+.mask-editor canvas { display: block; max-width: 100%; cursor: crosshair; touch-action: none; border: 1px solid currentColor; }
+.mask-canvas-viewport { position: relative; max-height: 70vh; overflow: auto; display: inline-block; max-width: 100%; }
+.mask-cursor-overlay { position: absolute; display: none; pointer-events: none; border-radius: 50%; border: 2px solid #e7b15b; background: rgba(231, 177, 91, 0.15); }
+.mask-cursor-overlay.erasing { border-color: #d9534f; background: rgba(217, 83, 79, 0.15); }
+.mask-cursor-overlay.keyboard { border-style: dashed; }
+.mask-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.mask-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .85rem; }
+.mask-legend-swatch { display: inline-block; width: 1rem; height: 1rem; border-radius: .25rem; border: 1px solid currentColor; vertical-align: middle; }
+.mask-legend-swatch.painted { background: rgba(0, 0, 0, 0.85); }
+.mask-legend-swatch.transparent { background: repeating-conic-gradient(#8888 0% 25%, transparent 0% 50%) 0 0 / 8px 8px; }

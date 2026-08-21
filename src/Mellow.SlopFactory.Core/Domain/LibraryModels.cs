@@ -208,6 +208,18 @@ public sealed record FileDerivationProvenance(
 
 public sealed record FileIdentitySnapshot(string DisplayName, string MediaType, string ContentHash);
 
+/// <summary>A private PNG editing mask owned by one library image. Masks deliberately are not
+/// <see cref="FileRecord"/>s: they never appear in folders, search results, or exports.</summary>
+public sealed record ImageMask(
+    string Id,
+    string OwnerFileId,
+    string Label,
+    string BaseContentHash,
+    int Width,
+    int Height,
+    string ContentHash,
+    DateTimeOffset CreatedAt);
+
 /// <summary>
 /// Named source-input slot roles. Only <see cref="ReferenceImage"/> (text generation, any provider;
 /// image generation, OpenAI/OpenRouter/DeepInfra only) and <see cref="FirstFrame"/> (DeepInfra video only)
@@ -228,14 +240,35 @@ public enum GenerationInputSlotRole
 /// <summary>One source-file assignment within a draft, saved setting or generation record.
 /// <paramref name="Order"/> is the position within its role (0-based) for roles that allow more than
 /// one file (e.g. multiple reference images).</summary>
-public sealed record GenerationSourceSlot(GenerationInputSlotRole Role, string FileId, int Order);
+/// <param name="FileId">The live library file this slot names. Null exactly when
+/// <paramref name="SnapshotSourceGenerationId"/> is set — a slot always has exactly one of the two,
+/// never both and never neither.</param>
+/// <param name="AttachmentId">A private, owner-bound input attachment (currently an
+/// <see cref="ImageMask"/> ID).  It is intentionally distinct from <paramref name="FileId"/>
+/// so generation history never mistakes editing data for a browsable library file.</param>
+/// <param name="SnapshotSourceGenerationId">Set only when this slot's bytes/identity should be
+/// cloned forward from another <see cref="GenerationRecord"/>'s own already-captured snapshot
+/// (<see cref="GenerationInputSlotRole.ReferenceImage"/>/<see cref="GenerationInputSlotRole.FirstFrame"/>
+/// via <c>generation_input_snapshots</c>, <see cref="GenerationInputSlotRole.Mask"/> via that record's
+/// own <c>attachment_snapshot_bytes</c>) rather than resolved from a live <see cref="FileRecord"/> or
+/// <see cref="ImageMask"/> — the case where <b>Use Again</b> is replaying a historical generation whose
+/// original source file (or, for a mask, owning image) has since been permanently deleted. Deliberately
+/// never <paramref name="FileId"/> itself, which has a real foreign key and must never be overloaded
+/// with a deleted or synthetic identifier. A generation record created from a slot like this captures
+/// its own independent copy of the referenced bytes at creation time — it never depends on the source
+/// generation surviving afterward.</param>
+public sealed record GenerationSourceSlot(GenerationInputSlotRole Role, string? FileId, int Order, string? AttachmentId = null, string? SnapshotSourceGenerationId = null);
 
 /// <summary>An immutable identity snapshot of a source slot as it was at generation-submission time,
 /// captured once on <see cref="GenerationRecord"/> and never rewritten. Identity only (display
 /// name/media type/hash via <see cref="FileIdentitySnapshot"/>) — not a byte-level copy; the source
 /// file remains a library <see cref="FileRecord"/> referenced by <paramref name="FileId"/>, which
 /// becomes null if that file is later permanently deleted (the snapshot itself survives).</summary>
-public sealed record GenerationSourceSlotSnapshot(GenerationInputSlotRole Role, int Order, string? FileId, FileIdentitySnapshot Identity);
+/// <param name="AttachmentId">The private mask ID this slot named, when <see cref="Role"/> is
+/// <see cref="GenerationInputSlotRole.Mask"/> — carried here (not just on the live
+/// <see cref="GenerationSourceSlot"/>) so a historical mask can still be identified, and its retained
+/// bytes located, even after both the mask row and its owning image have been permanently deleted.</param>
+public sealed record GenerationSourceSlotSnapshot(GenerationInputSlotRole Role, int Order, string? FileId, FileIdentitySnapshot Identity, string? AttachmentId = null);
 
 /// <summary>Describes how many files of a given role a model accepts. See
 /// <see cref="LibraryRules.GetInputSlotCapabilities"/> for the (currently very small) set of

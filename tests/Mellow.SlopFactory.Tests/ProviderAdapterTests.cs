@@ -494,6 +494,25 @@ public sealed class ProviderAdapterTests
     }
 
     [Fact]
+    public async Task OpenAiAdapterIncludesPrivateMaskInImagesEditsMultipartRequest()
+    {
+        var resultBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 1, 2, 3, 4 };
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.openai.com/v1/images/edits", request.RequestUri!.ToString());
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.Contains("name=image; filename=source.png", body, StringComparison.Ordinal);
+            Assert.Contains("name=mask; filename=mask.png", body, StringComparison.Ordinal);
+            return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, ProviderContractFixtures.OpenAiCompatibleImageGenerationResponseV1.Replace("__BASE64__", Convert.ToBase64String(resultBytes)));
+        });
+        var adapter = new OpenAiProviderAdapter(new HttpClient(handler));
+        var connection = CreateConnection(ProviderType.OpenAi, "https://api.openai.com/v1");
+        var images = await adapter.GenerateImageAsync(connection, CreateModel("gpt-image-1"), "secret-key", "Replace the sky", 1,
+            [new TextGenerationSourceImage("image/png", [1, 2, 3])], new TextGenerationSourceImage("image/png", [4, 5, 6]));
+        Assert.Equal(resultBytes, Assert.Single(images));
+    }
+
+    [Fact]
     public async Task OpenAiAdapterGenerateImageThrowsSanitizedExceptionOnProviderError()
     {
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") });

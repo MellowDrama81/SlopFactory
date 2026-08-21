@@ -8,11 +8,8 @@ namespace Mellow.SlopFactory.Infrastructure.Providers;
 
 /// <summary>
 /// DeepInfra's OpenAI-compatible surface (https://api.deepinfra.com/v1/openai) covers chat, model
-/// listing and image generation (including image-to-image editing) with the exact same request/response
-/// shapes and relative paths as OpenAI's own API (confirmed: POST {base}/chat/completions,
-/// POST {base}/images/generations, POST {base}/images/edits, GET {base}/models), so this adapter
-/// reuses <see cref="OpenAiCompatibleProtocol"/> identically to <see cref="OpenAiProviderAdapter"/> for
-/// those operations. Audio and video generation live
+/// listing and image generation (including image editing) with the same request/response shapes and
+/// relative paths as OpenAI's own API. Audio and video generation live
 /// under a different absolute path root (https://api.deepinfra.com/v1/audio/speech,
 /// https://api.deepinfra.com/v1/videos) rather than under the OpenAI-compatible base, so those two
 /// operations build absolute request URIs from the connection's scheme/host/port instead of
@@ -114,15 +111,41 @@ internal sealed class DeepInfraProviderAdapter : IProviderAdapter
     public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages = null, CancellationToken cancellationToken = default)
     {
         var hasSourceImages = sourceImages is { Count: > 0 };
-        using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, hasSourceImages ? "images/edits" : "images/generations"));
+        if (hasSourceImages)
+        {
+            var (isSuccess, statusCode, body) = await SendImageEditAsync(connection, model, apiKey, prompt, resultCount, sourceImages!, null, cancellationToken).ConfigureAwait(false);
+            if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
+            return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            new Uri(OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "images/generations"), UriKind.Absolute));
         OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
         OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
-        request.Content = hasSourceImages
-            ? OpenAiCompatibleProtocol.BuildImageEditMultipartContent(model.ProviderModelId, prompt, resultCount, sourceImages!)
-            : new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
-        var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
+        request.Content = new StringContent(OpenAiCompatibleProtocol.BuildImageGenerationRequestBody(model.ProviderModelId, prompt, resultCount), Encoding.UTF8, "application/json");
+        var (generationSucceeded, generationStatusCode, generationBody) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
+        if (!generationSucceeded) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(generationStatusCode));
+        return OpenAiCompatibleProtocol.ParseImageGenerationBytes(generationBody);
+    }
+
+    public async Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages, TextGenerationSourceImage? mask, CancellationToken cancellationToken = default)
+    {
+        if (mask is null) return await GenerateImageAsync(connection, model, apiKey, prompt, resultCount, sourceImages, cancellationToken).ConfigureAwait(false);
+        if (sourceImages is not { Count: > 0 }) throw new ProviderAdapterException("A mask requires a source image.");
+
+        var (isSuccess, statusCode, body) = await SendImageEditAsync(connection, model, apiKey, prompt, resultCount, sourceImages, mask, cancellationToken).ConfigureAwait(false);
         if (!isSuccess) throw new ProviderAdapterException(OpenAiCompatibleProtocol.DescribeFailure(statusCode));
         return OpenAiCompatibleProtocol.ParseImageGenerationBytes(body);
+    }
+
+    private async Task<(bool IsSuccess, HttpStatusCode StatusCode, string Body)> SendImageEditAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage> sourceImages, TextGenerationSourceImage? mask, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            new Uri(OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "images/edits"), UriKind.Absolute));
+        OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
+        OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
+        request.Content = OpenAiCompatibleProtocol.BuildImageEditMultipartContent(model.ProviderModelId, prompt, resultCount, sourceImages, mask);
+        return await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<byte[]>> GenerateAudioAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, string? voice = null, CancellationToken cancellationToken = default)
