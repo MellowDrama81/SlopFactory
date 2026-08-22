@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -5,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using Mellow.SlopFactory.Application;
 using Mellow.SlopFactory.Domain;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace Mellow.SlopFactory.Infrastructure.Providers;
 
@@ -50,6 +53,9 @@ internal sealed class ComfyUiProviderAdapter : IProviderAdapter
     private readonly HttpClient _httpClient;
     private readonly Func<string, CancellationToken, Task<IPAddress[]>> _resolveHost;
     private readonly IConnectionRateLimitTracker? _rateLimitTracker;
+    // /api/object_info is roughly 10 MB on Cloud, so retain the successful (or unavailable) snapshot
+    // for this adapter instance and connection rather than downloading it for every generation.
+    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlySet<string>?>>> _cloudNodeInventories = new(StringComparer.Ordinal);
 
     public ComfyUiProviderAdapter(HttpClient httpClient, Func<string, CancellationToken, Task<IPAddress[]>>? resolveHost = null, IConnectionRateLimitTracker? rateLimitTracker = null)
     {
@@ -92,6 +98,8 @@ internal sealed class ComfyUiProviderAdapter : IProviderAdapter
         if (resultCount < 1) throw new ProviderAdapterException("At least one image result must be requested.");
         if (string.IsNullOrWhiteSpace(model.ComfyWorkflowTemplate)) throw new ProviderAdapterException("This ComfyUI model has no workflow template configured.");
 
+        await PreflightBuiltInCloudWorkflowAsync(connection, apiKey, model.ComfyWorkflowTemplate, cancellationToken).ConfigureAwait(false);
+
         // The same reference images (at most two — see LibraryRules.GetInputSlotCapabilities) are
         // uploaded once and reused across every result below, mirroring OneMinAiProviderAdapter's
         // GenerateTextAsync: the source images don't change per result, only the seed does.
@@ -118,6 +126,72 @@ internal sealed class ComfyUiProviderAdapter : IProviderAdapter
         return results;
     }
 
+    /// <summary>Best-effort only: Cloud's object-info inventory is large, experimental and can vary by
+    /// worker. It is therefore consulted only for an exact built-in template, cached per connection,
+    /// and skipped if Cloud does not return a usable catalog. A positive missing-node result is still
+    /// valuable: it prevents a costly submission whose graph cannot be constructed.</summary>
+    private async Task PreflightBuiltInCloudWorkflowAsync(Connection connection, string? apiKey, string workflowTemplate, CancellationToken cancellationToken)
+    {
+        if (!IsComfyCloud(connection.BaseUrl)) return;
+        var builtIn = ComfyBuiltInWorkflows.All.FirstOrDefault(workflow => string.Equals(workflow.WorkflowTemplate, workflowTemplate, StringComparison.Ordinal));
+        if (builtIn is null || builtIn.Requirements.NodeTypes.Count == 0) return;
+
+        var inventory = await _cloudNodeInventories.GetOrAdd(
+            connection.Id,
+            _ => new Lazy<Task<IReadOnlySet<string>?>>(() => GetCloudNodeInventoryAsync(connection, apiKey, cancellationToken), LazyThreadSafetyMode.ExecutionAndPublication)).Value.ConfigureAwait(false);
+        if (inventory is null) return;
+
+        var missing = builtIn.Requirements.NodeTypes.Where(nodeType => !inventory.Contains(nodeType)).ToArray();
+        if (missing.Length > 0)
+        {
+            throw new ProviderAdapterException($"This Comfy Cloud worker does not advertise the required node type(s) for '{builtIn.Name}': {string.Join(", ", missing)}. Cloud's inventory is experimental and worker-dependent; try again later or choose a worker/account where these nodes are available.");
+        }
+    }
+
+    private async Task<IReadOnlySet<string>?> GetCloudNodeInventoryAsync(Connection connection, string? apiKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, "api/object_info"));
+            OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
+            OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
+            var (isSuccess, _, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
+            if (!isSuccess) return null;
+
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
+            return document.RootElement.EnumerateObject().Select(node => node.Name).ToHashSet(StringComparer.Ordinal);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsComfyCloud(string baseUrl) =>
+        Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) &&
+        string.Equals(uri.Host, "cloud.comfy.org", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// ComfyUI workflows receive a mask through the alpha channel of their first uploaded image: core
+    /// <c>LoadImage</c> exposes that alpha channel as its MASK output. This preserves the app's normal
+    /// private-mask picker while keeping the submitted workflow portable between Comfy Cloud and local
+    /// ComfyUI. Opaque pixels in the private mask become transparent/editable pixels in the upload.
+    /// </summary>
+    public Task<IReadOnlyList<byte[]>> GenerateImageAsync(Connection connection, Model model, string? apiKey, string prompt, int resultCount, IReadOnlyList<TextGenerationSourceImage>? sourceImages, TextGenerationSourceImage? mask, CancellationToken cancellationToken = default)
+    {
+        if (mask is null) return GenerateImageAsync(connection, model, apiKey, prompt, resultCount, sourceImages, cancellationToken);
+        if (sourceImages is not { Count: > 0 }) throw new ProviderAdapterException("A mask requires a source image.");
+
+        var alphaMaskedSources = sourceImages.ToList();
+        alphaMaskedSources[0] = ApplyMaskAsTransparency(sourceImages[0], mask);
+        return GenerateImageAsync(connection, model, apiKey, prompt, resultCount, alphaMaskedSources, cancellationToken);
+    }
+
     /// <summary>Substitutes the first uploaded image into <c>{{UPLOADED_IMAGE_FILENAME}}</c> and, when
     /// a second reference image was supplied, the second into <c>{{UPLOADED_IMAGE_FILENAME_2}}</c> — the
     /// token naming convention every built-in dual-image-edit workflow template uses (see
@@ -140,6 +214,37 @@ internal sealed class ComfyUiProviderAdapter : IProviderAdapter
         return result;
     }
 
+    private static TextGenerationSourceImage ApplyMaskAsTransparency(TextGenerationSourceImage source, TextGenerationSourceImage mask)
+    {
+        try
+        {
+            using var sourceImage = Image.Load<Rgba32>(source.Bytes);
+            using var maskImage = Image.Load<Rgba32>(mask.Bytes);
+            if (sourceImage.Width != maskImage.Width || sourceImage.Height != maskImage.Height)
+                throw new ProviderAdapterException("The mask dimensions must match its source image.");
+
+            for (var y = 0; y < sourceImage.Height; y++)
+            for (var x = 0; x < sourceImage.Width; x++)
+            {
+                var pixel = sourceImage[x, y];
+                pixel.A = (byte)(pixel.A * (255 - maskImage[x, y].A) / 255);
+                sourceImage[x, y] = pixel;
+            }
+
+            using var output = new MemoryStream();
+            sourceImage.SaveAsPng(output);
+            return new TextGenerationSourceImage("image/png", output.ToArray());
+        }
+        catch (ProviderAdapterException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is InvalidImageContentException or UnknownImageFormatException or NotSupportedException)
+        {
+            throw new ProviderAdapterException("The source image or mask could not be converted into an alpha-masked PNG.");
+        }
+    }
+
     /// <summary>Confirmed live: <c>POST /api/prompt</c>, body <c>{"prompt": &lt;workflow&gt;,
     /// "client_id": "..."}</c>, immediate response <c>{"node_errors":{},"prompt_id":"..."}</c>. A
     /// non-empty <c>node_errors</c> was never exercised live (the test workflow was valid on the first
@@ -159,7 +264,7 @@ internal sealed class ComfyUiProviderAdapter : IProviderAdapter
             using var document = JsonDocument.Parse(responseBody);
             if (document.RootElement.TryGetProperty("node_errors", out var nodeErrors) && nodeErrors.ValueKind == JsonValueKind.Object && nodeErrors.EnumerateObject().Any())
             {
-                throw new ProviderAdapterException($"The workflow had node errors: {nodeErrors}.");
+                throw new ProviderAdapterException(DescribeNodeErrors(nodeErrors, workflowJson));
             }
 
             if (!document.RootElement.TryGetProperty("prompt_id", out var promptIdElement) || promptIdElement.ValueKind != JsonValueKind.String || promptIdElement.GetString() is not { Length: > 0 } promptId)
@@ -175,18 +280,66 @@ internal sealed class ComfyUiProviderAdapter : IProviderAdapter
         }
     }
 
+    /// <summary>Turns Comfy's per-node validation payload into an actionable error. Cloud commonly
+    /// reports an unavailable checkpoint or ControlNet as a terse <c>"Value not in list"</c> on a
+    /// loader node; pairing that with the submitted workflow identifies the real problem without
+    /// requiring the user to inspect raw JSON.</summary>
+    private static string DescribeNodeErrors(JsonElement nodeErrors, string workflowJson)
+    {
+        Dictionary<string, string?>? nodeTypes = null;
+        try
+        {
+            using var workflow = JsonDocument.Parse(workflowJson);
+            nodeTypes = workflow.RootElement.EnumerateObject()
+                .Where(node => node.Value.ValueKind == JsonValueKind.Object && node.Value.TryGetProperty("class_type", out _))
+                .ToDictionary(node => node.Name, node => node.Value.GetProperty("class_type").GetString(), StringComparer.Ordinal);
+        }
+        catch (JsonException)
+        {
+            // The server's error is still more useful than discarding it if a custom workflow was
+            // somehow modified into invalid JSON after local validation.
+        }
+
+        var descriptions = new List<string>();
+        foreach (var node in nodeErrors.EnumerateObject())
+        {
+            var messages = node.Value.ValueKind == JsonValueKind.Object && node.Value.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array
+                ? errors.EnumerateArray()
+                    .Where(error => error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String)
+                    .Select(error => error.GetProperty("message").GetString())
+                    .Where(message => !string.IsNullOrWhiteSpace(message))
+                    .Cast<string>()
+                    .ToArray()
+                : [];
+            var nodeType = nodeTypes is not null && nodeTypes.TryGetValue(node.Name, out var knownType) && !string.IsNullOrWhiteSpace(knownType)
+                ? $" ({knownType})"
+                : string.Empty;
+            var message = messages.Length > 0 ? string.Join("; ", messages) : "Cloud rejected this node's configuration";
+            if (nodeType.EndsWith("Loader)", StringComparison.Ordinal) && messages.Any(item => item.Contains("Value not in list", StringComparison.OrdinalIgnoreCase)))
+            {
+                message += ". The selected model file is not available to this Cloud worker; import it or choose a filename offered by the loader.";
+            }
+            descriptions.Add($"node {node.Name}{nodeType}: {message}");
+        }
+
+        return $"The workflow was rejected: {string.Join(" | ", descriptions)}.";
+    }
+
     /// <summary>Confirmed live: <c>GET /api/job/{id}/status</c> returns a small status summary (no
     /// output filenames) with a <c>status</c> field. Only <c>"preparing"</c> (in progress) and
     /// <c>"success"</c> (terminal) were actually observed live; the documented failure vocabulary
     /// (<c>error</c>, <c>non_retryable_error</c>, <c>lost</c>, <c>cancelled</c>) and in-progress states
     /// (<c>queued_waiting</c>, <c>executing</c>) are treated as failed/processing respectively by name
     /// but were not exercised.</summary>
+    /// <summary>Polls the confirmed Cloud job-details endpoint. Cloud no longer exposes the old
+    /// singular <c>/api/job/{id}/status</c> route; its current lifecycle includes <c>in_progress</c>
+    /// and uses <c>completed</c> as the successful terminal status.</summary>
     private async Task WaitForCompletionAsync(Connection connection, string? apiKey, string promptId, CancellationToken cancellationToken)
     {
         var deadline = DateTimeOffset.UtcNow + MaxPollDuration;
         while (true)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, $"api/job/{Uri.EscapeDataString(promptId)}/status"));
+            using var request = new HttpRequestMessage(HttpMethod.Get, OpenAiCompatibleProtocol.CombineUrl(connection.BaseUrl, $"api/jobs/{Uri.EscapeDataString(promptId)}"));
             OpenAiCompatibleProtocol.ApplyAuthorization(request, connection, apiKey);
             OpenAiCompatibleProtocol.ApplyAdditionalHeaders(request, connection);
             var (isSuccess, statusCode, body) = await OpenAiCompatibleProtocol.SendAsync(_httpClient, request, connection, cancellationToken, allowRetry: true, rateLimitTracker: _rateLimitTracker).ConfigureAwait(false);
@@ -195,7 +348,7 @@ internal sealed class ComfyUiProviderAdapter : IProviderAdapter
             var status = TryGetStringProperty(body, "status");
             switch (status)
             {
-                case "success":
+                case "success" or "completed":
                     return;
                 case "error" or "non_retryable_error" or "lost" or "cancelled":
                     throw new ProviderAdapterException($"The provider reported the job as '{status}'.");

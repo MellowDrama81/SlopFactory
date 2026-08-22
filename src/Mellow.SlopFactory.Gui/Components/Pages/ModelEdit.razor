@@ -130,6 +130,21 @@ else
                 {
                     <p class="muted">@_selectedBuiltInWorkflow.Description</p>
                     <p class="muted">@Strings["ComfyBuiltInWorkflowReferenceImageCount", _selectedBuiltInWorkflow.ReferenceImageCount]</p>
+                    <p class="muted">@Strings["ComfyBuiltInWorkflowRequiredNodes", string.Join(", ", _selectedBuiltInWorkflow.Requirements.NodeTypes)]</p>
+                    @if (_selectedBuiltInWorkflow.Requirements.ModelFiles.Count > 0)
+                    {
+                        <p class="muted">@Strings["ComfyBuiltInWorkflowRequiredModels", string.Join(", ", _selectedBuiltInWorkflow.Requirements.ModelFiles)]</p>
+                    }
+                    @if (_selectedBuiltInWorkflow.Tuning.Count > 0)
+                    {
+                        <p class="muted">@Strings["ComfyBuiltInWorkflowTuningDefaults"]</p>
+                        <ul class="metadata-list">
+                            @foreach (var parameter in _selectedBuiltInWorkflow.Tuning)
+                            {
+                                <li><strong>@parameter.Name: @parameter.DefaultValue.</strong> @parameter.Effect</li>
+                            }
+                        </ul>
+                    }
                 }
             }
 

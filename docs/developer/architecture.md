@@ -570,7 +570,15 @@ template uses), since the real per-workflow capability (whether a given workflow
 let a workflow that doesn't use it just ignore it" posture DeepInfra's per-model image-edit variance
 already established. `LibraryRules.SupportsModelDiscovery` excludes ComfyUi alongside 1min.AI: there is
 no comparable model catalogue, only an installed-node/checkpoint listing (`GET /api/object_info`,
-~9.6 MB, not fetched by this app).
+~9.6 MB). Before submitting an exact built-in template to Comfy Cloud, the adapter makes one
+best-effort, per-connection cached read of that listing and reports any positively missing required
+node type before a job is submitted; it skips the check if the endpoint is unavailable or malformed.
+
+Comfy Cloud's node and checkpoint inventory is **experimental and worker/account dependent**. The
+`/api/object_info` response is a useful diagnostic snapshot, not a promise that a particular worker
+will expose or execute every listed dependency; conversely an active worker can execute a dependency
+that the snapshot does not show. Treat a built-in workflow's displayed requirements as a checklist for
+the user's own account, and treat a submission-time validation error as the authoritative result.
 
 Only `GenerateImageAsync` is implemented; every other adapter method throws
 `ProviderAdapterException`. It submits one job per requested result (`POST /api/prompt`), polls
@@ -584,23 +592,28 @@ unconfirmed — see the adapter's own remarks.
 
 ### Built-in workflow library
 
-`ComfyBuiltInWorkflows` (`Core/Domain/ComfyBuiltInWorkflows.cs`) is a small static catalog of 11
+`ComfyBuiltInWorkflows` (`Core/Domain/ComfyBuiltInWorkflows.cs`) is a small static catalog of 20
 ready-to-use `ComfyWorkflowTemplate` values — SD/Flux/Qwen text-to-image, single- and dual-reference
-image edits, mask inpainting, and two ComfyUI "API Node" workflows that proxy to a hosted third-party
-model — so a user doesn't have to hand-export and placeholder-tag their own workflow to get started.
+image edits, mask inpainting, reusable Canny/lineart/depth/normal/DWPose control-guide extractors,
+direct and one-pass DWPose+Union ControlNet workflows, and two ComfyUI "API Node" workflows that
+proxy to a hosted third-party model — so a user doesn't have to hand-export and placeholder-tag their
+own workflow to get started.
 `ModelEdit.razor` shows a picker (only for a ComfyUi connection's Image-mode models) that populates the
 still-editable workflow textarea from the chosen entry, mirroring the discovered-models
 pick-then-review pattern elsewhere on the same page — it never auto-saves, since a built-in template may
-still need hand-editing (e.g. a checkpoint name not installed on the user's own account).
+still need hand-editing (e.g. a checkpoint name not installed on the user's own account). The three
+ControlNet entries also disclose their deliberately conservative embedded baseline: full-strength,
+full-schedule control plus the workflow's sampler/CFG settings (and inpainting denoise). These are
+documentation for safe customization, not another global generation-settings override; the original
+workflow JSON remains the source of truth.
 
 Every template's JSON was supplied by the user already in ComfyUI API-format — this app only located
 and substituted the placeholder tokens (`{{PROMPT}}`/`{{SEED}}`/`{{UPLOADED_IMAGE_FILENAME}}`[`_2`]) at
 whichever node/field each workflow's own prompt, seed, and reference-image slot(s) actually live at,
-leaving every other field (checkpoints, LoRAs, samplers, negative prompts) exactly as supplied. **None of
-the 11 were independently re-verified against a live Comfy Cloud account by this app's own testing** —
-unlike the original minimal SD1.5 workflow that verified `comfycloud-contract.md` and predates this
-library, these are included on the basis of the user's own working exports, the same risk posture as the
-provider-adapter batches added earlier in this document. Every template passes
+leaving every other field (checkpoints, LoRAs, samplers, negative prompts) exactly as supplied. The
+control-guide entries were developed from live Comfy Cloud experiments; all templates still need to be
+validated against the user's active worker before use, because the Cloud inventory is not stable or
+universal. Every template passes
 `ValidateComfyWorkflowTemplate` (`LibraryRulesTests.EveryBuiltInComfyWorkflowValidates`), which confirms
 they're structurally well-formed, not that they'll actually run successfully on a given account. Two
 entries (ByteDance Seedream, Google's Gemini image model via "Nano Banana Pro") use ComfyUI's built-in

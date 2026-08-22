@@ -25,9 +25,10 @@ SlopFactory runs on Windows and Android, sharing one .NET MAUI Blazor Hybrid cod
   capability rules rather than one-size-fits-all behavior. ComfyUI is image-generation only: a model's
   provider-model ID is paired with a workflow-JSON template (exported from ComfyUI's "Save (API
   format)" button, with a few placeholder tokens for the prompt/seed/reference image(s)) instead of a
-  plain model name — a built-in library of 11 ready-to-use workflows (SD/Flux/Qwen text-to-image and
-  image-edit variants) is available to start from when adding a ComfyUI model, though none of them have
-  been independently re-verified against a live Comfy Cloud account. Every other newly-added provider is
+  plain model name — a built-in library of 20 ready-to-use workflows (SD/Flux/Qwen text-to-image,
+  image-edit, ControlNet, and reusable control-guide variants) is available to start from when adding a
+  ComfyUI model. Comfy Cloud's model/node inventory is experimental and worker/account dependent, so
+  validate a workflow's displayed requirements on the active worker before relying on it. Every other newly-added provider is
   text-only in this app except Together AI,
   Fireworks AI, and xAI, which also support plain (non-reference) image generation, and Google Gemini,
   which supports both image and text-to-speech audio generation; OpenAI and Groq also gained

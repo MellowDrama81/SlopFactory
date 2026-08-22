@@ -110,13 +110,13 @@
   "11": {
     "inputs": {
       "seed": 580196315299344,
-      "steps": 20,
-      "cfg": 4.5,
+      "steps": 40,
+      "cfg": 4.0,
       "sampler_name": "euler",
       "scheduler": "simple",
       "denoise": 1,
       "model": [
-        "14",
+        "15",
         0
       ],
       "positive": [
@@ -157,7 +157,7 @@
     "inputs": {
       "filename_prefix": "QwenEdit_Inpaint_Ref",
       "images": [
-        "12",
+        "16",
         0
       ]
     },
@@ -174,6 +174,42 @@
     "class_type": "UNETLoader",
     "_meta": {
       "title": "Load Diffusion Model"
+    }
+  },
+  "15": {
+    "inputs": {
+      "model": [
+        "14",
+        0
+      ],
+      "shift": 3.1
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "Qwen 2511 Model Sampling (official shift)"
+    }
+  },
+  "16": {
+    "inputs": {
+      "destination": [
+        "4",
+        0
+      ],
+      "source": [
+        "12",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "mask": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "ImageCompositeMasked",
+    "_meta": {
+      "title": "Preserve Unmasked Base Pixels"
     }
   }
 }

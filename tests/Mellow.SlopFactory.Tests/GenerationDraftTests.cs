@@ -45,6 +45,33 @@ public sealed class GenerationDraftTests
     }
 
     [Fact]
+    public async Task ControlGuideHandoffPersistsTheGuideInTheCompatibleComfyModelsFirstReferenceSlot()
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Child("library");
+        var guidePath = temporary.Child("pose-guide.png");
+        await File.WriteAllBytesAsync(guidePath, PngSignatureBytes);
+        var factory = new LibraryWorkspaceFactory();
+        await using var workspace = await factory.CreateAsync(root);
+        var connection = await workspace.CreateConnectionAsync("Comfy", ProviderType.ComfyUi, "https://cloud.comfy.org", "X-API-Key", string.Empty);
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-instantx-union-controlnet");
+        var model = await workspace.CreateModelAsync("Qwen Union", connection.Id, "workflow", GenerationMode.Image, false, comfyWorkflowTemplate: workflow.WorkflowTemplate);
+        var guide = Assert.Single(await workspace.ImportAsync([guidePath], workspace.Descriptor.RootFolderId)).File!;
+        var draft = await workspace.CreateDraftAsync();
+
+        var updated = await workspace.ReplaceDraftStateAsync(
+            draft.Id, null, model.Id, string.Empty, null, 1, workspace.Descriptor.RootFolderId, null, null,
+            GenerationSettings.Empty,
+            [new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, guide.Id, 0)]);
+
+        var slot = Assert.Single(updated.SourceSlots);
+        Assert.Equal(GenerationInputSlotRole.ReferenceImage, slot.Role);
+        Assert.Equal(guide.Id, slot.FileId);
+        Assert.Equal(0, slot.Order);
+        Assert.Equal(updated.SourceSlots, (await workspace.GetDraftAsync(draft.Id)).SourceSlots);
+    }
+
+    [Fact]
     public async Task ReplaceDraftStateRoundTripsEveryFieldAndCanClearTheCustomTitle()
     {
         using var temporary = new TemporaryDirectory();

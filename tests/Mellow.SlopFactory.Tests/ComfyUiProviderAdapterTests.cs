@@ -112,10 +112,6 @@ public sealed class ComfyUiProviderAdapterTests
                 submittedWorkflow = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
                 return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"node_errors":{},"prompt_id":"job-1"}""");
             }
-            if (url == "https://cloud.comfy.org/api/job/job-1/status")
-            {
-                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"job-1","status":"success"}""");
-            }
             if (url == "https://cloud.comfy.org/api/jobs/job-1")
             {
                 return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
@@ -153,14 +149,12 @@ public sealed class ComfyUiProviderAdapterTests
         {
             var url = request.RequestUri!.ToString();
             if (url == "https://cloud.comfy.org/api/prompt") return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"node_errors":{},"prompt_id":"job-1"}""");
-            if (url == "https://cloud.comfy.org/api/job/job-1/status")
-            {
-                statusCallCount++;
-                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, statusCallCount == 1 ? """{"id":"job-1","status":"preparing"}""" : """{"id":"job-1","status":"success"}""");
-            }
             if (url == "https://cloud.comfy.org/api/jobs/job-1")
             {
-                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"job-1","status":"completed","outputs":{"9":{"images":[{"filename":"abc.png","subfolder":"","type":"output"}]}}}""");
+                statusCallCount++;
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, statusCallCount == 1
+                    ? """{"id":"job-1","status":"preparing"}"""
+                    : """{"id":"job-1","status":"completed","outputs":{"9":{"images":[{"filename":"abc.png","subfolder":"","type":"output"}]}}}""");
             }
             return FakeHttpMessageHandler.BinaryResponse(pngBytes, "image/png");
         });
@@ -168,7 +162,7 @@ public sealed class ComfyUiProviderAdapterTests
 
         var images = await adapter.GenerateImageAsync(CreateConnection(), CreateModel(), "secret-key", "A fox", 1);
 
-        Assert.Equal(2, statusCallCount);
+        Assert.Equal(3, statusCallCount);
         Assert.Equal(pngBytes, Assert.Single(images));
     }
 
@@ -195,7 +189,45 @@ public sealed class ComfyUiProviderAdapterTests
         var adapter = new ComfyUiProviderAdapter(new HttpClient(handler));
 
         var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.GenerateImageAsync(CreateConnection(), CreateModel(), "secret-key", "A fox", 1));
-        Assert.Contains("node errors", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("node 6 (CLIPTextEncode): Required input is missing", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateImageAsyncExplainsUnavailableLoaderSelections()
+    {
+        const string workflow = """{"4":{"class_type":"ControlNetLoader","inputs":{"control_net_name":"missing.safetensors"}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{PROMPT}}"}}}""";
+        var handler = new FakeHttpMessageHandler(_ => FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK,
+            """{"node_errors":{"4":{"errors":[{"message":"Value not in list"}]}},"prompt_id":"job-1"}"""));
+        var adapter = new ComfyUiProviderAdapter(new HttpClient(handler));
+
+        var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.GenerateImageAsync(CreateConnection(), CreateModel(workflow), "secret-key", "A fox", 1));
+        Assert.Contains("ControlNetLoader", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("not available to this Cloud worker", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateImageAsyncPreflightsBuiltInCloudWorkflowsAndExplainsMissingNodeTypes()
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-instantx-union-controlnet");
+        var promptWasSubmitted = false;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            if (request.RequestUri!.ToString() == "https://cloud.comfy.org/api/object_info")
+            {
+                Assert.Equal("secret-key", request.Headers.GetValues("X-API-Key").Single());
+                return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, "{\"KSampler\":{},\"CLIPTextEncode\":{}}");
+            }
+
+            if (request.RequestUri!.ToString() == "https://cloud.comfy.org/api/prompt") promptWasSubmitted = true;
+            throw new InvalidOperationException("The missing-node preflight must stop before submission.");
+        });
+        var adapter = new ComfyUiProviderAdapter(new HttpClient(handler));
+
+        var exception = await Assert.ThrowsAsync<ProviderAdapterException>(() => adapter.GenerateImageAsync(CreateConnection(), CreateModel(workflow.WorkflowTemplate), "secret-key", "A fox", 1));
+
+        Assert.Contains("does not advertise", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("ControlNetLoader", exception.Message, StringComparison.Ordinal);
+        Assert.False(promptWasSubmitted);
     }
 
     [Fact]
@@ -220,7 +252,6 @@ public sealed class ComfyUiProviderAdapterTests
                 submittedWorkflow = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
                 return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"node_errors":{},"prompt_id":"job-1"}""");
             }
-            if (url == "https://cloud.comfy.org/api/job/job-1/status") return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"job-1","status":"success"}""");
             if (url == "https://cloud.comfy.org/api/jobs/job-1")
             {
                 return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"job-1","status":"completed","outputs":{"9":{"images":[{"filename":"out.png","subfolder":"","type":"output"}]}}}""");
@@ -257,7 +288,6 @@ public sealed class ComfyUiProviderAdapterTests
                 submittedWorkflow = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
                 return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"node_errors":{},"prompt_id":"job-1"}""");
             }
-            if (url == "https://cloud.comfy.org/api/job/job-1/status") return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"job-1","status":"success"}""");
             if (url == "https://cloud.comfy.org/api/jobs/job-1")
             {
                 return FakeHttpMessageHandler.JsonResponse(HttpStatusCode.OK, """{"id":"job-1","status":"completed","outputs":{"9":{"images":[{"filename":"out.png","subfolder":"","type":"output"}]}}}""");

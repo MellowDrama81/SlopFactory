@@ -245,7 +245,7 @@ public static class LibraryRules
         // section 3.3, option (a)) — a pure text-to-image workflow with no such node simply ignores an
         // offered slot. 2 is the highest reference-image count any built-in workflow template actually
         // uses today (see ComfyBuiltInWorkflows) — a dual-image-edit graph with two LoadImage nodes.
-        GenerationMode.Image when providerType == ProviderType.ComfyUi => [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 2, Required: false)],
+        GenerationMode.Image when providerType == ProviderType.ComfyUi => [new GenerationInputSlotCapability(GenerationInputSlotRole.ReferenceImage, 0, 2, Required: false), new GenerationInputSlotCapability(GenerationInputSlotRole.Mask, 0, 1, Required: false)],
         GenerationMode.Video when providerType == ProviderType.DeepInfra => [new GenerationInputSlotCapability(GenerationInputSlotRole.FirstFrame, 0, 1, Required: false)],
         _ => []
     };
@@ -451,7 +451,7 @@ public static class LibraryRules
             }
         }
 
-        if (!value.Contains("{{PROMPT}}", StringComparison.Ordinal))
+        if (!value.Contains("{{PROMPT}}", StringComparison.Ordinal) && !IsPromptFreeComfyPreprocessor(root))
         {
             throw new LibraryValidationException("Workflow template must contain the {{PROMPT}} placeholder at least once.");
         }
@@ -472,6 +472,23 @@ public static class LibraryRules
         }
 
         return true;
+    }
+
+    /// <summary>Control-guide extraction is an image-to-image utility, not image generation, so a text
+    /// prompt would only be a misleading dummy field. Keep this exception narrow: ordinary generation
+    /// graphs still require the prompt placeholder, while a known guide extractor must visibly save its output.</summary>
+    private static bool IsPromptFreeComfyPreprocessor(JsonElement root)
+    {
+        var classTypes = root.EnumerateObject()
+            .Select(property => property.Value.GetProperty("class_type").GetString())
+            .ToHashSet(StringComparer.Ordinal);
+
+        return classTypes.Contains("SaveImage") &&
+               (classTypes.Contains("DWPreprocessor") ||
+                classTypes.Contains("Canny") ||
+                classTypes.Contains("LineArtPreprocessor") ||
+                classTypes.Contains("DepthAnythingV2Preprocessor") ||
+                classTypes.Contains("BAE-NormalMapPreprocessor"));
     }
 
     /// <summary>

@@ -157,7 +157,13 @@ else if (_record is not null)
             <ul class="metadata-list">
                 @foreach (var result in _record.ResultFileIds.Select((fileId, index) => new { fileId, index }))
                 {
-                    <li><GenerationResultThumbnail FileId="@result.fileId" LinkText="@Strings["ResultPositionLabel", result.index + 1].Value" /></li>
+                    <li>
+                        <GenerationResultThumbnail FileId="@result.fileId" LinkText="@Strings["ResultPositionLabel", result.index + 1].Value" />
+                        @if (_record.Mode == GenerationMode.Image)
+                        {
+                            <a class="secondary button" href="@($"/generate/control-guide/{result.fileId}")">@Strings["UseAsControlGuide"]</a>
+                        }
+                    </li>
                 }
                 @foreach (var tombstone in _record.TombstonedResults)
                 {

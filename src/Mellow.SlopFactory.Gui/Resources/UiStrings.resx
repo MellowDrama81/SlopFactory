@@ -668,6 +668,9 @@
   <data name="ComfyBuiltInWorkflowPicker" xml:space="preserve"><value>Start from a built-in workflow</value></data>
   <data name="ComfyBuiltInWorkflowPickerPlaceholder" xml:space="preserve"><value>None — write or paste your own</value></data>
   <data name="ComfyBuiltInWorkflowReferenceImageCount" xml:space="preserve"><value>Reference images used by this workflow: {0}</value></data>
+  <data name="ComfyBuiltInWorkflowRequiredNodes" xml:space="preserve"><value>Required nodes: {0}</value></data>
+  <data name="ComfyBuiltInWorkflowRequiredModels" xml:space="preserve"><value>Required model files: {0}</value></data>
+  <data name="ComfyBuiltInWorkflowTuningDefaults" xml:space="preserve"><value>Control workflow defaults:</value></data>
   <data name="ModeAudio" xml:space="preserve"><value>Audio</value></data>
   <data name="ModeVideo" xml:space="preserve"><value>Video</value></data>
   <data name="ConnectionsPageTitle" xml:space="preserve"><value>Connections · SlopFactory</value></data>
@@ -853,6 +856,9 @@
   <data name="ReviewChangesNoValue" xml:space="preserve"><value>None</value></data>
   <data name="UnknownFile" xml:space="preserve"><value>Unknown file</value></data>
   <data name="SavedSettingsModelUnavailable" xml:space="preserve"><value>The model saved with these settings ({0}) is unavailable. Choose another model.</value></data>
+  <data name="ControlGuideUnavailable" xml:space="preserve"><value>This control-guide image is unavailable.</value></data>
+  <data name="ControlGuideModelUnavailable" xml:space="preserve"><value>No active Comfy image model that accepts a guide image is available.</value></data>
+  <data name="ControlGuideReady" xml:space="preserve"><value>Control guide selected. Enter a prompt and generate.</value></data>
   <data name="SourceSlotsIncompatibleWithReplacementModel" xml:space="preserve"><value>Some source files were not carried forward: the replacement model does not accept them.</value></data>
   <data name="SavedSettingsRecycledTitle" xml:space="preserve"><value>Saved settings were recycled</value></data>
   <data name="SavedSettingsRecycledMessage" xml:space="preserve"><value>These saved settings were moved to the recycle bin since you opened them. Restore and update the original with your current changes, save your changes as a new saved setting, or cancel.</value></data>
@@ -874,6 +880,7 @@
   <data name="RecycleSavedSettingsWarning" xml:space="preserve"><value>Recycling these saved settings does not affect the model or any previously generated files.</value></data>
   <data name="SavedSettingsRecycled" xml:space="preserve"><value>Saved settings recycled.</value></data>
   <data name="UseAgain" xml:space="preserve"><value>Use again</value></data>
+  <data name="UseAsControlGuide" xml:space="preserve"><value>Use as control guide</value></data>
   <data name="SystemInstructions" xml:space="preserve"><value>System instructions (optional)</value></data>
   <data name="ShowSystemInstructions" xml:space="preserve"><value>Show system instructions</value></data>
   <data name="TokenUsage" xml:space="preserve"><value>{0} prompt tokens · {1} completion tokens</value></data>

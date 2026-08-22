@@ -174,6 +174,11 @@ human-readable `slopfactory_test_00001_.png`, even though the storage key itself
 name — useful for a suggested local filename, but still not something to trust as the actual media
 type (see above).
 
+**Live update 2026-08-22:** Cloud's formerly documented singular `GET /api/job/{job_id}/status` route
+now responds with a 404 directing callers to `GET /api/jobs/{job_id}`. The plural job-details endpoint
+reports lifecycle states including `in_progress` and terminal `completed`; clients should poll that
+endpoint and read its outputs from the same response.
+
 **Whether a self-hosted (non-Cloud) ComfyUI instance's `/view` endpoint behaves the same way (redirect
 vs. direct bytes) was not tested in this pass** — self-hosted ComfyUI's own documentation describes
 `/view` as serving bytes directly, which would make this a genuine behavioral difference between the

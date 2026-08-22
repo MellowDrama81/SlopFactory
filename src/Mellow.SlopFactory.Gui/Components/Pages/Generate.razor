@@ -1,6 +1,7 @@
 @page "/generate"
 @page "/generate/{SettingsId}"
 @page "/generate/history/{HistoryId}"
+@page "/generate/control-guide/{ControlGuideFileId}"
 @implements IAsyncDisposable
 @inject AppLibraryState LibraryState
 @inject GenerationQueueService Queue
@@ -581,6 +582,7 @@ else
 @code {
     [Parameter] public string SettingsId { get; set; } = string.Empty;
     [Parameter] public string HistoryId { get; set; } = string.Empty;
+    [Parameter] public string ControlGuideFileId { get; set; } = string.Empty;
 
     private enum SaveStatus { Idle, Saving, Saved, NotSaved }
 
@@ -612,6 +614,7 @@ else
     private string? _saveError;
     private string? _consumedSettingsId;
     private string? _consumedHistoryId;
+    private string? _consumedControlGuideFileId;
     private bool _busy;
     private string? _message;
     private bool _isError;
@@ -745,6 +748,55 @@ else
                 {
                     _message = Strings["SourceSlotsIncompatibleWithReplacementModel"];
                 }
+            }
+            catch (SlopFactoryException exception)
+            {
+                _message = exception.Message;
+                _isError = true;
+            }
+        }
+        else if (!string.IsNullOrEmpty(ControlGuideFileId) && !string.Equals(_consumedControlGuideFileId, ControlGuideFileId, StringComparison.Ordinal))
+        {
+            _consumedControlGuideFileId = ControlGuideFileId;
+            try
+            {
+                var controlGuide = await workspace.GetFileAsync(ControlGuideFileId);
+                if (controlGuide.State != LibraryRecordState.Active || controlGuide.MediaType is not ("image/png" or "image/jpeg" or "image/webp" or "image/gif"))
+                {
+                    _message = Strings["ControlGuideUnavailable"];
+                    _isError = true;
+                    return;
+                }
+
+                var model = _models.FirstOrDefault(candidate =>
+                    candidate.Mode == GenerationMode.Image &&
+                    ComfyBuiltInWorkflows.IsDirectControlGuideTarget(candidate.ComfyWorkflowTemplate) &&
+                    _activeConnections.Any(connection => connection.Id == candidate.ConnectionId && connection.ProviderType == ProviderType.ComfyUi));
+                if (model is null)
+                {
+                    _message = Strings["ControlGuideModelUnavailable"];
+                    _isError = true;
+                    return;
+                }
+
+                await FlushPendingAutosaveAsync();
+                var draft = await workspace.CreateDraftAsync();
+                draft = await workspace.ReplaceDraftStateAsync(
+                    draft.Id,
+                    null,
+                    model.Id,
+                    string.Empty,
+                    null,
+                    1,
+                    LibraryState.Workspace?.Descriptor.RootFolderId ?? draft.DestinationFolderId,
+                    null,
+                    null,
+                    GenerationSettings.Empty,
+                    [new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, controlGuide.Id, 0)]);
+                _drafts = [.. _drafts, draft];
+                await LoadDraftIntoFormAsync(draft.Id);
+                _message = Strings["ControlGuideReady"];
+                _isError = false;
             }
             catch (SlopFactoryException exception)
             {

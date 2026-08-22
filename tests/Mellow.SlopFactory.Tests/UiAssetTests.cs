@@ -6,6 +6,34 @@ namespace Mellow.SlopFactory.Tests;
 public sealed class UiAssetTests
 {
     [Fact]
+    public void CompletedImageGenerationsOfferAControlGuideHandoff()
+    {
+        var generate = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "Generate.razor");
+        var history = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "GenerationHistoryDetail.razor");
+        var strings = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Resources", "UiStrings.resx");
+
+        Assert.Contains("@page \"/generate/control-guide/{ControlGuideFileId}\"", generate, StringComparison.Ordinal);
+        Assert.Contains("new GenerationSourceSlot(GenerationInputSlotRole.ReferenceImage, controlGuide.Id, 0)", generate, StringComparison.Ordinal);
+        Assert.Contains("ComfyBuiltInWorkflows.IsDirectControlGuideTarget", generate, StringComparison.Ordinal);
+        Assert.Contains("/generate/control-guide/{result.fileId}", history, StringComparison.Ordinal);
+        Assert.Contains("name=\"UseAsControlGuide\"", strings, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ComfyBuiltInWorkflowPickerDisclosesWorkflowRequirements()
+    {
+        var modelEdit = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Components", "Pages", "ModelEdit.razor");
+        var strings = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "Resources", "UiStrings.resx");
+
+        Assert.Contains("ComfyBuiltInWorkflowRequiredNodes", modelEdit, StringComparison.Ordinal);
+        Assert.Contains("ComfyBuiltInWorkflowRequiredModels", modelEdit, StringComparison.Ordinal);
+        Assert.Contains("ComfyBuiltInWorkflowTuningDefaults", modelEdit, StringComparison.Ordinal);
+        Assert.Contains("name=\"ComfyBuiltInWorkflowRequiredNodes\"", strings, StringComparison.Ordinal);
+        Assert.Contains("name=\"ComfyBuiltInWorkflowRequiredModels\"", strings, StringComparison.Ordinal);
+        Assert.Contains("name=\"ComfyBuiltInWorkflowTuningDefaults\"", strings, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ResponsiveAndFocusStylesCoverDesktopTouchAndHighContrast()
     {
         var css = ReadRepositoryFile("src", "Mellow.SlopFactory.Gui", "wwwroot", "css", "app.css");

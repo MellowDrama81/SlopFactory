@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Mellow.SlopFactory.Domain;
 
 /// <summary>One entry in the built-in ComfyUI workflow library — see <see cref="ComfyBuiltInWorkflows"/>.</summary>
@@ -6,7 +8,50 @@ public sealed record ComfyBuiltInWorkflow(
     string Name,
     string Description,
     int ReferenceImageCount,
-    string WorkflowTemplate);
+    string WorkflowTemplate,
+    IReadOnlyList<ComfyWorkflowTuningParameter>? TuningParameters = null)
+{
+    /// <summary>Node types and model filenames detected from the workflow's own API-format graph.
+    /// This is descriptive rather than a Cloud availability guarantee: Cloud's experimental node
+    /// inventory can omit nodes that an active worker nevertheless executes.</summary>
+    public ComfyWorkflowRequirements Requirements { get; } = ComfyWorkflowRequirements.FromTemplate(WorkflowTemplate);
+
+    /// <summary>Small, safe defaults worth preserving when a user customizes a ControlNet graph.</summary>
+    public IReadOnlyList<ComfyWorkflowTuningParameter> Tuning { get; } = TuningParameters ?? [];
+}
+
+/// <summary>A documented default embedded in a built-in workflow rather than a runtime override.</summary>
+public sealed record ComfyWorkflowTuningParameter(string Name, string DefaultValue, string Effect);
+
+/// <summary>Declared dependencies extracted from a built-in workflow's API-format JSON.</summary>
+public sealed record ComfyWorkflowRequirements(IReadOnlyList<string> NodeTypes, IReadOnlyList<string> ModelFiles)
+{
+    private static readonly HashSet<string> ModelInputNames = new(StringComparer.Ordinal)
+    {
+        "ckpt_name", "clip_name", "control_net_name", "lora_name", "unet_name", "vae_name"
+    };
+
+    public static ComfyWorkflowRequirements FromTemplate(string template)
+    {
+        var normalized = template.Replace("{{SEED}}", "0", StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(normalized);
+        var nodeTypes = new SortedSet<string>(StringComparer.Ordinal);
+        var modelFiles = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var node in document.RootElement.EnumerateObject())
+        {
+            if (node.Value.TryGetProperty("class_type", out var classType) && classType.ValueKind == JsonValueKind.String && classType.GetString() is { Length: > 0 } type)
+                nodeTypes.Add(type);
+            if (!node.Value.TryGetProperty("inputs", out var inputs) || inputs.ValueKind != JsonValueKind.Object) continue;
+            foreach (var input in inputs.EnumerateObject())
+            {
+                if (ModelInputNames.Contains(input.Name) && input.Value.ValueKind == JsonValueKind.String && input.Value.GetString() is { Length: > 0 } filename)
+                    modelFiles.Add(filename);
+            }
+        }
+
+        return new ComfyWorkflowRequirements(nodeTypes.ToArray(), modelFiles.ToArray());
+    }
+}
 
 /// <summary>
 /// A small library of ready-to-use ComfyUI API-format workflow templates for
@@ -31,6 +76,27 @@ public sealed record ComfyBuiltInWorkflow(
 /// </summary>
 public static class ComfyBuiltInWorkflows
 {
+    private static readonly IReadOnlyList<ComfyWorkflowTuningParameter> QwenUnionControlTuning =
+    [
+        new("Control strength", "1.0", "Keeps the output tightly aligned to the supplied guide. Lower it only when the guide is overpowering the prompt."),
+        new("Control schedule", "start 0.0, end 1.0", "Applies guide influence across the whole denoising pass; preserve this full range as the baseline."),
+        new("Sampling", "20 steps, CFG 4.0", "Balances speed and prompt adherence for the direct guide workflow.")
+    ];
+
+    private static readonly IReadOnlyList<ComfyWorkflowTuningParameter> QwenDWPoseUnionControlTuning =
+    [
+        new("Control strength", "1.0", "Keeps the generated composition and body pose strongly aligned to the extracted DWPose guide."),
+        new("Control schedule", "start 0.0, end 1.0", "Carries pose guidance through the whole denoising pass; preserve this full range as the baseline."),
+        new("Sampling", "24 steps, CFG 4.0", "Allows a little more refinement after pose extraction while retaining the existing prompt balance.")
+    ];
+
+    private static readonly IReadOnlyList<ComfyWorkflowTuningParameter> QwenInpaintControlTuning =
+    [
+        new("Control strength", "1.0", "Keeps the replacement closely constrained by the masked source image."),
+        new("Control schedule", "start 0.0, end 1.0", "Uses the inpainting control throughout the denoising pass; preserve this full range as the baseline."),
+        new("Masked-region sampling", "20 steps, CFG 2.5, denoise 1.0", "Fully regenerates only the masked area while the workflow composites unmasked pixels back unchanged.")
+    ];
+
     public static readonly IReadOnlyList<ComfyBuiltInWorkflow> All =
     [
         new ComfyBuiltInWorkflow(
@@ -58,6 +124,12 @@ public static class ComfyBuiltInWorkflows
             ReferenceImageCount: 2,
             WorkflowTemplate: Flux2KleinEditDouble),
         new ComfyBuiltInWorkflow(
+            "flux2-klein-inpaint-reference",
+            "FLUX.2 Klein 9B — masked reference inpainting",
+            "Uses image 1 as the masked inpainting base and image 2 as a visual reference. Only the selected private-mask area is noised, and the generated result is composited over image 1 so every unmasked pixel is preserved.",
+            ReferenceImageCount: 2,
+            WorkflowTemplate: Flux2KleinInpaintReference),
+        new ComfyBuiltInWorkflow(
             "krea2-style-reference",
             "Krea 2 Turbo — image style reference",
             "Generates a new image guided by the prompt and the style of one reference image, using Krea 2 Turbo's dedicated style-reference LoRA. Includes an optional (disabled by default) LLM prompt-expansion step baked into the graph.",
@@ -82,11 +154,62 @@ public static class ComfyBuiltInWorkflows
             ReferenceImageCount: 2,
             WorkflowTemplate: QwenImageEdit2511),
         new ComfyBuiltInWorkflow(
+            "qwen-image-edit-2511-inpainting",
+            "Qwen-Image-Edit 2511 — masked dual-image inpainting",
+            "Uses image 1 as the inpaint base and image 2 as a reference. Select a private mask for image 1: the app encodes its painted area as transparency for ComfyUI, the workflow edits that region, then composites the result back over the original to preserve every unmasked pixel.",
+            ReferenceImageCount: 2,
+            WorkflowTemplate: QwenImageEdit2511Inpainting),
+        new ComfyBuiltInWorkflow(
+            "qwen-instantx-union-controlnet",
+            "Qwen Image + InstantX Union ControlNet",
+            "Generates an image under strong control of one supplied guide image using Qwen Image and InstantX Union ControlNet. Use a prepared control image such as a depth map, Canny edge map, or another Union-compatible guide; it is not an image-reference/edit workflow.",
+            ReferenceImageCount: 1,
+            WorkflowTemplate: QwenInstantXUnionControlNet,
+            TuningParameters: QwenUnionControlTuning),
+        new ComfyBuiltInWorkflow(
+            "dwpose-extract-pose-guide",
+            "DWPose — extract a pose guide",
+            "Extracts a reusable OpenPose-style skeleton from one supplied image, including body, hands, and face landmarks. Use its saved image as the guide input for a pose-compatible ControlNet workflow such as Qwen Image + InstantX Union ControlNet.",
+            ReferenceImageCount: 1,
+            WorkflowTemplate: DWPoseExtractPoseGuide),
+        new ComfyBuiltInWorkflow(
+            "canny-extract-control-guide",
+            "Canny — extract an edge guide",
+            "Extracts a high-contrast Canny edge map from one supplied image. Use it as a precise composition or edge-control guide in a compatible ControlNet workflow.",
+            ReferenceImageCount: 1,
+            WorkflowTemplate: CannyExtractControlGuide),
+        new ComfyBuiltInWorkflow(
+            "lineart-extract-control-guide",
+            "Lineart — extract a contour guide",
+            "Extracts clean lineart from one supplied image while reducing texture. Use it as a structural guide for redraw, stylization, or a compatible ControlNet workflow.",
+            ReferenceImageCount: 1,
+            WorkflowTemplate: LineartExtractControlGuide),
+        new ComfyBuiltInWorkflow(
+            "depth-extract-control-guide",
+            "Depth Anything V2 — extract a depth guide",
+            "Extracts a relative depth map from one supplied image using Depth Anything V2. Use it as a spatial-structure guide in a compatible ControlNet workflow.",
+            ReferenceImageCount: 1,
+            WorkflowTemplate: DepthExtractControlGuide),
+        new ComfyBuiltInWorkflow(
+            "normal-extract-control-guide",
+            "BAE — extract a normal-map guide",
+            "Extracts a surface-normal map from one supplied image using BAE. Use it for relighting, material-aware stylization, or a compatible normal-control workflow.",
+            ReferenceImageCount: 1,
+            WorkflowTemplate: NormalExtractControlGuide),
+        new ComfyBuiltInWorkflow(
+            "qwen-dwpose-union-controlnet",
+            "Qwen Image — generate from a photo's pose",
+            "Extracts the body, hands, and face pose from one supplied image with DWPose, then generates a new image under that pose using Qwen Image + InstantX Union ControlNet. This uses the photo as a pose source only, not as an identity or style reference.",
+            ReferenceImageCount: 1,
+            WorkflowTemplate: QwenDWPoseUnionControlNet,
+            TuningParameters: QwenDWPoseUnionControlTuning),
+        new ComfyBuiltInWorkflow(
             "qwen-image-instantx-inpainting",
             "Qwen-Image + InstantX ControlNet — mask inpainting",
             "Inpaints part of one reference image per the prompt using Qwen-Image with the InstantX inpainting ControlNet. The masked region comes from the uploaded image's own alpha channel — export/upload an image with the area to change made transparent.",
             ReferenceImageCount: 1,
-            WorkflowTemplate: QwenImageInstantXInpainting),
+            WorkflowTemplate: QwenImageInstantXInpainting,
+            TuningParameters: QwenInpaintControlTuning),
         new ComfyBuiltInWorkflow(
             "api-bytedance-seedream4",
             "ByteDance Seedream 4.5/5.0 (API Node) — image edit",
@@ -100,6 +223,48 @@ public static class ComfyBuiltInWorkflows
             ReferenceImageCount: 2,
             WorkflowTemplate: ApiNanoBananaPro),
     ];
+
+    /// <summary>Identifies a workflow that accepts an already-prepared control guide directly.
+    /// A graph which first runs DWPose (or another preprocessor) is intentionally excluded: passing
+    /// it an extracted guide would make it preprocess the guide a second time. Custom workflows may
+    /// opt in by using the same direct Union-ControlNet shape as the built-in target.</summary>
+    public static bool IsDirectControlGuideTarget(string? workflowTemplate)
+    {
+        if (string.IsNullOrWhiteSpace(workflowTemplate)) return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(workflowTemplate.Replace("{{SEED}}", "0", StringComparison.Ordinal));
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
+
+            var classTypes = new HashSet<string>(StringComparer.Ordinal);
+            var hasUnionControlNet = false;
+            foreach (var node in document.RootElement.EnumerateObject())
+            {
+                if (!node.Value.TryGetProperty("class_type", out var classType) || classType.ValueKind != JsonValueKind.String) continue;
+                var type = classType.GetString();
+                if (string.IsNullOrWhiteSpace(type)) continue;
+                classTypes.Add(type);
+
+                if (type == "ControlNetLoader" &&
+                    node.Value.TryGetProperty("inputs", out var inputs) &&
+                    inputs.TryGetProperty("control_net_name", out var modelName) &&
+                    modelName.ValueKind == JsonValueKind.String &&
+                    modelName.GetString()?.Contains("union", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    hasUnionControlNet = true;
+                }
+            }
+
+            return hasUnionControlNet &&
+                   classTypes.Contains("ControlNetApplyAdvanced") &&
+                   !classTypes.Contains("DWPreprocessor");
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private const string ZImageTurbo = """
         {
@@ -926,6 +1091,34 @@ public static class ComfyBuiltInWorkflows
               "title": "Set Reference Latent"
             }
           }
+        }
+        """;
+
+    private const string Flux2KleinInpaintReference = """
+        {
+          "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME}}" } },
+          "2": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME_2}}" } },
+          "3": { "class_type": "UNETLoader", "inputs": { "unet_name": "flux-2-klein-base-9b-fp8.safetensors", "weight_dtype": "default" } },
+          "4": { "class_type": "CLIPLoader", "inputs": { "clip_name": "qwen_3_8b_fp8mixed.safetensors", "type": "flux2", "device": "default" } },
+          "5": { "class_type": "VAELoader", "inputs": { "vae_name": "full_encoder_small_decoder.safetensors" } },
+          "6": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{PROMPT}}", "clip": ["4", 0] } },
+          "7": { "class_type": "CLIPTextEncode", "inputs": { "text": "", "clip": ["4", 0] } },
+          "8": { "class_type": "VAEEncode", "inputs": { "pixels": ["1", 0], "vae": ["5", 0] } },
+          "9": { "class_type": "SetLatentNoiseMask", "inputs": { "samples": ["8", 0], "mask": ["1", 1] } },
+          "10": { "class_type": "VAEEncode", "inputs": { "pixels": ["2", 0], "vae": ["5", 0] } },
+          "11": { "class_type": "ReferenceLatent", "inputs": { "conditioning": ["6", 0], "latent": ["8", 0] } },
+          "12": { "class_type": "ReferenceLatent", "inputs": { "conditioning": ["11", 0], "latent": ["10", 0] } },
+          "13": { "class_type": "ReferenceLatent", "inputs": { "conditioning": ["7", 0], "latent": ["8", 0] } },
+          "14": { "class_type": "ReferenceLatent", "inputs": { "conditioning": ["13", 0], "latent": ["10", 0] } },
+          "15": { "class_type": "CFGGuider", "inputs": { "cfg": 5, "model": ["3", 0], "positive": ["12", 0], "negative": ["14", 0] } },
+          "16": { "class_type": "GetImageSize", "inputs": { "image": ["1", 0] } },
+          "17": { "class_type": "Flux2Scheduler", "inputs": { "steps": 20, "width": ["16", 0], "height": ["16", 1] } },
+          "18": { "class_type": "KSamplerSelect", "inputs": { "sampler_name": "euler" } },
+          "19": { "class_type": "RandomNoise", "inputs": { "noise_seed": {{SEED}} } },
+          "20": { "class_type": "SamplerCustomAdvanced", "inputs": { "noise": ["19", 0], "guider": ["15", 0], "sampler": ["18", 0], "sigmas": ["17", 0], "latent_image": ["9", 0] } },
+          "21": { "class_type": "VAEDecode", "inputs": { "samples": ["20", 0], "vae": ["5", 0] } },
+          "22": { "class_type": "ImageCompositeMasked", "inputs": { "destination": ["1", 0], "source": ["21", 0], "x": 0, "y": 0, "resize_source": false, "mask": ["1", 1] } },
+          "23": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Flux2_Klein_Inpaint_Reference", "images": ["22", 0] } }
         }
         """;
 
@@ -2365,6 +2558,123 @@ public static class ComfyBuiltInWorkflows
               "title": "FluxKontextImageScale"
             }
           }
+        }
+        """;
+
+    private const string QwenInstantXUnionControlNet = """
+        {
+          "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME}}" } },
+          "2": { "class_type": "UNETLoader", "inputs": { "unet_name": "qwen_image_fp8_e4m3fn.safetensors", "weight_dtype": "default" } },
+          "3": { "class_type": "CLIPLoader", "inputs": { "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors", "type": "qwen_image", "device": "default" } },
+          "4": { "class_type": "VAELoader", "inputs": { "vae_name": "qwen_image_vae.safetensors" } },
+          "5": { "class_type": "ControlNetLoader", "inputs": { "control_net_name": "Qwen-Image-InstantX-ControlNet-Union.safetensors" } },
+          "6": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{PROMPT}}", "clip": ["3", 0] } },
+          "7": { "class_type": "CLIPTextEncode", "inputs": { "text": "blurry, distorted", "clip": ["3", 0] } },
+          "8": { "class_type": "ControlNetApplyAdvanced", "inputs": { "positive": ["6", 0], "negative": ["7", 0], "control_net": ["5", 0], "image": ["1", 0], "vae": ["4", 0], "strength": 1, "start_percent": 0, "end_percent": 1 } },
+          "9": { "class_type": "VAEEncode", "inputs": { "pixels": ["1", 0], "vae": ["4", 0] } },
+          "10": { "class_type": "ModelSamplingAuraFlow", "inputs": { "model": ["2", 0], "shift": 3.1 } },
+          "11": { "class_type": "KSampler", "inputs": { "seed": {{SEED}}, "steps": 20, "cfg": 4, "sampler_name": "euler", "scheduler": "simple", "denoise": 1, "model": ["10", 0], "positive": ["8", 0], "negative": ["8", 1], "latent_image": ["9", 0] } },
+          "12": { "class_type": "VAEDecode", "inputs": { "samples": ["11", 0], "vae": ["4", 0] } },
+          "13": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Qwen_InstantX_Union", "images": ["12", 0] } }
+        }
+        """;
+
+    private const string QwenImageEdit2511Inpainting = """
+        {
+          "2": { "inputs": { "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors", "type": "qwen_image", "device": "default" }, "class_type": "CLIPLoader" },
+          "3": { "inputs": { "vae_name": "qwen_image_vae.safetensors" }, "class_type": "VAELoader" },
+          "4": { "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME}}" }, "class_type": "LoadImage" },
+          "6": { "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME_2}}" }, "class_type": "LoadImage" },
+          "7": { "inputs": { "pixels": ["4", 0], "vae": ["3", 0] }, "class_type": "VAEEncode" },
+          "8": { "inputs": { "samples": ["7", 0], "mask": ["4", 1] }, "class_type": "SetLatentNoiseMask" },
+          "9": { "inputs": { "prompt": "{{PROMPT}}", "clip": ["2", 0], "vae": ["3", 0], "image1": ["4", 0], "image2": ["6", 0] }, "class_type": "TextEncodeQwenImageEditPlus" },
+          "10": { "inputs": { "text": "ugly, blurry, low quality, deformed, artifacts, watermark, disjointed, bad anatomy", "clip": ["2", 0] }, "class_type": "CLIPTextEncode" },
+          "11": { "inputs": { "seed": {{SEED}}, "steps": 40, "cfg": 4.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1, "model": ["15", 0], "positive": ["9", 0], "negative": ["10", 0], "latent_image": ["8", 0] }, "class_type": "KSampler" },
+          "12": { "inputs": { "samples": ["11", 0], "vae": ["3", 0] }, "class_type": "VAEDecode" },
+          "13": { "inputs": { "filename_prefix": "QwenEdit_Inpaint_Ref", "images": ["16", 0] }, "class_type": "SaveImage" },
+          "14": { "inputs": { "unet_name": "qwen_image_edit_2511_bf16.safetensors", "weight_dtype": "default" }, "class_type": "UNETLoader" },
+          "15": { "inputs": { "model": ["14", 0], "shift": 3.1 }, "class_type": "ModelSamplingAuraFlow" },
+          "16": { "inputs": { "destination": ["4", 0], "source": ["12", 0], "x": 0, "y": 0, "resize_source": false, "mask": ["4", 1] }, "class_type": "ImageCompositeMasked" }
+        }
+        """;
+
+    private const string DWPoseExtractPoseGuide = """
+        {
+          "1": {
+            "class_type": "LoadImage",
+            "inputs": {
+              "image": "{{UPLOADED_IMAGE_FILENAME}} [input]"
+            }
+          },
+          "2": {
+            "class_type": "DWPreprocessor",
+            "inputs": {
+              "image": ["1", 0],
+              "detect_body": "enable",
+              "detect_hand": "enable",
+              "detect_face": "enable",
+              "resolution": 768,
+              "scale_stick_for_xinsr_cn": "disable"
+            }
+          },
+          "3": {
+            "class_type": "SaveImage",
+            "inputs": {
+              "filename_prefix": "DWPose_Pose_Guide",
+              "images": ["2", 0]
+            }
+          }
+        }
+        """;
+
+    private const string CannyExtractControlGuide = """
+        {
+          "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME}} [input]" } },
+          "2": { "class_type": "Canny", "inputs": { "image": ["1", 0], "low_threshold": 0.10, "high_threshold": 0.30 } },
+          "3": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Canny_Control_Guide", "images": ["2", 0] } }
+        }
+        """;
+
+    private const string LineartExtractControlGuide = """
+        {
+          "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME}} [input]" } },
+          "2": { "class_type": "LineArtPreprocessor", "inputs": { "image": ["1", 0], "coarse": "disable" } },
+          "3": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Lineart_Control_Guide", "images": ["2", 0] } }
+        }
+        """;
+
+    private const string DepthExtractControlGuide = """
+        {
+          "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME}} [input]" } },
+          "2": { "class_type": "DepthAnythingV2Preprocessor", "inputs": { "image": ["1", 0], "ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 768 } },
+          "3": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Depth_Control_Guide", "images": ["2", 0] } }
+        }
+        """;
+
+    private const string NormalExtractControlGuide = """
+        {
+          "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME}} [input]" } },
+          "2": { "class_type": "BAE-NormalMapPreprocessor", "inputs": { "image": ["1", 0], "resolution": 768 } },
+          "3": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Normal_Control_Guide", "images": ["2", 0] } }
+        }
+        """;
+
+    private const string QwenDWPoseUnionControlNet = """
+        {
+          "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME}}" } },
+          "2": { "class_type": "DWPreprocessor", "inputs": { "image": ["1", 0], "detect_body": "enable", "detect_hand": "enable", "detect_face": "enable", "resolution": 768, "scale_stick_for_xinsr_cn": "disable" } },
+          "3": { "class_type": "UNETLoader", "inputs": { "unet_name": "qwen_image_fp8_e4m3fn.safetensors", "weight_dtype": "default" } },
+          "4": { "class_type": "CLIPLoader", "inputs": { "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors", "type": "qwen_image", "device": "default" } },
+          "5": { "class_type": "VAELoader", "inputs": { "vae_name": "qwen_image_vae.safetensors" } },
+          "6": { "class_type": "ControlNetLoader", "inputs": { "control_net_name": "Qwen-Image-InstantX-ControlNet-Union.safetensors" } },
+          "7": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{PROMPT}}", "clip": ["4", 0] } },
+          "8": { "class_type": "CLIPTextEncode", "inputs": { "text": "blurry, distorted, cropped, bad anatomy", "clip": ["4", 0] } },
+          "9": { "class_type": "ControlNetApplyAdvanced", "inputs": { "positive": ["7", 0], "negative": ["8", 0], "control_net": ["6", 0], "image": ["2", 0], "vae": ["5", 0], "strength": 1, "start_percent": 0, "end_percent": 1 } },
+          "10": { "class_type": "VAEEncode", "inputs": { "pixels": ["2", 0], "vae": ["5", 0] } },
+          "11": { "class_type": "ModelSamplingAuraFlow", "inputs": { "model": ["3", 0], "shift": 3.1 } },
+          "12": { "class_type": "KSampler", "inputs": { "seed": {{SEED}}, "steps": 24, "cfg": 4, "sampler_name": "euler", "scheduler": "simple", "denoise": 1, "model": ["11", 0], "positive": ["9", 0], "negative": ["9", 1], "latent_image": ["10", 0] } },
+          "13": { "class_type": "VAEDecode", "inputs": { "samples": ["12", 0], "vae": ["5", 0] } },
+          "14": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Qwen_DWPose_Union", "images": ["13", 0] } }
         }
         """;
 

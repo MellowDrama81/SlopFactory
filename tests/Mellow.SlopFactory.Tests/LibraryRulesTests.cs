@@ -401,11 +401,15 @@ public sealed class LibraryRulesTests
         // highest count any built-in workflow template (ComfyBuiltInWorkflows) actually uses.
         var capabilities = LibraryRules.GetInputSlotCapabilities(ProviderType.ComfyUi, GenerationMode.Image);
 
-        var capability = Assert.Single(capabilities);
+        var capability = Assert.Single(capabilities, item => item.Role == GenerationInputSlotRole.ReferenceImage);
         Assert.Equal(GenerationInputSlotRole.ReferenceImage, capability.Role);
         Assert.Equal(0, capability.MinCount);
         Assert.Equal(2, capability.MaxCount);
         Assert.False(capability.Required);
+
+        var mask = Assert.Single(capabilities, item => item.Role == GenerationInputSlotRole.Mask);
+        Assert.Equal(1, mask.MaxCount);
+        Assert.False(mask.Required);
     }
 
     [Theory]
@@ -448,6 +452,14 @@ public sealed class LibraryRulesTests
     {
         const string json = """{"3":{"class_type":"CLIPTextEncode","inputs":{"text":"a fixed prompt"}}}""";
         Assert.Throws<LibraryValidationException>(() => LibraryRules.ValidateComfyWorkflowTemplate(json, GenerationMode.Image));
+    }
+
+    [Fact]
+    public void ValidateComfyWorkflowTemplateAcceptsPromptFreeDWPoseExtraction()
+    {
+        const string json = """{"1":{"class_type":"DWPreprocessor","inputs":{}},"2":{"class_type":"SaveImage","inputs":{}}}""";
+
+        Assert.Equal(json, LibraryRules.ValidateComfyWorkflowTemplate(json, GenerationMode.Image));
     }
 
     [Fact]
@@ -501,5 +513,122 @@ public sealed class LibraryRulesTests
                 : 0;
             Assert.Equal(expectedFilenameTokenCount, workflow.ReferenceImageCount);
         }
+    }
+
+    [Fact]
+    public void QwenMaskedInpaintingBuiltInWorkflowUsesTwoImagesAndPreservesTheUnmaskedBase()
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-image-edit-2511-inpainting");
+
+        Assert.Equal(2, workflow.ReferenceImageCount);
+        Assert.Contains("{{UPLOADED_IMAGE_FILENAME}}", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("{{UPLOADED_IMAGE_FILENAME_2}}", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("TextEncodeQwenImageEditPlus", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("ModelSamplingAuraFlow", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("ImageCompositeMasked", workflow.WorkflowTemplate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Flux2KleinMaskedReferenceBuiltInWorkflowUsesMaskedLatentNoiseAndBothReferences()
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "flux2-klein-inpaint-reference");
+
+        Assert.Equal(2, workflow.ReferenceImageCount);
+        Assert.Contains("{{UPLOADED_IMAGE_FILENAME}}", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("{{UPLOADED_IMAGE_FILENAME_2}}", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("SetLatentNoiseMask", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("ReferenceLatent", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("ImageCompositeMasked", workflow.WorkflowTemplate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void QwenInstantXUnionBuiltInWorkflowUsesOneGuideImageAndTheUnionControlNet()
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-instantx-union-controlnet");
+
+        Assert.Equal(1, workflow.ReferenceImageCount);
+        Assert.Contains("Qwen-Image-InstantX-ControlNet-Union.safetensors", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("ControlNetApplyAdvanced", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("ModelSamplingAuraFlow", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Collection(workflow.Tuning,
+            parameter => Assert.Equal(("Control strength", "1.0"), (parameter.Name, parameter.DefaultValue)),
+            parameter => Assert.Equal(("Control schedule", "start 0.0, end 1.0"), (parameter.Name, parameter.DefaultValue)),
+            parameter => Assert.Equal(("Sampling", "20 steps, CFG 4.0"), (parameter.Name, parameter.DefaultValue)));
+    }
+
+    [Fact]
+    public void DirectControlGuideTargetExcludesWorkflowsWhichExtractAPoseBeforeApplyingControlNet()
+    {
+        var direct = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-instantx-union-controlnet");
+        var poseExtraction = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-dwpose-union-controlnet");
+
+        Assert.True(ComfyBuiltInWorkflows.IsDirectControlGuideTarget(direct.WorkflowTemplate));
+        Assert.False(ComfyBuiltInWorkflows.IsDirectControlGuideTarget(poseExtraction.WorkflowTemplate));
+        Assert.False(ComfyBuiltInWorkflows.IsDirectControlGuideTarget("not JSON"));
+    }
+
+    [Fact]
+    public void DWPoseBuiltInWorkflowExtractsACompleteReusablePoseGuide()
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "dwpose-extract-pose-guide");
+
+        Assert.Equal(1, workflow.ReferenceImageCount);
+        Assert.Contains("{{UPLOADED_IMAGE_FILENAME}}", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("DWPreprocessor", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("\"detect_body\": \"enable\"", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("\"detect_hand\": \"enable\"", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("\"detect_face\": \"enable\"", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("SaveImage", workflow.WorkflowTemplate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void QwenDWPoseUnionBuiltInWorkflowExtractsAndUsesAPoseMap()
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-dwpose-union-controlnet");
+
+        Assert.Equal(1, workflow.ReferenceImageCount);
+        Assert.Contains("DWPreprocessor", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("Qwen-Image-InstantX-ControlNet-Union.safetensors", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("\"image\": [\"2\", 0]", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("VAEEncode", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("{{PROMPT}}", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains(workflow.Tuning, parameter => parameter.DefaultValue == "24 steps, CFG 4.0");
+    }
+
+    [Fact]
+    public void QwenInpaintControlWorkflowDocumentsItsSafeBaseline()
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-image-instantx-inpainting");
+
+        Assert.Contains(workflow.Tuning, parameter => parameter.DefaultValue == "1.0");
+        Assert.Contains(workflow.Tuning, parameter => parameter.DefaultValue == "start 0.0, end 1.0");
+        Assert.Contains(workflow.Tuning, parameter => parameter.DefaultValue == "20 steps, CFG 2.5, denoise 1.0");
+    }
+
+    [Fact]
+    public void BuiltInWorkflowRequirementsExposeTheirNodesAndModelFiles()
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == "qwen-dwpose-union-controlnet");
+
+        Assert.Contains("DWPreprocessor", workflow.Requirements.NodeTypes);
+        Assert.Contains("ControlNetLoader", workflow.Requirements.NodeTypes);
+        Assert.Contains("Qwen-Image-InstantX-ControlNet-Union.safetensors", workflow.Requirements.ModelFiles);
+        Assert.Contains("qwen_image_fp8_e4m3fn.safetensors", workflow.Requirements.ModelFiles);
+    }
+
+    [Theory]
+    [InlineData("canny-extract-control-guide", "Canny")]
+    [InlineData("lineart-extract-control-guide", "LineArtPreprocessor")]
+    [InlineData("depth-extract-control-guide", "DepthAnythingV2Preprocessor")]
+    [InlineData("normal-extract-control-guide", "BAE-NormalMapPreprocessor")]
+    public void BuiltInGuideExtractorsUseOneImageAndSaveTheirGuide(string workflowId, string extractor)
+    {
+        var workflow = Assert.Single(ComfyBuiltInWorkflows.All, item => item.Id == workflowId);
+
+        Assert.Equal(1, workflow.ReferenceImageCount);
+        Assert.Contains("{{UPLOADED_IMAGE_FILENAME}}", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains(extractor, workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Contains("SaveImage", workflow.WorkflowTemplate, StringComparison.Ordinal);
+        Assert.Equal(workflow.WorkflowTemplate, LibraryRules.ValidateComfyWorkflowTemplate(workflow.WorkflowTemplate, GenerationMode.Image));
     }
 }
