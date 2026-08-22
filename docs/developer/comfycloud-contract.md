@@ -102,7 +102,7 @@ same-shaped `404` whose message **names the correct endpoint directly**:
 ```
 
 `GET /api/jobs/{prompt_id}` (**plural** `jobs`) is the real endpoint and is what an adapter should
-actually call to retrieve output filenames after `/api/job/{id}/status` reports `"success"`. Confirmed
+poll for lifecycle state and output filenames. Confirmed
 response (abbreviated):
 
 ```json
@@ -203,16 +203,14 @@ section) rather than needing new machinery.
 | `Comfy.md` original assumption | Verified reality |
 | --- | --- |
 | `GET /system_stats` for `TestConnectionAsync` | Wrong path entirely (no `/api` prefix); silently returns the web app's HTML shell rather than erroring. Use `GET /api/user` instead. |
-| `GET /history/{prompt_id}` for polling | Wrong path. Two-step: `GET /api/job/{prompt_id}/status` for a cheap status check, `GET /api/jobs/{prompt_id}` (plural) for the actual output filenames. |
+| `GET /history/{prompt_id}` for polling | Wrong path. Poll `GET /api/jobs/{prompt_id}` (plural), which supplies both state and output filenames. |
 | `GET /view` serves bytes same-origin, no `ResultUrlValidator`-class hardening needed | Wrong. `GET /api/view` redirects (302) to a signed `storage.googleapis.com` URL — needs the same third-party-result hardening as OpenRouter/1min.AI. |
-| `POST /upload/image` shape | Not exercised in this pass — still open, no test workflow in this verification used an image input. |
+| `POST /upload/image` shape | Confirmed 2026-08-22: multipart field `image`, returning a server-assigned filename for workflow substitution. |
 | Self-hosted and Cloud share one code path unconditionally | Likely still true for submit/poll, but `/view`'s redirect-vs-direct-bytes behavior specifically was only confirmed for Cloud — flag as unconfirmed for self-hosted rather than assumed identical. |
 
 ## Not tested in this pass
 
-- A failing/erroring generation (only a success path was exercised — the documented failure status
-  vocabulary for `/api/job/{id}/status` remains unconfirmed).
-- `POST /upload/image` / `POST /upload/mask` (image-input workflows).
+- `POST /upload/mask` (image-input upload was confirmed, but the separate mask endpoint was not).
 - Video or audio output workflows (only a single SD1.5 image workflow was run).
 - `POST /api/queue` (cancel) and `POST /api/interrupt`.
 - The `wss://cloud.comfy.org/ws` WebSocket path.

@@ -22,9 +22,9 @@ namespace Mellow.SlopFactory.Infrastructure.Providers;
 /// (Comfy.md section 4).
 /// <para>
 /// <see cref="GenerateImageAsync"/> submits one job per requested result (<c>POST /api/prompt</c>),
-/// polls <c>GET /api/job/{id}/status</c> until a terminal state, fetches output filenames from
-/// <c>GET /api/jobs/{id}</c> (plural — the singular/history endpoints are not real, confirmed via a
-/// live 404 that names the correct one), and downloads bytes via <c>GET /api/view</c>, which redirects
+/// polls <c>GET /api/jobs/{id}</c> (plural — the singular/history endpoints are not real, confirmed via
+/// a live 404 that names the correct one) until a terminal state, reads output filenames from that same
+/// response, and downloads bytes via <c>GET /api/view</c>, which redirects
 /// (302) to a signed, time-limited <c>storage.googleapis.com</c> URL — the same third-party-result
 /// shape as OpenRouter/1min.ai, so it gets the same <see cref="ResultUrlValidator"/> host revalidation
 /// and DNS-rebinding-hardened handler (<c>DependencyInjection.CreateOpenRouterHttpHandler</c>).
@@ -325,12 +325,6 @@ internal sealed class ComfyUiProviderAdapter : IProviderAdapter
         return $"The workflow was rejected: {string.Join(" | ", descriptions)}.";
     }
 
-    /// <summary>Confirmed live: <c>GET /api/job/{id}/status</c> returns a small status summary (no
-    /// output filenames) with a <c>status</c> field. Only <c>"preparing"</c> (in progress) and
-    /// <c>"success"</c> (terminal) were actually observed live; the documented failure vocabulary
-    /// (<c>error</c>, <c>non_retryable_error</c>, <c>lost</c>, <c>cancelled</c>) and in-progress states
-    /// (<c>queued_waiting</c>, <c>executing</c>) are treated as failed/processing respectively by name
-    /// but were not exercised.</summary>
     /// <summary>Polls the confirmed Cloud job-details endpoint. Cloud no longer exposes the old
     /// singular <c>/api/job/{id}/status</c> route; its current lifecycle includes <c>in_progress</c>
     /// and uses <c>completed</c> as the successful terminal status.</summary>

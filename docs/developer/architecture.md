@@ -582,13 +582,12 @@ the user's own account, and treat a submission-time validation error as the auth
 
 Only `GenerateImageAsync` is implemented; every other adapter method throws
 `ProviderAdapterException`. It submits one job per requested result (`POST /api/prompt`), polls
-`GET /api/job/{id}/status` until a terminal state, fetches output filenames from `GET /api/jobs/{id}`
-(plural — confirmed live; the singular/history endpoints are not real) and downloads bytes via
+`GET /api/jobs/{id}` until a terminal state, reads output filenames from that same plural endpoint
+(confirmed live; the singular/history endpoints are not real) and downloads bytes via
 `GET /api/view`, which redirects to a signed, time-limited `storage.googleapis.com` URL — the same
 third-party-result shape as OpenRouter/1min.AI, so `ComfyUiProviderAdapter` gets the same
 `ResultUrlValidator` host revalidation and `DependencyInjection.CreateOpenRouterHttpHandler`. Reference-image
-upload (`POST /api/upload/image`) was not exercised in the live verification pass and remains
-unconfirmed — see the adapter's own remarks.
+upload (`POST /api/upload/image`) was live-verified on 2026-08-22 using the one-pass DWPose workflow.
 
 ### Built-in workflow library
 

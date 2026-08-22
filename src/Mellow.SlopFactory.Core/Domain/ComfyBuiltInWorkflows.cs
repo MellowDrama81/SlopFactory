@@ -61,10 +61,9 @@ public sealed record ComfyWorkflowRequirements(IReadOnlyList<string> NodeTypes, 
 /// the <c>{{PROMPT}}</c>/<c>{{SEED}}</c>/<c>{{UPLOADED_IMAGE_FILENAME}}</c>[<c>_2</c>] placeholder tokens
 /// (see <c>ComfyUiProviderAdapter.SubstitutePlaceholders</c>) at the node/field each workflow's own
 /// prompt, seed, and reference-image slot(s) actually live at — every other field (checkpoint/LoRA
-/// names, samplers, steps, negative prompts) is left exactly as supplied. None of these were
-/// independently re-verified against a live Comfy Cloud account by this app's own testing (the only
-/// workflow that was — a minimal SD1.5 graph — predates this library and isn't part of it); they are
-/// included on the basis of the user's own working exports.
+/// names, samplers, steps, negative prompts) is left exactly as supplied. The DWPose/control-guide
+/// entries were additionally exercised against a live Comfy Cloud worker on 2026-08-22; other templates
+/// remain user-supplied working exports and still require validation on the user's active worker.
 /// <para>
 /// Two entries (<c>ByteDanceSeedreamNode</c>/<c>GeminiImage2Node</c>-based) call ComfyUI's built-in "API
 /// Nodes," which proxy to a third-party hosted model (ByteDance Seedream, Google's Gemini image model)
