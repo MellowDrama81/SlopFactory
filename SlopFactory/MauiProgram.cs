@@ -1,4 +1,4 @@
-namespace RecursiveDockStudio;
+namespace SlopFactory;
 public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()

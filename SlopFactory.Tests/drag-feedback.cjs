@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
     const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    const root = path.join(__dirname, '../RecursiveDockStudio/wwwroot');
+    const root = path.join(__dirname, '../SlopFactory/wwwroot');
     await page.setContent(`<div id="app"><div style="display:flex;height:100%">
       <section class="tab-group" data-group="source" style="width:50%">
         <nav class="tabs"><button data-tab="overview" class="selected">Overview</button><button data-tab="velocity">Velocity</button></nav>

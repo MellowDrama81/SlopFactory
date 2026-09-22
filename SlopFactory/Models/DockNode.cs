@@ -1,4 +1,4 @@
-namespace RecursiveDockStudio.Models;
+namespace SlopFactory.Models;
 
 public abstract record DockNode;
 public sealed record SplitNode(string Id, DockAxis Axis, double Ratio, DockNode First, DockNode Second) : DockNode;

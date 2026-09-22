@@ -1,4 +1,4 @@
-@using RecursiveDockStudio.Models
+@using SlopFactory.Models
 @if (Node is SplitNode split)
 {
   <div class="dock-split @(split.Axis == DockAxis.Horizontal ? "split-horizontal" : "split-vertical")" style="--first:@(split.Ratio * 100)%">

@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace RecursiveDockStudio.WinUI;
+namespace SlopFactory.WinUI;
 
 public partial class App : MauiWinUIApplication
 {
@@ -16,7 +16,7 @@ public partial class App : MauiWinUIApplication
 
     private static void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
-        Debug.WriteLine("=== RecursiveDockStudio WinUI unhandled exception ===");
+        Debug.WriteLine("=== SlopFactory WinUI unhandled exception ===");
         Debug.WriteLine(e.Exception.ToString());
         Debug.WriteLine($"HRESULT: 0x{e.Exception.HResult:X8}");
         Debug.WriteLine("======================================================");
