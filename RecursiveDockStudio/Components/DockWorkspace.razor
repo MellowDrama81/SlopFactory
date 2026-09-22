@@ -1,0 +1,122 @@
+@using RecursiveDockStudio.Models
+@implements IDisposable
+@inject IJSRuntime JS
+
+<main class="dock-app">
+  <header class="ribbon">
+    <div class="ribbon-brand"><span>◈</span> NEST</div>
+    <div class="ribbon-tabs"><button type="button" class="ribbon-tab active" data-ribbon-action="workspace">Workspace</button><button type="button" class="ribbon-tab">View</button><button type="button" class="ribbon-tab">Layout</button></div>
+    <div class="ribbon-actions"><button type="button" class="ribbon-button" @onclick="AddPanel">＋ New panel</button><button type="button" class="ribbon-button" @onclick="Reset">↶ Reset layout</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Settings</button><button type="button" class="ribbon-button">⌕</button></div>
+  </header>
+  <section class="settings-screen">
+      <div class="settings-heading"><div><p>WORKSPACE PREFERENCES</p><h1>Settings</h1><span>Adjust how your dock workspace looks and behaves.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Done</button></div>
+      <div class="settings-grid">
+        <section class="settings-card"><h2>Appearance</h2><p>Choose the visual treatment for this workspace.</p><div class="setting-row"><div><b>Theme</b><span>Use a dark interface</span></div><div class="segmented"><button class="active">Dark</button><button>System</button></div></div><div class="setting-row"><div><b>Accent colour</b><span>Used for tabs and docking targets</span></div><div class="colour-choice"><i></i><span>Violet</span></div></div></section>
+        <section class="settings-card"><h2>Docking</h2><p>Control how panes are arranged and resized.</p><div class="setting-row"><div><b>Edge previews</b><span>Show dock targets while dragging tabs</span></div><label class="switch"><input type="checkbox" checked /><i></i></label></div><div class="setting-row"><div><b>Remember layout</b><span>Restore this workspace on startup</span></div><label class="switch"><input type="checkbox" checked /><i></i></label></div><div class="setting-row"><div><b>Minimum pane size</b><span>Prevent branches becoming too small</span></div><strong>180 px</strong></div></section>
+        <section class="settings-card"><h2>Interaction</h2><p>Keyboard shortcuts for common workspace actions.</p><div class="shortcut"><span>New panel</span><kbd>Ctrl</kbd><b>+</b><kbd>N</kbd></div><div class="shortcut"><span>Focus next tab</span><kbd>Ctrl</kbd><b>+</b><kbd>Tab</kbd></div><div class="shortcut"><span>Reset layout</span><kbd>Ctrl</kbd><b>+</b><kbd>R</kbd></div></section>
+      </div>
+    </section>
+  <section class="dock-host" data-root-dock><DockSurface Node="Root" OnActivateTab="ActivateTab" /></section>
+</main>
+
+@code {
+  private DockNode Root = BuildTree();
+  private DotNetObjectReference<DockWorkspace>? dockReference;
+  private int added;
+  private static DockNode BuildTree() => new SplitNode("root", DockAxis.Horizontal, .62,
+      new SplitNode("left", DockAxis.Vertical, .56,
+        new TabGroupNode("overview", [new("overview","Overview","◒","violet","overview"), new("velocity","Velocity","⌁","blue","velocity")], "overview"),
+        new SplitNode("bottom-left", DockAxis.Horizontal, .48,
+          new TabGroupNode("activity", [new("activity","Team activity","◌","mint","activity")], "activity"),
+          new TabGroupNode("notes", [new("notes","Notes","▤","gold","notes")], "notes"))),
+      new SplitNode("right", DockAxis.Vertical, .54,
+        new TabGroupNode("launch", [new("launch","Launch checklist","✓","mint","checklist"), new("risks","Risks","!","rose","risks")], "launch"),
+        new TabGroupNode("insights", [new("insights","Customer insights","✦","violet","insights")], "insights")));
+  private void Reset() => Root = BuildTree();
+  private void ActivateTab(TabActivation activation)
+      => Root = SetActiveTab(Root, activation.GroupId, activation.PanelId);
+  private void AddPanel()
+  {
+      added++;
+      Root = AddToFirstGroup(Root, new DockPanel($"panel{added}", $"New analysis {added}", "✦", "blue", "insights"));
+  }
+  private static DockNode AddToFirstGroup(DockNode node, DockPanel panel) => node switch
+  {
+      TabGroupNode group => group with { Panels = group.Panels.Append(panel).ToList(), ActiveId = panel.Id },
+      SplitNode split => split with { First = AddToFirstGroup(split.First, panel) },
+      _ => node
+  };
+  private static DockNode SetActiveTab(DockNode node, string groupId, string panelId) => node switch
+  {
+      TabGroupNode group when group.Id == groupId && group.Panels.Any(panel => panel.Id == panelId)
+          => group with { ActiveId = panelId },
+      SplitNode split => split with
+      {
+          First = SetActiveTab(split.First, groupId, panelId),
+          Second = SetActiveTab(split.Second, groupId, panelId)
+      },
+      _ => node
+  };
+  [JSInvokable("ApplyDockDrop")]
+  public async Task DockPanel(string panelId, string targetGroupId, string zone)
+  {
+      var withoutSource = RemovePanel(Root, panelId, out var panel);
+      if (panel is null || withoutSource is null) return;
+      Root = InsertPanel(withoutSource, targetGroupId, panel, zone);
+      await InvokeAsync(StateHasChanged);
+  }
+  [JSInvokable("ApplyRootDockDrop")]
+  public async Task DockAtRoot(string panelId, string edge)
+  {
+      var remaining = RemovePanel(Root, panelId, out var panel);
+      if (remaining is null || panel is null) return;
+      var incoming = new TabGroupNode($"group-{panel.Id}", [panel], panel.Id);
+      Root = edge switch
+      {
+          "top" => new SplitNode($"root-top-{panel.Id}", DockAxis.Vertical, .25, incoming, remaining),
+          "bottom" => new SplitNode($"root-bottom-{panel.Id}", DockAxis.Vertical, .75, remaining, incoming),
+          "left" => new SplitNode($"root-left-{panel.Id}", DockAxis.Horizontal, .25, incoming, remaining),
+          _ => new SplitNode($"root-right-{panel.Id}", DockAxis.Horizontal, .75, remaining, incoming)
+      };
+      await InvokeAsync(StateHasChanged);
+  }
+  private static DockNode? RemovePanel(DockNode node, string panelId, out DockPanel? removed)
+  {
+      removed = null;
+      if (node is TabGroupNode group)
+      {
+          var found = group.Panels.FirstOrDefault(panel => panel.Id == panelId);
+          if (found is null) return group;
+          removed = found;
+          var remaining = group.Panels.Where(panel => panel.Id != panelId).ToList();
+          return remaining.Count == 0 ? null : group with { Panels = remaining, ActiveId = remaining[0].Id };
+      }
+      var split = (SplitNode)node;
+      var first = RemovePanel(split.First, panelId, out removed);
+      if (removed is not null) return first is null ? split.Second : split with { First = first };
+      var second = RemovePanel(split.Second, panelId, out removed);
+      return second is null ? split.First : split with { Second = second };
+  }
+  private static DockNode InsertPanel(DockNode node, string groupId, DockPanel panel, string zone)
+  {
+      if (node is TabGroupNode group)
+      {
+          if (group.Id != groupId) return group;
+          if (zone == "stack") return group with { Panels = group.Panels.Append(panel).ToList(), ActiveId = panel.Id };
+          var incoming = new TabGroupNode($"group-{panel.Id}", [panel], panel.Id);
+          var axis = zone is "left" or "right" ? DockAxis.Horizontal : DockAxis.Vertical;
+          return zone is "left" or "top"
+              ? new SplitNode($"split-{panel.Id}", axis, .5, incoming, group)
+              : new SplitNode($"split-{panel.Id}", axis, .5, group, incoming);
+      }
+      var split = (SplitNode)node;
+      return split with { First = InsertPanel(split.First, groupId, panel, zone), Second = InsertPanel(split.Second, groupId, panel, zone) };
+  }
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+      if (!firstRender) return;
+      dockReference = DotNetObjectReference.Create(this);
+      await JS.InvokeVoidAsync("recursiveDock.setReference", dockReference);
+  }
+  public void Dispose() => dockReference?.Dispose();
+}

@@ -1,0 +1,143 @@
+@implements IDisposable
+@inject IJSRuntime JS
+
+<div class="studio-shell">
+    <header class="topbar">
+        <div class="brand"><span class="brand-mark">◒</span><span>orbit</span><span class="brand-rule"></span><span class="workspace-name">Product operations</span></div>
+        <div class="top-actions"><button class="icon-button" title="Search">⌕</button><button class="avatar">PM</button></div>
+    </header>
+
+    <aside class="rail">
+        <button class="rail-item active"><span>▦</span><small>Workspace</small></button>
+        <button class="rail-item"><span>◉</span><small>Activity</small></button>
+        <button class="rail-item"><span>◫</span><small>Library</small></button>
+        <span class="rail-spacer"></span>
+        <button class="rail-item"><span>⚙</span><small>Settings</small></button>
+    </aside>
+
+    <aside class="sidebar">
+        <div class="sidebar-heading"><span>WORKSPACE</span><button @onclick="AddPane" title="Add panel">+</button></div>
+        <button class="new-view" @onclick="AddPane"><span>+</span> New view</button>
+        <div class="side-section"><span>PINNED</span><button>···</button></div>
+        <button class="side-link selected"><span class="dot lavender"></span>Product overview</button>
+        <button class="side-link"><span class="dot aqua"></span>Sprint planning</button>
+        <button class="side-link"><span class="dot amber"></span>Release board</button>
+        <div class="side-section"><span>RECENT</span><button>⌄</button></div>
+        <button class="side-link"><span>◌</span>Design critique</button>
+        <button class="side-link"><span>◌</span>Research inbox</button>
+        <div class="sidebar-footer"><span class="presence"></span><span>12 teammates online</span></div>
+    </aside>
+
+    <main class="canvas">
+        <div class="canvas-toolbar">
+            <div><h1>Product overview</h1><p>Updated just now <span class="sync-dot">●</span> All changes saved</p></div>
+            <div class="toolbar-actions"><button class="subtle-button" @onclick="ResetLayout">↶ Reset layout</button><button class="share-button">Share <span>⌄</span></button></div>
+        </div>
+        <div class="hint"><span>✦</span> Drag panels anywhere on the canvas. They snap to nearby edges; release over a panel to stack it as tabs.</div>
+
+        <section class="freeform-canvas">
+            @foreach (var slot in Panels) { <PanelHost Panel="slot" Active="IsActive(slot.Id)" OnDragStart="StartDrag" OnDropOn="DropOn" OnActivate="Activate" /> }
+        </section>
+    </main>
+</div>
+
+@code {
+    private string? draggingId;
+    private DotNetObjectReference<Workspace>? dockingReference;
+    private int createdCount;
+    private readonly List<List<PanelModel>> Columns = new()
+    {
+        new() { new("roadmap", "Roadmap", "◒", "roadmap", 0, 0, 430, 319) },
+        new() { new("metrics", "Key metrics", "⌁", "metrics", 450, 0, 340, 233), new("activity", "Team activity", "◌", "activity", 450, 250, 340, 245) },
+        new() { new("launch", "Launch checklist", "✓", "checklist", 810, 0, 300, 235), new("notes", "Project notes", "▤", "notes", 810, 252, 300, 210) }
+    };
+    private readonly HashSet<string> activePanels = new() { "roadmap", "metrics", "activity", "launch", "notes" };
+    private IEnumerable<PanelModel> Panels => Columns.SelectMany(column => column);
+
+    private bool IsActive(string id) => activePanels.Contains(id);
+    private void StartDrag(string id) => draggingId = id;
+    [JSInvokable]
+    public void BeginPointerDrag(string id) => StartDrag(id);
+    [JSInvokable]
+    public void PointerDropOn(string id) => DropOn(id);
+    [JSInvokable]
+    public void PointerDockOn(string source, string target)
+    {
+        draggingId = source;
+        DropOn(target);
+    }
+    [JSInvokable]
+    public void PointerDropToColumn(int column) => DropToColumn(column);
+    [JSInvokable]
+    public void PointerDockToColumn(string source, int column)
+    {
+        draggingId = source;
+        DropToColumn(column);
+    }
+    [JSInvokable]
+    public void PointerPosition(string id, double x, double y)
+    {
+        var panel = Panels.FirstOrDefault(item => item.Id == id);
+        if (panel is null) return;
+        panel.X = Math.Max(0, x); panel.Y = Math.Max(0, y);
+    }
+    [JSInvokable]
+    public void PointerResize(string id, double width, double height)
+    {
+        var panel = Panels.FirstOrDefault(item => item.Id == id);
+        if (panel is null) return;
+        panel.Width = width; panel.Height = height;
+    }
+    [JSInvokable]
+    public void PointerInsert(string source, int column, string? beforeId)
+    {
+        var pane = Remove(source);
+        if (pane is null) return;
+        var destination = Columns[column];
+        var position = beforeId is null ? destination.Count : destination.FindIndex(panel => panel.Id == beforeId);
+        destination.Insert(position < 0 ? destination.Count : position, pane);
+        draggingId = null;
+    }
+    private void Activate(string id) => activePanels.Add(id);
+    private void DropToColumn(int column)
+    {
+        if (draggingId is null) return;
+        var pane = Remove(draggingId);
+        if (pane is not null) Columns[column].Add(pane);
+        draggingId = null;
+    }
+    private void DropOn(string target)
+    {
+        if (draggingId is null || draggingId == target) return;
+        var pane = Remove(draggingId);
+        var host = Columns.SelectMany(c => c).FirstOrDefault(p => p.Id == target);
+        if (pane is not null && host is not null) { host.Tabs.Add(pane); host.ActiveTabId = pane.Id; activePanels.Remove(pane.Id); }
+        draggingId = null;
+    }
+    private PanelModel? Remove(string id)
+    {
+        foreach (var column in Columns) { var found = column.FirstOrDefault(p => p.Id == id); if (found is not null) { column.Remove(found); return found; } }
+        return null;
+    }
+    private void AddPane()
+    {
+        createdCount++;
+        Columns[1].Add(new PanelModel($"insights{createdCount}", $"Customer insights {createdCount}", "✦", "insights", 420, 430, 320, 180));
+    }
+    private void ResetLayout()
+    {
+        Columns[0].Clear(); Columns[1].Clear(); Columns[2].Clear();
+        Columns[0].Add(new("roadmap", "Roadmap", "◒", "roadmap", 0, 0, 430, 319));
+        Columns[1].Add(new("metrics", "Key metrics", "⌁", "metrics", 450, 0, 340, 233)); Columns[1].Add(new("activity", "Team activity", "◌", "activity", 450, 250, 340, 245));
+        Columns[2].Add(new("launch", "Launch checklist", "✓", "checklist", 810, 0, 300, 235)); Columns[2].Add(new("notes", "Project notes", "▤", "notes", 810, 252, 300, 210));
+        activePanels.Clear(); activePanels.UnionWith(new[] { "roadmap", "metrics", "activity", "launch", "notes" });
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        dockingReference = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("orbitWorkspace.enablePointerDocking", dockingReference);
+    }
+    public void Dispose() => dockingReference?.Dispose();
+    public class PanelModel(string id, string title, string icon, string kind, double x = 0, double y = 0, double width = 320, double height = 220) { public string Id { get; } = id; public string Title { get; } = title; public string Icon { get; } = icon; public string Kind { get; } = kind; public double X { get; set; } = x; public double Y { get; set; } = y; public double Width { get; set; } = width; public double Height { get; set; } = height; public List<PanelModel> Tabs { get; } = []; public string? ActiveTabId { get; set; } }
+}

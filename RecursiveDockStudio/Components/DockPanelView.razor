@@ -1,0 +1,11 @@
+@using RecursiveDockStudio.Models
+<div class="panel-view @Panel.Kind">
+@if (Panel.Kind == "overview") { <div class="intro"><p class="eyebrow">Q3 DELIVERY</p><h2>Ship work, not status updates.</h2><p>Focus the team on the smallest set of decisions that moves the release forward.</p><div class="stat-row"><div><b>74%</b><span>release confidence</span></div><div><b>12</b><span>open decisions</span></div><div><b>4</b><span>days to beta</span></div></div></div><div class="mini-roadmap"><span>Discovery</span><i></i><span>Build</span><i></i><span>Launch</span></div> }
+else if (Panel.Kind == "velocity") { <div class="metric"><p>Weekly throughput</p><b>42 <em>↑ 18%</em></b><svg viewBox="0 0 300 90"><path d="M0 70 L40 64 70 68 105 42 140 50 185 20 220 32 260 14 300 23" fill="none" stroke="#82b6ff" stroke-width="4"/></svg></div> }
+else if (Panel.Kind == "activity") { <div class="feed"><p><b>Maia Chen</b> moved Payment flow to review <small>8m</small></p><p><b>Rohan Patel</b> added 4 customer interviews <small>28m</small></p><p><b>Ana Torres</b> closed Onboarding QA <small>1h</small></p></div> }
+else if (Panel.Kind == "notes") { <div class="notes"><p class="eyebrow">TODAY'S NOTE</p><h2>Keep the release calm.</h2><p>Surface decisions early, make handoffs explicit, and preserve room for the team to think.</p><span>#product</span><span>#direction</span></div> }
+else if (Panel.Kind == "checklist") { <div class="checklist"><p><b>12 / 16</b> launch tasks complete</p><div class="progress"><i></i></div><label>☑ Release notes approved</label><label>☑ Support coverage confirmed</label><label>□ Schedule customer announcement</label><label>□ Publish launch post</label></div> }
+else if (Panel.Kind == "risks") { <div class="risks"><p class="eyebrow">WATCH LIST</p><h2>2 decisions need a owner</h2><p>Billing migration and regional rollout timing could affect beta readiness.</p></div> }
+else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people asked for easier handoffs between product and design this week.</p><button>Review insights →</button></div> }
+</div>
+@code { [Parameter, EditorRequired] public DockPanel Panel { get; set; } = default!; }

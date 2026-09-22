@@ -1,0 +1,14 @@
+# .NET and MAUI build output
+[Bb]in/
+[Oo]bj/
+
+# IDE and user-specific state
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test browser output
+playwright-report/
+test-results/

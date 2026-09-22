@@ -1,0 +1,26 @@
+@using RecursiveDockStudio.Models
+@if (Node is SplitNode split)
+{
+  <div class="dock-split @(split.Axis == DockAxis.Horizontal ? "split-horizontal" : "split-vertical")" style="--first:@(split.Ratio * 100)%">
+    <div class="dock-branch"><DockSurface Node="split.First" OnActivateTab="OnActivateTab" /></div><div class="splitter" title="Resize dock branch"><i></i></div><div class="dock-branch"><DockSurface Node="split.Second" OnActivateTab="OnActivateTab" /></div>
+  </div>
+}
+else if (Node is TabGroupNode group)
+{
+  <section class="tab-group" data-group="@group.Id">
+    <nav class="tabs">@foreach (var panel in group.Panels) { <button type="button" data-tab="@panel.Id" data-drag-panel="@panel.Id" class="@(panel.Id == group.ActiveId ? "selected" : "")" @onclick="() => Activate(group.Id, panel.Id)"><span class="@panel.Accent">@panel.Icon</span>@panel.Title</button> }<button type="button" class="tab-more">+</button></nav>
+    <div class="dock-content">
+      @foreach (var panel in group.Panels)
+      {
+        <div class="dock-panel-slot @(panel.Id == group.ActiveId ? "is-active" : "")" data-panel-view="@panel.Id"><DockPanelView @key="panel.Id" Panel="panel" /></div>
+      }
+    </div>
+  </section>
+}
+
+@code {
+  [Parameter, EditorRequired] public DockNode Node { get; set; } = default!;
+  [Parameter] public EventCallback<TabActivation> OnActivateTab { get; set; }
+  private static DockPanel Active(TabGroupNode group) => group.Panels.First(panel => panel.Id == group.ActiveId);
+  private Task Activate(string groupId, string panelId) => OnActivateTab.InvokeAsync(new TabActivation(groupId, panelId));
+}

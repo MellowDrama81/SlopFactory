@@ -1,0 +1,26 @@
+@using WorkspaceStudio.Components
+<article class="panel @Panel.Kind" data-panel="@Panel.Id" style="left:@(Panel.X)px;top:@(Panel.Y)px;width:@(Panel.Width)px;height:@(Panel.Height)px">
+    @if (Panel.Tabs.Count > 0)
+    {
+        <div class="tab-strip"><button class="tab @(Panel.ActiveTabId is null ? "tab-active" : "")" @onclick="() => Panel.ActiveTabId = null">@Panel.Title</button>@foreach (var tab in Panel.Tabs) { <button class="tab @(Panel.ActiveTabId == tab.Id ? "tab-active" : "")" @onclick="() => Panel.ActiveTabId = tab.Id">@tab.Title</button> }</div>
+    }
+    <header class="panel-header drag-handle" @onclick="() => OnActivate.InvokeAsync(Panel.Id)">
+        <span class="panel-icon">@Current.Icon</span><span class="panel-title">@Current.Title</span><button class="panel-menu" @onclick:stopPropagation="true">•••</button>
+    </header>
+    @if (Current.Kind == "roadmap") { <Roadmap /> }
+    else if (Current.Kind == "metrics") { <Metrics /> }
+    else if (Current.Kind == "activity") { <Activity /> }
+    else if (Current.Kind == "checklist") { <Checklist /> }
+    else if (Current.Kind == "notes") { <Notes /> }
+    else { <Insights /> }
+    <span class="resize-handle" title="Drag to resize" aria-label="Resize panel"></span>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public Workspace.PanelModel Panel { get; set; } = default!;
+    [Parameter] public bool Active { get; set; }
+    [Parameter] public EventCallback<string> OnDragStart { get; set; }
+    [Parameter] public EventCallback<string> OnDropOn { get; set; }
+    [Parameter] public EventCallback<string> OnActivate { get; set; }
+    private Workspace.PanelModel Current => Panel.Tabs.FirstOrDefault(tab => tab.Id == Panel.ActiveTabId) ?? Panel;
+}
