@@ -1,21 +1,125 @@
 @using SlopFactory.Models
+@using SlopFactory.Services
+@using System.Text.Json
 @implements IDisposable
 @inject IJSRuntime JS
+@inject ComfyConnectionSettings ComfyConnection
+@inject ComfyConnectionTester ComfyConnectionTester
+@inject WorkflowLibrary WorkflowLibrary
+@inject ProjectLibrary ProjectLibrary
+@inject ProjectFolderPicker ProjectFolderPicker
+@inject ProjectExporter ProjectExporter
 
 <main class="dock-app">
   <header class="ribbon">
     <div class="ribbon-brand"><span>◈</span> NEST</div>
-    <div class="ribbon-tabs"><button type="button" class="ribbon-tab active" data-ribbon-action="workspace">Workspace</button><button type="button" class="ribbon-tab">View</button><button type="button" class="ribbon-tab">Layout</button></div>
-    <div class="ribbon-actions"><button type="button" class="ribbon-button" @onclick="AddPanel">＋ New panel</button><button type="button" class="ribbon-button" @onclick="Reset">↶ Reset layout</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Settings</button><button type="button" class="ribbon-button">⌕</button></div>
+    <div class="ribbon-tabs"><button type="button" class="ribbon-tab active" data-ribbon-action="workspace">Workspace</button><button type="button" class="ribbon-tab" data-ribbon-action="projects">Projects</button><button type="button" class="ribbon-tab">View</button><button type="button" class="ribbon-tab">Layout</button></div>
+    <div class="ribbon-actions"><button type="button" class="ribbon-button" @onclick="Reset">↶ Clear workspace</button><button type="button" class="ribbon-button" data-ribbon-action="assets">▤ Assets</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Comfy Settings</button><button type="button" class="ribbon-button" data-ribbon-action="workflows">⛭ Workflows</button><button type="button" class="ribbon-button">⌕</button></div>
   </header>
   <section class="settings-screen">
-      <div class="settings-heading"><div><p>WORKSPACE PREFERENCES</p><h1>Settings</h1><span>Adjust how your dock workspace looks and behaves.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Done</button></div>
+      <div class="settings-heading"><div><p>INTEGRATIONS</p><h1>ComfyUI connection</h1><span>Choose where SlopFactory sends ComfyUI workflow requests.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Done</button></div>
       <div class="settings-grid">
-        <section class="settings-card"><h2>Appearance</h2><p>Choose the visual treatment for this workspace.</p><div class="setting-row"><div><b>Theme</b><span>Use a dark interface</span></div><div class="segmented"><button class="active">Dark</button><button>System</button></div></div><div class="setting-row"><div><b>Accent colour</b><span>Used for tabs and docking targets</span></div><div class="colour-choice"><i></i><span>Violet</span></div></div></section>
-        <section class="settings-card"><h2>Docking</h2><p>Control how panes are arranged and resized.</p><div class="setting-row"><div><b>Edge previews</b><span>Show dock targets while dragging tabs</span></div><label class="switch"><input type="checkbox" checked /><i></i></label></div><div class="setting-row"><div><b>Remember layout</b><span>Restore this workspace on startup</span></div><label class="switch"><input type="checkbox" checked /><i></i></label></div><div class="setting-row"><div><b>Minimum pane size</b><span>Prevent branches becoming too small</span></div><strong>180 px</strong></div></section>
-        <section class="settings-card"><h2>Interaction</h2><p>Keyboard shortcuts for common workspace actions.</p><div class="shortcut"><span>New panel</span><kbd>Ctrl</kbd><b>+</b><kbd>N</kbd></div><div class="shortcut"><span>Focus next tab</span><kbd>Ctrl</kbd><b>+</b><kbd>Tab</kbd></div><div class="shortcut"><span>Reset layout</span><kbd>Ctrl</kbd><b>+</b><kbd>R</kbd></div></section>
+        <section class="settings-card comfy-settings-card" data-comfy-connection>
+          <h2>Connection</h2>
+          <p>Enter any ComfyUI-compatible API endpoint. Add an API key only when your endpoint requires one.</p>
+          <div class="comfy-connection-layout">
+            <div class="comfy-connection-list-pane">
+              <span class="comfy-connection-list-label">Saved connections</span>
+              <ul class="comfy-connection-list" data-comfy-connection-list>
+                <li class="comfy-connection-empty">No saved connections yet.</li>
+              </ul>
+              <button type="button" class="new-connection" data-comfy-action="new">＋ New connection</button>
+            </div>
+            <div class="comfy-connection-form">
+              <label class="comfy-field">
+                <span>Identifier <em>Optional — URL is used when blank</em></span>
+                <input type="text" data-comfy-connection-key placeholder="e.g. studio-cloud" />
+              </label>
+              <label class="comfy-field">
+                <span>ComfyUI API URL</span>
+                <input type="url" data-comfy-server-url @bind="ComfyConnection.ServerUrl" placeholder="http://127.0.0.1:8188" />
+              </label>
+              <label class="comfy-field">
+                <span>API key <em>Optional</em></span>
+                <input type="password" data-comfy-api-key @bind="ComfyConnection.ApiKey" autocomplete="off" placeholder="Paste an API key when required" />
+              </label>
+              <p class="connection-note">The key is sent as the <code>X-API-Key</code> request header only when supplied. Settings are retained in this app’s local profile. For Comfy Cloud, use <code>https://cloud.comfy.org</code> and create a key in your <a href="https://platform.comfy.org/profile/api-keys" target="_blank">Comfy API key settings</a>.</p>
+
+              <div class="connection-actions"><button type="button" class="test-connection" data-comfy-action="test" disabled="@isTesting">@(isTesting ? "Testing…" : "Test connection")</button><button type="button" class="save-connection" data-comfy-action="save">Save connection</button><button type="button" class="use-current-connection" data-comfy-action="use-current">Use as current</button><span data-comfy-status class="@connectionStatusClass">@connectionStatus</span></div>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
+  <section class="workflows-screen">
+      <div class="settings-heading"><div><p>AUTOMATION</p><h1>Workflows</h1><span>Manage the ComfyUI workflows SlopFactory can run.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Done</button></div>
+      <div class="settings-grid">
+        <section class="settings-card comfy-settings-card" data-workflow-library>
+          <h2>Workflow library</h2>
+          <p>Built-in workflows are read-only. Add your own custom workflows alongside them.</p>
+          <div class="comfy-connection-layout">
+            <div class="comfy-connection-list-pane">
+              <span class="comfy-connection-list-label">Workflows</span>
+              <ul class="comfy-connection-list" data-workflow-list>
+                <li class="comfy-connection-empty">Loading workflows…</li>
+              </ul>
+              <button type="button" class="new-connection" data-workflow-action="new">＋ New workflow</button>
+            </div>
+            <div class="comfy-connection-form">
+              <label class="comfy-field">
+                <span>Identifier</span>
+                <input type="text" data-workflow-id placeholder="e.g. my-custom-upscale" />
+              </label>
+              <label class="comfy-field">
+                <span>Display name</span>
+                <input type="text" data-workflow-display-name placeholder="e.g. My custom upscale" />
+              </label>
+              <label class="comfy-field">
+                <span>Description</span>
+                <textarea data-workflow-description rows="3" placeholder="What this workflow does"></textarea>
+              </label>
+              <div class="setting-row">
+                <div><b>Requires mask</b><span>The workflow needs a painted mask region.</span></div>
+                <label class="switch"><input type="checkbox" data-workflow-requires-mask /><i></i></label>
+              </div>
+              <label class="comfy-field">
+                <span>Minimum images</span>
+                <input type="number" min="0" step="1" data-workflow-min-images />
+              </label>
+              <label class="comfy-field">
+                <span>Maximum images</span>
+                <input type="number" min="0" step="1" data-workflow-max-images />
+              </label>
+              <p class="connection-note" data-workflow-readonly-note hidden>This is a built-in workflow. Its metadata is read-only — create a new workflow to customize it.</p>
+
+              <div class="connection-actions"><button type="button" class="save-connection" data-workflow-action="save">Save workflow</button><button type="button" class="use-current-connection" data-workflow-action="duplicate">⧉ Duplicate as new</button><button type="button" class="test-connection" data-workflow-action="delete">Remove workflow</button><span data-workflow-status></span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  <section class="projects-screen">
+    <div class="settings-heading"><div><p>WORKSPACE LIBRARY</p><h1>Projects</h1><span>Choose a project to open in the docking workspace.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Back to workspace</button></div>
+    <section class="settings-card comfy-settings-card" data-project-library>
+      <h2>Project library</h2>
+      <p>Each project is backed by a folder. Choose an existing folder or create one.</p>
+      <div class="comfy-connection-layout">
+        <div class="comfy-connection-list-pane">
+          <span class="comfy-connection-list-label">Projects</span>
+          <ul class="comfy-connection-list" data-project-list><li class="comfy-connection-empty">Loading projects…</li></ul>
+        </div>
+        <div class="comfy-connection-form">
+          <label class="comfy-field"><span>Project name <em>Optional — folder path is used when blank</em></span><input type="text" data-project-name placeholder="e.g. Brand launch" /></label>
+          <label class="comfy-field"><span>Project folder</span><input type="text" data-project-folder placeholder="C:\\Projects\\My project" readonly /></label>
+          <div class="connection-actions"><button type="button" class="test-connection" data-project-action="pick">Add project</button><button type="button" class="save-connection" data-project-action="save">Save project</button><button type="button" class="export-project" data-project-action="export">Export</button><button type="button" class="remove-project" data-project-action="remove">Remove project</button><span data-project-status></span></div>
+        </div>
+      </div>
+    </section>
+  </section>
+  <section class="assets-picker-screen">
+    <div class="settings-heading"><div><p>PROJECT CONTENT</p><h1>Open Assets</h1><span>Select a project to open its assets folder in a dock panel.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Cancel</button></div>
+    <section class="settings-card comfy-settings-card" data-assets-picker><h2>Projects</h2><p>Each selection creates another independent Assets panel.</p><ul class="comfy-connection-list" data-assets-project-list><li class="comfy-connection-empty">Loading projects…</li></ul><p class="connection-note" data-assets-status hidden></p></section>
+  </section>
   <section class="dock-host" data-root-dock><DockSurface Node="Root" OnActivateTab="ActivateTab" /></section>
 </main>
 
@@ -23,23 +127,169 @@
   private DockNode Root = BuildTree();
   private DotNetObjectReference<DockWorkspace>? dockReference;
   private int added;
-  private static DockNode BuildTree() => new SplitNode("root", DockAxis.Horizontal, .62,
-      new SplitNode("left", DockAxis.Vertical, .56,
-        new TabGroupNode("overview", [new("overview","Overview","◒","violet","overview"), new("velocity","Velocity","⌁","blue","velocity")], "overview"),
-        new SplitNode("bottom-left", DockAxis.Horizontal, .48,
-          new TabGroupNode("activity", [new("activity","Team activity","◌","mint","activity")], "activity"),
-          new TabGroupNode("notes", [new("notes","Notes","▤","gold","notes")], "notes"))),
-      new SplitNode("right", DockAxis.Vertical, .54,
-        new TabGroupNode("launch", [new("launch","Launch checklist","✓","mint","checklist"), new("risks","Risks","!","rose","risks")], "launch"),
-        new TabGroupNode("insights", [new("insights","Customer insights","✦","violet","insights")], "insights")));
+  private string connectionStatus = "";
+  private string connectionStatusClass = "";
+  private bool isTesting;
+  private static DockNode BuildTree() => new TabGroupNode("workspace", [], string.Empty);
+  private static readonly JsonSerializerOptions WorkflowJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
   private void Reset() => Root = BuildTree();
+  protected override async Task OnInitializedAsync()
+  {
+      await ComfyConnection.LoadAsync();
+      await WorkflowLibrary.LoadAsync();
+      await ProjectLibrary.LoadAsync();
+  }
+  [JSInvokable]
+  public string GetWorkflows() => JsonSerializer.Serialize(WorkflowLibrary.GetAll(), WorkflowJsonOptions);
+  [JSInvokable]
+  public string GetProjects() => JsonSerializer.Serialize(ProjectLibrary.GetAll(), WorkflowJsonOptions);
+  [JSInvokable]
+  public async Task<string?> PickProjectFolder() => await ProjectFolderPicker.PickAsync();
+  [JSInvokable]
+  public async Task<string> SaveProject(string folderPath, string name, bool createFolder)
+  {
+      if (string.IsNullOrWhiteSpace(folderPath)) return JsonSerializer.Serialize(new { success = false, message = "Choose or enter a project folder." }, WorkflowJsonOptions);
+      try
+      {
+          var project = await ProjectLibrary.SaveAsync(folderPath, name, createFolder);
+          return JsonSerializer.Serialize(new { success = true, project }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> RemoveProject(string folderPath)
+  {
+      if (string.IsNullOrWhiteSpace(folderPath)) return JsonSerializer.Serialize(new { success = false, message = "Select a project to remove." }, WorkflowJsonOptions);
+      try
+      {
+          await ProjectLibrary.RemoveAsync(folderPath);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> ExportProject(string folderPath)
+  {
+      if (string.IsNullOrWhiteSpace(folderPath)) return JsonSerializer.Serialize(new { success = false, message = "Select a project to export." }, WorkflowJsonOptions);
+      try
+      {
+          var path = await ProjectExporter.ExportAsync(folderPath);
+          return JsonSerializer.Serialize(new { success = path is not null, message = path is null ? "Export cancelled." : "Project exported as a ZIP archive." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> OpenAssetsPanel(string folderPath, string name)
+  {
+      var assetsPath = Path.Combine(folderPath, "assets");
+      Directory.CreateDirectory(assetsPath);
+      added++;
+      var title = string.IsNullOrWhiteSpace(name) ? folderPath : name;
+      Root = AddToFirstGroup(Root, new DockPanel($"assets{added}", $"Assets · {title}", "▤", "gold", "assets", assetsPath));
+      await InvokeAsync(StateHasChanged);
+      return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+  }
+  [JSInvokable]
+  public async Task<string> SaveWorkflow(string id, string displayName, string description, bool requiresMask, int minImages, int maxImages)
+  {
+      id = id.Trim();
+      displayName = displayName.Trim();
+      if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(displayName))
+          return JsonSerializer.Serialize(new { success = false, message = "Enter an identifier and a display name." }, WorkflowJsonOptions);
+      if (minImages < 0 || maxImages < minImages)
+          return JsonSerializer.Serialize(new { success = false, message = "Enter a valid image range." }, WorkflowJsonOptions);
+
+      try
+      {
+          var saved = await WorkflowLibrary.SaveCustomAsync(id, displayName, description.Trim(), requiresMask, minImages, maxImages);
+          return JsonSerializer.Serialize(new { success = true, workflow = saved }, WorkflowJsonOptions);
+      }
+      catch (InvalidOperationException ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> DeleteWorkflow(string id)
+  {
+      try
+      {
+          await WorkflowLibrary.DeleteCustomAsync(id);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (InvalidOperationException ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task TestComfyConnection(string serverUrl, string apiKey)
+  {
+      isTesting = true;
+      connectionStatus = "";
+      connectionStatusClass = "";
+      await InvokeAsync(StateHasChanged);
+      try
+      {
+          var testConnection = new ComfyConnectionSettings { ServerUrl = serverUrl, ApiKey = apiKey };
+          var result = await ComfyConnectionTester.TestAsync(testConnection);
+          connectionStatus = result.Message;
+          connectionStatusClass = result.Succeeded ? "connection-success" : "connection-error";
+      }
+      finally
+      {
+          isTesting = false;
+          await InvokeAsync(StateHasChanged);
+      }
+  }
+  [JSInvokable]
+  public async Task SaveComfyConnection(string serverUrl, string apiKey, string connectionKey)
+  {
+      if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out var parsedServerUrl)
+          || (!string.Equals(parsedServerUrl.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+              && !string.Equals(parsedServerUrl.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+      {
+          connectionStatus = "Enter a valid ComfyUI API URL.";
+          connectionStatusClass = "connection-error";
+          await InvokeAsync(StateHasChanged);
+          return;
+      }
+
+      connectionStatus = "Connection saved.";
+      connectionStatusClass = "connection-success";
+      await InvokeAsync(StateHasChanged);
+  }
+  [JSInvokable]
+  public async Task SetCurrentComfyConnection(string serverUrl, string apiKey)
+  {
+      ComfyConnection.ServerUrl = serverUrl;
+      ComfyConnection.ApiKey = apiKey;
+      if (!Uri.TryCreate(ComfyConnection.ServerUrl, UriKind.Absolute, out var parsedServerUrl)
+          || (!string.Equals(parsedServerUrl.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+              && !string.Equals(parsedServerUrl.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+      {
+          connectionStatus = "Enter a valid ComfyUI API URL.";
+          connectionStatusClass = "connection-error";
+          await InvokeAsync(StateHasChanged);
+          return;
+      }
+
+      await ComfyConnection.SaveAsync();
+      connectionStatus = "Current connection saved.";
+      connectionStatusClass = "connection-success";
+      await InvokeAsync(StateHasChanged);
+  }
   private void ActivateTab(TabActivation activation)
       => Root = SetActiveTab(Root, activation.GroupId, activation.PanelId);
-  private void AddPanel()
-  {
-      added++;
-      Root = AddToFirstGroup(Root, new DockPanel($"panel{added}", $"New analysis {added}", "✦", "blue", "insights"));
-  }
   private static DockNode AddToFirstGroup(DockNode node, DockPanel panel) => node switch
   {
       TabGroupNode group => group with { Panels = group.Panels.Append(panel).ToList(), ActiveId = panel.Id },

@@ -1,0 +1,11 @@
+{
+  "id": "flux2-klein-3img",
+  "displayName": "FLUX.2 Klein 9B \u2014 3-image edit",
+  "description": "FLUX.2 Klein 9B generation combining 3 reference images chained as reference latents.",
+  "graphFile": "flux2-klein-3img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 3,
+    "maxImages": 3
+  }
+}

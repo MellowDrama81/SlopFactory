@@ -1,0 +1,11 @@
+{
+  "id": "remove-background",
+  "displayName": "Rembg \u2014 remove background",
+  "description": "Removes the background from one supplied image, producing a transparent-background cutout of the main subject using the general-purpose isnet-general-use model. Deterministic single-image tool: no prompt, no generation model, not a creative edit.",
+  "graphFile": "remove-background.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

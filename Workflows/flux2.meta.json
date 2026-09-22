@@ -1,0 +1,11 @@
+{
+  "id": "flux2",
+  "displayName": "FLUX.2 \u2014 image reference generation (with optional style reference)",
+  "description": "FLUX.2 dev generation guided by one reference image (used as a style/composition guide, not a strict edit), with an optional 8-step LoRA toggle baked into the graph. The graph has no text-only path \u2014 the 0-image case is served by the separate flux2-0img workflow.",
+  "graphFile": "flux2.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

@@ -8,13 +8,20 @@
 else if (Node is TabGroupNode group)
 {
   <section class="tab-group" data-group="@group.Id">
-    <nav class="tabs">@foreach (var panel in group.Panels) { <button type="button" data-tab="@panel.Id" data-drag-panel="@panel.Id" class="@(panel.Id == group.ActiveId ? "selected" : "")" @onclick="() => Activate(group.Id, panel.Id)"><span class="@panel.Accent">@panel.Icon</span>@panel.Title</button> }<button type="button" class="tab-more">+</button></nav>
-    <div class="dock-content">
+    @if (group.Panels.Count == 0)
+    {
+      <div class="empty-workspace"><span>▤</span><h2>No panels open</h2><p>Open Assets from the ribbon to add a project folder to this workspace.</p></div>
+    }
+    else
+    {
+      <nav class="tabs">@foreach (var panel in group.Panels) { <button type="button" data-tab="@panel.Id" data-drag-panel="@panel.Id" class="@(panel.Id == group.ActiveId ? "selected" : "")" @onclick="() => Activate(group.Id, panel.Id)"><span class="@panel.Accent">@panel.Icon</span>@panel.Title</button> }</nav>
+      <div class="dock-content">
       @foreach (var panel in group.Panels)
       {
         <div class="dock-panel-slot @(panel.Id == group.ActiveId ? "is-active" : "")" data-panel-view="@panel.Id"><DockPanelView @key="panel.Id" Panel="panel" /></div>
       }
-    </div>
+      </div>
+    }
   </section>
 }
 

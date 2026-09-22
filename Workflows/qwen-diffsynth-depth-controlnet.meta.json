@@ -1,0 +1,11 @@
+{
+  "id": "qwen-diffsynth-depth-controlnet",
+  "displayName": "Qwen Image \u2014 DiffSynth depth model-patch",
+  "description": "Extracts a relative depth map from one supplied photo with Depth Anything V2, then generates a new image under that spatial structure using DiffSynth-Studio's Qwen-Image Blockwise Depth ControlNet \u2014 a model-patch mechanism rather than a classic ControlNet, baked directly into the diffusion model instead of conditioning it externally.",
+  "graphFile": "qwen-diffsynth-depth-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

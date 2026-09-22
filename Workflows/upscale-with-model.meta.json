@@ -1,0 +1,11 @@
+{
+  "id": "upscale-with-model",
+  "displayName": "4x-UltraSharp \u2014 upscale image",
+  "description": "Upscales one supplied image 4x using the UltraSharp Real-ESRGAN-family model. Deterministic single-image tool: no prompt, no generation model, not a creative edit.",
+  "graphFile": "upscale-with-model.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

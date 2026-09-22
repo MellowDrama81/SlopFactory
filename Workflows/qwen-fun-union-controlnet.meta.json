@@ -1,0 +1,11 @@
+{
+  "id": "qwen-fun-union-controlnet",
+  "displayName": "Qwen Image + PAI Fun-Controlnet-Union",
+  "description": "Generates an image under strong structural control from one supplied guide image using Qwen Image and Alibaba PAI's Fun-Controlnet-Union (2512/2602). Broader control-type coverage than the InstantX Union ControlNet: canny, HED/soft-edge, depth, pose, MLSD, and scribble guides, plus its own inpainting mode. Use a prepared control image such as a depth map, Canny edge map, pose skeleton, or line-drawing guide; it is not an image-reference/edit workflow.",
+  "graphFile": "qwen-fun-union-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

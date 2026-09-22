@@ -1,0 +1,11 @@
+{
+  "id": "qwen-lineart-union-controlnet",
+  "displayName": "Qwen Image \u2014 generate from a photo's lineart",
+  "description": "Extracts clean contour lineart from one supplied photo, then generates a new image under that contour structure using Qwen Image + InstantX Union ControlNet. Uses the photo as a structural source only, not as an identity or style reference.",
+  "graphFile": "qwen-lineart-union-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

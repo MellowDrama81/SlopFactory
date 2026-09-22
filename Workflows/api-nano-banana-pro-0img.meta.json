@@ -1,0 +1,11 @@
+{
+  "id": "api-nano-banana-pro-0img",
+  "displayName": "Nano Banana Pro / Gemini Image (API Node) \u2014 text to image",
+  "description": "Generates an image from the prompt alone using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+  "graphFile": "api-nano-banana-pro-0img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0
+  }
+}

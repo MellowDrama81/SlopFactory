@@ -1,0 +1,11 @@
+{
+  "id": "krea2-style-reference",
+  "displayName": "Krea 2 Turbo \u2014 image style reference",
+  "description": "Generates a new image guided by the prompt and the style of one reference image, using Krea 2 Turbo's dedicated style-reference LoRA. Includes an optional (disabled by default) LLM prompt-expansion step baked into the graph.",
+  "graphFile": "krea2-style-reference.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

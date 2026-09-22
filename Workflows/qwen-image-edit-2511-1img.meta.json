@@ -1,0 +1,11 @@
+{
+  "id": "qwen-image-edit-2511-1img",
+  "displayName": "Qwen-Image-Edit 2511 \u2014 single-image edit",
+  "description": "Edits one reference image per the prompt using Qwen-Image-Edit 2511, with an optional (disabled by default) 4-step LoRA toggle baked into the graph.",
+  "graphFile": "qwen-image-edit-2511-1img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

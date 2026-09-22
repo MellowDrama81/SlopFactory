@@ -1,0 +1,11 @@
+{
+  "id": "api-krea2-style-reference-2img",
+  "displayName": "Krea 2 (API Node) \u2014 2-image style reference",
+  "description": "Generates a new image guided by the prompt and 2 chained style-reference image(s) using Krea 2's hosted API Node (Krea 2 Large), via ComfyUI's API Nodes integration. Distinct from the local krea2-style-reference workflow's community LoRA: this is Krea's own model and documents support for up to 10 chained style references with per-reference strength (including negative weights). Requires Krea 2 access separately authorized/credited on your Comfy account.",
+  "graphFile": "api-krea2-style-reference-2img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2
+  }
+}

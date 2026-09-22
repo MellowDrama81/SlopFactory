@@ -1,0 +1,11 @@
+{
+  "id": "z-image-turbo",
+  "displayName": "Z-Image Turbo \u2014 text to image",
+  "description": "Fast few-step text-to-image with Z-Image Turbo (Lumina/AuraFlow-based). No reference image.",
+  "graphFile": "z-image-turbo.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0
+  }
+}

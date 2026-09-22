@@ -1,0 +1,11 @@
+{
+  "id": "normal-extract-control-guide",
+  "displayName": "BAE \u2014 extract a normal-map guide",
+  "description": "Extracts a surface-normal map from one supplied image using BAE. Use it for relighting, material-aware stylization, or a compatible normal-control workflow.",
+  "graphFile": "normal-extract-control-guide.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

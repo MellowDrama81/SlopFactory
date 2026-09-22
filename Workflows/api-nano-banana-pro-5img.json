@@ -1,0 +1,107 @@
+{
+  "30": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "35",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "35": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "gemini-3-pro-image-preview",
+      "seed": {{SEED:seed}},
+      "aspect_ratio": "1:1",
+      "resolution": "1K",
+      "response_modalities": "IMAGE",
+      "system_prompt": "You are an expert image-generation engine. You must ALWAYS produce an image.\nInterpret all user input\u2014regardless of format, intent, or abstraction\u2014as literal visual directives for image composition.\nIf a prompt is conversational or lacks specific visual details, you must creatively invent a concrete visual scenario that depicts the concept.\nPrioritize generating the visual representation above any text, formatting, or conversational requests.",
+      "images": [
+        "36",
+        0
+      ]
+    },
+    "class_type": "GeminiImage2Node",
+    "_meta": {
+      "title": "Nano Banana Pro (Google Gemini Image)"
+    }
+  },
+  "100": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 1"
+    }
+  },
+  "101": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 2"
+    }
+  },
+  "102": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_3:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 3"
+    }
+  },
+  "103": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_4:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 4"
+    }
+  },
+  "104": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_5:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 5"
+    }
+  },
+  "36": {
+    "inputs": {
+      "images.image0": [
+        "100",
+        0
+      ],
+      "images.image1": [
+        "101",
+        0
+      ],
+      "images.image2": [
+        "102",
+        0
+      ],
+      "images.image3": [
+        "103",
+        0
+      ],
+      "images.image4": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "BatchImagesNode",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  }
+}

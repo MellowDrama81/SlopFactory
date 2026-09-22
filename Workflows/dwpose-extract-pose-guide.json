@@ -1,0 +1,26 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}} [input]"
+    }
+  },
+  "2": {
+    "class_type": "DWPreprocessor",
+    "inputs": {
+      "image": ["1", 0],
+      "detect_body": "enable",
+      "detect_hand": "enable",
+      "detect_face": "enable",
+      "resolution": 768,
+      "scale_stick_for_xinsr_cn": "disable"
+    }
+  },
+  "3": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "DWPose_Pose_Guide",
+      "images": ["2", 0]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "flux2-4img",
+  "displayName": "FLUX.2 \u2014 4-image reference generation",
+  "description": "FLUX.2 dev generation guided by 4 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
+  "graphFile": "flux2-4img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 4,
+    "maxImages": 4
+  }
+}

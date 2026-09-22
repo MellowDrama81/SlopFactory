@@ -1,0 +1,11 @@
+{
+  "id": "flux2-0img",
+  "displayName": "FLUX.2 \u2014 text to image (no reference)",
+  "description": "FLUX.2 dev pure text-to-image with an optional 8-step LoRA toggle baked into the graph. No reference image.",
+  "graphFile": "flux2-0img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0
+  }
+}

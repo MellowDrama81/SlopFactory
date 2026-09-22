@@ -1,0 +1,11 @@
+{
+  "id": "dwpose-extract-pose-guide",
+  "displayName": "DWPose \u2014 extract a pose guide",
+  "description": "Extracts a reusable OpenPose-style skeleton from one supplied image, including body, hands, and face landmarks. Use its saved image as the guide input for a pose-compatible ControlNet workflow such as Qwen Image + InstantX Union ControlNet.",
+  "graphFile": "dwpose-extract-pose-guide.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

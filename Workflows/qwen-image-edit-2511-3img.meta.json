@@ -1,0 +1,11 @@
+{
+  "id": "qwen-image-edit-2511-3img",
+  "displayName": "Qwen-Image-Edit 2511 \u2014 triple-image edit",
+  "description": "Combines three reference images per the prompt using Qwen-Image-Edit 2511 (the documented sweet-spot ceiling), with an optional (disabled by default) 4-step LoRA toggle baked into the graph.",
+  "graphFile": "qwen-image-edit-2511-3img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 3,
+    "maxImages": 3
+  }
+}

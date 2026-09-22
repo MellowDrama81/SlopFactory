@@ -1,0 +1,46 @@
+{
+  "1": {
+    "inputs": {
+      "model": "seedream-4-0-250828",
+      "prompt": "{{PROMPT:string}}",
+      "size_preset": "2048x2048 (1:1)",
+      "width": 2048,
+      "height": 2048,
+      "sequential_image_generation": "disabled",
+      "max_images": 1,
+      "seed": {{SEED:seed}},
+      "watermark": false,
+      "fail_on_partial": true,
+      "image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ByteDanceSeedreamNode",
+    "_meta": {
+      "title": "ByteDance Seedream 4.5 & 5.0"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "12": {
+    "inputs": {
+      "filename_prefix": "Seedream-4",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

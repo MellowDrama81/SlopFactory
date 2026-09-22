@@ -1,0 +1,11 @@
+{
+  "id": "qwen-image-instantx-inpainting",
+  "displayName": "Qwen-Image + InstantX ControlNet \u2014 mask inpainting",
+  "description": "Inpaints part of one reference image per the prompt using Qwen-Image with the InstantX inpainting ControlNet. The masked region comes from the uploaded image's own alpha channel \u2014 the app encodes the painted area as transparency before upload.",
+  "graphFile": "qwen-image-instantx-inpainting.json",
+  "capabilities": {
+    "requiresMask": true,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

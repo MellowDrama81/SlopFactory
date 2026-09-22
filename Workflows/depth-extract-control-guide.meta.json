@@ -1,0 +1,11 @@
+{
+  "id": "depth-extract-control-guide",
+  "displayName": "Depth Anything V2 \u2014 extract a depth guide",
+  "description": "Extracts a relative depth map from one supplied image using Depth Anything V2. Use it as a spatial-structure guide in a compatible ControlNet workflow.",
+  "graphFile": "depth-extract-control-guide.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

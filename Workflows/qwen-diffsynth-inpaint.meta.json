@@ -1,0 +1,11 @@
+{
+  "id": "qwen-diffsynth-inpaint",
+  "displayName": "Qwen Image \u2014 DiffSynth inpaint model-patch",
+  "description": "Inpaints the masked region of one supplied image using DiffSynth-Studio's Qwen-Image Blockwise Inpaint ControlNet \u2014 a model-patch mechanism rather than a classic ControlNet. The masked region comes from the uploaded image's own alpha channel; the generated result is composited back over the original so every unmasked pixel is preserved.",
+  "graphFile": "qwen-diffsynth-inpaint.json",
+  "capabilities": {
+    "requiresMask": true,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

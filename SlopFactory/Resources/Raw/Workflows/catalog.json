@@ -1,0 +1,750 @@
+[
+  {
+    "id": "api-bytedance-seedream4-2img",
+    "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — 2-image edit",
+    "description": "Combines 2 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-bytedance-seedream4-2img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "api-bytedance-seedream4-3img",
+    "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — 3-image edit",
+    "description": "Combines 3 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-bytedance-seedream4-3img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 3,
+      "maxImages": 3
+    }
+  },
+  {
+    "id": "api-bytedance-seedream4-4img",
+    "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — 4-image edit",
+    "description": "Combines 4 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-bytedance-seedream4-4img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 4,
+      "maxImages": 4
+    }
+  },
+  {
+    "id": "api-bytedance-seedream4-5img",
+    "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — 5-image edit",
+    "description": "Combines 5 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-bytedance-seedream4-5img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 5,
+      "maxImages": 5
+    }
+  },
+  {
+    "id": "api-bytedance-seedream4-6img",
+    "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — 6-image edit",
+    "description": "Combines 6 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-bytedance-seedream4-6img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 6,
+      "maxImages": 6
+    }
+  },
+  {
+    "id": "api-bytedance-seedream4-7img",
+    "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — 7-image edit",
+    "description": "Combines 7 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-bytedance-seedream4-7img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 7,
+      "maxImages": 7
+    }
+  },
+  {
+    "id": "api-bytedance-seedream4-8img",
+    "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — 8-image edit",
+    "description": "Combines 8 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-bytedance-seedream4-8img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 8,
+      "maxImages": 8
+    }
+  },
+  {
+    "id": "api-bytedance-seedream4",
+    "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — image edit",
+    "description": "Edits one reference image per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-bytedance-seedream4.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "api-krea2-style-reference-1img",
+    "displayName": "Krea 2 (API Node) — 1-image style reference",
+    "description": "Generates a new image guided by the prompt and 1 chained style-reference image(s) using Krea 2's hosted API Node (Krea 2 Large), via ComfyUI's API Nodes integration. Distinct from the local krea2-style-reference workflow's community LoRA: this is Krea's own model and documents support for up to 10 chained style references with per-reference strength (including negative weights). Requires Krea 2 access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-krea2-style-reference-1img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "api-krea2-style-reference-2img",
+    "displayName": "Krea 2 (API Node) — 2-image style reference",
+    "description": "Generates a new image guided by the prompt and 2 chained style-reference image(s) using Krea 2's hosted API Node (Krea 2 Large), via ComfyUI's API Nodes integration. Distinct from the local krea2-style-reference workflow's community LoRA: this is Krea's own model and documents support for up to 10 chained style references with per-reference strength (including negative weights). Requires Krea 2 access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-krea2-style-reference-2img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "api-krea2-style-reference-3img",
+    "displayName": "Krea 2 (API Node) — 3-image style reference",
+    "description": "Generates a new image guided by the prompt and 3 chained style-reference image(s) using Krea 2's hosted API Node (Krea 2 Large), via ComfyUI's API Nodes integration. Distinct from the local krea2-style-reference workflow's community LoRA: this is Krea's own model and documents support for up to 10 chained style references with per-reference strength (including negative weights). Requires Krea 2 access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-krea2-style-reference-3img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 3,
+      "maxImages": 3
+    }
+  },
+  {
+    "id": "api-nano-banana-pro-0img",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — text to image",
+    "description": "Generates an image from the prompt alone using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro-0img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 0,
+      "maxImages": 0
+    }
+  },
+  {
+    "id": "api-nano-banana-pro-1img",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — 1-image edit",
+    "description": "Combines 1 reference image per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro-1img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "api-nano-banana-pro-3img",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — 3-image edit",
+    "description": "Combines 3 reference images per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro-3img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 3,
+      "maxImages": 3
+    }
+  },
+  {
+    "id": "api-nano-banana-pro-4img",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — 4-image edit",
+    "description": "Combines 4 reference images per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro-4img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 4,
+      "maxImages": 4
+    }
+  },
+  {
+    "id": "api-nano-banana-pro-5img",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — 5-image edit",
+    "description": "Combines 5 reference images per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro-5img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 5,
+      "maxImages": 5
+    }
+  },
+  {
+    "id": "api-nano-banana-pro-6img",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — 6-image edit",
+    "description": "Combines 6 reference images per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro-6img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 6,
+      "maxImages": 6
+    }
+  },
+  {
+    "id": "api-nano-banana-pro-7img",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — 7-image edit",
+    "description": "Combines 7 reference images per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro-7img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 7,
+      "maxImages": 7
+    }
+  },
+  {
+    "id": "api-nano-banana-pro-8img",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — 8-image edit",
+    "description": "Combines 8 reference images per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro-8img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 8,
+      "maxImages": 8
+    }
+  },
+  {
+    "id": "api-nano-banana-pro",
+    "displayName": "Nano Banana Pro / Gemini Image (API Node) — dual-image edit",
+    "description": "Combines two reference images per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+    "graphFile": "api-nano-banana-pro.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "canny-extract-control-guide",
+    "displayName": "Canny — extract an edge guide",
+    "description": "Extracts a high-contrast Canny edge map from one supplied image. Use it as a precise composition or edge-control guide in a compatible ControlNet workflow.",
+    "graphFile": "canny-extract-control-guide.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "depth-extract-control-guide",
+    "displayName": "Depth Anything V2 — extract a depth guide",
+    "description": "Extracts a relative depth map from one supplied image using Depth Anything V2. Use it as a spatial-structure guide in a compatible ControlNet workflow.",
+    "graphFile": "depth-extract-control-guide.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "dwpose-extract-pose-guide",
+    "displayName": "DWPose — extract a pose guide",
+    "description": "Extracts a reusable OpenPose-style skeleton from one supplied image, including body, hands, and face landmarks. Use its saved image as the guide input for a pose-compatible ControlNet workflow such as Qwen Image + InstantX Union ControlNet.",
+    "graphFile": "dwpose-extract-pose-guide.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "flux2-0img",
+    "displayName": "FLUX.2 — text to image (no reference)",
+    "description": "FLUX.2 dev pure text-to-image with an optional 8-step LoRA toggle baked into the graph. No reference image.",
+    "graphFile": "flux2-0img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 0,
+      "maxImages": 0
+    }
+  },
+  {
+    "id": "flux2-2img",
+    "displayName": "FLUX.2 — 2-image reference generation",
+    "description": "FLUX.2 dev generation guided by 2 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
+    "graphFile": "flux2-2img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "flux2-3img",
+    "displayName": "FLUX.2 — 3-image reference generation",
+    "description": "FLUX.2 dev generation guided by 3 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
+    "graphFile": "flux2-3img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 3,
+      "maxImages": 3
+    }
+  },
+  {
+    "id": "flux2-4img",
+    "displayName": "FLUX.2 — 4-image reference generation",
+    "description": "FLUX.2 dev generation guided by 4 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
+    "graphFile": "flux2-4img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 4,
+      "maxImages": 4
+    }
+  },
+  {
+    "id": "flux2-5img",
+    "displayName": "FLUX.2 — 5-image reference generation",
+    "description": "FLUX.2 dev generation guided by 5 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
+    "graphFile": "flux2-5img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 5,
+      "maxImages": 5
+    }
+  },
+  {
+    "id": "flux2-6img",
+    "displayName": "FLUX.2 — 6-image reference generation",
+    "description": "FLUX.2 dev generation guided by 6 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
+    "graphFile": "flux2-6img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 6,
+      "maxImages": 6
+    }
+  },
+  {
+    "id": "flux2-7img",
+    "displayName": "FLUX.2 — 7-image reference generation",
+    "description": "FLUX.2 dev generation guided by 7 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
+    "graphFile": "flux2-7img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 7,
+      "maxImages": 7
+    }
+  },
+  {
+    "id": "flux2-8img",
+    "displayName": "FLUX.2 — 8-image reference generation",
+    "description": "FLUX.2 dev generation guided by 8 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
+    "graphFile": "flux2-8img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 8,
+      "maxImages": 8
+    }
+  },
+  {
+    "id": "flux2-inpaint",
+    "displayName": "FLUX.2 — masked inpainting",
+    "description": "Uses image 1 as the masked inpainting base for FLUX.2 dev. Only the selected private-mask area is noised (guided by the prompt, with an optional 8-step LoRA toggle baked into the graph), and the generated result is composited over image 1 so every unmasked pixel is preserved.",
+    "graphFile": "flux2-inpaint.json",
+    "capabilities": {
+      "requiresMask": true,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "flux2-klein-0img",
+    "displayName": "FLUX.2 Klein 9B — text to image",
+    "description": "FLUX.2 Klein 9B pure text-to-image. No reference image.",
+    "graphFile": "flux2-klein-0img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 0,
+      "maxImages": 0
+    }
+  },
+  {
+    "id": "flux2-klein-3img",
+    "displayName": "FLUX.2 Klein 9B — 3-image edit",
+    "description": "FLUX.2 Klein 9B generation combining 3 reference images chained as reference latents.",
+    "graphFile": "flux2-klein-3img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 3,
+      "maxImages": 3
+    }
+  },
+  {
+    "id": "flux2-klein-4img",
+    "displayName": "FLUX.2 Klein 9B — 4-image edit",
+    "description": "FLUX.2 Klein 9B generation combining 4 reference images chained as reference latents.",
+    "graphFile": "flux2-klein-4img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 4,
+      "maxImages": 4
+    }
+  },
+  {
+    "id": "flux2-klein-5img",
+    "displayName": "FLUX.2 Klein 9B — 5-image edit",
+    "description": "FLUX.2 Klein 9B generation combining 5 reference images chained as reference latents.",
+    "graphFile": "flux2-klein-5img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 5,
+      "maxImages": 5
+    }
+  },
+  {
+    "id": "flux2-klein-6img",
+    "displayName": "FLUX.2 Klein 9B — 6-image edit",
+    "description": "FLUX.2 Klein 9B generation combining 6 reference images chained as reference latents.",
+    "graphFile": "flux2-klein-6img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 6,
+      "maxImages": 6
+    }
+  },
+  {
+    "id": "flux2-klein-7img",
+    "displayName": "FLUX.2 Klein 9B — 7-image edit",
+    "description": "FLUX.2 Klein 9B generation combining 7 reference images chained as reference latents.",
+    "graphFile": "flux2-klein-7img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 7,
+      "maxImages": 7
+    }
+  },
+  {
+    "id": "flux2-klein-8img",
+    "displayName": "FLUX.2 Klein 9B — 8-image edit",
+    "description": "FLUX.2 Klein 9B generation combining 8 reference images chained as reference latents.",
+    "graphFile": "flux2-klein-8img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 8,
+      "maxImages": 8
+    }
+  },
+  {
+    "id": "flux2-klein-edit-double",
+    "displayName": "FLUX.2 Klein 9B — dual-image edit",
+    "description": "Combines two reference images per the prompt (e.g. \"apply this logo from image 2 onto the object in image 1\") using FLUX.2 Klein's base 9B model.",
+    "graphFile": "flux2-klein-edit-double.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "flux2-klein-edit-single",
+    "displayName": "FLUX.2 Klein 9B — single-image edit",
+    "description": "Edits one reference image per the prompt using FLUX.2 Klein's base 9B model.",
+    "graphFile": "flux2-klein-edit-single.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "flux2-klein-inpaint-reference",
+    "displayName": "FLUX.2 Klein 9B — masked reference inpainting",
+    "description": "Uses image 1 as the masked inpainting base and image 2 as a visual reference. Only the selected private-mask area is noised, and the generated result is composited over image 1 so every unmasked pixel is preserved.",
+    "graphFile": "flux2-klein-inpaint-reference.json",
+    "capabilities": {
+      "requiresMask": true,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "flux2",
+    "displayName": "FLUX.2 — image reference generation (with optional style reference)",
+    "description": "FLUX.2 dev generation guided by one reference image (used as a style/composition guide, not a strict edit), with an optional 8-step LoRA toggle baked into the graph. The graph has no text-only path — the 0-image case is served by the separate flux2-0img workflow.",
+    "graphFile": "flux2.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "krea2-style-reference-2img",
+    "displayName": "Krea 2 Turbo — 2-image style reference",
+    "description": "Generates a new image guided by the prompt and the combined style of 2 reference images, using Krea 2 Turbo's style-reference LoRA (trained primarily for 1–2 references — 2 exceeds that).",
+    "graphFile": "krea2-style-reference-2img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "krea2-style-reference-3img",
+    "displayName": "Krea 2 Turbo — 3-image style reference",
+    "description": "Generates a new image guided by the prompt and the combined style of 3 reference images, using Krea 2 Turbo's style-reference LoRA (trained primarily for 1–2 references — 3 exceeds that).",
+    "graphFile": "krea2-style-reference-3img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 3,
+      "maxImages": 3
+    }
+  },
+  {
+    "id": "krea2-style-reference",
+    "displayName": "Krea 2 Turbo — image style reference",
+    "description": "Generates a new image guided by the prompt and the style of one reference image, using Krea 2 Turbo's dedicated style-reference LoRA. Includes an optional (disabled by default) LLM prompt-expansion step baked into the graph.",
+    "graphFile": "krea2-style-reference.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "lineart-extract-control-guide",
+    "displayName": "Lineart — extract a contour guide",
+    "description": "Extracts clean lineart from one supplied image while reducing texture. Use it as a structural guide for redraw, stylization, or a compatible ControlNet workflow.",
+    "graphFile": "lineart-extract-control-guide.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "normal-extract-control-guide",
+    "displayName": "BAE — extract a normal-map guide",
+    "description": "Extracts a surface-normal map from one supplied image using BAE. Use it for relighting, material-aware stylization, or a compatible normal-control workflow.",
+    "graphFile": "normal-extract-control-guide.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-canny-union-controlnet",
+    "displayName": "Qwen Image — generate from a photo's edges",
+    "description": "Extracts a high-contrast Canny edge map from one supplied photo, then generates a new image under that edge structure using Qwen Image + InstantX Union ControlNet. Uses the photo as an edge/composition source only, not as an identity or style reference.",
+    "graphFile": "qwen-canny-union-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-depth-union-controlnet",
+    "displayName": "Qwen Image — generate from a photo's depth",
+    "description": "Extracts a relative depth map from one supplied photo with Depth Anything V2, then generates a new image under that spatial structure using Qwen Image + InstantX Union ControlNet. Uses the photo as a depth/composition source only, not as an identity or style reference.",
+    "graphFile": "qwen-depth-union-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-diffsynth-canny-controlnet",
+    "displayName": "Qwen Image — DiffSynth canny model-patch",
+    "description": "Extracts a Canny edge map from one supplied photo, then generates a new image under that edge structure using DiffSynth-Studio's Qwen-Image Blockwise Canny ControlNet — a model-patch mechanism rather than a classic ControlNet, baked directly into the diffusion model instead of conditioning it externally.",
+    "graphFile": "qwen-diffsynth-canny-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-diffsynth-depth-controlnet",
+    "displayName": "Qwen Image — DiffSynth depth model-patch",
+    "description": "Extracts a relative depth map from one supplied photo with Depth Anything V2, then generates a new image under that spatial structure using DiffSynth-Studio's Qwen-Image Blockwise Depth ControlNet — a model-patch mechanism rather than a classic ControlNet, baked directly into the diffusion model instead of conditioning it externally.",
+    "graphFile": "qwen-diffsynth-depth-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-diffsynth-inpaint",
+    "displayName": "Qwen Image — DiffSynth inpaint model-patch",
+    "description": "Inpaints the masked region of one supplied image using DiffSynth-Studio's Qwen-Image Blockwise Inpaint ControlNet — a model-patch mechanism rather than a classic ControlNet. The masked region comes from the uploaded image's own alpha channel; the generated result is composited back over the original so every unmasked pixel is preserved.",
+    "graphFile": "qwen-diffsynth-inpaint.json",
+    "capabilities": {
+      "requiresMask": true,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-dwpose-union-controlnet",
+    "displayName": "Qwen Image — generate from a photo's pose",
+    "description": "Extracts the body, hands, and face pose from one supplied image with DWPose, then generates a new image under that pose using Qwen Image + InstantX Union ControlNet. This uses the photo as a pose source only, not as an identity or style reference.",
+    "graphFile": "qwen-dwpose-union-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-fun-union-controlnet",
+    "displayName": "Qwen Image + PAI Fun-Controlnet-Union",
+    "description": "Generates an image under strong structural control from one supplied guide image using Qwen Image and Alibaba PAI's Fun-Controlnet-Union (2512/2602). Broader control-type coverage than the InstantX Union ControlNet: canny, HED/soft-edge, depth, pose, MLSD, and scribble guides, plus its own inpainting mode. Use a prepared control image such as a depth map, Canny edge map, pose skeleton, or line-drawing guide; it is not an image-reference/edit workflow.",
+    "graphFile": "qwen-fun-union-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-image-edit-2511-1img",
+    "displayName": "Qwen-Image-Edit 2511 — single-image edit",
+    "description": "Edits one reference image per the prompt using Qwen-Image-Edit 2511, with an optional (disabled by default) 4-step LoRA toggle baked into the graph.",
+    "graphFile": "qwen-image-edit-2511-1img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-image-edit-2511-3img",
+    "displayName": "Qwen-Image-Edit 2511 — triple-image edit",
+    "description": "Combines three reference images per the prompt using Qwen-Image-Edit 2511 (the documented sweet-spot ceiling), with an optional (disabled by default) 4-step LoRA toggle baked into the graph.",
+    "graphFile": "qwen-image-edit-2511-3img.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 3,
+      "maxImages": 3
+    }
+  },
+  {
+    "id": "qwen-image-edit-2511-character-pose",
+    "displayName": "Qwen-Image-Edit 2511 — character reference + pose",
+    "description": "Uses image 1 as the character reference and image 2 as a prepared pose guide. The supplied Qwen graph has no DWPose preprocessor, so extraction remains an explicit separate workflow.",
+    "graphFile": "qwen-image-edit-2511.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "qwen-image-edit-2511-character-prepared-pose",
+    "displayName": "Qwen-Image-Edit 2511 — character reference + prepared pose",
+    "description": "Uses image 1 as the character reference and image 2 as an already-prepared DWPose/OpenPose guide. Unlike the photo-pose variant, image 2 is passed directly and is not preprocessed again.",
+    "graphFile": "qwen-image-edit-2511.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "qwen-image-edit-2511-inpainting",
+    "displayName": "Qwen-Image-Edit 2511 — masked dual-image inpainting",
+    "description": "Uses image 1 as the inpaint base and image 2 as a reference. Select a private mask for image 1: the app encodes its painted area as transparency for ComfyUI, the workflow edits that region, then composites the result back over the original to preserve every unmasked pixel.",
+    "graphFile": "qwen-image-edit-2511-inpainting.json",
+    "capabilities": {
+      "requiresMask": true,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "qwen-image-edit-2511",
+    "displayName": "Qwen-Image-Edit 2511 — dual-image edit",
+    "description": "Combines two reference images per the prompt (e.g. transferring a material or attribute from one image onto the other) using Qwen-Image-Edit 2511, with an optional (disabled by default) 4-step LoRA toggle baked into the graph.",
+    "graphFile": "qwen-image-edit-2511.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 2,
+      "maxImages": 2
+    }
+  },
+  {
+    "id": "qwen-image-instantx-inpainting",
+    "displayName": "Qwen-Image + InstantX ControlNet — mask inpainting",
+    "description": "Inpaints part of one reference image per the prompt using Qwen-Image with the InstantX inpainting ControlNet. The masked region comes from the uploaded image's own alpha channel — the app encodes the painted area as transparency before upload.",
+    "graphFile": "qwen-image-instantx-inpainting.json",
+    "capabilities": {
+      "requiresMask": true,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-instantx-union-controlnet",
+    "displayName": "Qwen Image + InstantX Union ControlNet",
+    "description": "Generates an image under strong control of one supplied guide image using Qwen Image and InstantX Union ControlNet. Use a prepared control image such as a depth map, Canny edge map, or another Union-compatible guide; it is not an image-reference/edit workflow.",
+    "graphFile": "qwen-instantx-union-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-lineart-union-controlnet",
+    "displayName": "Qwen Image — generate from a photo's lineart",
+    "description": "Extracts clean contour lineart from one supplied photo, then generates a new image under that contour structure using Qwen Image + InstantX Union ControlNet. Uses the photo as a structural source only, not as an identity or style reference.",
+    "graphFile": "qwen-lineart-union-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "qwen-normal-union-controlnet",
+    "displayName": "Qwen Image — generate from a photo's surface normals",
+    "description": "Extracts a surface-normal map from one supplied photo using BAE, then generates a new image under that surface structure using Qwen Image + InstantX Union ControlNet. Uses the photo as a structural source only, not as an identity or style reference.",
+    "graphFile": "qwen-normal-union-controlnet.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "remove-background",
+    "displayName": "Rembg — remove background",
+    "description": "Removes the background from one supplied image, producing a transparent-background cutout of the main subject using the general-purpose isnet-general-use model. Deterministic single-image tool: no prompt, no generation model, not a creative edit.",
+    "graphFile": "remove-background.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "upscale-with-model",
+    "displayName": "4x-UltraSharp — upscale image",
+    "description": "Upscales one supplied image 4x using the UltraSharp Real-ESRGAN-family model. Deterministic single-image tool: no prompt, no generation model, not a creative edit.",
+    "graphFile": "upscale-with-model.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 1,
+      "maxImages": 1
+    }
+  },
+  {
+    "id": "z-image-turbo",
+    "displayName": "Z-Image Turbo — text to image",
+    "description": "Fast few-step text-to-image with Z-Image Turbo (Lumina/AuraFlow-based). No reference image.",
+    "graphFile": "z-image-turbo.json",
+    "capabilities": {
+      "requiresMask": false,
+      "minImages": 0,
+      "maxImages": 0
+    }
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "id": "qwen-image-edit-2511-character-prepared-pose",
+  "displayName": "Qwen-Image-Edit 2511 \u2014 character reference + prepared pose",
+  "description": "Uses image 1 as the character reference and image 2 as an already-prepared DWPose/OpenPose guide. Unlike the photo-pose variant, image 2 is passed directly and is not preprocessed again.",
+  "graphFile": "qwen-image-edit-2511.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2
+  }
+}

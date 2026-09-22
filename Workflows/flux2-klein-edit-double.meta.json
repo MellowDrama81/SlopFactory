@@ -1,0 +1,11 @@
+{
+  "id": "flux2-klein-edit-double",
+  "displayName": "FLUX.2 Klein 9B \u2014 dual-image edit",
+  "description": "Combines two reference images per the prompt (e.g. \"apply this logo from image 2 onto the object in image 1\") using FLUX.2 Klein's base 9B model.",
+  "graphFile": "flux2-klein-edit-double.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2
+  }
+}

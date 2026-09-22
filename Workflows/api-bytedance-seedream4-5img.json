@@ -1,0 +1,110 @@
+{
+  "1": {
+    "inputs": {
+      "model": "seedream-4-5-251128",
+      "prompt": "{{PROMPT:string}}",
+      "size_preset": "2048x2048 (1:1)",
+      "width": 2048,
+      "height": 2048,
+      "sequential_image_generation": "disabled",
+      "max_images": 1,
+      "seed": {{SEED:seed}},
+      "watermark": false,
+      "fail_on_partial": true,
+      "image": [
+        "50",
+        0
+      ]
+    },
+    "class_type": "ByteDanceSeedreamNode",
+    "_meta": {
+      "title": "ByteDance Seedream 4.5 & 5.0"
+    }
+  },
+  "12": {
+    "inputs": {
+      "filename_prefix": "Seedream-4",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "100": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 1"
+    }
+  },
+  "101": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 2"
+    }
+  },
+  "102": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_3:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 3"
+    }
+  },
+  "103": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_4:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 4"
+    }
+  },
+  "104": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_5:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 5"
+    }
+  },
+  "50": {
+    "inputs": {
+      "images.image0": [
+        "100",
+        0
+      ],
+      "images.image1": [
+        "101",
+        0
+      ],
+      "images.image2": [
+        "102",
+        0
+      ],
+      "images.image3": [
+        "103",
+        0
+      ],
+      "images.image4": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "BatchImagesNode",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  }
+}

@@ -1,0 +1,285 @@
+{
+  "vae": {
+    "inputs": {
+      "vae_name": "full_encoder_small_decoder.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "clip": {
+    "inputs": {
+      "clip_name": "mistral_3_small_flux2_bf16.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "unet": {
+    "inputs": {
+      "unet_name": "flux2_dev_fp8mixed.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "lora": {
+    "inputs": {
+      "lora_name": "Flux_2-Turbo-LoRA_comfyui.safetensors",
+      "strength_model": 1,
+      "model": [
+        "unet",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "lora_on": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Enable 8 steps lora"
+    }
+  },
+  "steps_hi": {
+    "inputs": {
+      "value": 20
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Steps"
+    }
+  },
+  "steps_lo": {
+    "inputs": {
+      "value": 8
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Steps"
+    }
+  },
+  "model_sw": {
+    "inputs": {
+      "switch": [
+        "lora_on",
+        0
+      ],
+      "on_false": [
+        "unet",
+        0
+      ],
+      "on_true": [
+        "lora",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch(model)"
+    }
+  },
+  "steps_sw": {
+    "inputs": {
+      "switch": [
+        "lora_on",
+        0
+      ],
+      "on_false": [
+        "steps_hi",
+        0
+      ],
+      "on_true": [
+        "steps_lo",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch(steps)"
+    }
+  },
+  "pos": {
+    "inputs": {
+      "text": "{{PROMPT:string}}",
+      "clip": [
+        "clip",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "guid": {
+    "inputs": {
+      "guidance": 4,
+      "conditioning": [
+        "pos",
+        0
+      ]
+    },
+    "class_type": "FluxGuidance",
+    "_meta": {
+      "title": "FluxGuidance"
+    }
+  },
+  "w": {
+    "inputs": {
+      "value": 1024
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Width"
+    }
+  },
+  "h": {
+    "inputs": {
+      "value": 1024
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Height"
+    }
+  },
+  "latent": {
+    "inputs": {
+      "width": [
+        "w",
+        0
+      ],
+      "height": [
+        "h",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "Empty Flux 2 Latent"
+    }
+  },
+  "sched": {
+    "inputs": {
+      "steps": [
+        "steps_sw",
+        0
+      ],
+      "width": [
+        "w",
+        0
+      ],
+      "height": [
+        "h",
+        0
+      ]
+    },
+    "class_type": "Flux2Scheduler",
+    "_meta": {
+      "title": "Flux2Scheduler"
+    }
+  },
+  "guider": {
+    "inputs": {
+      "model": [
+        "model_sw",
+        0
+      ],
+      "conditioning": [
+        "guid",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "Basic Guider"
+    }
+  },
+  "ksel": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "noise": {
+    "inputs": {
+      "noise_seed": {{SEED:seed}}
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "samp": {
+    "inputs": {
+      "noise": [
+        "noise",
+        0
+      ],
+      "guider": [
+        "guider",
+        0
+      ],
+      "sampler": [
+        "ksel",
+        0
+      ],
+      "sigmas": [
+        "sched",
+        0
+      ],
+      "latent_image": [
+        "latent",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "dec": {
+    "inputs": {
+      "samples": [
+        "samp",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "save": {
+    "inputs": {
+      "filename_prefix": "Flux2",
+      "images": [
+        "dec",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

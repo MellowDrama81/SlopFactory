@@ -1,0 +1,11 @@
+{
+  "id": "qwen-image-edit-2511",
+  "displayName": "Qwen-Image-Edit 2511 \u2014 dual-image edit",
+  "description": "Combines two reference images per the prompt (e.g. transferring a material or attribute from one image onto the other) using Qwen-Image-Edit 2511, with an optional (disabled by default) 4-step LoRA toggle baked into the graph.",
+  "graphFile": "qwen-image-edit-2511.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2
+  }
+}

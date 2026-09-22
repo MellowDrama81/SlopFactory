@@ -1,0 +1,43 @@
+{
+  "ref0": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    }
+  },
+  "sr0": {
+    "class_type": "Krea2StyleReferenceNode",
+    "inputs": {
+      "image": [
+        "ref0",
+        0
+      ],
+      "strength": 1.0
+    }
+  },
+  "gen": {
+    "class_type": "Krea2ImageNode",
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "Krea 2 Large",
+      "seed": {{SEED:seed}},
+      "model.aspect_ratio": "1:1",
+      "model.resolution": "1K",
+      "model.creativity": "medium",
+      "model.style_reference": [
+        "sr0",
+        0
+      ]
+    }
+  },
+  "save": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "Krea2_API_StyleRef",
+      "images": [
+        "gen",
+        0
+      ]
+    }
+  }
+}

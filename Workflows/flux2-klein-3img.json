@@ -1,0 +1,416 @@
+{
+  "unet": {
+    "inputs": {
+      "unet_name": "flux-2-klein-base-9b-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "vae": {
+    "inputs": {
+      "vae_name": "full_encoder_small_decoder.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "clip": {
+    "inputs": {
+      "clip_name": "qwen_3_8b_fp8mixed.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "pos": {
+    "inputs": {
+      "text": "{{PROMPT:string}}",
+      "clip": [
+        "clip",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "neg": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "clip",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode ( Negative Prompt)"
+    }
+  },
+  "ld0": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 1"
+    }
+  },
+  "sc0": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "ld0",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Scale Image to Total Pixels"
+    }
+  },
+  "enc0": {
+    "inputs": {
+      "pixels": [
+        "sc0",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "ld1": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 2"
+    }
+  },
+  "sc1": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "ld1",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Scale Image to Total Pixels"
+    }
+  },
+  "enc1": {
+    "inputs": {
+      "pixels": [
+        "sc1",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "ld2": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_3:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image 3"
+    }
+  },
+  "sc2": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "ld2",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Scale Image to Total Pixels"
+    }
+  },
+  "enc2": {
+    "inputs": {
+      "pixels": [
+        "sc2",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "prl0": {
+    "inputs": {
+      "conditioning": [
+        "pos",
+        0
+      ],
+      "latent": [
+        "enc0",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "Set Reference Latent"
+    }
+  },
+  "nrl0": {
+    "inputs": {
+      "conditioning": [
+        "neg",
+        0
+      ],
+      "latent": [
+        "enc0",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "Set Reference Latent"
+    }
+  },
+  "prl1": {
+    "inputs": {
+      "conditioning": [
+        "prl0",
+        0
+      ],
+      "latent": [
+        "enc1",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "Set Reference Latent"
+    }
+  },
+  "nrl1": {
+    "inputs": {
+      "conditioning": [
+        "nrl0",
+        0
+      ],
+      "latent": [
+        "enc1",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "Set Reference Latent"
+    }
+  },
+  "prl2": {
+    "inputs": {
+      "conditioning": [
+        "prl1",
+        0
+      ],
+      "latent": [
+        "enc2",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "Set Reference Latent"
+    }
+  },
+  "nrl2": {
+    "inputs": {
+      "conditioning": [
+        "nrl1",
+        0
+      ],
+      "latent": [
+        "enc2",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "Set Reference Latent"
+    }
+  },
+  "size": {
+    "inputs": {
+      "image": [
+        "sc0",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "Get Image Size"
+    }
+  },
+  "latent": {
+    "inputs": {
+      "width": [
+        "size",
+        0
+      ],
+      "height": [
+        "size",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "Empty Flux 2 Latent"
+    }
+  },
+  "sched": {
+    "inputs": {
+      "steps": 20,
+      "width": [
+        "size",
+        0
+      ],
+      "height": [
+        "size",
+        1
+      ]
+    },
+    "class_type": "Flux2Scheduler",
+    "_meta": {
+      "title": "Flux2Scheduler"
+    }
+  },
+  "guider": {
+    "inputs": {
+      "cfg": 5,
+      "model": [
+        "unet",
+        0
+      ],
+      "positive": [
+        "prl2",
+        0
+      ],
+      "negative": [
+        "nrl2",
+        0
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFG Guider"
+    }
+  },
+  "ksel": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "noise": {
+    "inputs": {
+      "noise_seed": {{SEED:seed}}
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "samp": {
+    "inputs": {
+      "noise": [
+        "noise",
+        0
+      ],
+      "guider": [
+        "guider",
+        0
+      ],
+      "sampler": [
+        "ksel",
+        0
+      ],
+      "sigmas": [
+        "sched",
+        0
+      ],
+      "latent_image": [
+        "latent",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "dec": {
+    "inputs": {
+      "samples": [
+        "samp",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "save": {
+    "inputs": {
+      "filename_prefix": "Flux2-Klein-9b-base",
+      "images": [
+        "dec",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

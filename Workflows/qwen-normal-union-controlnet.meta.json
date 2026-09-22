@@ -1,0 +1,11 @@
+{
+  "id": "qwen-normal-union-controlnet",
+  "displayName": "Qwen Image \u2014 generate from a photo's surface normals",
+  "description": "Extracts a surface-normal map from one supplied photo using BAE, then generates a new image under that surface structure using Qwen Image + InstantX Union ControlNet. Uses the photo as a structural source only, not as an identity or style reference.",
+  "graphFile": "qwen-normal-union-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

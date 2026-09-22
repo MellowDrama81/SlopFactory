@@ -1,0 +1,11 @@
+{
+  "id": "lineart-extract-control-guide",
+  "displayName": "Lineart \u2014 extract a contour guide",
+  "description": "Extracts clean lineart from one supplied image while reducing texture. Use it as a structural guide for redraw, stylization, or a compatible ControlNet workflow.",
+  "graphFile": "lineart-extract-control-guide.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

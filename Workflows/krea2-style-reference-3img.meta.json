@@ -1,0 +1,11 @@
+{
+  "id": "krea2-style-reference-3img",
+  "displayName": "Krea 2 Turbo \u2014 3-image style reference",
+  "description": "Generates a new image guided by the prompt and the combined style of 3 reference images, using Krea 2 Turbo's style-reference LoRA (trained primarily for 1\u20132 references \u2014 3 exceeds that).",
+  "graphFile": "krea2-style-reference-3img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 3,
+    "maxImages": 3
+  }
+}

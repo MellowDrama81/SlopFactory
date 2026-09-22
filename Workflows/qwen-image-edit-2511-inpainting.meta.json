@@ -1,0 +1,11 @@
+{
+  "id": "qwen-image-edit-2511-inpainting",
+  "displayName": "Qwen-Image-Edit 2511 \u2014 masked dual-image inpainting",
+  "description": "Uses image 1 as the inpaint base and image 2 as a reference. Select a private mask for image 1: the app encodes its painted area as transparency for ComfyUI, the workflow edits that region, then composites the result back over the original to preserve every unmasked pixel.",
+  "graphFile": "qwen-image-edit-2511-inpainting.json",
+  "capabilities": {
+    "requiresMask": true,
+    "minImages": 2,
+    "maxImages": 2
+  }
+}

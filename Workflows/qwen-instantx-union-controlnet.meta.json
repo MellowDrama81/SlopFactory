@@ -1,0 +1,11 @@
+{
+  "id": "qwen-instantx-union-controlnet",
+  "displayName": "Qwen Image + InstantX Union ControlNet",
+  "description": "Generates an image under strong control of one supplied guide image using Qwen Image and InstantX Union ControlNet. Use a prepared control image such as a depth map, Canny edge map, or another Union-compatible guide; it is not an image-reference/edit workflow.",
+  "graphFile": "qwen-instantx-union-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "qwen-canny-union-controlnet",
+  "displayName": "Qwen Image \u2014 generate from a photo's edges",
+  "description": "Extracts a high-contrast Canny edge map from one supplied photo, then generates a new image under that edge structure using Qwen Image + InstantX Union ControlNet. Uses the photo as an edge/composition source only, not as an identity or style reference.",
+  "graphFile": "qwen-canny-union-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

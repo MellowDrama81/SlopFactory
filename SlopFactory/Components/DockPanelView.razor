@@ -6,6 +6,20 @@ else if (Panel.Kind == "activity") { <div class="feed"><p><b>Maia Chen</b> moved
 else if (Panel.Kind == "notes") { <div class="notes"><p class="eyebrow">TODAY'S NOTE</p><h2>Keep the release calm.</h2><p>Surface decisions early, make handoffs explicit, and preserve room for the team to think.</p><span>#product</span><span>#direction</span></div> }
 else if (Panel.Kind == "checklist") { <div class="checklist"><p><b>12 / 16</b> launch tasks complete</p><div class="progress"><i></i></div><label>☑ Release notes approved</label><label>☑ Support coverage confirmed</label><label>□ Schedule customer announcement</label><label>□ Publish launch post</label></div> }
 else if (Panel.Kind == "risks") { <div class="risks"><p class="eyebrow">WATCH LIST</p><h2>2 decisions need a owner</h2><p>Billing migration and regional rollout timing could affect beta readiness.</p></div> }
+else if (Panel.Kind == "assets") { <div class="assets-panel"><p class="eyebrow">PROJECT ASSETS</p><h2>@Panel.Title</h2><p class="assets-path">@Panel.Context</p>@if (assetEntries.Count == 0) { <p class="assets-empty">This assets folder is empty.</p> } else { <ul>@foreach (var entry in assetEntries) { <li><span>@(entry.IsDirectory ? "▸" : "•")</span>@entry.Name <small>@entry.Detail</small></li> }</ul> }</div> }
 else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people asked for easier handoffs between product and design this week.</p><button>Review insights →</button></div> }
 </div>
-@code { [Parameter, EditorRequired] public DockPanel Panel { get; set; } = default!; }
+@code {
+  [Parameter, EditorRequired] public DockPanel Panel { get; set; } = default!;
+  private List<AssetEntry> assetEntries = [];
+  protected override void OnParametersSet()
+  {
+      if (Panel.Kind != "assets" || string.IsNullOrWhiteSpace(Panel.Context) || !Directory.Exists(Panel.Context)) { assetEntries = []; return; }
+      try
+      {
+          assetEntries = Directory.EnumerateFileSystemEntries(Panel.Context).OrderBy(path => !Directory.Exists(path)).ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).Select(path => new AssetEntry(Path.GetFileName(path), Directory.Exists(path), Directory.Exists(path) ? "Folder" : $"{new FileInfo(path).Length:N0} bytes")).ToList();
+      }
+      catch { assetEntries = []; }
+  }
+  private sealed record AssetEntry(string Name, bool IsDirectory, string Detail);
+}

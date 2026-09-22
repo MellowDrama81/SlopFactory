@@ -1,0 +1,11 @@
+{
+  "id": "api-nano-banana-pro-8img",
+  "displayName": "Nano Banana Pro / Gemini Image (API Node) \u2014 8-image edit",
+  "description": "Combines 8 reference images per the prompt using Google's Gemini image model via ComfyUI's API Nodes integration. Requires Gemini image access separately authorized/credited on your Comfy account.",
+  "graphFile": "api-nano-banana-pro-8img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 8,
+    "maxImages": 8
+  }
+}

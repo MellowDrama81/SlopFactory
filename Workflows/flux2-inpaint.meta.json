@@ -1,0 +1,11 @@
+{
+  "id": "flux2-inpaint",
+  "displayName": "FLUX.2 \u2014 masked inpainting",
+  "description": "Uses image 1 as the masked inpainting base for FLUX.2 dev. Only the selected private-mask area is noised (guided by the prompt, with an optional 8-step LoRA toggle baked into the graph), and the generated result is composited over image 1 so every unmasked pixel is preserved.",
+  "graphFile": "flux2-inpaint.json",
+  "capabilities": {
+    "requiresMask": true,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

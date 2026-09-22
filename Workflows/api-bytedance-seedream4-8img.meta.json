@@ -1,0 +1,11 @@
+{
+  "id": "api-bytedance-seedream4-8img",
+  "displayName": "ByteDance Seedream 4.5/5.0 (API Node) \u2014 8-image edit",
+  "description": "Combines 8 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
+  "graphFile": "api-bytedance-seedream4-8img.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 8,
+    "maxImages": 8
+  }
+}

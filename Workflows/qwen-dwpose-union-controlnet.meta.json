@@ -1,0 +1,11 @@
+{
+  "id": "qwen-dwpose-union-controlnet",
+  "displayName": "Qwen Image \u2014 generate from a photo's pose",
+  "description": "Extracts the body, hands, and face pose from one supplied image with DWPose, then generates a new image under that pose using Qwen Image + InstantX Union ControlNet. This uses the photo as a pose source only, not as an identity or style reference.",
+  "graphFile": "qwen-dwpose-union-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

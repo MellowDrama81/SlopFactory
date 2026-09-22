@@ -1,0 +1,11 @@
+{
+  "id": "qwen-depth-union-controlnet",
+  "displayName": "Qwen Image \u2014 generate from a photo's depth",
+  "description": "Extracts a relative depth map from one supplied photo with Depth Anything V2, then generates a new image under that spatial structure using Qwen Image + InstantX Union ControlNet. Uses the photo as a depth/composition source only, not as an identity or style reference.",
+  "graphFile": "qwen-depth-union-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

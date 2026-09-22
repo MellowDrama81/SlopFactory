@@ -1,0 +1,11 @@
+{
+  "id": "qwen-image-edit-2511-character-pose",
+  "displayName": "Qwen-Image-Edit 2511 \u2014 character reference + pose",
+  "description": "Uses image 1 as the character reference and image 2 as a prepared pose guide. The supplied Qwen graph has no DWPose preprocessor, so extraction remains an explicit separate workflow.",
+  "graphFile": "qwen-image-edit-2511.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2
+  }
+}

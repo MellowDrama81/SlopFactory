@@ -1,0 +1,5 @@
+{
+  "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME:image}} [input]" } },
+  "2": { "class_type": "BAE-NormalMapPreprocessor", "inputs": { "image": ["1", 0], "resolution": 768 } },
+  "3": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Normal_Control_Guide", "images": ["2", 0] } }
+}

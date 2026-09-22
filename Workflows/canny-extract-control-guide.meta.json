@@ -1,0 +1,11 @@
+{
+  "id": "canny-extract-control-guide",
+  "displayName": "Canny \u2014 extract an edge guide",
+  "description": "Extracts a high-contrast Canny edge map from one supplied image. Use it as a precise composition or edge-control guide in a compatible ControlNet workflow.",
+  "graphFile": "canny-extract-control-guide.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1
+  }
+}

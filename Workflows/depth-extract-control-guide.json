@@ -1,0 +1,5 @@
+{
+  "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME:image}} [input]" } },
+  "2": { "class_type": "DepthAnythingV2Preprocessor", "inputs": { "image": ["1", 0], "ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 768 } },
+  "3": { "class_type": "SaveImage", "inputs": { "filename_prefix": "Depth_Control_Guide", "images": ["2", 0] } }
+}
