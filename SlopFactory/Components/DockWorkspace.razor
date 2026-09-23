@@ -1,6 +1,7 @@
 @using SlopFactory.Models
 @using SlopFactory.Services
 @using System.Text.Json
+@using System.Text.Json.Nodes
 @implements IDisposable
 @inject IJSRuntime JS
 @inject ComfyConnectionSettings ComfyConnection
@@ -9,15 +10,17 @@
 @inject ProjectLibrary ProjectLibrary
 @inject ProjectFolderPicker ProjectFolderPicker
 @inject ProjectExporter ProjectExporter
+@inject AssetExporter AssetExporter
+@inject WorkspaceLayoutStore WorkspaceLayoutStore
 
 <main class="dock-app">
   <header class="ribbon">
-    <div class="ribbon-brand"><span>◈</span> NEST</div>
-    <div class="ribbon-tabs"><button type="button" class="ribbon-tab active" data-ribbon-action="workspace">Workspace</button><button type="button" class="ribbon-tab" data-ribbon-action="projects">Projects</button><button type="button" class="ribbon-tab">View</button><button type="button" class="ribbon-tab">Layout</button></div>
-    <div class="ribbon-actions"><button type="button" class="ribbon-button" @onclick="Reset">↶ Clear workspace</button><button type="button" class="ribbon-button" data-ribbon-action="assets">▤ Assets</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Comfy Settings</button><button type="button" class="ribbon-button" data-ribbon-action="workflows">⛭ Workflows</button><button type="button" class="ribbon-button">⌕</button></div>
+    <div class="ribbon-brand"><span>◈</span> SlopFactory</div>
+    <div class="ribbon-tabs"><button type="button" class="ribbon-tab active" data-ribbon-action="workspace">Workspace</button><button type="button" class="ribbon-tab" data-ribbon-action="projects">Projects</button></div>
+    <div class="ribbon-actions"><button type="button" class="ribbon-button" data-ribbon-action="clear-workspace">↶ Clear workspace</button><button type="button" class="ribbon-button" data-ribbon-action="generation">✦ Generation</button><button type="button" class="ribbon-button" data-ribbon-action="assets">▤ Assets</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Comfy Settings</button><button type="button" class="ribbon-button" data-ribbon-action="workflows">⛭ Workflows</button></div>
   </header>
   <section class="settings-screen">
-      <div class="settings-heading"><div><p>INTEGRATIONS</p><h1>ComfyUI connection</h1><span>Choose where SlopFactory sends ComfyUI workflow requests.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Done</button></div>
+      <div class="settings-heading"><div><p>INTEGRATIONS</p><h1>ComfyUI connection</h1><span>Choose where SlopFactory sends ComfyUI workflow requests.</span></div></div>
       <div class="settings-grid">
         <section class="settings-card comfy-settings-card" data-comfy-connection>
           <h2>Connection</h2>
@@ -52,7 +55,7 @@
       </div>
     </section>
   <section class="workflows-screen">
-      <div class="settings-heading"><div><p>AUTOMATION</p><h1>Workflows</h1><span>Manage the ComfyUI workflows SlopFactory can run.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Done</button></div>
+      <div class="settings-heading"><div><p>AUTOMATION</p><h1>Workflows</h1><span>Manage the ComfyUI workflows SlopFactory can run.</span></div></div>
       <div class="settings-grid">
         <section class="settings-card comfy-settings-card" data-workflow-library>
           <h2>Workflow library</h2>
@@ -99,7 +102,7 @@
       </div>
     </section>
   <section class="projects-screen">
-    <div class="settings-heading"><div><p>WORKSPACE LIBRARY</p><h1>Projects</h1><span>Choose a project to open in the docking workspace.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Back to workspace</button></div>
+    <div class="settings-heading"><div><p>WORKSPACE LIBRARY</p><h1>Projects</h1><span>Choose a project to open in the docking workspace.</span></div></div>
     <section class="settings-card comfy-settings-card" data-project-library>
       <h2>Project library</h2>
       <p>Each project is backed by a folder. Choose an existing folder or create one.</p>
@@ -116,15 +119,13 @@
       </div>
     </section>
   </section>
-  <section class="assets-picker-screen">
-    <div class="settings-heading"><div><p>PROJECT CONTENT</p><h1>Open Assets</h1><span>Select a project to open its assets folder in a dock panel.</span></div><button type="button" class="close-settings" data-ribbon-action="workspace">Cancel</button></div>
-    <section class="settings-card comfy-settings-card" data-assets-picker><h2>Projects</h2><p>Each selection creates another independent Assets panel.</p><ul class="comfy-connection-list" data-assets-project-list><li class="comfy-connection-empty">Loading projects…</li></ul><p class="connection-note" data-assets-status hidden></p></section>
-  </section>
-  <section class="dock-host" data-root-dock><DockSurface Node="Root" OnActivateTab="ActivateTab" /></section>
+  <section class="dock-host" data-root-dock><DockSurface @key="Root" Node="Root" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" /></section>
 </main>
 
 @code {
   private DockNode Root = BuildTree();
+  private DockNode? savedRoot;
+  private bool workspaceLoaded;
   private DotNetObjectReference<DockWorkspace>? dockReference;
   private int added;
   private string connectionStatus = "";
@@ -132,12 +133,20 @@
   private bool isTesting;
   private static DockNode BuildTree() => new TabGroupNode("workspace", [], string.Empty);
   private static readonly JsonSerializerOptions WorkflowJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-  private void Reset() => Root = BuildTree();
+  [JSInvokable]
+  public Task ClearWorkspace()
+  {
+      Root = BuildTree();
+      return InvokeAsync(StateHasChanged);
+  }
   protected override async Task OnInitializedAsync()
   {
       await ComfyConnection.LoadAsync();
       await WorkflowLibrary.LoadAsync();
       await ProjectLibrary.LoadAsync();
+      Root = RestoreWorkspace(await WorkspaceLayoutStore.LoadAsync()) ?? BuildTree();
+      added = MaximumPanelNumber(Root);
+      workspaceLoaded = true;
   }
   [JSInvokable]
   public string GetWorkflows() => JsonSerializer.Serialize(WorkflowLibrary.GetAll(), WorkflowJsonOptions);
@@ -190,13 +199,465 @@
   [JSInvokable]
   public async Task<string> OpenAssetsPanel(string folderPath, string name)
   {
+      if (string.IsNullOrWhiteSpace(folderPath))
+      {
+          added++;
+          Root = AddToFirstGroup(Root, new DockPanel($"assets{added}", "Assets", "▤", "gold", "assets"));
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
       var assetsPath = Path.Combine(folderPath, "assets");
       Directory.CreateDirectory(assetsPath);
       added++;
       var title = string.IsNullOrWhiteSpace(name) ? folderPath : name;
-      Root = AddToFirstGroup(Root, new DockPanel($"assets{added}", $"Assets · {title}", "▤", "gold", "assets", assetsPath));
+      Root = AddToFirstGroup(Root, new DockPanel($"assets{added}", $"Assets · {title}", "▤", "gold", "assets", assetsPath, assetsPath));
       await InvokeAsync(StateHasChanged);
       return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+  }
+  [JSInvokable]
+  public async Task<string> OpenGenerationPanel()
+  {
+      added++;
+      Root = AddToFirstGroup(Root, new DockPanel($"generation{added}", "Generation", "✦", "violet", "generation"));
+      await InvokeAsync(StateHasChanged);
+      return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+  }
+  [JSInvokable]
+  public async Task<string> SetGenerationPanelProject(string panelId, string folderPath)
+  {
+      try
+      {
+          var project = ProjectLibrary.GetAll().FirstOrDefault(item =>
+              string.Equals(item.FolderPath, Path.GetFullPath(folderPath), StringComparison.OrdinalIgnoreCase));
+          if (project is null || !Directory.Exists(project.FolderPath))
+              return JsonSerializer.Serialize(new { success = false, message = "The selected project is not available." }, WorkflowJsonOptions);
+          Root = SetGenerationProject(Root, panelId, project);
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task ClearGenerationPanelProject(string panelId)
+  {
+      Root = ClearGenerationProject(Root, panelId);
+      await InvokeAsync(StateHasChanged);
+  }
+  private static DockNode ClearGenerationProject(DockNode node, string panelId) => node switch
+  {
+      TabGroupNode group => group with
+      {
+          Panels = group.Panels.Select(panel => panel.Id == panelId && panel.Kind == "generation"
+              ? panel with { Title = "Generation", Context = null, WorkflowId = null, InputValues = null }
+              : panel).ToList()
+      },
+      SplitNode split => split with
+      {
+          First = ClearGenerationProject(split.First, panelId),
+          Second = ClearGenerationProject(split.Second, panelId)
+      },
+      _ => node
+  };
+  private static DockNode SetGenerationProject(DockNode node, string panelId, ProjectDefinition project) => node switch
+  {
+      TabGroupNode group => group with
+      {
+          Panels = group.Panels.Select(panel => panel.Id == panelId && panel.Kind == "generation"
+              ? panel with { Title = $"Generation · {project.DisplayName}", Context = project.FolderPath, WorkflowId = null, InputValues = null }
+              : panel).ToList()
+      },
+      SplitNode split => split with
+      {
+          First = SetGenerationProject(split.First, panelId, project),
+          Second = SetGenerationProject(split.Second, panelId, project)
+      },
+      _ => node
+  };
+  [JSInvokable]
+  public async Task SetAssetsPanelProject(string panelId, string folderPath, string name)
+  {
+      if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)) return;
+      var assetsPath = Path.Combine(folderPath, "assets");
+      Directory.CreateDirectory(assetsPath);
+      var title = string.IsNullOrWhiteSpace(name) ? folderPath : name;
+      Root = SetAssetsPanelProject(Root, panelId, assetsPath, $"Assets · {title}");
+      await InvokeAsync(StateHasChanged);
+  }
+  private static DockNode SetAssetsPanelProject(DockNode node, string panelId, string assetsPath, string title) => node switch
+  {
+      TabGroupNode group => group with { Panels = group.Panels.Select(panel => panel.Id == panelId ? panel with { Title = title, Context = assetsPath, Location = assetsPath } : panel).ToList() },
+      SplitNode split => split with { First = SetAssetsPanelProject(split.First, panelId, assetsPath, title), Second = SetAssetsPanelProject(split.Second, panelId, assetsPath, title) },
+      _ => node
+  };
+  [JSInvokable]
+  public async Task<string> AddAssets(string assetsFolder, string assetsRoot)
+  {
+      if (string.IsNullOrWhiteSpace(assetsFolder) || string.IsNullOrWhiteSpace(assetsRoot) || !Directory.Exists(assetsFolder) || !Directory.Exists(assetsRoot))
+          return JsonSerializer.Serialize(new { success = false, message = "The assets folder is not available." }, WorkflowJsonOptions);
+
+      var files = await FilePicker.Default.PickMultipleAsync();
+      if (files is null || !files.Any()) return JsonSerializer.Serialize(new { success = false, message = "No files selected." }, WorkflowJsonOptions);
+
+      var copied = 0;
+      foreach (var file in files)
+      {
+          if (file is null) continue;
+          var target = UniqueAssetPath(assetsFolder, file.FileName ?? "asset");
+          await using var source = await file.OpenReadAsync();
+          await using var destination = File.Create(target);
+          await source.CopyToAsync(destination);
+          var projectFolder = Directory.GetParent(assetsRoot)!.FullName;
+          var relativeAssetPath = Path.GetRelativePath(projectFolder, target).Replace('\\', '/');
+          var metadataFileName = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativeAssetPath))).ToLowerInvariant() + ".json";
+          var metadataPath = Path.Combine(projectFolder, metadataFileName);
+          var metadata = new { asset = relativeAssetPath, name = Path.GetFileName(target), tags = Array.Empty<string>() };
+          await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(metadata, WorkflowJsonOptions));
+          copied++;
+      }
+      await InvokeAsync(StateHasChanged);
+      return JsonSerializer.Serialize(new { success = true, message = $"Added {copied} asset{(copied == 1 ? string.Empty : "s")}." }, WorkflowJsonOptions);
+  }
+  [JSInvokable]
+  public async Task<string> AddDroppedAsset(string assetsFolder, string assetsRoot, string fileName, IJSStreamReference file)
+  {
+      const long maxFileSize = 1024L * 1024 * 1024;
+      string? target = null;
+      var created = false;
+      try
+      {
+          var folder = NormalizeFolder(assetsFolder);
+          var root = NormalizeFolder(assetsRoot);
+          if (!Directory.Exists(folder) || !Directory.Exists(root) || !IsInFolder(folder, root))
+              return JsonSerializer.Serialize(new { success = false, message = "The destination assets folder is not available." }, WorkflowJsonOptions);
+          if (string.IsNullOrWhiteSpace(fileName) || fileName is "." or ".." ||
+              fileName != Path.GetFileName(fileName) || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+              return JsonSerializer.Serialize(new { success = false, message = "The dropped file has an invalid name." }, WorkflowJsonOptions);
+          if (file.Length > maxFileSize)
+              return JsonSerializer.Serialize(new { success = false, message = $"{fileName} exceeds the 1 GB file limit." }, WorkflowJsonOptions);
+
+          target = UniqueAssetPath(folder, fileName);
+          await using (var source = await file.OpenReadStreamAsync(maxAllowedSize: maxFileSize))
+          await using (var destination = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+          {
+              created = true;
+              await source.CopyToAsync(destination);
+          }
+
+          var projectFolder = Directory.GetParent(root)!.FullName;
+          var relativeAssetPath = Path.GetRelativePath(projectFolder, target).Replace('\\', '/');
+          var metadataPath = AssetMetadataPath(projectFolder, relativeAssetPath);
+          var metadata = new { asset = relativeAssetPath, name = Path.GetFileName(target), tags = Array.Empty<string>() };
+          await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(metadata, WorkflowJsonOptions));
+          return JsonSerializer.Serialize(new { success = true, message = $"Added {Path.GetFileName(target)}." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          if (created && target is not null)
+          {
+              try { File.Delete(target); } catch { /* Preserve the original error. */ }
+          }
+          return JsonSerializer.Serialize(new { success = false, message = $"Could not add {fileName}: {ex.Message}" }, WorkflowJsonOptions);
+      }
+      finally { await file.DisposeAsync(); }
+  }
+  [JSInvokable]
+  public Task RefreshAssetsPanels() => InvokeAsync(StateHasChanged);
+  [JSInvokable]
+  public async Task<string> CopyAsset(string sourcePath, string sourceRoot, string destinationFolder, string destinationRoot)
+  {
+      try
+      {
+          var source = Path.GetFullPath(sourcePath);
+          var normalizedSourceRoot = NormalizeFolder(sourceRoot);
+          var destination = NormalizeFolder(destinationFolder);
+          var normalizedDestinationRoot = NormalizeFolder(destinationRoot);
+          if (!IsInFolder(source, normalizedSourceRoot) || !IsInFolder(destination, normalizedDestinationRoot) || (!File.Exists(source) && !Directory.Exists(source)))
+              return JsonSerializer.Serialize(new { success = false, message = "The source or destination assets folder is not available." }, WorkflowJsonOptions);
+
+          var sourceParent = NormalizeFolder(Path.GetDirectoryName(source)!);
+          if (string.Equals(sourceParent, destination, StringComparison.OrdinalIgnoreCase))
+              return JsonSerializer.Serialize(new { success = true, message = "That asset is already in this folder." }, WorkflowJsonOptions);
+          if (Directory.Exists(source) && IsInFolder(destination, source))
+              return JsonSerializer.Serialize(new { success = false, message = "A folder cannot be copied into itself." }, WorkflowJsonOptions);
+
+          var target = UniqueAssetPath(destination, Path.GetFileName(source), Directory.Exists(source));
+          if (Directory.Exists(source)) CopyDirectory(source, target);
+          else File.Copy(source, target);
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true, message = $"Copied {Path.GetFileName(source)}." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> OpenAssetDetails(string assetPath, string assetsRoot, string sourcePanelId)
+  {
+      try
+      {
+          var asset = Path.GetFullPath(assetPath);
+          var root = NormalizeFolder(assetsRoot);
+          if (!File.Exists(asset) || !IsInFolder(asset, root))
+              return JsonSerializer.Serialize(new { success = false, message = "The asset is not available." }, WorkflowJsonOptions);
+          var existingDetails = FindAssetDetails(Root, sourcePanelId);
+          if (existingDetails is not null)
+          {
+              Root = UpdateAssetDetails(Root, existingDetails.Id, asset, root);
+          }
+          else
+          {
+              added++;
+              var detailsPanel = new DockPanel($"asset-details{added}", $"Asset · {Path.GetFileName(asset)}", "◉", "mint", "asset-details", asset, root, sourcePanelId);
+              Root = ContainsPanel(Root, sourcePanelId) ? DockDetailsRightOfPanel(Root, sourcePanelId, detailsPanel) : AddToFirstGroup(Root, detailsPanel);
+          }
+          Root = CollapseEmptyGroups(Root) ?? BuildTree();
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  private static bool ContainsPanel(DockNode node, string panelId) => node switch
+  {
+      TabGroupNode group => group.Panels.Any(panel => panel.Id == panelId),
+      SplitNode split => ContainsPanel(split.First, panelId) || ContainsPanel(split.Second, panelId),
+      _ => false
+  };
+  private static DockPanel? FindAssetDetails(DockNode node, string sourcePanelId) => node switch
+  {
+      TabGroupNode group => group.Panels.FirstOrDefault(panel => panel.Kind == "asset-details" && panel.Owner == sourcePanelId),
+      SplitNode split => FindAssetDetails(split.First, sourcePanelId) ?? FindAssetDetails(split.Second, sourcePanelId),
+      _ => null
+  };
+  private static DockNode UpdateAssetDetails(DockNode node, string detailsPanelId, string assetPath, string assetsRoot) => node switch
+  {
+      TabGroupNode group when group.Panels.Any(panel => panel.Id == detailsPanelId)
+          => group with
+          {
+              Panels = group.Panels.Select(panel => panel.Id == detailsPanelId
+                  ? panel with { Title = $"Asset · {Path.GetFileName(assetPath)}", Context = assetPath, Location = assetsRoot }
+                  : panel).ToList(),
+              ActiveId = detailsPanelId
+          },
+      SplitNode split => split with
+      {
+          First = UpdateAssetDetails(split.First, detailsPanelId, assetPath, assetsRoot),
+          Second = UpdateAssetDetails(split.Second, detailsPanelId, assetPath, assetsRoot)
+      },
+      _ => node
+  };
+  private static DockNode DockDetailsRightOfPanel(DockNode node, string sourcePanelId, DockPanel detailsPanel) => node switch
+  {
+      TabGroupNode group when group.Panels.Any(panel => panel.Id == sourcePanelId)
+          => new SplitNode($"asset-details-split-{detailsPanel.Id}", DockAxis.Horizontal, .6, group, new TabGroupNode($"asset-details-group-{detailsPanel.Id}", [detailsPanel], detailsPanel.Id)),
+      SplitNode split when ContainsPanel(split.First, sourcePanelId)
+          => split with { First = DockDetailsRightOfPanel(split.First, sourcePanelId, detailsPanel) },
+      SplitNode split => split with { Second = DockDetailsRightOfPanel(split.Second, sourcePanelId, detailsPanel) },
+      _ => node
+  };
+  private static string NormalizeFolder(string path) => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+  private static bool IsInFolder(string path, string folder) => string.Equals(path, folder, StringComparison.OrdinalIgnoreCase) || path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+  private static void CopyDirectory(string source, string destination)
+  {
+      Directory.CreateDirectory(destination);
+      foreach (var file in Directory.EnumerateFiles(source)) File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+      foreach (var folder in Directory.EnumerateDirectories(source)) CopyDirectory(folder, Path.Combine(destination, Path.GetFileName(folder)));
+  }
+  [JSInvokable]
+  public async Task NavigateAssetsPanel(string panelId, string folderPath)
+  {
+      if (!Directory.Exists(folderPath)) return;
+      Root = SetPanelLocation(Root, panelId, folderPath);
+      await InvokeAsync(StateHasChanged);
+  }
+  private static DockNode SetPanelLocation(DockNode node, string panelId, string folderPath) => node switch
+  {
+      TabGroupNode group => group with { Panels = group.Panels.Select(panel => panel.Id == panelId ? panel with { Location = folderPath } : panel).ToList() },
+      SplitNode split => split with { First = SetPanelLocation(split.First, panelId, folderPath), Second = SetPanelLocation(split.Second, panelId, folderPath) },
+      _ => node
+  };
+  [JSInvokable]
+  public async Task<string> RenameAsset(string assetPath, string assetsRoot, string newName)
+  {
+      try
+      {
+          var root = NormalizeFolder(assetsRoot);
+          var source = Path.GetFullPath(assetPath);
+          newName = newName.Trim();
+          if (!Directory.Exists(root) || !IsInFolder(source, root) || string.Equals(source, root, StringComparison.OrdinalIgnoreCase))
+              return JsonSerializer.Serialize(new { success = false, message = "The asset is outside the project assets folder." }, WorkflowJsonOptions);
+          if (string.IsNullOrWhiteSpace(newName) || newName is "." or ".." || newName.EndsWith('.') || newName.EndsWith(' ')
+              || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || newName.Contains('/') || newName.Contains('\\'))
+              return JsonSerializer.Serialize(new { success = false, message = "Enter a valid file or folder name." }, WorkflowJsonOptions);
+
+          var isFolder = Directory.Exists(source);
+          if (!isFolder && !File.Exists(source))
+              return JsonSerializer.Serialize(new { success = false, message = "The asset no longer exists." }, WorkflowJsonOptions);
+          var destination = Path.Combine(Path.GetDirectoryName(source)!, newName);
+          if (string.Equals(source, destination, StringComparison.Ordinal))
+              return JsonSerializer.Serialize(new { success = true, message = "Name unchanged." }, WorkflowJsonOptions);
+          if (!string.Equals(source, destination, StringComparison.OrdinalIgnoreCase) && (File.Exists(destination) || Directory.Exists(destination)))
+              return JsonSerializer.Serialize(new { success = false, message = "An item with that name already exists." }, WorkflowJsonOptions);
+
+          var projectFolder = Directory.GetParent(root)!.FullName;
+          var files = isFolder ? Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories).ToList() : [source];
+          var metadata = new List<(string OldPath, string NewPath, string Content)>();
+          foreach (var file in files)
+          {
+              var renamedFile = destination + file[source.Length..];
+              var oldRelative = Path.GetRelativePath(projectFolder, file).Replace('\\', '/');
+              var newRelative = Path.GetRelativePath(projectFolder, renamedFile).Replace('\\', '/');
+              var oldMetadata = AssetMetadataPath(projectFolder, oldRelative);
+              var newMetadata = AssetMetadataPath(projectFolder, newRelative);
+              if (!string.Equals(oldMetadata, newMetadata, StringComparison.OrdinalIgnoreCase) && File.Exists(newMetadata))
+                  return JsonSerializer.Serialize(new { success = false, message = "Metadata already exists for the new name." }, WorkflowJsonOptions);
+              var content = File.Exists(oldMetadata) ? JsonNode.Parse(File.ReadAllText(oldMetadata)) as JsonObject
+                  ?? throw new InvalidOperationException($"Invalid metadata for {Path.GetFileName(file)}.") : new JsonObject();
+              content["asset"] = newRelative;
+              content["name"] = Path.GetFileName(renamedFile);
+              metadata.Add((oldMetadata, newMetadata, content.ToJsonString(new JsonSerializerOptions { WriteIndented = true })));
+          }
+
+          if (isFolder) Directory.Move(source, destination);
+          else File.Move(source, destination);
+          foreach (var item in metadata)
+          {
+              File.WriteAllText(item.NewPath, item.Content);
+              if (!string.Equals(item.OldPath, item.NewPath, StringComparison.OrdinalIgnoreCase)) File.Delete(item.OldPath);
+          }
+          Root = RewriteRenamedPaths(Root, source, destination);
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true, message = $"Renamed to {newName}." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  private static string AssetMetadataPath(string projectFolder, string relativePath)
+      => Path.Combine(projectFolder, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativePath))).ToLowerInvariant() + ".json");
+  private static string? RewriteRenamedPath(string? path, string source, string destination)
+      => path is not null && IsInFolder(path, source) ? destination + path[source.Length..] : path;
+  private static DockNode RewriteRenamedPaths(DockNode node, string source, string destination) => node switch
+  {
+      TabGroupNode group => group with { Panels = group.Panels.Select(panel => panel with
+      {
+          Context = RewriteRenamedPath(panel.Context, source, destination),
+          Location = RewriteRenamedPath(panel.Location, source, destination),
+          Title = panel.Kind == "asset-details" && IsInFolder(panel.Context ?? string.Empty, source)
+              ? $"Asset · {Path.GetFileName(RewriteRenamedPath(panel.Context, source, destination))}" : panel.Title
+      }).ToList() },
+      SplitNode split => split with { First = RewriteRenamedPaths(split.First, source, destination), Second = RewriteRenamedPaths(split.Second, source, destination) },
+      _ => node
+  };
+  [JSInvokable]
+  public async Task<string> CreateAssetsFolder(string parentFolder, string name)
+  {
+      if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+          return JsonSerializer.Serialize(new { success = false, message = "Enter a valid folder name." }, WorkflowJsonOptions);
+      try
+      {
+          Directory.CreateDirectory(Path.Combine(parentFolder, name.Trim()));
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true, message = "Folder created." }, WorkflowJsonOptions);
+      }
+      catch
+      {
+          return JsonSerializer.Serialize(new { success = false, message = "Could not create the folder." }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> ExportAsset(string assetPath)
+  {
+      if (string.IsNullOrWhiteSpace(assetPath)) return JsonSerializer.Serialize(new { success = false, message = "Select an asset to export." }, WorkflowJsonOptions);
+      try
+      {
+          var exported = await AssetExporter.ExportAsync(assetPath);
+          return JsonSerializer.Serialize(new { success = exported is not null, message = exported is null ? "Export cancelled." : "Asset exported." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> ExportAssets(string[] assetPaths)
+  {
+      try
+      {
+          var exported = await AssetExporter.ExportSelectionAsync(assetPaths);
+          return JsonSerializer.Serialize(new { success = exported is not null, message = exported is null ? "Export cancelled." : "Selected assets exported." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> DeleteAsset(string assetPath, string assetsRoot)
+  {
+      try
+      {
+          var root = Path.GetFullPath(assetsRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+          var target = Path.GetFullPath(assetPath);
+          if (!target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+              return JsonSerializer.Serialize(new { success = false, message = "The asset is outside the project assets folder." }, WorkflowJsonOptions);
+
+          var files = File.Exists(target) ? [target] : Directory.Exists(target) ? Directory.EnumerateFiles(target, "*", SearchOption.AllDirectories).ToList() : [];
+          if (File.Exists(target)) DeleteFile(target);
+          else if (Directory.Exists(target)) DeleteDirectory(target);
+          else return JsonSerializer.Serialize(new { success = false, message = "The asset no longer exists." }, WorkflowJsonOptions);
+
+          var projectFolder = Directory.GetParent(root)!.FullName;
+          foreach (var file in files)
+          {
+              var relativePath = Path.GetRelativePath(projectFolder, file).Replace('\\', '/');
+              var metadataName = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativePath))).ToLowerInvariant() + ".json";
+              var metadataPath = Path.Combine(projectFolder, metadataName);
+              if (File.Exists(metadataPath)) DeleteFile(metadataPath);
+          }
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true, message = "Asset deleted." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  private static void DeleteDirectory(string directoryPath)
+  {
+      foreach (var file in Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories)) DeleteFile(file);
+      foreach (var directory in Directory.EnumerateDirectories(directoryPath, "*", SearchOption.AllDirectories).OrderByDescending(path => path.Length))
+      {
+          File.SetAttributes(directory, FileAttributes.Normal);
+          Directory.Delete(directory, recursive: false);
+      }
+      File.SetAttributes(directoryPath, FileAttributes.Normal);
+      Directory.Delete(directoryPath, recursive: false);
+  }
+  private static void DeleteFile(string filePath)
+  {
+      File.SetAttributes(filePath, FileAttributes.Normal);
+      File.Delete(filePath);
+  }
+  private static string UniqueAssetPath(string assetsFolder, string fileName, bool isDirectory = false)
+  {
+      var safeName = Path.GetFileName(fileName);
+      var target = Path.Combine(assetsFolder, safeName);
+      if (!File.Exists(target) && !Directory.Exists(target)) return target;
+      var baseName = Path.GetFileNameWithoutExtension(safeName);
+      var extension = isDirectory ? string.Empty : Path.GetExtension(safeName);
+      for (var suffix = 2; ; suffix++)
+      {
+          target = Path.Combine(assetsFolder, $"{baseName} ({suffix}){extension}");
+          if (!File.Exists(target) && !Directory.Exists(target)) return target;
+      }
   }
   [JSInvokable]
   public async Task<string> SaveWorkflow(string id, string displayName, string description, bool requiresMask, int minImages, int maxImages)
@@ -269,7 +730,7 @@
       await InvokeAsync(StateHasChanged);
   }
   [JSInvokable]
-  public async Task SetCurrentComfyConnection(string serverUrl, string apiKey)
+  public async Task SetCurrentComfyConnection(string serverUrl, string apiKey, string connectionId)
   {
       ComfyConnection.ServerUrl = serverUrl;
       ComfyConnection.ApiKey = apiKey;
@@ -283,6 +744,7 @@
           return;
       }
 
+      ComfyConnection.ConnectionId = string.IsNullOrWhiteSpace(connectionId) ? serverUrl.Trim() : connectionId.Trim();
       await ComfyConnection.SaveAsync();
       connectionStatus = "Current connection saved.";
       connectionStatusClass = "connection-success";
@@ -290,6 +752,49 @@
   }
   private void ActivateTab(TabActivation activation)
       => Root = SetActiveTab(Root, activation.GroupId, activation.PanelId);
+  private Task SelectGenerationWorkflow(GenerationWorkflowSelection selection)
+  {
+      if (!string.IsNullOrEmpty(selection.WorkflowId) && !WorkflowLibrary.GetAll().Any(workflow =>
+          workflow.Id == selection.WorkflowId && !string.IsNullOrWhiteSpace(workflow.GraphFile)))
+          return Task.CompletedTask;
+      Root = UpdateGenerationPanel(Root, selection.PanelId, panel =>
+          panel with { WorkflowId = selection.WorkflowId, InputValues = new Dictionary<string, string>() });
+      return InvokeAsync(StateHasChanged);
+  }
+  private Task ChangeGenerationInput(GenerationInputChange change)
+  {
+      if (string.IsNullOrWhiteSpace(change.Name)) return Task.CompletedTask;
+      Root = UpdateGenerationPanel(Root, change.PanelId, panel =>
+      {
+          var values = new Dictionary<string, string>(panel.InputValues ?? [], StringComparer.Ordinal);
+          values[change.Name] = change.Value;
+          return panel with { InputValues = values };
+      });
+      return InvokeAsync(StateHasChanged);
+  }
+  private static DockNode UpdateGenerationPanel(DockNode node, string panelId, Func<DockPanel, DockPanel> update) => node switch
+  {
+      TabGroupNode group when group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "generation")
+          => group with
+          {
+              Panels = group.Panels.Select(panel => panel.Id == panelId ? update(panel) : panel).ToList(),
+              ActiveId = panelId
+          },
+      SplitNode split => split with
+      {
+          First = UpdateGenerationPanel(split.First, panelId, update),
+          Second = UpdateGenerationPanel(split.Second, panelId, update)
+      },
+      _ => node
+  };
+  [JSInvokable]
+  public async Task ClosePanel(string panelId)
+  {
+      var remaining = RemovePanel(Root, panelId, out var removed);
+      if (removed is null) return;
+      Root = remaining is null ? BuildTree() : CollapseEmptyGroups(remaining) ?? BuildTree();
+      await InvokeAsync(StateHasChanged);
+  }
   private static DockNode AddToFirstGroup(DockNode node, DockPanel panel) => node switch
   {
       TabGroupNode group => group with { Panels = group.Panels.Append(panel).ToList(), ActiveId = panel.Id },
@@ -312,7 +817,7 @@
   {
       var withoutSource = RemovePanel(Root, panelId, out var panel);
       if (panel is null || withoutSource is null) return;
-      Root = InsertPanel(withoutSource, targetGroupId, panel, zone);
+      Root = CollapseEmptyGroups(InsertPanel(withoutSource, targetGroupId, panel, zone)) ?? BuildTree();
       await InvokeAsync(StateHasChanged);
   }
   [JSInvokable("ApplyRootDockDrop")]
@@ -321,13 +826,13 @@
       var remaining = RemovePanel(Root, panelId, out var panel);
       if (remaining is null || panel is null) return;
       var incoming = new TabGroupNode($"group-{panel.Id}", [panel], panel.Id);
-      Root = edge switch
+      Root = CollapseEmptyGroups(edge switch
       {
           "top" => new SplitNode($"root-top-{panel.Id}", DockAxis.Vertical, .25, incoming, remaining),
           "bottom" => new SplitNode($"root-bottom-{panel.Id}", DockAxis.Vertical, .75, remaining, incoming),
           "left" => new SplitNode($"root-left-{panel.Id}", DockAxis.Horizontal, .25, incoming, remaining),
           _ => new SplitNode($"root-right-{panel.Id}", DockAxis.Horizontal, .75, remaining, incoming)
-      };
+      }) ?? BuildTree();
       await InvokeAsync(StateHasChanged);
   }
   private static DockNode? RemovePanel(DockNode node, string panelId, out DockPanel? removed)
@@ -347,6 +852,18 @@
       var second = RemovePanel(split.Second, panelId, out removed);
       return second is null ? split.First : split with { Second = second };
   }
+  private static DockNode? CollapseEmptyGroups(DockNode node) => node switch
+  {
+      TabGroupNode group => group.Panels.Count == 0 ? null : group,
+      SplitNode split => CollapseSplit(split),
+      _ => node
+  };
+  private static DockNode? CollapseSplit(SplitNode split)
+  {
+      var first = CollapseEmptyGroups(split.First);
+      var second = CollapseEmptyGroups(split.Second);
+      return first is null ? second : second is null ? first : split with { First = first, Second = second };
+  }
   private static DockNode InsertPanel(DockNode node, string groupId, DockPanel panel, string zone)
   {
       if (node is TabGroupNode group)
@@ -362,11 +879,119 @@
       var split = (SplitNode)node;
       return split with { First = InsertPanel(split.First, groupId, panel, zone), Second = InsertPanel(split.Second, groupId, panel, zone) };
   }
+  [JSInvokable]
+  public Task SetSplitRatio(string splitId, double ratio)
+  {
+      if (string.IsNullOrWhiteSpace(splitId) || !double.IsFinite(ratio)) return Task.CompletedTask;
+      Root = UpdateSplitRatio(Root, splitId, Math.Clamp(ratio, .22, .78));
+      return InvokeAsync(StateHasChanged);
+  }
+  private static DockNode UpdateSplitRatio(DockNode node, string splitId, double ratio) => node switch
+  {
+      SplitNode split when split.Id == splitId => split with { Ratio = ratio },
+      SplitNode split => split with
+      {
+          First = UpdateSplitRatio(split.First, splitId, ratio),
+          Second = UpdateSplitRatio(split.Second, splitId, ratio)
+      },
+      _ => node
+  };
+  private DockNode? RestoreWorkspace(DockNode? node)
+  {
+      if (node is TabGroupNode group)
+      {
+          var panels = (group.Panels ?? []).Select(RestorePanel).OfType<DockPanel>()
+              .DistinctBy(panel => panel.Id).ToList();
+          if (panels.Count == 0) return null;
+          var activeId = panels.Any(panel => panel.Id == group.ActiveId) ? group.ActiveId : panels[0].Id;
+          return group with { Id = string.IsNullOrWhiteSpace(group.Id) ? $"group-{Guid.NewGuid():N}" : group.Id,
+              Panels = panels, ActiveId = activeId };
+      }
+      if (node is SplitNode split)
+      {
+          var first = RestoreWorkspace(split.First);
+          var second = RestoreWorkspace(split.Second);
+          if (first is null) return second;
+          if (second is null) return first;
+          return split with { First = first, Second = second,
+              Ratio = double.IsFinite(split.Ratio) ? Math.Clamp(split.Ratio, .22, .78) : .5 };
+      }
+      return null;
+  }
+  private DockPanel? RestorePanel(DockPanel panel)
+  {
+      if (string.IsNullOrWhiteSpace(panel.Id)) return null;
+      try
+      {
+          if (panel.Kind == "assets")
+          {
+              if (string.IsNullOrWhiteSpace(panel.Context))
+                  return panel with { Title = "Assets", Context = null, Location = null };
+              var root = NormalizeFolder(panel.Context);
+              var projectFolder = Directory.GetParent(root)?.FullName;
+              var project = FindRegisteredProject(projectFolder);
+              if (project is null || !Directory.Exists(root) ||
+                  !string.Equals(root, NormalizeFolder(Path.Combine(project.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase))
+                  return panel with { Title = "Assets", Context = null, Location = null };
+              var location = string.IsNullOrWhiteSpace(panel.Location) ? root : NormalizeFolder(panel.Location);
+              if (!IsInFolder(location, root) || !Directory.Exists(location)) location = root;
+              return panel with { Title = $"Assets · {project.DisplayName}", Context = root, Location = location };
+          }
+          if (panel.Kind == "generation")
+          {
+              var project = FindRegisteredProject(panel.Context);
+              return project is null
+                  ? panel with { Title = "Generation", Context = null, Location = null }
+                  : panel with { Title = $"Generation · {project.DisplayName}", Context = project.FolderPath };
+          }
+          if (panel.Kind == "asset-details")
+          {
+              if (string.IsNullOrWhiteSpace(panel.Context) || string.IsNullOrWhiteSpace(panel.Location)) return null;
+              var root = NormalizeFolder(panel.Location);
+              var project = FindRegisteredProject(Directory.GetParent(root)?.FullName);
+              var asset = Path.GetFullPath(panel.Context);
+              if (project is null || !File.Exists(asset) || !IsInFolder(asset, root) ||
+                  !string.Equals(root, NormalizeFolder(Path.Combine(project.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase)) return null;
+              return panel with { Title = $"Asset · {Path.GetFileName(asset)}", Context = asset, Location = root };
+          }
+      }
+      catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+      {
+          return panel.Kind is "assets" or "generation" ? panel with { Title = panel.Kind == "assets" ? "Assets" : "Generation", Context = null, Location = null } : null;
+      }
+      return null;
+  }
+  private ProjectDefinition? FindRegisteredProject(string? folderPath) =>
+      string.IsNullOrWhiteSpace(folderPath) ? null : ProjectLibrary.GetAll().FirstOrDefault(project =>
+          string.Equals(project.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase) && Directory.Exists(project.FolderPath));
+  private static int MaximumPanelNumber(DockNode node) => node switch
+  {
+      TabGroupNode group => group.Panels.Select(panel =>
+      {
+          var digits = new string(panel.Id.Reverse().TakeWhile(char.IsDigit).Reverse().ToArray());
+          return int.TryParse(digits, out var number) ? number : 0;
+      }).DefaultIfEmpty().Max(),
+      SplitNode split => Math.Max(MaximumPanelNumber(split.First), MaximumPanelNumber(split.Second)),
+      _ => 0
+  };
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
-      if (!firstRender) return;
-      dockReference = DotNetObjectReference.Create(this);
-      await JS.InvokeVoidAsync("recursiveDock.setReference", dockReference);
+      if (firstRender)
+      {
+          dockReference = DotNetObjectReference.Create(this);
+          await JS.InvokeVoidAsync("recursiveDock.setReference", dockReference);
+      }
+      if (!workspaceLoaded) return;
+      if (ReferenceEquals(savedRoot, Root)) return;
+      try
+      {
+          WorkspaceLayoutStore.Save(Root);
+          savedRoot = Root;
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+      {
+          System.Diagnostics.Debug.WriteLine($"Could not save workspace layout: {ex}");
+      }
   }
   public void Dispose() => dockReference?.Dispose();
 }

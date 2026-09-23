@@ -1,5 +1,46 @@
 (function () {
   let reference=null, drag=null, target=null, zone=null, ghost=null, suppressTabClick=false;
+  let modalId=0;
+  const showAppModal=({title,message,confirmLabel,initialValue,danger=false})=>new Promise(resolve=>{
+    const hasInput=initialValue!==undefined;
+    const previousFocus=document.activeElement;
+    const dialog=document.createElement('dialog');
+    dialog.className=`app-modal${danger?' app-modal-danger':''}`;
+    const id=`app-modal-title-${++modalId}`;
+    dialog.setAttribute('aria-labelledby',id);
+    dialog.innerHTML='<form method="dialog"><div class="app-modal-header"><span class="app-modal-mark" aria-hidden="true"></span><div><p class="app-modal-eyebrow">SLOPFACTORY / ASSETS</p><h2></h2></div></div><p class="app-modal-message"></p><label class="app-modal-field"><span>Name</span><input type="text" required maxlength="255" autocomplete="off" /></label><div class="app-modal-actions"><button type="button" class="app-modal-cancel">Cancel</button><button type="submit" class="app-modal-confirm"></button></div></form>';
+    const heading=dialog.querySelector('h2');
+    const messageElement=dialog.querySelector('.app-modal-message');
+    const field=dialog.querySelector('.app-modal-field');
+    const input=dialog.querySelector('input');
+    heading.id=id;
+    heading.textContent=title;
+    messageElement.textContent=message;
+    dialog.querySelector('.app-modal-mark').textContent=danger?'!':'✦';
+    dialog.querySelector('.app-modal-confirm').textContent=confirmLabel;
+    field.hidden=!hasInput;
+    input.disabled=!hasInput;
+    if(hasInput)input.value=initialValue;
+    const finish=value=>{
+      dialog.close();
+      dialog.remove();
+      if(previousFocus?.isConnected)previousFocus.focus();
+      resolve(value);
+    };
+    dialog.querySelector('form').addEventListener('submit',event=>{
+      event.preventDefault();
+      if(hasInput&&!input.value.trim()){input.setCustomValidity('Enter a name.');input.reportValidity();return;}
+      finish(hasInput?input.value.trim():true);
+    });
+    input.addEventListener('input',()=>input.setCustomValidity(''));
+    dialog.querySelector('.app-modal-cancel').addEventListener('click',()=>finish(hasInput?null:false));
+    dialog.addEventListener('cancel',event=>{event.preventDefault();finish(hasInput?null:false);});
+    dialog.addEventListener('click',event=>{if(event.target===dialog)finish(hasInput?null:false);});
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    if(hasInput){input.focus();input.select();}
+    else dialog.querySelector('.app-modal-cancel').focus();
+  });
   const clear=()=>{target?.classList.remove('dock-stack','dock-left','dock-right','dock-top','dock-bottom','root-dock-top','root-dock-bottom','root-dock-left','root-dock-right');target=null;zone=null;};
   const groupAt=(x,y)=>{const points=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];return points.map(e=>e?.closest?.('[data-group]')).find(Boolean)||null;};
   const show = (event, text) => {
@@ -106,6 +147,10 @@
       const selectedKey = currentKey && currentKey in connections ? currentKey : firstKey;
       populateComfyConnections(connection, selectedKey);
       if (selectedKey) loadComfyConnection(connection, selectedKey);
+      if (currentKey && selectedKey === currentKey && reference) {
+        const saved = connections[currentKey];
+        reference.invokeMethodAsync('SetCurrentComfyConnection', saved.serverUrl ?? '', saved.apiKey ?? '', currentKey);
+      }
     } catch { /* Local profile storage may be unavailable in a restricted WebView. */ }
   };
   const persistComfyConnection = (connection, userKey, serverUrl, apiKey) => {
@@ -321,6 +366,79 @@
   // Ignore compatibility mousedown events while a pointer drag is already active.
   window.addEventListener('pointerdown',begin,true);window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',cancel,true);
   window.addEventListener('mousedown',begin,true);window.addEventListener('mousemove',move,true);window.addEventListener('mouseup',end,true);
+  let assetDrag=null;
+  const clearAssetDropTargets=()=>document.querySelectorAll('.assets-drop-ready,.assets-external-drop-ready').forEach(panel=>panel.classList.remove('assets-drop-ready','assets-external-drop-ready'));
+  const hasExternalFiles=event=>!assetDrag&&Array.from(event.dataTransfer?.types??[]).includes('Files');
+  window.addEventListener('dragstart',event=>{
+    const asset=event.target.closest?.('[data-assets-drag]');
+    if(!asset)return;
+    assetDrag={path:asset.dataset.assetsSourcePath??'',root:asset.dataset.assetsSourceRoot??'',element:asset};
+    asset.classList.add('asset-dragging');
+    event.dataTransfer.effectAllowed='copy';
+    event.dataTransfer.setData('text/plain',assetDrag.path);
+  },true);
+  window.addEventListener('dragover',event=>{
+    const panel=event.target.closest?.('[data-assets-drop-target]');
+    const external=hasExternalFiles(event);
+    if(!assetDrag&&!external)return;
+    event.preventDefault();
+    if(!panel){clearAssetDropTargets();return;}
+    event.dataTransfer.dropEffect='copy';
+    clearAssetDropTargets();
+    panel.classList.add(external?'assets-external-drop-ready':'assets-drop-ready');
+  },true);
+  window.addEventListener('dragleave',event=>{
+    const panel=event.target.closest?.('[data-assets-drop-target]');
+    if(panel&&!panel.contains(event.relatedTarget))panel.classList.remove('assets-drop-ready','assets-external-drop-ready');
+  },true);
+  window.addEventListener('drop',async event=>{
+    const panel=event.target.closest?.('[data-assets-drop-target]');
+    const external=hasExternalFiles(event);
+    if(!assetDrag&&!external)return;
+    event.preventDefault();
+    if(!panel){clearAssetDropTargets();return;}
+    if(external){
+      const files=Array.from(event.dataTransfer?.files??[]);
+      const folder=panel.dataset.assetsFolder??'';
+      const root=panel.dataset.assetsRoot??'';
+      const panelId=panel.dataset.assetsPanel;
+      clearAssetDropTargets();
+      if(!reference||!files.length)return;
+      const status=panel.querySelector('[data-assets-status]');
+      if(status)status.textContent=`Adding ${files.length} file${files.length===1?'':'s'}…`;
+      let added=0;
+      const failures=[];
+      for(const file of files){
+        try{
+          const result=JSON.parse(await reference.invokeMethodAsync('AddDroppedAsset',folder,root,file.name,DotNet.createJSStreamReference(file)));
+          if(result.success)added++;
+          else failures.push(result.message??`Could not add ${file.name}.`);
+        }catch(error){failures.push(`Could not add ${file.name}: ${error?.message??'Unknown error'}`);}
+      }
+      if(added)await reference.invokeMethodAsync('RefreshAssetsPanels');
+      const currentPanel=[...document.querySelectorAll('[data-assets-drop-target]')].find(item=>item.dataset.assetsPanel===panelId);
+      const currentStatus=currentPanel?.querySelector('[data-assets-status]');
+      if(currentStatus)currentStatus.textContent=failures.length
+        ? `${added} added. ${failures.length} failed: ${failures[0]}`
+        : `Added ${added} file${added===1?'':'s'}.`;
+      return;
+    }
+    const source=assetDrag;
+    clearAssetDropTargets();
+    assetDrag=null;
+    source.element.classList.remove('asset-dragging');
+    const status=panel.querySelector('[data-assets-status]');
+    if(!reference)return;
+    reference.invokeMethodAsync('CopyAsset',source.path,source.root,panel.dataset.assetsFolder??'',panel.dataset.assetsRoot??'').then(result=>{
+      const copied=JSON.parse(result);
+      if(status)status.textContent=copied.message??(copied.success?'Asset copied.':'Could not copy asset.');
+    }).catch(()=>{if(status)status.textContent='Could not copy asset.';});
+  },true);
+  window.addEventListener('dragend',()=>{
+    assetDrag?.element.classList.remove('asset-dragging');
+    assetDrag=null;
+    clearAssetDropTargets();
+  },true);
   // The DOM update gives tab selection instant feedback while Blazor persists
   // the active tab in the recursive dock tree through the button callback.
   window.addEventListener('click', event => {
@@ -332,27 +450,58 @@
     const ribbonAction = event.target.closest?.('[data-ribbon-action]')?.dataset.ribbonAction;
     if (ribbonAction) {
       const app = document.querySelector('.dock-app');
+      const activeTab=ribbonAction==='projects'?'projects':(['workspace','assets','generation','clear-workspace'].includes(ribbonAction)?'workspace':null);
+      app?.querySelectorAll('.ribbon-tab').forEach(button=>button.classList.toggle('active',button.dataset.ribbonAction===activeTab));
       app?.classList.toggle('settings-open', ribbonAction === 'settings');
       app?.classList.toggle('workflows-open', ribbonAction === 'workflows');
       app?.classList.toggle('projects-open', ribbonAction === 'projects');
-      app?.classList.toggle('assets-picker-open', ribbonAction === 'assets');
+      app?.classList.toggle('assets-picker-open', false);
       if (ribbonAction === 'settings') restoreComfyConnection();
       if (ribbonAction === 'workflows') restoreWorkflows();
       if (ribbonAction === 'projects') restoreProjects();
-      if (ribbonAction === 'assets') restoreAssetsPicker();
+      if (ribbonAction === 'assets' && reference) reference.invokeMethodAsync('OpenAssetsPanel', '', '');
+      if (ribbonAction === 'generation' && reference) reference.invokeMethodAsync('OpenGenerationPanel');
+      if (ribbonAction === 'clear-workspace' && reference) reference.invokeMethodAsync('ClearWorkspace');
       return;
     }
-    const assetsProject = event.target.closest?.('[data-assets-project]');
-    if (assetsProject && reference) {
-      const picker = assetsProject.closest('[data-assets-picker]');
-      const status = picker?.querySelector('[data-assets-status]');
-      reference.invokeMethodAsync('OpenAssetsPanel', assetsProject.dataset.folderPath ?? '', assetsProject.dataset.name ?? '').then(result => {
-        const opened = JSON.parse(result);
-        if (opened.success) { document.querySelector('.dock-app')?.classList.remove('assets-picker-open'); return; }
-        if (status) { status.hidden = false; status.textContent = opened.message ?? 'Could not open an Assets panel.'; }
-      }).catch(() => { if (status) { status.hidden = false; status.textContent = 'Could not open an Assets panel.'; } });
+    const closePanel = event.target.closest?.('[data-close-panel]');
+    if (closePanel && reference) { reference.invokeMethodAsync('ClosePanel', closePanel.dataset.closePanel ?? ''); return; }
+    const assetsProject = event.target.closest?.('[data-assets-project-select]');
+    if (assetsProject && reference) { reference.invokeMethodAsync('SetAssetsPanelProject', assetsProject.dataset.assetsPanel ?? '', assetsProject.dataset.projectFolder ?? '', assetsProject.dataset.projectName ?? ''); return; }
+    const generationProject = event.target.closest?.('[data-generation-project-select]');
+    if (generationProject && reference) {
+      const status=generationProject.closest('.generation-panel')?.querySelector('[data-generation-status]');
+      reference.invokeMethodAsync('SetGenerationPanelProject', generationProject.dataset.generationPanel ?? '', generationProject.dataset.projectFolder ?? '')
+        .then(result=>{const selected=JSON.parse(result);if(!selected.success&&status?.isConnected)status.textContent=selected.message??'Could not select project.';})
+        .catch(()=>{if(status?.isConnected)status.textContent='Could not select project.';});
       return;
     }
+    const generationChange = event.target.closest?.('[data-generation-change-project]');
+    if (generationChange && reference) { reference.invokeMethodAsync('ClearGenerationPanelProject', generationChange.dataset.generationPanel ?? ''); return; }
+    const assetsAdd = event.target.closest?.('[data-assets-add]');
+    if (assetsAdd && reference) {
+      const status = assetsAdd.closest('.assets-panel')?.querySelector('[data-assets-status]');
+      assetsAdd.disabled = true;
+      reference.invokeMethodAsync('AddAssets', assetsAdd.dataset.assetsFolder ?? '', assetsAdd.dataset.assetsRoot ?? '').then(result => {
+        const added = JSON.parse(result);
+        if (status) status.textContent = added.message ?? (added.success ? 'Assets added.' : 'Could not add assets.');
+      }).catch(() => { if (status) status.textContent = 'Could not add assets.'; }).finally(() => { assetsAdd.disabled = false; });
+      return;
+    }
+    const assetsCreateFolder = event.target.closest?.('[data-assets-create-folder]');
+    if (assetsCreateFolder && reference) {
+      const status = assetsCreateFolder.closest('.assets-panel')?.querySelector('[data-assets-status]');
+      showAppModal({title:'Create folder',message:'Add a folder to the current assets location.',confirmLabel:'Create folder',initialValue:''}).then(name=>{
+        if(name===null)return;
+        reference.invokeMethodAsync('CreateAssetsFolder', assetsCreateFolder.dataset.assetsFolder ?? '', name).then(result => {
+          const created = JSON.parse(result);
+          if (status?.isConnected) status.textContent = created.message ?? (created.success ? 'Folder created.' : 'Could not create folder.');
+        }).catch(() => { if (status?.isConnected) status.textContent = 'Could not create folder.'; });
+      });
+      return;
+    }
+    const assetsNavigate = event.target.closest?.('[data-assets-navigate]');
+    if (assetsNavigate && reference) { reference.invokeMethodAsync('NavigateAssetsPanel', assetsNavigate.dataset.assetsPanel ?? '', assetsNavigate.dataset.assetsFolder ?? ''); return; }
     const projectItem = event.target.closest?.('[data-project-item]');
     if (projectItem) { const library = projectItem.closest('[data-project-library]'); library?.querySelectorAll('[data-project-item]').forEach(item => item.classList.toggle('is-selected', item === projectItem)); const folder = library?.querySelector('[data-project-folder]'); const name = library?.querySelector('[data-project-name]'); if (folder) { folder.value = projectItem.dataset.folderPath ?? ''; folder.readOnly = true; } if (name) name.value = projectItem.dataset.name ?? ''; return; }
     const projectAction = event.target.closest?.('[data-project-action]')?.dataset.projectAction;
@@ -392,6 +541,73 @@
       }
       const create = projectAction === 'create';
       reference.invokeMethodAsync('SaveProject', folder?.value ?? '', name?.value ?? '', create).then(result => { const saved = JSON.parse(result); setProjectStatus(library, saved.message ?? (saved.success ? 'Project saved.' : 'Could not save project.'), saved.success ? 'success' : 'error'); if (saved.success) { if (folder) folder.readOnly = true; restoreProjects(); } });
+      return;
+    }
+    const assetsExportSelected = event.target.closest?.('[data-assets-export-selected]');
+    const assetsSelectAll = event.target.closest?.('[data-assets-select-all]');
+    if (assetsSelectAll) { assetsSelectAll.closest('.assets-panel')?.querySelectorAll('[data-asset-select]').forEach(item => { item.checked = true; }); return; }
+    if (assetsExportSelected && reference) {
+      const panel = assetsExportSelected.closest('.assets-panel'); const selected = [...(panel?.querySelectorAll('[data-asset-select]:checked') ?? [])].map(item => item.dataset.assetPath ?? ''); const status = panel?.querySelector('[data-assets-status]');
+      if (!selected.length) { if (status) status.textContent = 'Select assets to export.'; return; }
+      reference.invokeMethodAsync('ExportAssets', selected).then(result => { const exported = JSON.parse(result); if (status) status.textContent = exported.message ?? (exported.success ? 'Selected assets exported.' : 'Could not export assets.'); });
+      return;
+    }
+    const assetsDeleteSelected = event.target.closest?.('[data-assets-delete-selected]');
+    if (assetsDeleteSelected && reference) {
+      const panel = assetsDeleteSelected.closest('.assets-panel'); const selected = [...(panel?.querySelectorAll('[data-asset-select]:checked') ?? [])]; const status = panel?.querySelector('[data-assets-status]');
+      if (!selected.length) { if (status) status.textContent = 'Select assets to delete.'; return; }
+      showAppModal({title:'Delete selected items?',message:`Delete ${selected.length} selected item${selected.length===1?'':'s'}? Folders and their contents will be permanently removed. This cannot be undone.`,confirmLabel:'Delete selected',danger:true}).then(confirmed=>{
+        if(!confirmed)return;
+        Promise.all(selected.map(item => reference.invokeMethodAsync('DeleteAsset', item.dataset.assetPath ?? '', item.dataset.assetsRoot ?? ''))).then(results => {
+          const failures=results.map(result=>JSON.parse(result)).filter(result=>!result.success);
+          if(status?.isConnected)status.textContent=failures.length?failures[0].message??'Some items could not be deleted.':'Selected items deleted.';
+        }).catch(()=>{if(status?.isConnected)status.textContent='Could not delete selected items.';});
+      });
+      return;
+    }
+    const assetsRename = event.target.closest?.('[data-assets-rename]');
+    if (assetsRename && reference) {
+      const assetPath = assetsRename.dataset.assetPath ?? '';
+      const currentName = assetPath.split(/[\\/]/).pop() ?? '';
+      const panel = assetsRename.closest('.assets-panel');
+      const status = panel?.querySelector('[data-assets-status]');
+      showAppModal({title:'Rename item',message:'Choose a new name for this asset or folder.',confirmLabel:'Rename',initialValue:currentName}).then(newName=>{
+        if (newName===null || newName===currentName)return;
+        assetsRename.disabled = true;
+        reference.invokeMethodAsync('RenameAsset', assetPath, assetsRename.dataset.assetsRoot ?? '', newName).then(result => {
+          const renamed = JSON.parse(result);
+          if (status?.isConnected) status.textContent = renamed.message ?? (renamed.success ? 'Renamed.' : 'Could not rename asset.');
+        }).catch(() => { if (status?.isConnected) status.textContent = 'Could not rename asset.'; })
+          .finally(() => { if (assetsRename.isConnected) assetsRename.disabled = false; });
+      });
+      return;
+    }
+    const assetsExport = event.target.closest?.('[data-assets-export]');
+    if (assetsExport && reference) {
+      const panel = assetsExport.closest('.assets-panel'); const status = panel?.querySelector('[data-assets-status]');
+      reference.invokeMethodAsync('ExportAsset', assetsExport.dataset.assetPath ?? '').then(result => { const exported = JSON.parse(result); if (status) status.textContent = exported.message ?? (exported.success ? 'Asset exported.' : 'Could not export asset.'); });
+      return;
+    }
+    const assetsDelete = event.target.closest?.('[data-assets-delete]');
+    if (assetsDelete && reference) {
+      const panel = assetsDelete.closest('.assets-panel'); const status = panel?.querySelector('[data-assets-status]');
+      const name=(assetsDelete.dataset.assetPath??'').split(/[\\/]/).pop()??'this item';
+      showAppModal({title:'Delete item?',message:`Delete “${name}”? Folders and their contents will be permanently removed. This cannot be undone.`,confirmLabel:'Delete',danger:true}).then(confirmed=>{
+        if(!confirmed)return;
+        reference.invokeMethodAsync('DeleteAsset', assetsDelete.dataset.assetPath ?? '', assetsDelete.dataset.assetsRoot ?? '').then(result => { const deleted = JSON.parse(result); if (status?.isConnected) status.textContent = deleted.message ?? (deleted.success ? 'Asset deleted.' : 'Could not delete asset.'); })
+          .catch(()=>{if(status?.isConnected)status.textContent='Could not delete item.';});
+      });
+      return;
+    }
+    if (event.target.closest?.('[data-asset-select]')) return;
+    const assetFile = event.target.closest?.('[data-assets-open-details]');
+    if (assetFile?.dataset.assetsOpenDetails === 'file' && reference) {
+      const panel = assetFile.closest('.assets-panel');
+      const status = panel?.querySelector('[data-assets-status]');
+      reference.invokeMethodAsync('OpenAssetDetails', assetFile.dataset.assetPath ?? '', assetFile.dataset.assetsSourceRoot ?? '', panel?.dataset.assetsPanel ?? '').then(result => {
+        const opened = JSON.parse(result);
+        if (!opened.success && status) status.textContent = opened.message ?? 'Could not open asset details.';
+      }).catch(() => { if (status) status.textContent = 'Could not open asset details.'; });
       return;
     }
     const workflowItem = event.target.closest?.('[data-workflow-item]');
@@ -472,7 +688,7 @@
         localStorage.setItem(currentConnectionKey, key);
         populateComfyConnections(connection, key);
         setComfyStatus(connection, `“${key}” is now the current connection.`, 'success');
-        reference.invokeMethodAsync('SetCurrentComfyConnection', serverUrl, apiKey)
+        reference.invokeMethodAsync('SetCurrentComfyConnection', serverUrl, apiKey, key)
           .then(() => populateComfyConnections(connection, key));
       } catch {
         setComfyStatus(connection, 'Could not set the current connection.', 'error');
@@ -487,7 +703,12 @@
       const key = fields.key?.value ?? '';
       if (comfyAction === 'save' && !persistComfyConnection(connection, key, serverUrl, apiKey)) return;
       if (comfyAction === 'test') reference.invokeMethodAsync('TestComfyConnection', serverUrl, apiKey);
-      else reference.invokeMethodAsync('SaveComfyConnection', serverUrl, apiKey, key);
+      else {
+        reference.invokeMethodAsync('SaveComfyConnection', serverUrl, apiKey, key);
+        const savedKey = key.trim() || serverUrl.trim();
+        if (localStorage.getItem(currentConnectionKey) === savedKey)
+          reference.invokeMethodAsync('SetCurrentComfyConnection', serverUrl, apiKey, savedKey);
+      }
       return;
     }
     if (!tab) return;
@@ -496,5 +717,12 @@
     group.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('selected', item === tab));
     group.querySelectorAll('[data-panel-view]').forEach(item => item.classList.toggle('is-active', item.dataset.panelView === tab.dataset.tab));
   }, true);
-  window.recursiveDock={setReference:dotnet=>{reference=dotnet;}};
+  window.recursiveDock={setReference:dotnet=>{
+    reference=dotnet;
+    try {
+      const key=localStorage.getItem(currentConnectionKey);
+      const saved=key ? getComfyConnections()[key] : null;
+      if (saved) reference.invokeMethodAsync('SetCurrentComfyConnection',saved.serverUrl ?? '',saved.apiKey ?? '',key);
+    } catch { /* Use the connection already restored by .NET preferences. */ }
+  },setSplitRatio:(id,ratio)=>reference?.invokeMethodAsync('SetSplitRatio',id,ratio),imageDimensions:image=>[image.naturalWidth,image.naturalHeight]};
 })();

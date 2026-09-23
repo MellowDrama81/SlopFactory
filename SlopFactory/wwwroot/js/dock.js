@@ -10,6 +10,12 @@ document.addEventListener('pointerdown', event => {
     const percent = Math.max(22, Math.min(78, offset / available * 100));
     split.style.setProperty('--first', `${percent}%`);
   };
-  const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); splitter.classList.remove('dragging'); };
+  const up = () => {
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', up);
+    splitter.classList.remove('dragging');
+    const ratio = parseFloat(split.style.getPropertyValue('--first')) / 100;
+    if (Number.isFinite(ratio)) window.recursiveDock?.setSplitRatio?.(split.dataset.splitId, ratio);
+  };
   splitter.classList.add('dragging'); document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); event.preventDefault();
 });

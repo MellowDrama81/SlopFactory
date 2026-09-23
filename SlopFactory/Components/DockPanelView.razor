@@ -1,4 +1,13 @@
 @using SlopFactory.Models
+@using SlopFactory.Services
+@using System.Text.Json.Nodes
+@using Microsoft.AspNetCore.Components.Web
+@inject ProjectLibrary ProjectLibrary
+@inject WorkflowLibrary WorkflowLibrary
+@inject WorkflowTemplateService WorkflowTemplateService
+@inject ComfyGenerationService ComfyGenerationService
+@inject IJSRuntime JS
+@implements IDisposable
 <div class="panel-view @Panel.Kind">
 @if (Panel.Kind == "overview") { <div class="intro"><p class="eyebrow">Q3 DELIVERY</p><h2>Ship work, not status updates.</h2><p>Focus the team on the smallest set of decisions that moves the release forward.</p><div class="stat-row"><div><b>74%</b><span>release confidence</span></div><div><b>12</b><span>open decisions</span></div><div><b>4</b><span>days to beta</span></div></div></div><div class="mini-roadmap"><span>Discovery</span><i></i><span>Build</span><i></i><span>Launch</span></div> }
 else if (Panel.Kind == "velocity") { <div class="metric"><p>Weekly throughput</p><b>42 <em>↑ 18%</em></b><svg viewBox="0 0 300 90"><path d="M0 70 L40 64 70 68 105 42 140 50 185 20 220 32 260 14 300 23" fill="none" stroke="#82b6ff" stroke-width="4"/></svg></div> }
@@ -6,20 +15,461 @@ else if (Panel.Kind == "activity") { <div class="feed"><p><b>Maia Chen</b> moved
 else if (Panel.Kind == "notes") { <div class="notes"><p class="eyebrow">TODAY'S NOTE</p><h2>Keep the release calm.</h2><p>Surface decisions early, make handoffs explicit, and preserve room for the team to think.</p><span>#product</span><span>#direction</span></div> }
 else if (Panel.Kind == "checklist") { <div class="checklist"><p><b>12 / 16</b> launch tasks complete</p><div class="progress"><i></i></div><label>☑ Release notes approved</label><label>☑ Support coverage confirmed</label><label>□ Schedule customer announcement</label><label>□ Publish launch post</label></div> }
 else if (Panel.Kind == "risks") { <div class="risks"><p class="eyebrow">WATCH LIST</p><h2>2 decisions need a owner</h2><p>Billing migration and regional rollout timing could affect beta readiness.</p></div> }
-else if (Panel.Kind == "assets") { <div class="assets-panel"><p class="eyebrow">PROJECT ASSETS</p><h2>@Panel.Title</h2><p class="assets-path">@Panel.Context</p>@if (assetEntries.Count == 0) { <p class="assets-empty">This assets folder is empty.</p> } else { <ul>@foreach (var entry in assetEntries) { <li><span>@(entry.IsDirectory ? "▸" : "•")</span>@entry.Name <small>@entry.Detail</small></li> }</ul> }</div> }
+else if (Panel.Kind == "assets" && string.IsNullOrWhiteSpace(Panel.Context)) { <div class="assets-panel assets-project-picker"><p class="eyebrow">PROJECT ASSETS</p><h2>Select a project</h2><p>Choose the project whose assets folder this panel should show.</p>@if (ProjectLibrary.GetAll().Count == 0) { <p class="assets-empty">No projects have been added yet. Add one from Projects, then open a new Assets panel.</p> } else { <div class="assets-project-list">@foreach (var project in ProjectLibrary.GetAll()) { <button type="button" data-assets-project-select data-assets-panel="@Panel.Id" data-project-folder="@project.FolderPath" data-project-name="@project.Name">@project.DisplayName</button> }</div> }</div> }
+else if (Panel.Kind == "generation" && string.IsNullOrWhiteSpace(Panel.Context))
+{
+  <div class="generation-panel generation-project-picker">
+    <p class="eyebrow">PROJECT GENERATION</p>
+    <h2>Select a project</h2>
+    <p>Generations in this panel will belong to the project you choose.</p>
+    @if (ProjectLibrary.GetAll().Count == 0)
+    {
+      <p class="assets-empty">No projects have been added yet. Add one from Projects, then select it here.</p>
+    }
+    else
+    {
+      <div class="assets-project-list">
+        @foreach (var project in ProjectLibrary.GetAll())
+        {
+          <button type="button" data-generation-project-select data-generation-panel="@Panel.Id" data-project-folder="@project.FolderPath">@project.DisplayName</button>
+        }
+      </div>
+    }
+    <p class="generation-status" data-generation-status role="status"></p>
+  </div>
+}
+else if (Panel.Kind == "generation")
+{
+  <div class="generation-panel">
+    <p class="eyebrow">PROJECT GENERATION</p>
+    <div class="generation-heading">
+      <div><h2>@Panel.Title</h2><p class="assets-path">@Panel.Context</p></div>
+      <button type="button" data-generation-change-project data-generation-panel="@Panel.Id">Change project</button>
+    </div>
+    <label class="generation-field">
+      <span>Workflow</span>
+      <select value="@Panel.WorkflowId" @onchange="ChangeGenerationWorkflow">
+        <option value="">Select a workflow</option>
+        @foreach (var workflow in WorkflowLibrary.GetAll().Where(item => !string.IsNullOrWhiteSpace(item.GraphFile)))
+        {
+          <option value="@workflow.Id">@workflow.DisplayName</option>
+        }
+      </select>
+    </label>
+    @if (SelectedGenerationWorkflow is not null)
+    {
+      <p class="generation-workflow-description">@SelectedGenerationWorkflow.Description</p>
+      @if (generationLoading)
+      {
+        <p class="generation-next-step">Loading workflow inputs…</p>
+      }
+      else if (!string.IsNullOrWhiteSpace(generationLoadError))
+      {
+        <p class="generation-status" role="alert">@generationLoadError</p>
+      }
+      else
+      {
+        <div class="generation-inputs">
+          @foreach (var placeholder in generationInputs)
+          {
+            <label class="generation-field" @key="placeholder.Name">
+              <span>@placeholder.Label</span>
+              @if (placeholder.Type == "image")
+              {
+                <select value="@GenerationValue(placeholder.Name)" @onchange="args => ChangeGenerationInput(placeholder.Name, args)">
+                  <option value="">Select a project asset</option>
+                  @foreach (var asset in generationImages)
+                  {
+                    <option value="@asset">@asset</option>
+                  }
+                </select>
+              }
+              else if (placeholder.Name == "PROMPT")
+              {
+                <textarea rows="5" value="@GenerationValue(placeholder.Name)" @onchange="args => ChangeGenerationInput(placeholder.Name, args)" placeholder="Describe what to create"></textarea>
+              }
+              else
+              {
+                <input type="text" value="@GenerationValue(placeholder.Name)" @onchange="args => ChangeGenerationInput(placeholder.Name, args)" />
+              }
+            </label>
+          }
+          @if (generationInputs.Count == 0)
+          {
+            <p>No user inputs are required by this workflow.</p>
+          }
+        </div>
+        <p class="generation-seed-note">Seed values are generated automatically. Run uploads selected images and submits the workflow to the current Comfy connection.</p>
+        <button type="button" class="generation-run-button" disabled="@(GenerationState?.IsRunning == true)" @onclick="RunGeneration">@(GenerationState?.IsRunning == true ? "Running…" : "Run")</button>
+      }
+    }
+    else
+    {
+      <p class="generation-next-step">Select a workflow to see its required inputs.</p>
+    }
+    @if (GenerationState is { } run)
+    {
+      <p class="generation-status @(run.IsRunning ? "generation-active" : "")" role="status">@run.Status</p>
+      @if (!string.IsNullOrWhiteSpace(run.PromptId))
+      {
+        <p class="generation-job-id">Comfy job · @run.PromptId</p>
+      }
+      @if (run.Outputs.Count > 0)
+      {
+        <section class="generation-results" aria-label="Generation results">
+          <h3>Results</h3>
+          <div class="generation-result-grid">
+            @foreach (var output in run.Outputs)
+            {
+              <div class="generation-result" @key="output.Path">
+                @if (output.IsImage)
+                {
+                  <img src="@CreateImageSource(output.Path)" alt="Generated result @Path.GetFileName(output.Path)" />
+                }
+                <span>@Path.GetFileName(output.Path)</span>
+              </div>
+            }
+          </div>
+        </section>
+      }
+    }
+  </div>
+}
+else if (Panel.Kind == "asset-details")
+{
+  <div class="asset-details">
+    <p class="eyebrow">ASSET DETAILS</p>
+    <h2>@assetName</h2>
+    <p class="assets-path">@Panel.Context</p>
+    @if (assetImage is not null)
+    {
+      <p class="asset-dimensions">Dimensions: @(assetDimensions ?? "Loading…")</p>
+      <div class="asset-full-image"><img @ref="assetImageElement" @onload="UpdateImageDimensions" src="@assetImage" alt="@assetName" /></div>
+    }
+    else
+    {
+      <div class="asset-image-unavailable">Preview is available for JPG, PNG, GIF, and WebP images.</div>
+    }
+    <section class="asset-tags-section" aria-label="Asset tags">
+      <h3>Tags</h3>
+      @if (assetTags.Count == 0)
+      {
+        <p class="asset-tags-empty">No tags yet.</p>
+      }
+      else
+      {
+        <div class="asset-tag-list">
+          @foreach (var tag in assetTags)
+          {
+            <span class="asset-tag" @key="tag">@tag<button type="button" title="Remove @tag" aria-label="Remove @tag" @onclick="() => RemoveTag(tag)">×</button></span>
+          }
+        </div>
+      }
+      <div class="asset-tag-form">
+        <input type="text" list="@TagSuggestionListId" placeholder="Add a tag" aria-label="New tag" autocomplete="off" maxlength="64" @bind="newTag" @bind:event="oninput" @onkeydown="HandleTagKeyDown" />
+        <datalist id="@TagSuggestionListId">
+          @foreach (var tag in projectTags.Where(tag => !assetTags.Contains(tag, StringComparer.OrdinalIgnoreCase)))
+          {
+            <option value="@tag"></option>
+          }
+        </datalist>
+        <button type="button" @onclick="AddTag">Add tag</button>
+      </div>
+      @if (!string.IsNullOrWhiteSpace(tagStatus))
+      {
+        <p class="asset-tag-status" role="status">@tagStatus</p>
+      }
+    </section>
+  </div>
+}
+else if (Panel.Kind == "assets") { <div class="assets-panel" data-assets-drop-target data-assets-panel="@Panel.Id" data-assets-folder="@currentAssetsPath" data-assets-root="@assetsRoot"><p class="eyebrow">PROJECT ASSETS</p><div class="assets-heading"><div><h2>@Panel.Title</h2><p class="assets-path">@currentAssetsPath</p></div><div class="assets-actions"><button type="button" class="assets-up" data-assets-navigate data-assets-panel="@Panel.Id" data-assets-folder="@ParentAssetsPath" disabled="@(!CanNavigateUp)">↑ Up</button><button type="button" class="assets-create" data-assets-create-folder data-assets-folder="@currentAssetsPath">Create folder</button><button type="button" class="assets-select-all" data-assets-select-all>Select all</button><button type="button" class="assets-export-selected" data-assets-export-selected>⇩ Selected</button><button type="button" class="assets-delete-selected" data-assets-delete-selected>× Selected</button><button type="button" class="assets-add" data-assets-add data-assets-folder="@currentAssetsPath" data-assets-root="@assetsRoot">＋ Add assets</button></div></div><div class="assets-filter-bar"><label><span>Filter by tag</span><select value="@selectedTag" @onchange="ChangeTagFilter"><option value="">All tags</option>@foreach (var tag in availableTags) { <option value="@tag">@tag</option> }</select></label>@if (!string.IsNullOrEmpty(selectedTag)) { <span class="assets-filter-hint">Showing matching files in this folder and subfolders</span> }</div><p class="assets-action-status" data-assets-status></p>@if (assetEntries.Count == 0) { <p class="assets-empty">@(string.IsNullOrEmpty(selectedTag) ? "This folder is empty." : "No assets with this tag in this folder or its subfolders.")</p> } else { <div class="assets-grid">@foreach (var entry in assetEntries) { <article class="asset-tile @(entry.IsDirectory ? "" : "asset-file")" draggable="true" data-assets-drag data-assets-source-path="@entry.Path" data-assets-source-root="@assetsRoot" data-asset-path="@entry.Path" data-assets-open-details="@(entry.IsDirectory ? "" : "file")"><input type="checkbox" class="asset-select" data-asset-select data-asset-path="@entry.Path" data-assets-root="@assetsRoot" aria-label="Select @entry.Name" />@if (entry.IsDirectory) { <button type="button" class="asset-folder" data-assets-navigate data-assets-panel="@Panel.Id" data-assets-folder="@entry.Path"><div class="asset-tile-placeholder">▰</div><strong>@entry.Name</strong><small>Folder</small></button><div class="asset-folder-actions"><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename folder" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export folder as ZIP">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete folder">×</button></div> } else { @if (entry.Thumbnail is not null) { <img src="@entry.Thumbnail" alt="@entry.Name" /> } else { <div class="asset-tile-placeholder">◌</div> }<div class="asset-tile-footer"><strong>@entry.Name</strong><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename asset" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export asset">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete asset">×</button></div><small>@entry.Detail</small> }</article> }</div> }</div> }
 else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people asked for easier handoffs between product and design this week.</p><button>Review insights →</button></div> }
 </div>
 @code {
   [Parameter, EditorRequired] public DockPanel Panel { get; set; } = default!;
+  [Parameter] public EventCallback<GenerationWorkflowSelection> OnGenerationWorkflowChanged { get; set; }
+  [Parameter] public EventCallback<GenerationInputChange> OnGenerationInputChanged { get; set; }
+  private string? loadedGenerationWorkflowId;
+  private List<WorkflowPlaceholder> generationInputs = [];
+  private List<string> generationImages = [];
+  private string generationLoadError = string.Empty;
+  private bool generationLoading;
+  private GenerationRunState? GenerationState => ComfyGenerationService.GetState(Panel.Id);
+  private WorkflowDefinition? SelectedGenerationWorkflow => WorkflowLibrary.GetAll()
+      .FirstOrDefault(workflow => workflow.Id == Panel.WorkflowId && !string.IsNullOrWhiteSpace(workflow.GraphFile));
+  private string GenerationValue(string name) => Panel.InputValues?.GetValueOrDefault(name) ?? string.Empty;
+  private Task ChangeGenerationWorkflow(ChangeEventArgs args) =>
+      OnGenerationWorkflowChanged.InvokeAsync(new GenerationWorkflowSelection(Panel.Id, args.Value?.ToString() ?? string.Empty));
+  private Task ChangeGenerationInput(string name, ChangeEventArgs args) =>
+      OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Panel.Id, name, args.Value?.ToString() ?? string.Empty));
+  private void RunGeneration()
+  {
+      var workflow = SelectedGenerationWorkflow;
+      if (workflow is null || string.IsNullOrWhiteSpace(Panel.Context)) return;
+      ComfyGenerationService.Start(Panel.Id, Panel.Context, workflow,
+          Panel.InputValues ?? new Dictionary<string, string>());
+  }
+  protected override void OnInitialized() => ComfyGenerationService.Changed += OnGenerationChanged;
+  private void OnGenerationChanged(string panelId)
+  {
+      if (Panel.Id == panelId) _ = InvokeAsync(StateHasChanged);
+  }
+  public void Dispose() => ComfyGenerationService.Changed -= OnGenerationChanged;
   private List<AssetEntry> assetEntries = [];
+  private List<string> availableTags = [];
+  private string selectedTag = string.Empty;
+  private string? assetsRoot;
+  private string currentAssetsPath = string.Empty;
+  private string assetName = string.Empty;
+  private string? assetMetadataPath;
+  private string? assetProjectFolder;
+  private List<string> assetTags = [];
+  private IReadOnlyList<string> projectTags = [];
+  private string newTag = string.Empty;
+  private string tagStatus = string.Empty;
+  private string? assetImage;
+  private ElementReference assetImageElement;
+  private string? assetDimensions;
+  private string? dimensionsForPath;
+  private string TagSuggestionListId => $"asset-tag-suggestions-{Panel.Id}";
+  private async Task UpdateImageDimensions()
+  {
+      var size = await JS.InvokeAsync<int[]>("recursiveDock.imageDimensions", assetImageElement);
+      assetDimensions = size.Length == 2 && size[0] > 0 && size[1] > 0
+          ? $"{size[0]:N0} × {size[1]:N0} px" : "Unavailable";
+      await InvokeAsync(StateHasChanged);
+  }
   protected override void OnParametersSet()
   {
+      if (Panel.Kind == "generation") { LoadGenerationImages(); return; }
+      if (Panel.Kind == "asset-details") { LoadAssetDetails(); return; }
       if (Panel.Kind != "assets" || string.IsNullOrWhiteSpace(Panel.Context) || !Directory.Exists(Panel.Context)) { assetEntries = []; return; }
+      if (!string.Equals(assetsRoot, Panel.Context, StringComparison.OrdinalIgnoreCase))
+      {
+          assetsRoot = Panel.Context;
+          selectedTag = string.Empty;
+      }
+      currentAssetsPath = Panel.Location ?? Panel.Context;
+      LoadAssets();
+  }
+  protected override async Task OnParametersSetAsync()
+  {
+      if (Panel.Kind != "generation" || string.Equals(loadedGenerationWorkflowId, Panel.WorkflowId, StringComparison.Ordinal)) return;
+      loadedGenerationWorkflowId = Panel.WorkflowId;
+      generationInputs = [];
+      generationLoadError = string.Empty;
+      generationLoading = false;
+      if (SelectedGenerationWorkflow is not { } workflow) return;
+      generationLoading = true;
       try
       {
-          assetEntries = Directory.EnumerateFileSystemEntries(Panel.Context).OrderBy(path => !Directory.Exists(path)).ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).Select(path => new AssetEntry(Path.GetFileName(path), Directory.Exists(path), Directory.Exists(path) ? "Folder" : $"{new FileInfo(path).Length:N0} bytes")).ToList();
+          var placeholders = await WorkflowTemplateService.GetPlaceholdersAsync(workflow);
+          if (Panel.WorkflowId == workflow.Id)
+              generationInputs = placeholders.Where(placeholder => !placeholder.IsSeed).ToList();
       }
-      catch { assetEntries = []; }
+      catch (Exception ex)
+      {
+          if (Panel.WorkflowId == workflow.Id) generationLoadError = $"Could not load workflow inputs: {ex.Message}";
+      }
+      finally { if (Panel.WorkflowId == workflow.Id) generationLoading = false; }
   }
-  private sealed record AssetEntry(string Name, bool IsDirectory, string Detail);
+  private void LoadGenerationImages()
+  {
+      generationImages = [];
+      if (string.IsNullOrWhiteSpace(Panel.Context)) return;
+      var assetsFolder = Path.Combine(Panel.Context, "assets");
+      if (!Directory.Exists(assetsFolder)) return;
+      try
+      {
+          generationImages = Directory.EnumerateFiles(assetsFolder, "*", new EnumerationOptions
+          {
+              RecurseSubdirectories = true,
+              IgnoreInaccessible = true
+          }).Where(path => Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp")
+              .Select(path => Path.GetRelativePath(Panel.Context, path).Replace('\\', '/'))
+              .OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
+      }
+      catch { generationImages = []; }
+  }
+  private bool CanNavigateUp => !string.Equals(currentAssetsPath, assetsRoot, StringComparison.OrdinalIgnoreCase);
+  private string ParentAssetsPath => CanNavigateUp ? Directory.GetParent(currentAssetsPath)?.FullName ?? assetsRoot! : currentAssetsPath;
+  private void ChangeTagFilter(ChangeEventArgs args)
+  {
+      selectedTag = args.Value?.ToString() ?? string.Empty;
+      LoadAssets();
+  }
+  private void LoadAssets()
+  {
+      try
+      {
+          var files = Directory.EnumerateFiles(currentAssetsPath, "*", new EnumerationOptions
+          {
+              RecurseSubdirectories = true,
+              IgnoreInaccessible = true
+          }).ToList();
+          var taggedFiles = files.Select(path => (Path: path, Tags: ReadAssetTags(path))).ToList();
+          availableTags = taggedFiles.SelectMany(file => file.Tags)
+              .Distinct(StringComparer.OrdinalIgnoreCase)
+              .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+              .ToList();
+          if (selectedTag.Length > 0 && !availableTags.Contains(selectedTag, StringComparer.OrdinalIgnoreCase))
+              selectedTag = string.Empty;
+          if (selectedTag.Length > 0)
+          {
+              assetEntries = taggedFiles.Where(file => file.Tags.Contains(selectedTag, StringComparer.OrdinalIgnoreCase))
+                  .OrderBy(file => Path.GetFileName(file.Path), StringComparer.OrdinalIgnoreCase)
+                  .Select(file =>
+                  {
+                      var entry = CreateAssetEntry(file.Path);
+                      var folder = Path.GetRelativePath(currentAssetsPath, Path.GetDirectoryName(file.Path)!);
+                      return folder == "." ? entry : entry with { Detail = $"{folder.Replace('\\', '/')} · {entry.Detail}" };
+                  }).ToList();
+          }
+          else
+          {
+              assetEntries = Directory.EnumerateFileSystemEntries(currentAssetsPath)
+                  .OrderBy(path => !Directory.Exists(path))
+                  .ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                  .Select(CreateAssetEntry).ToList();
+          }
+      }
+      catch { availableTags = []; assetEntries = []; }
+  }
+  private IReadOnlyList<string> ReadAssetTags(string assetPath)
+  {
+      try
+      {
+          var projectFolder = Directory.GetParent(assetsRoot!)!.FullName;
+          var relativePath = Path.GetRelativePath(projectFolder, assetPath).Replace('\\', '/');
+          var metadataName = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativePath))).ToLowerInvariant() + ".json";
+          var metadataPath = Path.Combine(projectFolder, metadataName);
+          if (!File.Exists(metadataPath)) return [];
+          using var metadata = System.Text.Json.JsonDocument.Parse(File.ReadAllText(metadataPath));
+          if (!metadata.RootElement.TryGetProperty("tags", out var tags) || tags.ValueKind != System.Text.Json.JsonValueKind.Array) return [];
+          return tags.EnumerateArray()
+              .Where(tag => tag.ValueKind == System.Text.Json.JsonValueKind.String)
+              .Select(tag => tag.GetString()?.Trim() ?? string.Empty)
+              .Where(tag => tag.Length > 0)
+              .ToList();
+      }
+      catch { return []; }
+  }
+  private AssetEntry CreateAssetEntry(string path)
+  {
+      var isDirectory = Directory.Exists(path);
+      if (!isDirectory) EnsureAssetMetadata(path);
+      return new AssetEntry(Path.GetFileName(path), isDirectory, isDirectory ? "Folder" : $"{new FileInfo(path).Length:N0} bytes", isDirectory ? null : CreateThumbnail(path), path);
+  }
+  private void EnsureAssetMetadata(string assetPath)
+  {
+      try
+      {
+          var projectFolder = Directory.GetParent(assetsRoot!)!.FullName;
+          var relativeAssetPath = Path.GetRelativePath(projectFolder, assetPath).Replace('\\', '/');
+          var metadataFileName = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativeAssetPath))).ToLowerInvariant() + ".json";
+          var metadataPath = Path.Combine(projectFolder, metadataFileName);
+          if (File.Exists(metadataPath)) return;
+          var metadata = new { asset = relativeAssetPath, name = Path.GetFileName(assetPath), tags = Array.Empty<string>() };
+          File.WriteAllText(metadataPath, System.Text.Json.JsonSerializer.Serialize(metadata));
+      }
+      catch { }
+  }
+  private void LoadAssetDetails()
+  {
+      if (!string.Equals(dimensionsForPath, Panel.Context, StringComparison.OrdinalIgnoreCase))
+      {
+          assetDimensions = null;
+          dimensionsForPath = Panel.Context;
+          newTag = string.Empty;
+          tagStatus = string.Empty;
+      }
+      assetName = Path.GetFileName(Panel.Context) ?? "Asset";
+      assetImage = null;
+      assetTags = [];
+      assetMetadataPath = null;
+      assetProjectFolder = null;
+      projectTags = [];
+      if (string.IsNullOrWhiteSpace(Panel.Context) || string.IsNullOrWhiteSpace(Panel.Location) || !File.Exists(Panel.Context)) return;
+      try
+      {
+          assetsRoot = Panel.Location;
+          EnsureAssetMetadata(Panel.Context);
+          assetImage = CreateImageSource(Panel.Context);
+          var projectFolder = Directory.GetParent(Panel.Location)!.FullName;
+          assetProjectFolder = projectFolder;
+          var relativePath = Path.GetRelativePath(projectFolder, Panel.Context).Replace('\\', '/');
+          var metadataName = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativePath))).ToLowerInvariant() + ".json";
+          assetMetadataPath = Path.Combine(projectFolder, metadataName);
+          if (File.Exists(assetMetadataPath))
+          {
+              using var metadata = System.Text.Json.JsonDocument.Parse(File.ReadAllText(assetMetadataPath));
+              if (metadata.RootElement.TryGetProperty("tags", out var tags) && tags.ValueKind == System.Text.Json.JsonValueKind.Array)
+                  assetTags = tags.EnumerateArray()
+                      .Where(tag => tag.ValueKind == System.Text.Json.JsonValueKind.String)
+                      .Select(tag => tag.GetString()?.Trim() ?? string.Empty)
+                      .Where(tag => tag.Length > 0)
+                      .Distinct(StringComparer.OrdinalIgnoreCase)
+                      .ToList();
+          }
+          projectTags = ProjectLibrary.GetProjectTags(projectFolder);
+      }
+      catch { tagStatus = "Tags could not be read."; }
+  }
+  private async Task AddTag()
+  {
+      var enteredTag = newTag.Trim();
+      var tag = projectTags.FirstOrDefault(existing => string.Equals(existing, enteredTag, StringComparison.OrdinalIgnoreCase)) ?? enteredTag;
+      if (tag.Length == 0) { tagStatus = "Enter a tag."; return; }
+      if (tag.Length > 64) { tagStatus = "Tags must be 64 characters or fewer."; return; }
+      if (assetTags.Contains(tag, StringComparer.OrdinalIgnoreCase)) { tagStatus = "This tag is already assigned."; return; }
+      if (await SaveTags(assetTags.Append(tag).ToList())) newTag = string.Empty;
+  }
+  private Task HandleTagKeyDown(KeyboardEventArgs args) => args.Key == "Enter" ? AddTag() : Task.CompletedTask;
+  private Task RemoveTag(string tag) => SaveTags(assetTags.Where(existing => !string.Equals(existing, tag, StringComparison.OrdinalIgnoreCase)).ToList());
+  private async Task<bool> SaveTags(List<string> tags)
+  {
+      if (string.IsNullOrWhiteSpace(assetMetadataPath)) { tagStatus = "Asset metadata is unavailable."; return false; }
+      try
+      {
+          var metadata = JsonNode.Parse(await File.ReadAllTextAsync(assetMetadataPath)) as JsonObject
+              ?? throw new InvalidOperationException("The asset metadata is invalid.");
+          metadata["tags"] = System.Text.Json.JsonSerializer.SerializeToNode(tags);
+          await File.WriteAllTextAsync(assetMetadataPath, metadata.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+          assetTags = tags;
+          tagStatus = string.Empty;
+          if (assetProjectFolder is not null)
+          {
+              try
+              {
+                  foreach (var tag in tags) ProjectLibrary.RegisterProjectTag(assetProjectFolder, tag);
+                  projectTags = ProjectLibrary.GetProjectTags(assetProjectFolder);
+              }
+              catch (Exception ex) { tagStatus = $"Tags saved, but project suggestions could not be updated: {ex.Message}"; }
+          }
+          return true;
+      }
+      catch (Exception ex)
+      {
+          tagStatus = $"Could not save tags: {ex.Message}";
+          return false;
+      }
+  }
+  private static string? CreateThumbnail(string path)
+  {
+      var extension = Path.GetExtension(path).ToLowerInvariant();
+      var mimeType = extension switch { ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".gif" => "image/gif", ".webp" => "image/webp", _ => null };
+      var info = new FileInfo(path);
+      if (mimeType is null || info.Length > 8 * 1024 * 1024) return null;
+      try { return $"data:{mimeType};base64,{Convert.ToBase64String(File.ReadAllBytes(path))}"; }
+      catch { return null; }
+  }
+  private static string? CreateImageSource(string path)
+  {
+      var extension = Path.GetExtension(path).ToLowerInvariant();
+      var mimeType = extension switch { ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".gif" => "image/gif", ".webp" => "image/webp", _ => null };
+      if (mimeType is null) return null;
+      try { return $"data:{mimeType};base64,{Convert.ToBase64String(File.ReadAllBytes(path))}"; }
+      catch { return null; }
+  }
+  private sealed record AssetEntry(string Name, bool IsDirectory, string Detail, string? Thumbnail, string Path);
 }
