@@ -72,27 +72,97 @@ else if (Panel.Kind == "generation")
         <div class="generation-inputs">
           @foreach (var placeholder in generationInputs)
           {
-            <label class="generation-field" @key="placeholder.Name">
-              <span>@placeholder.Label</span>
-              @if (placeholder.Type == "image")
-              {
-                <select value="@GenerationValue(placeholder.Name)" @onchange="args => ChangeGenerationInput(placeholder.Name, args)">
-                  <option value="">Select a project asset</option>
-                  @foreach (var asset in generationImages)
+            @if (placeholder.Type == "image")
+            {
+              var selectedAsset = GenerationValue(placeholder.Name);
+              <div class="generation-field generation-image-field" @key="placeholder.Name">
+                <span>@placeholder.Label</span>
+                <button type="button" class="generation-image-selection" aria-label="Choose @placeholder.Label.ToLowerInvariant()" aria-expanded="@(openGenerationImagePicker == placeholder.Name)" @onclick="() => ToggleGenerationImagePicker(placeholder.Name)">
+                  @if (selectedAsset.Length > 0 && GenerationThumbnail(selectedAsset) is { } selectedThumbnail)
                   {
-                    <option value="@asset">@asset</option>
+                    <img src="@selectedThumbnail" alt="Selected @placeholder.Label.ToLowerInvariant()" />
                   }
-                </select>
-              }
-              else if (placeholder.Name == "PROMPT")
-              {
-                <textarea rows="5" value="@GenerationValue(placeholder.Name)" @onchange="args => ChangeGenerationInput(placeholder.Name, args)" placeholder="Describe what to create"></textarea>
-              }
-              else
-              {
-                <input type="text" value="@GenerationValue(placeholder.Name)" @onchange="args => ChangeGenerationInput(placeholder.Name, args)" />
-              }
-            </label>
+                  else
+                  {
+                    <span class="generation-image-empty" aria-hidden="true">▧</span>
+                  }
+                  <span class="generation-image-selection-text"><strong>@(selectedAsset.Length > 0 ? Path.GetFileName(selectedAsset) : "Choose a project image")</strong><small>@(selectedAsset.Length > 0 ? selectedAsset : "Browse image thumbnails")</small></span>
+                  <span class="generation-image-chevron" aria-hidden="true">@(openGenerationImagePicker == placeholder.Name ? "▴" : "▾")</span>
+                </button>
+                @if (openGenerationImagePicker == placeholder.Name)
+                {
+                  <div class="generation-picker-toolbar">
+                    <button type="button" class="generation-picker-up" disabled="@(!CanGenerationPickerNavigateUp)" @onclick="NavigateGenerationPickerUp">↑ Up</button>
+                    <span class="generation-picker-path" title="@GenerationPickerLocation">@GenerationPickerLocation</span>
+                    <div class="generation-picker-filter">
+                      <span>Filter by tag</span>
+                      <button type="button" class="generation-picker-tag-trigger" aria-label="Filter by tag" aria-haspopup="listbox" aria-expanded="@generationTagMenuOpen" @onclick="ToggleGenerationTagMenu">@(generationPickerTag.Length == 0 ? "All tags" : generationPickerTag)<span aria-hidden="true">▾</span></button>
+                      @if (generationTagMenuOpen)
+                      {
+                        <div class="generation-picker-tag-menu" role="listbox" aria-label="Filter by tag">
+                          <button type="button" role="option" aria-selected="@(generationPickerTag.Length == 0)" @onclick="() => SetGenerationPickerTag(string.Empty)">All tags</button>
+                          @foreach (var tag in generationPickerTags)
+                          {
+                            <button type="button" role="option" aria-selected="@(string.Equals(generationPickerTag, tag, StringComparison.OrdinalIgnoreCase))" @key="tag" @onclick="() => SetGenerationPickerTag(tag)">@tag</button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </div>
+                  @if (generationPickerTag.Length > 0)
+                  {
+                    <p class="generation-picker-hint">Showing matching images in this folder and subfolders</p>
+                  }
+                  @if (generationPickerEntries.Count == 0)
+                  {
+                    <p class="generation-image-picker-empty">@(generationPickerTag.Length > 0 ? "No images with this tag in this folder or its subfolders." : "This folder has no images or subfolders.")</p>
+                  }
+                  else
+                  {
+                    <div class="generation-image-grid" aria-label="Choose @placeholder.Label.ToLowerInvariant()">
+                      @foreach (var entry in generationPickerEntries)
+                      {
+                        @if (entry.IsDirectory)
+                        {
+                          <button type="button" class="generation-image-option generation-folder-option" title="Open @entry.RelativePath" aria-label="Open folder @entry.RelativePath" @key="entry.FullPath" @onclick="() => NavigateGenerationPicker(entry.FullPath)">
+                            <span class="generation-folder-icon" aria-hidden="true">▰</span><span>@Path.GetFileName(entry.FullPath)</span><small>Folder</small>
+                          </button>
+                        }
+                        else
+                        {
+                          <button type="button" class="generation-image-option @(string.Equals(entry.RelativePath, selectedAsset, StringComparison.OrdinalIgnoreCase) ? "is-selected" : "")" title="@entry.RelativePath" aria-label="Select @entry.RelativePath" aria-pressed="@(string.Equals(entry.RelativePath, selectedAsset, StringComparison.OrdinalIgnoreCase))" @key="entry.FullPath" @onclick="() => SelectGenerationImage(placeholder.Name, entry.RelativePath)">
+                            @if (GenerationThumbnail(entry.RelativePath) is { } thumbnail)
+                            {
+                              <img src="@thumbnail" alt="" loading="lazy" />
+                            }
+                            else
+                            {
+                              <span class="generation-image-unavailable" aria-hidden="true">▧</span>
+                            }
+                            <span>@Path.GetFileName(entry.FullPath)</span>
+                            @if (generationPickerTag.Length > 0) { <small>@Path.GetDirectoryName(entry.RelativePath)?.Replace('\\', '/')</small> }
+                          </button>
+                        }
+                      }
+                    </div>
+                  }
+                }
+              </div>
+            }
+            else
+            {
+              <label class="generation-field" @key="placeholder.Name">
+                <span>@placeholder.Label</span>
+                @if (placeholder.Name == "PROMPT")
+                {
+                  <textarea rows="5" value="@GenerationValue(placeholder.Name)" @onchange="args => ChangeGenerationInput(placeholder.Name, args)" placeholder="Describe what to create"></textarea>
+                }
+                else
+                {
+                  <input type="text" value="@GenerationValue(placeholder.Name)" @onchange="args => ChangeGenerationInput(placeholder.Name, args)" />
+                }
+              </label>
+            }
           }
           @if (generationInputs.Count == 0)
           {
@@ -182,7 +252,39 @@ else if (Panel.Kind == "asset-details")
     </section>
   </div>
 }
-else if (Panel.Kind == "assets") { <div class="assets-panel" data-assets-drop-target data-assets-panel="@Panel.Id" data-assets-folder="@currentAssetsPath" data-assets-root="@assetsRoot"><p class="eyebrow">PROJECT ASSETS</p><div class="assets-heading"><div><h2>@Panel.Title</h2><p class="assets-path">@currentAssetsPath</p></div><div class="assets-actions"><button type="button" class="assets-up" data-assets-navigate data-assets-panel="@Panel.Id" data-assets-folder="@ParentAssetsPath" disabled="@(!CanNavigateUp)">↑ Up</button><button type="button" class="assets-create" data-assets-create-folder data-assets-folder="@currentAssetsPath">Create folder</button><button type="button" class="assets-select-all" data-assets-select-all>Select all</button><button type="button" class="assets-export-selected" data-assets-export-selected>⇩ Selected</button><button type="button" class="assets-delete-selected" data-assets-delete-selected>× Selected</button><button type="button" class="assets-add" data-assets-add data-assets-folder="@currentAssetsPath" data-assets-root="@assetsRoot">＋ Add assets</button></div></div><div class="assets-filter-bar"><label><span>Filter by tag</span><select value="@selectedTag" @onchange="ChangeTagFilter"><option value="">All tags</option>@foreach (var tag in availableTags) { <option value="@tag">@tag</option> }</select></label>@if (!string.IsNullOrEmpty(selectedTag)) { <span class="assets-filter-hint">Showing matching files in this folder and subfolders</span> }</div><p class="assets-action-status" data-assets-status></p>@if (assetEntries.Count == 0) { <p class="assets-empty">@(string.IsNullOrEmpty(selectedTag) ? "This folder is empty." : "No assets with this tag in this folder or its subfolders.")</p> } else { <div class="assets-grid">@foreach (var entry in assetEntries) { <article class="asset-tile @(entry.IsDirectory ? "" : "asset-file")" draggable="true" data-assets-drag data-assets-source-path="@entry.Path" data-assets-source-root="@assetsRoot" data-asset-path="@entry.Path" data-assets-open-details="@(entry.IsDirectory ? "" : "file")"><input type="checkbox" class="asset-select" data-asset-select data-asset-path="@entry.Path" data-assets-root="@assetsRoot" aria-label="Select @entry.Name" />@if (entry.IsDirectory) { <button type="button" class="asset-folder" data-assets-navigate data-assets-panel="@Panel.Id" data-assets-folder="@entry.Path"><div class="asset-tile-placeholder">▰</div><strong>@entry.Name</strong><small>Folder</small></button><div class="asset-folder-actions"><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename folder" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export folder as ZIP">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete folder">×</button></div> } else { @if (entry.Thumbnail is not null) { <img src="@entry.Thumbnail" alt="@entry.Name" /> } else { <div class="asset-tile-placeholder">◌</div> }<div class="asset-tile-footer"><strong>@entry.Name</strong><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename asset" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export asset">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete asset">×</button></div><small>@entry.Detail</small> }</article> }</div> }</div> }
+else if (Panel.Kind == "assets")
+{
+  <div class="assets-panel" data-assets-drop-target data-assets-panel="@Panel.Id" data-assets-folder="@currentAssetsPath" data-assets-root="@assetsRoot">
+    <p class="eyebrow">PROJECT ASSETS</p>
+    <div class="assets-heading">
+      <div><h2>@Panel.Title</h2><p class="assets-path">@currentAssetsPath</p></div>
+      <div class="assets-actions"><button type="button" class="assets-up" data-assets-navigate data-assets-panel="@Panel.Id" data-assets-folder="@ParentAssetsPath" disabled="@(!CanNavigateUp)">↑ Up</button><button type="button" class="assets-create" data-assets-create-folder data-assets-folder="@currentAssetsPath">Create folder</button><button type="button" class="assets-select-all" data-assets-select-all>Select all</button><button type="button" class="assets-export-selected" data-assets-export-selected>⇩ Selected</button><button type="button" class="assets-delete-selected" data-assets-delete-selected>× Selected</button><button type="button" class="assets-add" data-assets-add data-assets-folder="@currentAssetsPath" data-assets-root="@assetsRoot">＋ Add assets</button></div>
+    </div>
+    <div class="assets-filter-bar">
+      <div class="assets-tag-filter">
+        <span>Filter by tag</span>
+        <button type="button" class="assets-tag-trigger" aria-label="Filter by tag" aria-haspopup="listbox" aria-expanded="@assetTagMenuOpen" @onclick="ToggleAssetTagMenu">@(selectedTag.Length == 0 ? "All tags" : selectedTag)<span aria-hidden="true">▾</span></button>
+        @if (assetTagMenuOpen)
+        {
+          <div class="assets-tag-menu" role="listbox" aria-label="Filter by tag">
+            <button type="button" role="option" aria-selected="@(selectedTag.Length == 0)" @onclick="() => SetAssetTagFilter(string.Empty)">All tags</button>
+            @foreach (var tag in availableTags)
+            {
+              <button type="button" role="option" aria-selected="@(string.Equals(selectedTag, tag, StringComparison.OrdinalIgnoreCase))" @key="tag" @onclick="() => SetAssetTagFilter(tag)">@tag</button>
+            }
+          </div>
+        }
+      </div>
+      @if (!string.IsNullOrEmpty(selectedTag)) { <span class="assets-filter-hint">Showing matching files in this folder and subfolders</span> }
+    </div>
+    <p class="assets-action-status" data-assets-status></p>
+    @if (assetEntries.Count == 0) { <p class="assets-empty">@(string.IsNullOrEmpty(selectedTag) ? "This folder is empty." : "No assets with this tag in this folder or its subfolders.")</p> }
+    else
+    {
+      <div class="assets-grid">@foreach (var entry in assetEntries) { <article class="asset-tile @(entry.IsDirectory ? "" : "asset-file")" draggable="true" data-assets-drag data-assets-source-path="@entry.Path" data-assets-source-root="@assetsRoot" data-asset-path="@entry.Path" data-assets-open-details="@(entry.IsDirectory ? "" : "file")"><input type="checkbox" class="asset-select" data-asset-select data-asset-path="@entry.Path" data-assets-root="@assetsRoot" aria-label="Select @entry.Name" />@if (entry.IsDirectory) { <button type="button" class="asset-folder" data-assets-navigate data-assets-panel="@Panel.Id" data-assets-folder="@entry.Path"><div class="asset-tile-placeholder">▰</div><strong>@entry.Name</strong><small>Folder</small></button><div class="asset-folder-actions"><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename folder" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export folder as ZIP">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete folder">×</button></div> } else { @if (entry.Thumbnail is not null) { <img src="@entry.Thumbnail" alt="@entry.Name" /> } else { <div class="asset-tile-placeholder">◌</div> }<div class="asset-tile-footer"><strong>@entry.Name</strong><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename asset" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export asset">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete asset">×</button></div><small>@entry.Detail</small> }</article> }</div>
+    }
+  </div>
+}
 else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people asked for easier handoffs between product and design this week.</p><button>Review insights →</button></div> }
 </div>
 @code {
@@ -192,16 +294,86 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   private string? loadedGenerationWorkflowId;
   private List<WorkflowPlaceholder> generationInputs = [];
   private List<string> generationImages = [];
+  private HashSet<string> generationImagePaths = new(StringComparer.OrdinalIgnoreCase);
+  private List<GenerationPickerEntry> generationPickerEntries = [];
+  private List<string> generationPickerTags = [];
+  private string generationPickerTag = string.Empty;
+  private bool generationTagMenuOpen;
+  private string? generationPickerRoot;
+  private string? generationPickerFolder;
+  private readonly Dictionary<string, string?> generationThumbnails = new(StringComparer.OrdinalIgnoreCase);
+  private string? openGenerationImagePicker;
+  private string? generationImageProject;
   private string generationLoadError = string.Empty;
   private bool generationLoading;
   private GenerationRunState? GenerationState => ComfyGenerationService.GetState(Panel.Id);
   private WorkflowDefinition? SelectedGenerationWorkflow => WorkflowLibrary.GetAll()
       .FirstOrDefault(workflow => workflow.Id == Panel.WorkflowId && !string.IsNullOrWhiteSpace(workflow.GraphFile));
   private string GenerationValue(string name) => Panel.InputValues?.GetValueOrDefault(name) ?? string.Empty;
-  private Task ChangeGenerationWorkflow(ChangeEventArgs args) =>
-      OnGenerationWorkflowChanged.InvokeAsync(new GenerationWorkflowSelection(Panel.Id, args.Value?.ToString() ?? string.Empty));
+  private Task ChangeGenerationWorkflow(ChangeEventArgs args)
+  {
+      openGenerationImagePicker = null;
+      return OnGenerationWorkflowChanged.InvokeAsync(new GenerationWorkflowSelection(Panel.Id, args.Value?.ToString() ?? string.Empty));
+  }
   private Task ChangeGenerationInput(string name, ChangeEventArgs args) =>
       OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Panel.Id, name, args.Value?.ToString() ?? string.Empty));
+  private void ToggleGenerationImagePicker(string name)
+  {
+      if (openGenerationImagePicker == name) { openGenerationImagePicker = null; generationTagMenuOpen = false; return; }
+      openGenerationImagePicker = name;
+      generationPickerTag = string.Empty;
+      generationTagMenuOpen = false;
+      generationPickerFolder = generationPickerRoot;
+      var selected = GenerationValue(name);
+      if (generationImagePaths.Contains(selected) && Panel.Context is not null)
+      {
+          var selectedFolder = Path.GetDirectoryName(Path.Combine(Panel.Context, selected.Replace('/', Path.DirectorySeparatorChar)));
+          if (selectedFolder is not null && IsInsideGenerationPicker(selectedFolder)) generationPickerFolder = selectedFolder;
+      }
+      RefreshGenerationPicker();
+  }
+  private bool CanGenerationPickerNavigateUp => generationPickerRoot is not null && generationPickerFolder is not null &&
+      !string.Equals(generationPickerRoot, generationPickerFolder, StringComparison.OrdinalIgnoreCase);
+  private string GenerationPickerLocation => generationPickerFolder is null || Panel.Context is null ? "assets" :
+      Path.GetRelativePath(Panel.Context, generationPickerFolder).Replace('\\', '/');
+  private bool IsInsideGenerationPicker(string folder) => generationPickerRoot is not null &&
+      (string.Equals(Path.GetFullPath(folder), generationPickerRoot, StringComparison.OrdinalIgnoreCase) ||
+       Path.GetFullPath(folder).StartsWith(generationPickerRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+  private void NavigateGenerationPicker(string folder)
+  {
+      if (!Directory.Exists(folder) || !IsInsideGenerationPicker(folder)) return;
+      generationTagMenuOpen = false;
+      generationPickerFolder = Path.GetFullPath(folder);
+      RefreshGenerationPicker();
+  }
+  private void NavigateGenerationPickerUp()
+  {
+      if (!CanGenerationPickerNavigateUp) return;
+      var parent = Directory.GetParent(generationPickerFolder!)?.FullName;
+      if (parent is not null) NavigateGenerationPicker(parent);
+  }
+  private void ToggleGenerationTagMenu() => generationTagMenuOpen = !generationTagMenuOpen;
+  private void SetGenerationPickerTag(string tag)
+  {
+      generationPickerTag = tag;
+      generationTagMenuOpen = false;
+      RefreshGenerationPicker();
+  }
+  private Task SelectGenerationImage(string name, string asset)
+  {
+      openGenerationImagePicker = null;
+      return OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Panel.Id, name, asset));
+  }
+  private string? GenerationThumbnail(string asset)
+  {
+      if (!generationImagePaths.Contains(asset)) return null;
+      if (generationThumbnails.TryGetValue(asset, out var thumbnail)) return thumbnail;
+      if (string.IsNullOrWhiteSpace(Panel.Context)) return null;
+      var path = Path.Combine(Panel.Context, asset.Replace('/', Path.DirectorySeparatorChar));
+      thumbnail = CreateImageSource(path);
+      generationThumbnails[asset] = thumbnail;
+      return thumbnail;
+  }
   private void RunGeneration()
   {
       var workflow = SelectedGenerationWorkflow;
@@ -218,6 +390,7 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   private List<AssetEntry> assetEntries = [];
   private List<string> availableTags = [];
   private string selectedTag = string.Empty;
+  private bool assetTagMenuOpen;
   private string? assetsRoot;
   private string currentAssetsPath = string.Empty;
   private string assetName = string.Empty;
@@ -248,6 +421,7 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
       {
           assetsRoot = Panel.Context;
           selectedTag = string.Empty;
+          assetTagMenuOpen = false;
       }
       currentAssetsPath = Panel.Location ?? Panel.Context;
       LoadAssets();
@@ -276,8 +450,21 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   private void LoadGenerationImages()
   {
       generationImages = [];
+      generationImagePaths.Clear();
+      if (!string.Equals(generationImageProject, Panel.Context, StringComparison.OrdinalIgnoreCase))
+      {
+          generationThumbnails.Clear();
+          openGenerationImagePicker = null;
+          generationImageProject = Panel.Context;
+          generationPickerTag = string.Empty;
+          generationTagMenuOpen = false;
+          generationPickerFolder = null;
+      }
       if (string.IsNullOrWhiteSpace(Panel.Context)) return;
       var assetsFolder = Path.Combine(Panel.Context, "assets");
+      generationPickerRoot = Path.GetFullPath(assetsFolder);
+      if (generationPickerFolder is null || !IsInsideGenerationPicker(generationPickerFolder) || !Directory.Exists(generationPickerFolder))
+          generationPickerFolder = generationPickerRoot;
       if (!Directory.Exists(assetsFolder)) return;
       try
       {
@@ -290,12 +477,47 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
               .OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
       }
       catch { generationImages = []; }
+      generationImagePaths = generationImages.ToHashSet(StringComparer.OrdinalIgnoreCase);
+      if (openGenerationImagePicker is not null) RefreshGenerationPicker();
   }
+  private void RefreshGenerationPicker()
+  {
+      generationPickerEntries = [];
+      generationPickerTags = [];
+      if (generationPickerFolder is null || Panel.Context is null || !Directory.Exists(generationPickerFolder) ||
+          !IsInsideGenerationPicker(generationPickerFolder)) return;
+      try
+      {
+          var imageFiles = Directory.EnumerateFiles(generationPickerFolder, "*", new EnumerationOptions
+          {
+              RecurseSubdirectories = true,
+              IgnoreInaccessible = true
+          }).Where(IsGenerationImage).ToList();
+          var taggedImages = imageFiles.Select(path => (Path: path, Tags: ReadAssetTags(path, Panel.Context))).ToList();
+          generationPickerTags = taggedImages.SelectMany(item => item.Tags)
+              .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase).ToList();
+          if (generationPickerTag.Length > 0 && !generationPickerTags.Contains(generationPickerTag, StringComparer.OrdinalIgnoreCase))
+              generationPickerTag = string.Empty;
+          IEnumerable<string> paths = generationPickerTag.Length > 0
+              ? taggedImages.Where(item => item.Tags.Contains(generationPickerTag, StringComparer.OrdinalIgnoreCase)).Select(item => item.Path)
+              : Directory.EnumerateFileSystemEntries(generationPickerFolder)
+                  .Where(path => Directory.Exists(path) || IsGenerationImage(path));
+          generationPickerEntries = paths.OrderBy(path => !Directory.Exists(path))
+              .ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+              .Select(path => new GenerationPickerEntry(path, Path.GetRelativePath(Panel.Context, path).Replace('\\', '/'), Directory.Exists(path)))
+              .ToList();
+      }
+      catch { generationPickerEntries = []; generationPickerTags = []; }
+  }
+  private static bool IsGenerationImage(string path) => Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp";
+  private sealed record GenerationPickerEntry(string FullPath, string RelativePath, bool IsDirectory);
   private bool CanNavigateUp => !string.Equals(currentAssetsPath, assetsRoot, StringComparison.OrdinalIgnoreCase);
   private string ParentAssetsPath => CanNavigateUp ? Directory.GetParent(currentAssetsPath)?.FullName ?? assetsRoot! : currentAssetsPath;
-  private void ChangeTagFilter(ChangeEventArgs args)
+  private void ToggleAssetTagMenu() => assetTagMenuOpen = !assetTagMenuOpen;
+  private void SetAssetTagFilter(string tag)
   {
-      selectedTag = args.Value?.ToString() ?? string.Empty;
+      selectedTag = tag;
+      assetTagMenuOpen = false;
       LoadAssets();
   }
   private void LoadAssets()
@@ -307,7 +529,7 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
               RecurseSubdirectories = true,
               IgnoreInaccessible = true
           }).ToList();
-          var taggedFiles = files.Select(path => (Path: path, Tags: ReadAssetTags(path))).ToList();
+          var taggedFiles = files.Select(path => (Path: path, Tags: ReadAssetTags(path, Directory.GetParent(assetsRoot!)!.FullName))).ToList();
           availableTags = taggedFiles.SelectMany(file => file.Tags)
               .Distinct(StringComparer.OrdinalIgnoreCase)
               .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
@@ -335,11 +557,10 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
       }
       catch { availableTags = []; assetEntries = []; }
   }
-  private IReadOnlyList<string> ReadAssetTags(string assetPath)
+  private static IReadOnlyList<string> ReadAssetTags(string assetPath, string projectFolder)
   {
       try
       {
-          var projectFolder = Directory.GetParent(assetsRoot!)!.FullName;
           var relativePath = Path.GetRelativePath(projectFolder, assetPath).Replace('\\', '/');
           var metadataName = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativePath))).ToLowerInvariant() + ".json";
           var metadataPath = Path.Combine(projectFolder, metadataName);

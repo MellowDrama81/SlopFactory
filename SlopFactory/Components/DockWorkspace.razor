@@ -252,7 +252,8 @@
       {
           Panels = group.Panels.Select(panel => panel.Id == panelId && panel.Kind == "generation"
               ? panel with { Title = "Generation", Context = null, WorkflowId = null, InputValues = null }
-              : panel).ToList()
+              : panel).ToList(),
+          ActiveId = group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "generation") ? panelId : group.ActiveId
       },
       SplitNode split => split with
       {
@@ -267,7 +268,8 @@
       {
           Panels = group.Panels.Select(panel => panel.Id == panelId && panel.Kind == "generation"
               ? panel with { Title = $"Generation · {project.DisplayName}", Context = project.FolderPath, WorkflowId = null, InputValues = null }
-              : panel).ToList()
+              : panel).ToList(),
+          ActiveId = group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "generation") ? panelId : group.ActiveId
       },
       SplitNode split => split with
       {
@@ -288,7 +290,12 @@
   }
   private static DockNode SetAssetsPanelProject(DockNode node, string panelId, string assetsPath, string title) => node switch
   {
-      TabGroupNode group => group with { Panels = group.Panels.Select(panel => panel.Id == panelId ? panel with { Title = title, Context = assetsPath, Location = assetsPath } : panel).ToList() },
+      TabGroupNode group when group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "assets")
+          => group with
+          {
+              Panels = group.Panels.Select(panel => panel.Id == panelId ? panel with { Title = title, Context = assetsPath, Location = assetsPath } : panel).ToList(),
+              ActiveId = panelId
+          },
       SplitNode split => split with { First = SetAssetsPanelProject(split.First, panelId, assetsPath, title), Second = SetAssetsPanelProject(split.Second, panelId, assetsPath, title) },
       _ => node
   };
@@ -478,12 +485,17 @@
   }
   private static DockNode SetPanelLocation(DockNode node, string panelId, string folderPath) => node switch
   {
-      TabGroupNode group => group with { Panels = group.Panels.Select(panel => panel.Id == panelId ? panel with { Location = folderPath } : panel).ToList() },
+      TabGroupNode group when group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "assets")
+          => group with
+          {
+              Panels = group.Panels.Select(panel => panel.Id == panelId ? panel with { Location = folderPath } : panel).ToList(),
+              ActiveId = panelId
+          },
       SplitNode split => split with { First = SetPanelLocation(split.First, panelId, folderPath), Second = SetPanelLocation(split.Second, panelId, folderPath) },
       _ => node
   };
   [JSInvokable]
-  public async Task<string> RenameAsset(string assetPath, string assetsRoot, string newName)
+  public async Task<string> RenameAsset(string assetPath, string assetsRoot, string newName, string panelId)
   {
       try
       {
@@ -531,7 +543,7 @@
               File.WriteAllText(item.NewPath, item.Content);
               if (!string.Equals(item.OldPath, item.NewPath, StringComparison.OrdinalIgnoreCase)) File.Delete(item.OldPath);
           }
-          Root = RewriteRenamedPaths(Root, source, destination);
+          Root = RewriteRenamedPaths(Root, source, destination, panelId);
           await InvokeAsync(StateHasChanged);
           return JsonSerializer.Serialize(new { success = true, message = $"Renamed to {newName}." }, WorkflowJsonOptions);
       }
@@ -544,7 +556,7 @@
       => Path.Combine(projectFolder, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativePath))).ToLowerInvariant() + ".json");
   private static string? RewriteRenamedPath(string? path, string source, string destination)
       => path is not null && IsInFolder(path, source) ? destination + path[source.Length..] : path;
-  private static DockNode RewriteRenamedPaths(DockNode node, string source, string destination) => node switch
+  private static DockNode RewriteRenamedPaths(DockNode node, string source, string destination, string panelId) => node switch
   {
       TabGroupNode group => group with { Panels = group.Panels.Select(panel => panel with
       {
@@ -552,8 +564,8 @@
           Location = RewriteRenamedPath(panel.Location, source, destination),
           Title = panel.Kind == "asset-details" && IsInFolder(panel.Context ?? string.Empty, source)
               ? $"Asset · {Path.GetFileName(RewriteRenamedPath(panel.Context, source, destination))}" : panel.Title
-      }).ToList() },
-      SplitNode split => split with { First = RewriteRenamedPaths(split.First, source, destination), Second = RewriteRenamedPaths(split.Second, source, destination) },
+      }).ToList(), ActiveId = group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "assets") ? panelId : group.ActiveId },
+      SplitNode split => split with { First = RewriteRenamedPaths(split.First, source, destination, panelId), Second = RewriteRenamedPaths(split.Second, source, destination, panelId) },
       _ => node
   };
   [JSInvokable]
@@ -750,8 +762,11 @@
       connectionStatusClass = "connection-success";
       await InvokeAsync(StateHasChanged);
   }
-  private void ActivateTab(TabActivation activation)
-      => Root = SetActiveTab(Root, activation.GroupId, activation.PanelId);
+  private Task ActivateTab(TabActivation activation)
+  {
+      Root = SetActiveTab(Root, activation.GroupId, activation.PanelId);
+      return InvokeAsync(StateHasChanged);
+  }
   private Task SelectGenerationWorkflow(GenerationWorkflowSelection selection)
   {
       if (!string.IsNullOrEmpty(selection.WorkflowId) && !WorkflowLibrary.GetAll().Any(workflow =>
@@ -840,11 +855,15 @@
       removed = null;
       if (node is TabGroupNode group)
       {
-          var found = group.Panels.FirstOrDefault(panel => panel.Id == panelId);
-          if (found is null) return group;
-          removed = found;
+          var removedIndex = group.Panels.ToList().FindIndex(panel => panel.Id == panelId);
+          if (removedIndex < 0) return group;
+          removed = group.Panels[removedIndex];
           var remaining = group.Panels.Where(panel => panel.Id != panelId).ToList();
-          return remaining.Count == 0 ? null : group with { Panels = remaining, ActiveId = remaining[0].Id };
+          if (remaining.Count == 0) return null;
+          var activeId = remaining.Any(panel => panel.Id == group.ActiveId)
+              ? group.ActiveId
+              : remaining[Math.Min(removedIndex, remaining.Count - 1)].Id;
+          return group with { Panels = remaining, ActiveId = activeId };
       }
       var split = (SplitNode)node;
       var first = RemovePanel(split.First, panelId, out removed);

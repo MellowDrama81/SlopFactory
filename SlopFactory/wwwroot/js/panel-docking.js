@@ -574,7 +574,7 @@
       showAppModal({title:'Rename item',message:'Choose a new name for this asset or folder.',confirmLabel:'Rename',initialValue:currentName}).then(newName=>{
         if (newName===null || newName===currentName)return;
         assetsRename.disabled = true;
-        reference.invokeMethodAsync('RenameAsset', assetPath, assetsRename.dataset.assetsRoot ?? '', newName).then(result => {
+        reference.invokeMethodAsync('RenameAsset', assetPath, assetsRename.dataset.assetsRoot ?? '', newName, panel?.dataset.assetsPanel ?? '').then(result => {
           const renamed = JSON.parse(result);
           if (status?.isConnected) status.textContent = renamed.message ?? (renamed.success ? 'Renamed.' : 'Could not rename asset.');
         }).catch(() => { if (status?.isConnected) status.textContent = 'Could not rename asset.'; })
