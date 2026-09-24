@@ -1,0 +1,170 @@
+@using SlopFactory.Services
+@using Microsoft.AspNetCore.Components.Web
+@inject AssetMaskStore MaskStore
+@inject IJSRuntime JS
+
+<div class="mask-pane">
+  <p class="eyebrow">IMAGE MASKS</p>
+  <h2>@Path.GetFileName(AssetPath)</h2>
+  <p class="assets-path">@AssetPath</p>
+  @if (!string.IsNullOrWhiteSpace(loadError))
+  {
+    <p class="generation-status" role="alert">@loadError</p>
+  }
+  else if (imageSource is not null)
+  {
+    <div class="mask-workspace">
+      <aside class="mask-list" aria-label="Saved masks">
+        <h3>Masks</h3>
+        <button type="button" class="mask-new" @onclick="NewMask">＋ New mask</button>
+        @if (masks.Count == 0) { <p>No masks saved for this image yet.</p> }
+        @foreach (var mask in masks)
+        {
+          <button type="button" class="mask-list-item @(selectedMaskId == mask.Id ? "is-selected" : "")" @key="mask.Id" @onclick="() => SelectMask(mask)">@mask.Name</button>
+        }
+      </aside>
+      <div class="mask-editor-main">
+        <div class="mask-toolbar">
+          <label class="mask-name-field"><span>Mask name</span><input type="text" value="@maskName" maxlength="64" placeholder="e.g. subject" @oninput="args => maskName = args.Value?.ToString() ?? string.Empty" /></label>
+          <div class="mask-tools" role="group" aria-label="Mask brush tools">
+            <button type="button" class="@(tool == "paint" ? "is-selected" : "")" @onclick='() => SetTool("paint")'>Paint</button>
+            <button type="button" class="@(tool == "erase" ? "is-selected" : "")" @onclick='() => SetTool("erase")'>Erase</button>
+            <label>Brush <input type="range" min="4" max="100" value="@brushSize" @oninput="ChangeBrushSize" /> <span>@brushSize px</span></label>
+            <button type="button" @onclick="ClearMask">Clear</button>
+          </div>
+        </div>
+        <p class="mask-instruction">Paint the area to include in the mask. Unpainted areas remain transparent.</p>
+        <div class="mask-canvas-frame">
+          <img @ref="imageElement" src="@imageSource" alt="Image being masked" draggable="false" />
+          <canvas @ref="maskCanvas" aria-label="Paint mask over image"></canvas>
+        </div>
+        <div class="mask-footer">
+          <button type="button" class="mask-save" disabled="@saving" @onclick="SaveMask">@(saving ? "Saving…" : selectedMaskId is null ? "Save new mask" : "Save mask")</button>
+          <span>@(imageDimensions.Length > 0 ? imageDimensions : "")</span>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(status)) { <p class="mask-status" role="status">@status</p> }
+      </div>
+    </div>
+  }
+</div>
+
+@code {
+  [Parameter, EditorRequired] public string AssetPath { get; set; } = string.Empty;
+  [Parameter, EditorRequired] public string AssetsRoot { get; set; } = string.Empty;
+
+  private string? loadedAsset;
+  private string? imageSource;
+  private string? projectFolder;
+  private string loadError = string.Empty;
+  private List<AssetMask> masks = [];
+  private string? selectedMaskId;
+  private string maskName = string.Empty;
+  private string? pendingMaskSource;
+  private bool canvasNeedsInit;
+  private bool saving;
+  private string tool = "paint";
+  private int brushSize = 24;
+  private string imageDimensions = string.Empty;
+  private string status = string.Empty;
+  private ElementReference imageElement;
+  private ElementReference maskCanvas;
+
+  protected override void OnParametersSet()
+  {
+      if (string.Equals(loadedAsset, AssetPath, StringComparison.OrdinalIgnoreCase)) return;
+      loadedAsset = AssetPath;
+      loadError = string.Empty;
+      status = string.Empty;
+      imageSource = null;
+      selectedMaskId = null;
+      maskName = string.Empty;
+      pendingMaskSource = null;
+      masks = [];
+      imageDimensions = string.Empty;
+      try
+      {
+          if (!File.Exists(AssetPath) || !Directory.Exists(AssetsRoot)) throw new FileNotFoundException("The image is no longer available.");
+          projectFolder = Directory.GetParent(Path.GetFullPath(AssetsRoot))?.FullName
+              ?? throw new InvalidOperationException("The project folder is unavailable.");
+          masks = MaskStore.GetMasks(projectFolder, AssetPath).ToList();
+          var mime = Path.GetExtension(AssetPath).ToLowerInvariant() switch
+          {
+              ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".gif" => "image/gif", ".webp" => "image/webp",
+              _ => throw new InvalidOperationException("Masks require a JPG, PNG, GIF, or WebP image.")
+          };
+          imageSource = $"data:{mime};base64,{Convert.ToBase64String(File.ReadAllBytes(AssetPath))}";
+          canvasNeedsInit = true;
+      }
+      catch (Exception ex) { loadError = ex.Message; canvasNeedsInit = false; }
+  }
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+      if (!canvasNeedsInit || imageSource is null) return;
+      canvasNeedsInit = false;
+      try
+      {
+          var size = await JS.InvokeAsync<int[]>("maskEditor.attach", maskCanvas, imageElement, pendingMaskSource, tool, brushSize);
+          imageDimensions = size.Length == 2 ? $"{size[0]:N0} × {size[1]:N0} px" : string.Empty;
+          await InvokeAsync(StateHasChanged);
+      }
+      catch (Exception ex) { status = $"Could not load the mask canvas: {ex.Message}"; await InvokeAsync(StateHasChanged); }
+  }
+
+  private void NewMask()
+  {
+      selectedMaskId = null;
+      maskName = string.Empty;
+      pendingMaskSource = null;
+      status = string.Empty;
+      canvasNeedsInit = true;
+  }
+
+  private void SelectMask(AssetMask mask)
+  {
+      if (projectFolder is null) return;
+      try
+      {
+          pendingMaskSource = MaskStore.GetMaskImage(projectFolder, AssetPath, mask.Id);
+          selectedMaskId = mask.Id;
+          maskName = mask.Name;
+          status = string.Empty;
+          canvasNeedsInit = true;
+      }
+      catch (Exception ex) { status = ex.Message; }
+  }
+
+  private async Task SetTool(string selected)
+  {
+      tool = selected;
+      await JS.InvokeVoidAsync("maskEditor.setTool", maskCanvas, tool);
+  }
+  private async Task ChangeBrushSize(ChangeEventArgs args)
+  {
+      if (!int.TryParse(args.Value?.ToString(), out var size)) return;
+      brushSize = Math.Clamp(size, 4, 100);
+      await JS.InvokeVoidAsync("maskEditor.setBrushSize", maskCanvas, brushSize);
+  }
+  private async Task ClearMask()
+  {
+      await JS.InvokeVoidAsync("maskEditor.clear", maskCanvas);
+      status = string.Empty;
+  }
+  private async Task SaveMask()
+  {
+      if (projectFolder is null || saving) return;
+      saving = true;
+      status = string.Empty;
+      try
+      {
+          var png = await JS.InvokeAsync<string>("maskEditor.exportPng", maskCanvas);
+          var saved = await MaskStore.SaveAsync(projectFolder, AssetPath, selectedMaskId, maskName, png);
+          masks = MaskStore.GetMasks(projectFolder, AssetPath).ToList();
+          selectedMaskId = saved.Id;
+          maskName = saved.Name;
+          status = $"Saved “{saved.Name}” in the project masks folder.";
+      }
+      catch (Exception ex) { status = $"Could not save mask: {ex.Message}"; }
+      finally { saving = false; }
+  }
+}

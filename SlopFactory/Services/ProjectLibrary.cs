@@ -35,11 +35,13 @@ public sealed class ProjectLibrary
             ?? throw new InvalidOperationException("The project's slop.json file must contain a JSON object.");
         var tags = ReadTags(settings);
 
-        // Include tags saved before the project-level catalog was introduced.
-        foreach (var path in Directory.EnumerateFiles(folderPath, "*.json", SearchOption.TopDirectoryOnly))
+        // Include tags stored in asset metadata in addition to the project catalog.
+        var metadataFolder = Path.Combine(folderPath, "metadata");
+        var metadataFiles = Directory.Exists(metadataFolder)
+            ? Directory.EnumerateFiles(metadataFolder, "*.json", SearchOption.AllDirectories)
+            : Enumerable.Empty<string>();
+        foreach (var path in metadataFiles)
         {
-            var fileName = Path.GetFileNameWithoutExtension(path);
-            if (fileName.Length != 64 || !fileName.All(Uri.IsHexDigit)) continue;
             try
             {
                 if (JsonNode.Parse(File.ReadAllText(path)) is JsonObject metadata)
@@ -86,6 +88,7 @@ public sealed class ProjectLibrary
         if (createFolder) Directory.CreateDirectory(normalizedPath);
         if (!Directory.Exists(normalizedPath)) throw new DirectoryNotFoundException("The selected project folder does not exist.");
         Directory.CreateDirectory(Path.Combine(normalizedPath, "assets"));
+        Directory.CreateDirectory(Path.Combine(normalizedPath, "metadata"));
 
         var settings = await LoadProjectSettingsAsync(normalizedPath);
         if (settings is null)
@@ -98,7 +101,6 @@ public sealed class ProjectLibrary
             settings = settings with { Name = name.Trim() };
             await UpdateProjectNameAsync(normalizedPath, settings.Name);
         }
-
         var project = new ProjectDefinition(normalizedPath, settings.Name);
         projects = projects.Where(item => !string.Equals(item.FolderPath, normalizedPath, StringComparison.OrdinalIgnoreCase)).Append(project).ToList();
         await PersistAsync();

@@ -17,6 +17,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<Services.WorkflowTemplateService>();
         builder.Services.AddSingleton<Services.ComfyGenerationService>();
         builder.Services.AddSingleton<Services.ComfyAssetReferenceStore>();
+        builder.Services.AddSingleton<Services.AssetMaskStore>();
+        builder.Services.AddSingleton<Services.PanelStore>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif

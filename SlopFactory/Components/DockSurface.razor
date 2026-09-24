@@ -2,23 +2,23 @@
 @if (Node is SplitNode split)
 {
   <div class="dock-split @(split.Axis == DockAxis.Horizontal ? "split-horizontal" : "split-vertical")" data-split-id="@split.Id" style="--first:@(split.Ratio * 100)%">
-    <div class="dock-branch"><DockSurface @key="split.First" Node="split.First" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" /></div><div class="splitter" title="Resize dock branch"><i></i></div><div class="dock-branch"><DockSurface @key="split.Second" Node="split.Second" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" /></div>
+    <div class="dock-branch"><DockSurface @key="split.First" Node="split.First" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" /></div><div class="splitter" title="Resize dock branch"><i></i></div><div class="dock-branch"><DockSurface @key="split.Second" Node="split.Second" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" /></div>
   </div>
 }
 else if (Node is TabGroupNode group)
 {
   <section class="tab-group" data-group="@group.Id">
-    @if (group.Panels.Count == 0)
+    @if (group.Panes.Count == 0)
     {
-      <div class="empty-workspace"><span>▤</span><h2>No panels open</h2><p>Open Assets or Generation from the ribbon to start working with a project.</p></div>
+      <div class="empty-workspace"><span>▤</span><h2>No panes open</h2><p>Open Assets or Generation from the ribbon to start working with a project.</p></div>
     }
     else
     {
-      <nav class="tabs">@foreach (var panel in group.Panels) { <div class="tab-item @(panel.Id == group.ActiveId ? "selected" : "")"><button type="button" data-tab="@panel.Id" data-drag-panel="@panel.Id" class="tab-label" @onclick="() => Activate(group.Id, panel.Id)"><span class="@panel.Accent">@panel.Icon</span>@panel.Title</button><button type="button" class="close-panel" data-close-panel="@panel.Id" title="Close @panel.Title" aria-label="Close @panel.Title">×</button></div> }</nav>
+      <nav class="tabs">@foreach (var pane in group.Panes) { <div class="tab-item @(pane.Id == group.ActiveId ? "selected" : "")"><button type="button" data-tab="@pane.Id" data-drag-pane="@pane.Id" class="tab-label" @onclick="() => Activate(group.Id, pane.Id)"><span class="@pane.Accent">@pane.Icon</span>@pane.Title</button><button type="button" class="close-pane" data-close-pane="@pane.Id" title="Close @pane.Title" aria-label="Close @pane.Title">×</button></div> }</nav>
       <div class="dock-content">
-      @foreach (var panel in group.Panels)
+      @foreach (var pane in group.Panes)
       {
-        <div class="dock-panel-slot @(panel.Id == group.ActiveId ? "is-active" : "")" data-panel-view="@panel.Id"><DockPanelView @key="panel.Id" Panel="panel" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" /></div>
+        <div class="dock-pane-slot @(pane.Id == group.ActiveId ? "is-active" : "")" data-pane-view="@pane.Id"><DockPaneView @key="pane.Id" Pane="pane" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" /></div>
       }
       </div>
     }
@@ -30,6 +30,9 @@ else if (Node is TabGroupNode group)
   [Parameter] public EventCallback<TabActivation> OnActivateTab { get; set; }
   [Parameter] public EventCallback<GenerationWorkflowSelection> OnGenerationWorkflowChanged { get; set; }
   [Parameter] public EventCallback<GenerationInputChange> OnGenerationInputChanged { get; set; }
-  private static DockPanel Active(TabGroupNode group) => group.Panels.First(panel => panel.Id == group.ActiveId);
-  private Task Activate(string groupId, string panelId) => OnActivateTab.InvokeAsync(new TabActivation(groupId, panelId));
+  [Parameter] public EventCallback<GenerationOutputFolderChange> OnGenerationOutputFolderChanged { get; set; }
+  [Parameter] public EventCallback<GenerationOutputTagsChange> OnGenerationOutputTagsChanged { get; set; }
+  [Parameter] public EventCallback<PanelPaneSelection> OnPanelSelectionChanged { get; set; }
+  private static DockPane Active(TabGroupNode group) => group.Panes.First(pane => pane.Id == group.ActiveId);
+  private Task Activate(string groupId, string paneId) => OnActivateTab.InvokeAsync(new TabActivation(groupId, paneId));
 }

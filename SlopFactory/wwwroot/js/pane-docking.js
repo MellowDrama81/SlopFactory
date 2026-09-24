@@ -359,15 +359,15 @@
     ].sort((first, second) => first.distance - second.distance);
     return edges[0].distance < 36 ? { host, zone: edges[0].zone } : null;
   };
-  const begin=e=>{if(drag)return;const panel=e.target.closest?.('[data-drag-panel]');if(!panel||(e.button!==undefined&&e.button!==0))return;if(e.pointerId!==undefined)panel.setPointerCapture?.(e.pointerId);drag={id:panel.dataset.dragPanel,source:panel.closest('[data-group]')?.dataset.group,panel,isTab:true,x:e.clientX,y:e.clientY,moved:false};};
-  const move=e=>{if(!drag)return;if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<5)return;drag.moved=true;drag.panel.classList.add('dragging-tab');const root=rootEdge(e);if(root){if(target!==root.host||zone!==root.zone){clear();target=root.host;zone=root.zone;target.classList.add(`root-dock-${root.zone.substring(5)}`);}show(e,`Drop to dock ${root.zone.substring(5)}`);return;}const group=groupAt(e.clientX,e.clientY);if(!group||group.dataset.group===drag.source){clear();show(e,'Moving panel');return;}const next=pick(group,e);if(target!==group||zone!==next){clear();target=group;zone=next;target.classList.add(`dock-${zone}`);}show(e,next==='stack'?'Drop to stack':`Drop to split ${next}`);};
-  const end=()=>{if(!drag)return;const item=drag;drag=null;item.panel.classList.remove('dragging-tab');hide();const destination=target,next=zone;clear();if(item.moved&&item.isTab)suppressTabClick=true;if(item.moved&&destination&&next&&reference){if(next?.startsWith('root-'))reference.invokeMethodAsync('ApplyRootDockDrop',item.id,next.substring(5));else reference.invokeMethodAsync('ApplyDockDrop',item.id,destination.dataset.group,next);}};
-  const cancel=()=>{drag?.panel.classList.remove('dragging-tab');drag=null;hide();clear();};
+  const begin=e=>{if(drag)return;const pane=e.target.closest?.('[data-drag-pane]');if(!pane||(e.button!==undefined&&e.button!==0))return;if(e.pointerId!==undefined)pane.setPointerCapture?.(e.pointerId);drag={id:pane.dataset.dragPane,source:pane.closest('[data-group]')?.dataset.group,pane,isTab:true,x:e.clientX,y:e.clientY,moved:false};};
+  const move=e=>{if(!drag)return;if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<5)return;drag.moved=true;drag.pane.classList.add('dragging-tab');const root=rootEdge(e);if(root){if(target!==root.host||zone!==root.zone){clear();target=root.host;zone=root.zone;target.classList.add(`root-dock-${root.zone.substring(5)}`);}show(e,`Drop to dock ${root.zone.substring(5)}`);return;}const group=groupAt(e.clientX,e.clientY);if(!group||group.dataset.group===drag.source){clear();show(e,'Moving pane');return;}const next=pick(group,e);if(target!==group||zone!==next){clear();target=group;zone=next;target.classList.add(`dock-${zone}`);}show(e,next==='stack'?'Drop to stack':`Drop to split ${next}`);};
+  const end=()=>{if(!drag)return;const item=drag;drag=null;item.pane.classList.remove('dragging-tab');hide();const destination=target,next=zone;clear();if(item.moved&&item.isTab)suppressTabClick=true;if(item.moved&&destination&&next&&reference){if(next?.startsWith('root-'))reference.invokeMethodAsync('ApplyRootDockDrop',item.id,next.substring(5));else reference.invokeMethodAsync('ApplyDockDrop',item.id,destination.dataset.group,next);}};
+  const cancel=()=>{drag?.pane.classList.remove('dragging-tab');drag=null;hide();clear();};
   // Ignore compatibility mousedown events while a pointer drag is already active.
   window.addEventListener('pointerdown',begin,true);window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',cancel,true);
   window.addEventListener('mousedown',begin,true);window.addEventListener('mousemove',move,true);window.addEventListener('mouseup',end,true);
   let assetDrag=null;
-  const clearAssetDropTargets=()=>document.querySelectorAll('.assets-drop-ready,.assets-external-drop-ready').forEach(panel=>panel.classList.remove('assets-drop-ready','assets-external-drop-ready'));
+  const clearAssetDropTargets=()=>document.querySelectorAll('.assets-drop-ready,.assets-external-drop-ready,.generation-image-drop-ready').forEach(pane=>pane.classList.remove('assets-drop-ready','assets-external-drop-ready','generation-image-drop-ready'));
   const hasExternalFiles=event=>!assetDrag&&Array.from(event.dataTransfer?.types??[]).includes('Files');
   window.addEventListener('dragstart',event=>{
     const asset=event.target.closest?.('[data-assets-drag]');
@@ -378,33 +378,71 @@
     event.dataTransfer.setData('text/plain',assetDrag.path);
   },true);
   window.addEventListener('dragover',event=>{
-    const panel=event.target.closest?.('[data-assets-drop-target]');
+    const pane=event.target.closest?.('[data-assets-drop-target]');
+    const generationInput=event.target.closest?.('[data-generation-image-drop]');
     const external=hasExternalFiles(event);
     if(!assetDrag&&!external)return;
     event.preventDefault();
-    if(!panel){clearAssetDropTargets();return;}
+    if(generationInput){
+      event.dataTransfer.dropEffect='copy';
+      clearAssetDropTargets();
+      generationInput.classList.add('generation-image-drop-ready');
+      return;
+    }
+    if(!pane){clearAssetDropTargets();return;}
     event.dataTransfer.dropEffect='copy';
     clearAssetDropTargets();
-    panel.classList.add(external?'assets-external-drop-ready':'assets-drop-ready');
+    pane.classList.add(external?'assets-external-drop-ready':'assets-drop-ready');
   },true);
   window.addEventListener('dragleave',event=>{
-    const panel=event.target.closest?.('[data-assets-drop-target]');
-    if(panel&&!panel.contains(event.relatedTarget))panel.classList.remove('assets-drop-ready','assets-external-drop-ready');
+    const pane=event.target.closest?.('[data-assets-drop-target]');
+    if(pane&&!pane.contains(event.relatedTarget))pane.classList.remove('assets-drop-ready','assets-external-drop-ready');
+    const generationInput=event.target.closest?.('[data-generation-image-drop]');
+    if(generationInput&&!generationInput.contains(event.relatedTarget))generationInput.classList.remove('generation-image-drop-ready');
   },true);
   window.addEventListener('drop',async event=>{
-    const panel=event.target.closest?.('[data-assets-drop-target]');
+    const pane=event.target.closest?.('[data-assets-drop-target]');
+    const generationInput=event.target.closest?.('[data-generation-image-drop]');
     const external=hasExternalFiles(event);
     if(!assetDrag&&!external)return;
     event.preventDefault();
-    if(!panel){clearAssetDropTargets();return;}
+    if(generationInput){
+      const paneId=generationInput.dataset.generationPane??'';
+      const inputName=generationInput.dataset.generationInput??'';
+      const source=assetDrag;
+      if(source)source.element.classList.remove('asset-dragging');
+      assetDrag=null;
+      clearAssetDropTargets();
+      const findStatus=()=>[...document.querySelectorAll('[data-generation-image-drop]')]
+        .find(item=>item.dataset.generationPane===paneId&&item.dataset.generationInput===inputName)
+        ?.querySelector('[data-generation-drop-status]');
+      const status=findStatus();
+      if(status)status.textContent=external?'Importing image…':'Selecting image…';
+      if(!reference)return;
+      try{
+        const files=Array.from(event.dataTransfer?.files??[]);
+        if(external&&files.length!==1)throw new Error('Drop one image at a time.');
+        const response=external
+          ? await reference.invokeMethodAsync('SetGenerationInputFromFile',paneId,inputName,files[0].name,DotNet.createJSStreamReference(files[0]))
+          : await reference.invokeMethodAsync('SetGenerationInputFromAsset',paneId,inputName,source.path,source.root);
+        const result=JSON.parse(response);
+        const currentStatus=findStatus();
+        if(currentStatus)currentStatus.textContent=result.success?'':(result.message??'Could not select image.');
+      }catch(error){
+        const currentStatus=findStatus();
+        if(currentStatus)currentStatus.textContent=error?.message??'Could not select image.';
+      }
+      return;
+    }
+    if(!pane){clearAssetDropTargets();return;}
     if(external){
       const files=Array.from(event.dataTransfer?.files??[]);
-      const folder=panel.dataset.assetsFolder??'';
-      const root=panel.dataset.assetsRoot??'';
-      const panelId=panel.dataset.assetsPanel;
+      const folder=pane.dataset.assetsFolder??'';
+      const root=pane.dataset.assetsRoot??'';
+      const paneId=pane.dataset.assetsPane;
       clearAssetDropTargets();
       if(!reference||!files.length)return;
-      const status=panel.querySelector('[data-assets-status]');
+      const status=pane.querySelector('[data-assets-status]');
       if(status)status.textContent=`Adding ${files.length} file${files.length===1?'':'s'}…`;
       let added=0;
       const failures=[];
@@ -415,9 +453,9 @@
           else failures.push(result.message??`Could not add ${file.name}.`);
         }catch(error){failures.push(`Could not add ${file.name}: ${error?.message??'Unknown error'}`);}
       }
-      if(added)await reference.invokeMethodAsync('RefreshAssetsPanels');
-      const currentPanel=[...document.querySelectorAll('[data-assets-drop-target]')].find(item=>item.dataset.assetsPanel===panelId);
-      const currentStatus=currentPanel?.querySelector('[data-assets-status]');
+      if(added)await reference.invokeMethodAsync('RefreshAssetsPanes');
+      const currentPane=[...document.querySelectorAll('[data-assets-drop-target]')].find(item=>item.dataset.assetsPane===paneId);
+      const currentStatus=currentPane?.querySelector('[data-assets-status]');
       if(currentStatus)currentStatus.textContent=failures.length
         ? `${added} added. ${failures.length} failed: ${failures[0]}`
         : `Added ${added} file${added===1?'':'s'}.`;
@@ -427,9 +465,9 @@
     clearAssetDropTargets();
     assetDrag=null;
     source.element.classList.remove('asset-dragging');
-    const status=panel.querySelector('[data-assets-status]');
+    const status=pane.querySelector('[data-assets-status]');
     if(!reference)return;
-    reference.invokeMethodAsync('CopyAsset',source.path,source.root,panel.dataset.assetsFolder??'',panel.dataset.assetsRoot??'').then(result=>{
+    reference.invokeMethodAsync('CopyAsset',source.path,source.root,pane.dataset.assetsFolder??'',pane.dataset.assetsRoot??'').then(result=>{
       const copied=JSON.parse(result);
       if(status)status.textContent=copied.message??(copied.success?'Asset copied.':'Could not copy asset.');
     }).catch(()=>{if(status)status.textContent='Could not copy asset.';});
@@ -450,7 +488,7 @@
     const ribbonAction = event.target.closest?.('[data-ribbon-action]')?.dataset.ribbonAction;
     if (ribbonAction) {
       const app = document.querySelector('.dock-app');
-      const activeTab=ribbonAction==='projects'?'projects':(['workspace','assets','generation','clear-workspace'].includes(ribbonAction)?'workspace':null);
+      const activeTab=ribbonAction==='projects'?'projects':(['workspace','assets','generation','panels','clear-workspace'].includes(ribbonAction)?'workspace':null);
       app?.querySelectorAll('.ribbon-tab').forEach(button=>button.classList.toggle('active',button.dataset.ribbonAction===activeTab));
       app?.classList.toggle('settings-open', ribbonAction === 'settings');
       app?.classList.toggle('workflows-open', ribbonAction === 'workflows');
@@ -459,28 +497,40 @@
       if (ribbonAction === 'settings') restoreComfyConnection();
       if (ribbonAction === 'workflows') restoreWorkflows();
       if (ribbonAction === 'projects') restoreProjects();
-      if (ribbonAction === 'assets' && reference) reference.invokeMethodAsync('OpenAssetsPanel', '', '');
-      if (ribbonAction === 'generation' && reference) reference.invokeMethodAsync('OpenGenerationPanel');
+      if (ribbonAction === 'assets' && reference) reference.invokeMethodAsync('OpenAssetsPane', '', '');
+      if (ribbonAction === 'generation' && reference) reference.invokeMethodAsync('OpenGenerationPane');
+      if (ribbonAction === 'panels' && reference) reference.invokeMethodAsync('OpenPanelEditorPane');
       if (ribbonAction === 'clear-workspace' && reference) reference.invokeMethodAsync('ClearWorkspace');
       return;
     }
-    const closePanel = event.target.closest?.('[data-close-panel]');
-    if (closePanel && reference) { reference.invokeMethodAsync('ClosePanel', closePanel.dataset.closePanel ?? ''); return; }
+    const closePane = event.target.closest?.('[data-close-pane]');
+    if (closePane && reference) { reference.invokeMethodAsync('ClosePane', closePane.dataset.closePane ?? ''); return; }
     const assetsProject = event.target.closest?.('[data-assets-project-select]');
-    if (assetsProject && reference) { reference.invokeMethodAsync('SetAssetsPanelProject', assetsProject.dataset.assetsPanel ?? '', assetsProject.dataset.projectFolder ?? '', assetsProject.dataset.projectName ?? ''); return; }
+    if (assetsProject && reference) { reference.invokeMethodAsync('SetAssetsPaneProject', assetsProject.dataset.assetsPane ?? '', assetsProject.dataset.projectFolder ?? '', assetsProject.dataset.projectName ?? ''); return; }
     const generationProject = event.target.closest?.('[data-generation-project-select]');
     if (generationProject && reference) {
-      const status=generationProject.closest('.generation-panel')?.querySelector('[data-generation-status]');
-      reference.invokeMethodAsync('SetGenerationPanelProject', generationProject.dataset.generationPanel ?? '', generationProject.dataset.projectFolder ?? '')
+      const status=generationProject.closest('.generation-pane')?.querySelector('[data-generation-status]');
+      reference.invokeMethodAsync('SetGenerationPaneProject', generationProject.dataset.generationPane ?? '', generationProject.dataset.projectFolder ?? '')
         .then(result=>{const selected=JSON.parse(result);if(!selected.success&&status?.isConnected)status.textContent=selected.message??'Could not select project.';})
         .catch(()=>{if(status?.isConnected)status.textContent='Could not select project.';});
       return;
     }
     const generationChange = event.target.closest?.('[data-generation-change-project]');
-    if (generationChange && reference) { reference.invokeMethodAsync('ClearGenerationPanelProject', generationChange.dataset.generationPanel ?? ''); return; }
+    if (generationChange && reference) { reference.invokeMethodAsync('ClearGenerationPaneProject', generationChange.dataset.generationPane ?? ''); return; }
+    const assetsGenerate = event.target.closest?.('[data-assets-generate]');
+    if (assetsGenerate && reference) {
+      const status = assetsGenerate.closest('.assets-pane')?.querySelector('[data-assets-status]');
+      assetsGenerate.disabled = true;
+      reference.invokeMethodAsync('OpenGenerationFromAssetsPane', assetsGenerate.dataset.assetsPane ?? '').then(result => {
+        const opened = JSON.parse(result);
+        if (!opened.success && status?.isConnected) status.textContent = opened.message ?? 'Could not open Generation.';
+      }).catch(() => { if (status?.isConnected) status.textContent = 'Could not open Generation.'; })
+        .finally(() => { if (assetsGenerate.isConnected) assetsGenerate.disabled = false; });
+      return;
+    }
     const assetsAdd = event.target.closest?.('[data-assets-add]');
     if (assetsAdd && reference) {
-      const status = assetsAdd.closest('.assets-panel')?.querySelector('[data-assets-status]');
+      const status = assetsAdd.closest('.assets-pane')?.querySelector('[data-assets-status]');
       assetsAdd.disabled = true;
       reference.invokeMethodAsync('AddAssets', assetsAdd.dataset.assetsFolder ?? '', assetsAdd.dataset.assetsRoot ?? '').then(result => {
         const added = JSON.parse(result);
@@ -490,7 +540,7 @@
     }
     const assetsCreateFolder = event.target.closest?.('[data-assets-create-folder]');
     if (assetsCreateFolder && reference) {
-      const status = assetsCreateFolder.closest('.assets-panel')?.querySelector('[data-assets-status]');
+      const status = assetsCreateFolder.closest('.assets-pane')?.querySelector('[data-assets-status]');
       showAppModal({title:'Create folder',message:'Add a folder to the current assets location.',confirmLabel:'Create folder',initialValue:''}).then(name=>{
         if(name===null)return;
         reference.invokeMethodAsync('CreateAssetsFolder', assetsCreateFolder.dataset.assetsFolder ?? '', name).then(result => {
@@ -501,7 +551,7 @@
       return;
     }
     const assetsNavigate = event.target.closest?.('[data-assets-navigate]');
-    if (assetsNavigate && reference) { reference.invokeMethodAsync('NavigateAssetsPanel', assetsNavigate.dataset.assetsPanel ?? '', assetsNavigate.dataset.assetsFolder ?? ''); return; }
+    if (assetsNavigate && reference) { reference.invokeMethodAsync('NavigateAssetsPane', assetsNavigate.dataset.assetsPane ?? '', assetsNavigate.dataset.assetsFolder ?? ''); return; }
     const projectItem = event.target.closest?.('[data-project-item]');
     if (projectItem) { const library = projectItem.closest('[data-project-library]'); library?.querySelectorAll('[data-project-item]').forEach(item => item.classList.toggle('is-selected', item === projectItem)); const folder = library?.querySelector('[data-project-folder]'); const name = library?.querySelector('[data-project-name]'); if (folder) { folder.value = projectItem.dataset.folderPath ?? ''; folder.readOnly = true; } if (name) name.value = projectItem.dataset.name ?? ''; return; }
     const projectAction = event.target.closest?.('[data-project-action]')?.dataset.projectAction;
@@ -545,16 +595,16 @@
     }
     const assetsExportSelected = event.target.closest?.('[data-assets-export-selected]');
     const assetsSelectAll = event.target.closest?.('[data-assets-select-all]');
-    if (assetsSelectAll) { assetsSelectAll.closest('.assets-panel')?.querySelectorAll('[data-asset-select]').forEach(item => { item.checked = true; }); return; }
+    if (assetsSelectAll) { assetsSelectAll.closest('.assets-pane')?.querySelectorAll('[data-asset-select]').forEach(item => { item.checked = true; }); return; }
     if (assetsExportSelected && reference) {
-      const panel = assetsExportSelected.closest('.assets-panel'); const selected = [...(panel?.querySelectorAll('[data-asset-select]:checked') ?? [])].map(item => item.dataset.assetPath ?? ''); const status = panel?.querySelector('[data-assets-status]');
+      const pane = assetsExportSelected.closest('.assets-pane'); const selected = [...(pane?.querySelectorAll('[data-asset-select]:checked') ?? [])].map(item => item.dataset.assetPath ?? ''); const status = pane?.querySelector('[data-assets-status]');
       if (!selected.length) { if (status) status.textContent = 'Select assets to export.'; return; }
       reference.invokeMethodAsync('ExportAssets', selected).then(result => { const exported = JSON.parse(result); if (status) status.textContent = exported.message ?? (exported.success ? 'Selected assets exported.' : 'Could not export assets.'); });
       return;
     }
     const assetsDeleteSelected = event.target.closest?.('[data-assets-delete-selected]');
     if (assetsDeleteSelected && reference) {
-      const panel = assetsDeleteSelected.closest('.assets-panel'); const selected = [...(panel?.querySelectorAll('[data-asset-select]:checked') ?? [])]; const status = panel?.querySelector('[data-assets-status]');
+      const pane = assetsDeleteSelected.closest('.assets-pane'); const selected = [...(pane?.querySelectorAll('[data-asset-select]:checked') ?? [])]; const status = pane?.querySelector('[data-assets-status]');
       if (!selected.length) { if (status) status.textContent = 'Select assets to delete.'; return; }
       showAppModal({title:'Delete selected items?',message:`Delete ${selected.length} selected item${selected.length===1?'':'s'}? Folders and their contents will be permanently removed. This cannot be undone.`,confirmLabel:'Delete selected',danger:true}).then(confirmed=>{
         if(!confirmed)return;
@@ -569,12 +619,12 @@
     if (assetsRename && reference) {
       const assetPath = assetsRename.dataset.assetPath ?? '';
       const currentName = assetPath.split(/[\\/]/).pop() ?? '';
-      const panel = assetsRename.closest('.assets-panel');
-      const status = panel?.querySelector('[data-assets-status]');
+      const pane = assetsRename.closest('.assets-pane');
+      const status = pane?.querySelector('[data-assets-status]');
       showAppModal({title:'Rename item',message:'Choose a new name for this asset or folder.',confirmLabel:'Rename',initialValue:currentName}).then(newName=>{
         if (newName===null || newName===currentName)return;
         assetsRename.disabled = true;
-        reference.invokeMethodAsync('RenameAsset', assetPath, assetsRename.dataset.assetsRoot ?? '', newName, panel?.dataset.assetsPanel ?? '').then(result => {
+        reference.invokeMethodAsync('RenameAsset', assetPath, assetsRename.dataset.assetsRoot ?? '', newName, pane?.dataset.assetsPane ?? '').then(result => {
           const renamed = JSON.parse(result);
           if (status?.isConnected) status.textContent = renamed.message ?? (renamed.success ? 'Renamed.' : 'Could not rename asset.');
         }).catch(() => { if (status?.isConnected) status.textContent = 'Could not rename asset.'; })
@@ -583,14 +633,26 @@
       return;
     }
     const assetsExport = event.target.closest?.('[data-assets-export]');
+    const assetsMask = event.target.closest?.('[data-assets-mask]');
+    if (assetsMask && reference) {
+      const status = assetsMask.closest('.assets-pane')?.querySelector('[data-assets-status]')
+        ?? assetsMask.closest('.asset-details')?.querySelector('[data-mask-open-status]');
+      assetsMask.disabled = true;
+      reference.invokeMethodAsync('OpenMaskEditor', assetsMask.dataset.assetPath ?? '', assetsMask.dataset.assetsRoot ?? '', assetsMask.dataset.sourcePane ?? '').then(result => {
+        const opened = JSON.parse(result);
+        if (!opened.success && status?.isConnected) status.textContent = opened.message ?? 'Could not open mask editor.';
+      }).catch(() => { if (status?.isConnected) status.textContent = 'Could not open mask editor.'; })
+        .finally(() => { if (assetsMask.isConnected) assetsMask.disabled = false; });
+      return;
+    }
     if (assetsExport && reference) {
-      const panel = assetsExport.closest('.assets-panel'); const status = panel?.querySelector('[data-assets-status]');
+      const pane = assetsExport.closest('.assets-pane'); const status = pane?.querySelector('[data-assets-status]');
       reference.invokeMethodAsync('ExportAsset', assetsExport.dataset.assetPath ?? '').then(result => { const exported = JSON.parse(result); if (status) status.textContent = exported.message ?? (exported.success ? 'Asset exported.' : 'Could not export asset.'); });
       return;
     }
     const assetsDelete = event.target.closest?.('[data-assets-delete]');
     if (assetsDelete && reference) {
-      const panel = assetsDelete.closest('.assets-panel'); const status = panel?.querySelector('[data-assets-status]');
+      const pane = assetsDelete.closest('.assets-pane'); const status = pane?.querySelector('[data-assets-status]');
       const name=(assetsDelete.dataset.assetPath??'').split(/[\\/]/).pop()??'this item';
       showAppModal({title:'Delete item?',message:`Delete “${name}”? Folders and their contents will be permanently removed. This cannot be undone.`,confirmLabel:'Delete',danger:true}).then(confirmed=>{
         if(!confirmed)return;
@@ -602,9 +664,9 @@
     if (event.target.closest?.('[data-asset-select]')) return;
     const assetFile = event.target.closest?.('[data-assets-open-details]');
     if (assetFile?.dataset.assetsOpenDetails === 'file' && reference) {
-      const panel = assetFile.closest('.assets-panel');
-      const status = panel?.querySelector('[data-assets-status]');
-      reference.invokeMethodAsync('OpenAssetDetails', assetFile.dataset.assetPath ?? '', assetFile.dataset.assetsSourceRoot ?? '', panel?.dataset.assetsPanel ?? '').then(result => {
+      const pane = assetFile.closest('.assets-pane');
+      const status = pane?.querySelector('[data-assets-status]');
+      reference.invokeMethodAsync('OpenAssetDetails', assetFile.dataset.assetPath ?? '', assetFile.dataset.assetsSourceRoot ?? '', pane?.dataset.assetsPane ?? '').then(result => {
         const opened = JSON.parse(result);
         if (!opened.success && status) status.textContent = opened.message ?? 'Could not open asset details.';
       }).catch(() => { if (status) status.textContent = 'Could not open asset details.'; });
@@ -715,7 +777,7 @@
     const group = tab.closest('[data-group]');
     if (!group) return;
     group.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('selected', item === tab));
-    group.querySelectorAll('[data-panel-view]').forEach(item => item.classList.toggle('is-active', item.dataset.panelView === tab.dataset.tab));
+    group.querySelectorAll('[data-pane-view]').forEach(item => item.classList.toggle('is-active', item.dataset.paneView === tab.dataset.tab));
   }, true);
   window.recursiveDock={setReference:dotnet=>{
     reference=dotnet;

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -49,7 +48,7 @@ public sealed class ComfyAssetReferenceStore
     }
 
     public async Task SetAsync(string projectFolder, string assetPath, string connectionId,
-        string serverUrl, string filename, string subfolder, string type)
+        string serverUrl, string filename, string subfolder, string type, IReadOnlyList<string>? tags = null)
     {
         if (string.IsNullOrWhiteSpace(connectionId) || string.IsNullOrWhiteSpace(filename))
             throw new ArgumentException("A Comfy connection ID and file reference are required.");
@@ -60,6 +59,7 @@ public sealed class ComfyAssetReferenceStore
         try
         {
             var metadata = await ReadOrCreateAsync(metadataPath, projectFolder, assetPath);
+            if (tags is not null) metadata["tags"] = JsonSerializer.SerializeToNode(tags);
             var references = metadata["comfyReferences"] as JsonObject;
             if (references is null) metadata["comfyReferences"] = references = new JsonObject();
             references[connectionId] = new JsonObject
@@ -101,9 +101,7 @@ public sealed class ComfyAssetReferenceStore
         var fullPath = Path.GetFullPath(assetPath);
         if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
             throw new InvalidOperationException("The asset must be a file inside the project's assets folder.");
-        var relative = Path.GetRelativePath(projectFolder, fullPath).Replace('\\', '/');
-        var name = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(relative))).ToLowerInvariant() + ".json";
-        return Path.Combine(projectFolder, name);
+        return AssetMetadataPaths.ForAsset(projectFolder, fullPath, createDirectory: true);
     }
 
     private static async Task<string> HashFileAsync(string path)

@@ -7,7 +7,9 @@
 @inject ComfyConnectionSettings ComfyConnection
 @inject ComfyConnectionTester ComfyConnectionTester
 @inject WorkflowLibrary WorkflowLibrary
+@inject WorkflowTemplateService WorkflowTemplateService
 @inject ProjectLibrary ProjectLibrary
+@inject PanelStore PanelStore
 @inject ProjectFolderPicker ProjectFolderPicker
 @inject ProjectExporter ProjectExporter
 @inject AssetExporter AssetExporter
@@ -17,7 +19,7 @@
   <header class="ribbon">
     <div class="ribbon-brand"><span>◈</span> SlopFactory</div>
     <div class="ribbon-tabs"><button type="button" class="ribbon-tab active" data-ribbon-action="workspace">Workspace</button><button type="button" class="ribbon-tab" data-ribbon-action="projects">Projects</button></div>
-    <div class="ribbon-actions"><button type="button" class="ribbon-button" data-ribbon-action="clear-workspace">↶ Clear workspace</button><button type="button" class="ribbon-button" data-ribbon-action="generation">✦ Generation</button><button type="button" class="ribbon-button" data-ribbon-action="assets">▤ Assets</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Comfy Settings</button><button type="button" class="ribbon-button" data-ribbon-action="workflows">⛭ Workflows</button></div>
+    <div class="ribbon-actions"><button type="button" class="ribbon-button" data-ribbon-action="clear-workspace">↶ Clear workspace</button><button type="button" class="ribbon-button" data-ribbon-action="generation">✦ Generation</button><button type="button" class="ribbon-button" data-ribbon-action="assets">▤ Assets</button><button type="button" class="ribbon-button" data-ribbon-action="panels">▣ Panels</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Comfy Settings</button><button type="button" class="ribbon-button" data-ribbon-action="workflows">⛭ Workflows</button></div>
   </header>
   <section class="settings-screen">
       <div class="settings-heading"><div><p>INTEGRATIONS</p><h1>ComfyUI connection</h1><span>Choose where SlopFactory sends ComfyUI workflow requests.</span></div></div>
@@ -119,7 +121,7 @@
       </div>
     </section>
   </section>
-  <section class="dock-host" data-root-dock><DockSurface @key="Root" Node="Root" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" /></section>
+  <section class="dock-host" data-root-dock><DockSurface @key="Root" Node="Root" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" /></section>
 </main>
 
 @code {
@@ -145,7 +147,7 @@
       await WorkflowLibrary.LoadAsync();
       await ProjectLibrary.LoadAsync();
       Root = RestoreWorkspace(await WorkspaceLayoutStore.LoadAsync()) ?? BuildTree();
-      added = MaximumPanelNumber(Root);
+      added = MaximumPaneNumber(Root);
       workspaceLoaded = true;
   }
   [JSInvokable]
@@ -197,12 +199,12 @@
       }
   }
   [JSInvokable]
-  public async Task<string> OpenAssetsPanel(string folderPath, string name)
+  public async Task<string> OpenAssetsPane(string folderPath, string name)
   {
       if (string.IsNullOrWhiteSpace(folderPath))
       {
           added++;
-          Root = AddToFirstGroup(Root, new DockPanel($"assets{added}", "Assets", "▤", "gold", "assets"));
+          Root = AddToFirstGroup(Root, new DockPane($"assets{added}", "Assets", "▤", "gold", "assets"));
           await InvokeAsync(StateHasChanged);
           return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
       }
@@ -210,20 +212,83 @@
       Directory.CreateDirectory(assetsPath);
       added++;
       var title = string.IsNullOrWhiteSpace(name) ? folderPath : name;
-      Root = AddToFirstGroup(Root, new DockPanel($"assets{added}", $"Assets · {title}", "▤", "gold", "assets", assetsPath, assetsPath));
+      Root = AddToFirstGroup(Root, new DockPane($"assets{added}", $"Assets · {title}", "▤", "gold", "assets", assetsPath, assetsPath));
       await InvokeAsync(StateHasChanged);
       return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
   }
   [JSInvokable]
-  public async Task<string> OpenGenerationPanel()
+  public async Task<string> OpenGenerationPane()
   {
       added++;
-      Root = AddToFirstGroup(Root, new DockPanel($"generation{added}", "Generation", "✦", "violet", "generation"));
+      Root = AddToFirstGroup(Root, new DockPane($"generation{added}", "Generation", "✦", "violet", "generation"));
       await InvokeAsync(StateHasChanged);
       return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
   }
   [JSInvokable]
-  public async Task<string> SetGenerationPanelProject(string panelId, string folderPath)
+  public async Task<string> OpenPanelEditorPane()
+  {
+      added++;
+      Root = AddToFirstGroup(Root, new DockPane($"panel-editor{added}", "Panel", "▣", "blue", "panel-editor"));
+      await InvokeAsync(StateHasChanged);
+      return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+  }
+  private Task ChangePanelPaneSelection(PanelPaneSelection selection)
+  {
+      var project = FindRegisteredProject(selection.ProjectFolder);
+      PanelDocument? panel = null;
+      if (project is not null && !string.IsNullOrWhiteSpace(selection.PanelId))
+          panel = PanelStore.Load(project.FolderPath, selection.PanelId);
+      Root = UpdatePanelPane(Root, selection.PaneId, pane => pane with
+      {
+          Title = panel is not null ? $"Panel · {panel.Name}" : project is not null ? $"Panel · {project.DisplayName}" : "Panel",
+          Context = project?.FolderPath,
+          Location = panel?.Id
+      });
+      return InvokeAsync(StateHasChanged);
+  }
+  private static DockNode UpdatePanelPane(DockNode node, string paneId, Func<DockPane, DockPane> update) => node switch
+  {
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "panel-editor")
+          => group with { Panes = group.Panes.Select(pane => pane.Id == paneId ? update(pane) : pane).ToList(), ActiveId = paneId },
+      SplitNode split => split with { First = UpdatePanelPane(split.First, paneId, update), Second = UpdatePanelPane(split.Second, paneId, update) },
+      _ => node
+  };
+  [JSInvokable]
+  public async Task<string> OpenGenerationFromAssetsPane(string assetsPaneId)
+  {
+      try
+      {
+          var source = FindAssetsPane(Root, assetsPaneId);
+          if (source is null || string.IsNullOrWhiteSpace(source.Context))
+              throw new InvalidOperationException("Select a project in the Assets pane first.");
+          var assetsRoot = NormalizeFolder(source.Context);
+          var project = FindRegisteredProject(Directory.GetParent(assetsRoot)?.FullName);
+          var currentFolder = NormalizeFolder(source.Location ?? assetsRoot);
+          if (project is null || !string.Equals(assetsRoot, NormalizeFolder(Path.Combine(project.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase) ||
+              !IsInFolder(currentFolder, assetsRoot) || !Directory.Exists(currentFolder))
+              throw new InvalidOperationException("The current Assets folder is not available.");
+
+          var outputFolder = Path.GetRelativePath(assetsRoot, currentFolder).Replace('\\', '/');
+          added++;
+          var generation = new DockPane($"generation{added}", $"Generation · {project.DisplayName}", "✦", "violet", "generation",
+              Context: project.FolderPath, OutputFolder: outputFolder);
+          Root = AddPaneAfter(Root, assetsPaneId, generation);
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  private static DockPane? FindAssetsPane(DockNode node, string paneId) => node switch
+  {
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Id == paneId && pane.Kind == "assets"),
+      SplitNode split => FindAssetsPane(split.First, paneId) ?? FindAssetsPane(split.Second, paneId),
+      _ => null
+  };
+  [JSInvokable]
+  public async Task<string> SetGenerationPaneProject(string paneId, string folderPath)
   {
       try
       {
@@ -231,7 +296,7 @@
               string.Equals(item.FolderPath, Path.GetFullPath(folderPath), StringComparison.OrdinalIgnoreCase));
           if (project is null || !Directory.Exists(project.FolderPath))
               return JsonSerializer.Serialize(new { success = false, message = "The selected project is not available." }, WorkflowJsonOptions);
-          Root = SetGenerationProject(Root, panelId, project);
+          Root = SetGenerationProject(Root, paneId, project);
           await InvokeAsync(StateHasChanged);
           return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
       }
@@ -241,62 +306,62 @@
       }
   }
   [JSInvokable]
-  public async Task ClearGenerationPanelProject(string panelId)
+  public async Task ClearGenerationPaneProject(string paneId)
   {
-      Root = ClearGenerationProject(Root, panelId);
+      Root = ClearGenerationProject(Root, paneId);
       await InvokeAsync(StateHasChanged);
   }
-  private static DockNode ClearGenerationProject(DockNode node, string panelId) => node switch
+  private static DockNode ClearGenerationProject(DockNode node, string paneId) => node switch
   {
       TabGroupNode group => group with
       {
-          Panels = group.Panels.Select(panel => panel.Id == panelId && panel.Kind == "generation"
-              ? panel with { Title = "Generation", Context = null, WorkflowId = null, InputValues = null }
-              : panel).ToList(),
-          ActiveId = group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "generation") ? panelId : group.ActiveId
+          Panes = group.Panes.Select(pane => pane.Id == paneId && pane.Kind == "generation"
+              ? pane with { Title = "Generation", Context = null, WorkflowId = null, InputValues = null, OutputFolder = null, OutputTags = null }
+              : pane).ToList(),
+          ActiveId = group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "generation") ? paneId : group.ActiveId
       },
       SplitNode split => split with
       {
-          First = ClearGenerationProject(split.First, panelId),
-          Second = ClearGenerationProject(split.Second, panelId)
+          First = ClearGenerationProject(split.First, paneId),
+          Second = ClearGenerationProject(split.Second, paneId)
       },
       _ => node
   };
-  private static DockNode SetGenerationProject(DockNode node, string panelId, ProjectDefinition project) => node switch
+  private static DockNode SetGenerationProject(DockNode node, string paneId, ProjectDefinition project) => node switch
   {
       TabGroupNode group => group with
       {
-          Panels = group.Panels.Select(panel => panel.Id == panelId && panel.Kind == "generation"
-              ? panel with { Title = $"Generation · {project.DisplayName}", Context = project.FolderPath, WorkflowId = null, InputValues = null }
-              : panel).ToList(),
-          ActiveId = group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "generation") ? panelId : group.ActiveId
+          Panes = group.Panes.Select(pane => pane.Id == paneId && pane.Kind == "generation"
+              ? pane with { Title = $"Generation · {project.DisplayName}", Context = project.FolderPath, WorkflowId = null, InputValues = null, OutputFolder = null, OutputTags = null }
+              : pane).ToList(),
+          ActiveId = group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "generation") ? paneId : group.ActiveId
       },
       SplitNode split => split with
       {
-          First = SetGenerationProject(split.First, panelId, project),
-          Second = SetGenerationProject(split.Second, panelId, project)
+          First = SetGenerationProject(split.First, paneId, project),
+          Second = SetGenerationProject(split.Second, paneId, project)
       },
       _ => node
   };
   [JSInvokable]
-  public async Task SetAssetsPanelProject(string panelId, string folderPath, string name)
+  public async Task SetAssetsPaneProject(string paneId, string folderPath, string name)
   {
       if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)) return;
       var assetsPath = Path.Combine(folderPath, "assets");
       Directory.CreateDirectory(assetsPath);
       var title = string.IsNullOrWhiteSpace(name) ? folderPath : name;
-      Root = SetAssetsPanelProject(Root, panelId, assetsPath, $"Assets · {title}");
+      Root = SetAssetsPaneProject(Root, paneId, assetsPath, $"Assets · {title}");
       await InvokeAsync(StateHasChanged);
   }
-  private static DockNode SetAssetsPanelProject(DockNode node, string panelId, string assetsPath, string title) => node switch
+  private static DockNode SetAssetsPaneProject(DockNode node, string paneId, string assetsPath, string title) => node switch
   {
-      TabGroupNode group when group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "assets")
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "assets")
           => group with
           {
-              Panels = group.Panels.Select(panel => panel.Id == panelId ? panel with { Title = title, Context = assetsPath, Location = assetsPath } : panel).ToList(),
-              ActiveId = panelId
+              Panes = group.Panes.Select(pane => pane.Id == paneId ? pane with { Title = title, Context = assetsPath, Location = assetsPath } : pane).ToList(),
+              ActiveId = paneId
           },
-      SplitNode split => split with { First = SetAssetsPanelProject(split.First, panelId, assetsPath, title), Second = SetAssetsPanelProject(split.Second, panelId, assetsPath, title) },
+      SplitNode split => split with { First = SetAssetsPaneProject(split.First, paneId, assetsPath, title), Second = SetAssetsPaneProject(split.Second, paneId, assetsPath, title) },
       _ => node
   };
   [JSInvokable]
@@ -318,8 +383,7 @@
           await source.CopyToAsync(destination);
           var projectFolder = Directory.GetParent(assetsRoot)!.FullName;
           var relativeAssetPath = Path.GetRelativePath(projectFolder, target).Replace('\\', '/');
-          var metadataFileName = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativeAssetPath))).ToLowerInvariant() + ".json";
-          var metadataPath = Path.Combine(projectFolder, metadataFileName);
+          var metadataPath = AssetMetadataPath(projectFolder, relativeAssetPath);
           var metadata = new { asset = relativeAssetPath, name = Path.GetFileName(target), tags = Array.Empty<string>() };
           await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(metadata, WorkflowJsonOptions));
           copied++;
@@ -371,7 +435,123 @@
       finally { await file.DisposeAsync(); }
   }
   [JSInvokable]
-  public Task RefreshAssetsPanels() => InvokeAsync(StateHasChanged);
+  public Task RefreshAssetsPanes() => InvokeAsync(StateHasChanged);
+  [JSInvokable]
+  public async Task<string> SetGenerationInputFromAsset(string paneId, string inputName, string sourcePath, string sourceRoot)
+  {
+      string? copiedPath = null;
+      string? metadataPath = null;
+      var copied = false;
+      try
+      {
+          var projectFolder = await GenerationDropProjectAsync(paneId, inputName);
+          var source = Path.GetFullPath(sourcePath);
+          var root = NormalizeFolder(sourceRoot);
+          var sourceProject = FindRegisteredProject(Directory.GetParent(root)?.FullName);
+          if (sourceProject is null ||
+              !string.Equals(root, NormalizeFolder(Path.Combine(sourceProject.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase) ||
+              !IsInFolder(source, root) || !File.Exists(source) || !IsGenerationImage(source))
+              throw new InvalidOperationException("Drop an image asset from a registered project.");
+
+          var destinationRoot = NormalizeFolder(Path.Combine(projectFolder, "assets"));
+          string selectedPath;
+          if (string.Equals(root, destinationRoot, StringComparison.OrdinalIgnoreCase))
+          {
+              selectedPath = source;
+          }
+          else
+          {
+              var importedFolder = Path.Combine(destinationRoot, "imported");
+              Directory.CreateDirectory(importedFolder);
+              copiedPath = UniqueAssetPath(importedFolder, Path.GetFileName(source));
+              File.Copy(source, copiedPath);
+              var relativeCopy = Path.GetRelativePath(projectFolder, copiedPath).Replace('\\', '/');
+              metadataPath = AssetMetadataPath(projectFolder, relativeCopy);
+              var metadata = new { asset = relativeCopy, name = Path.GetFileName(copiedPath), tags = Array.Empty<string>() };
+              await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(metadata, WorkflowJsonOptions));
+              copied = true;
+              selectedPath = copiedPath;
+          }
+
+          var relativePath = Path.GetRelativePath(projectFolder, selectedPath).Replace('\\', '/');
+          await ChangeGenerationInput(new GenerationInputChange(paneId, inputName, relativePath));
+          return JsonSerializer.Serialize(new { success = true, message = copied ? "Copied and selected image." : "Selected image." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          if (!copied && copiedPath is not null)
+          {
+              try { File.Delete(copiedPath); } catch { /* Preserve the original error. */ }
+              if (metadataPath is not null)
+              {
+                  try { File.Delete(metadataPath); } catch { /* Preserve the original error. */ }
+              }
+          }
+          return JsonSerializer.Serialize(new { success = false, message = copied ? $"Image copied, but could not select it: {ex.Message}" : ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> SetGenerationInputFromFile(string paneId, string inputName, string fileName, IJSStreamReference file)
+  {
+      const long maxFileSize = 1024L * 1024 * 1024;
+      string? targetPath = null;
+      string? metadataPath = null;
+      var imported = false;
+      try
+      {
+          var projectFolder = await GenerationDropProjectAsync(paneId, inputName);
+          if (string.IsNullOrWhiteSpace(fileName) || fileName != Path.GetFileName(fileName) ||
+              fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || !IsGenerationImage(fileName))
+              throw new InvalidOperationException("Drop a JPG, PNG, GIF, or WebP image file.");
+          if (file.Length > maxFileSize) throw new InvalidOperationException("The image exceeds the 1 GB file limit.");
+
+          var importedFolder = Path.Combine(projectFolder, "assets", "imported");
+          Directory.CreateDirectory(importedFolder);
+          targetPath = UniqueAssetPath(importedFolder, fileName);
+          await using (var source = await file.OpenReadStreamAsync(maxAllowedSize: maxFileSize))
+          await using (var target = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+              await source.CopyToAsync(target);
+
+          var relativePath = Path.GetRelativePath(projectFolder, targetPath).Replace('\\', '/');
+          metadataPath = AssetMetadataPath(projectFolder, relativePath);
+          var metadata = new { asset = relativePath, name = Path.GetFileName(targetPath), tags = Array.Empty<string>() };
+          await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(metadata, WorkflowJsonOptions));
+          imported = true;
+          await ChangeGenerationInput(new GenerationInputChange(paneId, inputName, relativePath));
+          return JsonSerializer.Serialize(new { success = true, message = "Imported and selected image." }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          if (!imported && targetPath is not null)
+          {
+              try { File.Delete(targetPath); } catch { /* Preserve the original error. */ }
+              if (metadataPath is not null)
+              {
+                  try { File.Delete(metadataPath); } catch { /* Preserve the original error. */ }
+              }
+          }
+          return JsonSerializer.Serialize(new { success = false, message = imported ? $"Image imported, but could not select it: {ex.Message}" : ex.Message }, WorkflowJsonOptions);
+      }
+      finally { await file.DisposeAsync(); }
+  }
+  private async Task<string> GenerationDropProjectAsync(string paneId, string inputName)
+  {
+      var pane = FindGenerationPane(Root, paneId);
+      var project = FindRegisteredProject(pane?.Context);
+      var workflow = WorkflowLibrary.GetAll().FirstOrDefault(item => item.Id == pane?.WorkflowId && !string.IsNullOrWhiteSpace(item.GraphFile));
+      if (project is null || workflow is null) throw new InvalidOperationException("Select a project and workflow before dropping an image.");
+      var placeholders = await WorkflowTemplateService.GetPlaceholdersAsync(workflow);
+      if (!placeholders.Any(item => item.Name == inputName && item.Type == "image"))
+          throw new InvalidOperationException("This workflow input does not accept an image.");
+      return project.FolderPath;
+  }
+  private static DockPane? FindGenerationPane(DockNode node, string paneId) => node switch
+  {
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Id == paneId && pane.Kind == "generation"),
+      SplitNode split => FindGenerationPane(split.First, paneId) ?? FindGenerationPane(split.Second, paneId),
+      _ => null
+  };
+  private static bool IsGenerationImage(string path) => Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp";
   [JSInvokable]
   public async Task<string> CopyAsset(string sourcePath, string sourceRoot, string destinationFolder, string destinationRoot)
   {
@@ -402,7 +582,7 @@
       }
   }
   [JSInvokable]
-  public async Task<string> OpenAssetDetails(string assetPath, string assetsRoot, string sourcePanelId)
+  public async Task<string> OpenAssetDetails(string assetPath, string assetsRoot, string sourcePaneId)
   {
       try
       {
@@ -410,7 +590,7 @@
           var root = NormalizeFolder(assetsRoot);
           if (!File.Exists(asset) || !IsInFolder(asset, root))
               return JsonSerializer.Serialize(new { success = false, message = "The asset is not available." }, WorkflowJsonOptions);
-          var existingDetails = FindAssetDetails(Root, sourcePanelId);
+          var existingDetails = FindAssetDetails(Root, sourcePaneId);
           if (existingDetails is not null)
           {
               Root = UpdateAssetDetails(Root, existingDetails.Id, asset, root);
@@ -418,8 +598,13 @@
           else
           {
               added++;
-              var detailsPanel = new DockPanel($"asset-details{added}", $"Asset · {Path.GetFileName(asset)}", "◉", "mint", "asset-details", asset, root, sourcePanelId);
-              Root = ContainsPanel(Root, sourcePanelId) ? DockDetailsRightOfPanel(Root, sourcePanelId, detailsPanel) : AddToFirstGroup(Root, detailsPanel);
+              var detailsPane = new DockPane($"asset-details{added}", $"Asset · {Path.GetFileName(asset)}", "◉", "mint", "asset-details", asset, root, sourcePaneId);
+              var relatedMask = FindRelatedMaskPane(Root, sourcePaneId, root);
+              if (relatedMask is not null && relatedMask.Owner is null)
+                  Root = SetPaneOwner(Root, relatedMask.Id, sourcePaneId);
+              Root = relatedMask is not null
+                  ? AddPaneAfter(Root, relatedMask.Id, detailsPane)
+                  : ContainsPane(Root, sourcePaneId) ? DockDetailsRightOfPane(Root, sourcePaneId, detailsPane) : AddToFirstGroup(Root, detailsPane);
           }
           Root = CollapseEmptyGroups(Root) ?? BuildTree();
           await InvokeAsync(StateHasChanged);
@@ -430,42 +615,142 @@
           return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
       }
   }
-  private static bool ContainsPanel(DockNode node, string panelId) => node switch
+  [JSInvokable]
+  public async Task<string> OpenMaskEditor(string assetPath, string assetsRoot, string sourcePaneId)
   {
-      TabGroupNode group => group.Panels.Any(panel => panel.Id == panelId),
-      SplitNode split => ContainsPanel(split.First, panelId) || ContainsPanel(split.Second, panelId),
-      _ => false
-  };
-  private static DockPanel? FindAssetDetails(DockNode node, string sourcePanelId) => node switch
+      try
+      {
+          var asset = Path.GetFullPath(assetPath);
+          var root = NormalizeFolder(assetsRoot);
+          var project = FindRegisteredProject(Directory.GetParent(root)?.FullName);
+          if (project is null || !string.Equals(root, NormalizeFolder(Path.Combine(project.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase) ||
+              !File.Exists(asset) || !IsInFolder(asset, root) || !IsGenerationImage(asset))
+              throw new InvalidOperationException("Choose an image in a registered project's assets folder.");
+          var existing = FindMaskPane(Root, asset);
+          if (existing is not null)
+          {
+              var source = FindPane(Root, sourcePaneId);
+              var owner = source?.Kind == "asset-details" ? source.Owner : source?.Kind == "assets" ? sourcePaneId : null;
+              if (owner is not null && existing.Owner is null)
+                  Root = SetPaneOwner(Root, existing.Id, owner);
+              Root = ActivatePane(Root, existing.Id);
+          }
+          else
+          {
+              added++;
+              var source = FindPane(Root, sourcePaneId);
+              var owner = source?.Kind == "asset-details" ? source.Owner : sourcePaneId;
+              var maskPane = new DockPane($"mask{added}", $"Mask · {Path.GetFileName(asset)}", "◐", "violet", "mask-editor", asset, root, owner);
+              if (source?.Kind == "asset-details")
+              {
+                  Root = AddPaneAfter(Root, sourcePaneId, maskPane);
+              }
+              else if (source?.Kind == "assets")
+              {
+                  var relatedPane = FindAssetDetails(Root, sourcePaneId) ?? FindRelatedMaskPane(Root, sourcePaneId, root);
+                  if (relatedPane?.Kind == "mask-editor" && relatedPane.Owner is null)
+                      Root = SetPaneOwner(Root, relatedPane.Id, sourcePaneId);
+                  Root = relatedPane is not null
+                      ? AddPaneAfter(Root, relatedPane.Id, maskPane)
+                      : DockDetailsRightOfPane(Root, sourcePaneId, maskPane);
+              }
+              else
+              {
+                  Root = AddToFirstGroup(Root, maskPane);
+              }
+          }
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  private static DockPane? FindMaskPane(DockNode node, string assetPath) => node switch
   {
-      TabGroupNode group => group.Panels.FirstOrDefault(panel => panel.Kind == "asset-details" && panel.Owner == sourcePanelId),
-      SplitNode split => FindAssetDetails(split.First, sourcePanelId) ?? FindAssetDetails(split.Second, sourcePanelId),
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Kind == "mask-editor" && string.Equals(pane.Context, assetPath, StringComparison.OrdinalIgnoreCase)),
+      SplitNode split => FindMaskPane(split.First, assetPath) ?? FindMaskPane(split.Second, assetPath),
       _ => null
   };
-  private static DockNode UpdateAssetDetails(DockNode node, string detailsPanelId, string assetPath, string assetsRoot) => node switch
+  private static DockPane? FindOwnedMaskPane(DockNode node, string assetsPaneId) => node switch
   {
-      TabGroupNode group when group.Panels.Any(panel => panel.Id == detailsPanelId)
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Kind == "mask-editor" && pane.Owner == assetsPaneId),
+      SplitNode split => FindOwnedMaskPane(split.First, assetsPaneId) ?? FindOwnedMaskPane(split.Second, assetsPaneId),
+      _ => null
+  };
+  private static DockPane? FindRelatedMaskPane(DockNode node, string assetsPaneId, string assetsRoot)
+      => FindOwnedMaskPane(node, assetsPaneId) ??
+          (CountAssetsPanesForRoot(node, assetsRoot) == 1 ? FindUnownedMaskPane(node, assetsRoot) : null);
+  private static DockPane? FindUnownedMaskPane(DockNode node, string assetsRoot) => node switch
+  {
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Kind == "mask-editor" && pane.Owner is null &&
+          string.Equals(pane.Location, assetsRoot, StringComparison.OrdinalIgnoreCase)),
+      SplitNode split => FindUnownedMaskPane(split.First, assetsRoot) ?? FindUnownedMaskPane(split.Second, assetsRoot),
+      _ => null
+  };
+  private static int CountAssetsPanesForRoot(DockNode node, string assetsRoot) => node switch
+  {
+      TabGroupNode group => group.Panes.Count(pane => pane.Kind == "assets" &&
+          string.Equals(pane.Context, assetsRoot, StringComparison.OrdinalIgnoreCase)),
+      SplitNode split => CountAssetsPanesForRoot(split.First, assetsRoot) + CountAssetsPanesForRoot(split.Second, assetsRoot),
+      _ => 0
+  };
+  private static DockNode SetPaneOwner(DockNode node, string paneId, string owner) => node switch
+  {
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId)
+          => group with { Panes = group.Panes.Select(pane => pane.Id == paneId ? pane with { Owner = owner } : pane).ToList() },
+      SplitNode split => split with { First = SetPaneOwner(split.First, paneId, owner), Second = SetPaneOwner(split.Second, paneId, owner) },
+      _ => node
+  };
+  private static DockPane? FindPane(DockNode node, string paneId) => node switch
+  {
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Id == paneId),
+      SplitNode split => FindPane(split.First, paneId) ?? FindPane(split.Second, paneId),
+      _ => null
+  };
+  private static DockNode ActivatePane(DockNode node, string paneId) => node switch
+  {
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId) => group with { ActiveId = paneId },
+      SplitNode split => split with { First = ActivatePane(split.First, paneId), Second = ActivatePane(split.Second, paneId) },
+      _ => node
+  };
+  private static bool ContainsPane(DockNode node, string paneId) => node switch
+  {
+      TabGroupNode group => group.Panes.Any(pane => pane.Id == paneId),
+      SplitNode split => ContainsPane(split.First, paneId) || ContainsPane(split.Second, paneId),
+      _ => false
+  };
+  private static DockPane? FindAssetDetails(DockNode node, string sourcePaneId) => node switch
+  {
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Kind == "asset-details" && pane.Owner == sourcePaneId),
+      SplitNode split => FindAssetDetails(split.First, sourcePaneId) ?? FindAssetDetails(split.Second, sourcePaneId),
+      _ => null
+  };
+  private static DockNode UpdateAssetDetails(DockNode node, string detailsPaneId, string assetPath, string assetsRoot) => node switch
+  {
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == detailsPaneId)
           => group with
           {
-              Panels = group.Panels.Select(panel => panel.Id == detailsPanelId
-                  ? panel with { Title = $"Asset · {Path.GetFileName(assetPath)}", Context = assetPath, Location = assetsRoot }
-                  : panel).ToList(),
-              ActiveId = detailsPanelId
+              Panes = group.Panes.Select(pane => pane.Id == detailsPaneId
+                  ? pane with { Title = $"Asset · {Path.GetFileName(assetPath)}", Context = assetPath, Location = assetsRoot }
+                  : pane).ToList(),
+              ActiveId = detailsPaneId
           },
       SplitNode split => split with
       {
-          First = UpdateAssetDetails(split.First, detailsPanelId, assetPath, assetsRoot),
-          Second = UpdateAssetDetails(split.Second, detailsPanelId, assetPath, assetsRoot)
+          First = UpdateAssetDetails(split.First, detailsPaneId, assetPath, assetsRoot),
+          Second = UpdateAssetDetails(split.Second, detailsPaneId, assetPath, assetsRoot)
       },
       _ => node
   };
-  private static DockNode DockDetailsRightOfPanel(DockNode node, string sourcePanelId, DockPanel detailsPanel) => node switch
+  private static DockNode DockDetailsRightOfPane(DockNode node, string sourcePaneId, DockPane detailsPane) => node switch
   {
-      TabGroupNode group when group.Panels.Any(panel => panel.Id == sourcePanelId)
-          => new SplitNode($"asset-details-split-{detailsPanel.Id}", DockAxis.Horizontal, .6, group, new TabGroupNode($"asset-details-group-{detailsPanel.Id}", [detailsPanel], detailsPanel.Id)),
-      SplitNode split when ContainsPanel(split.First, sourcePanelId)
-          => split with { First = DockDetailsRightOfPanel(split.First, sourcePanelId, detailsPanel) },
-      SplitNode split => split with { Second = DockDetailsRightOfPanel(split.Second, sourcePanelId, detailsPanel) },
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == sourcePaneId)
+          => new SplitNode($"asset-details-split-{detailsPane.Id}", DockAxis.Horizontal, .6, group, new TabGroupNode($"asset-details-group-{detailsPane.Id}", [detailsPane], detailsPane.Id)),
+      SplitNode split when ContainsPane(split.First, sourcePaneId)
+          => split with { First = DockDetailsRightOfPane(split.First, sourcePaneId, detailsPane) },
+      SplitNode split => split with { Second = DockDetailsRightOfPane(split.Second, sourcePaneId, detailsPane) },
       _ => node
   };
   private static string NormalizeFolder(string path) => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -477,25 +762,25 @@
       foreach (var folder in Directory.EnumerateDirectories(source)) CopyDirectory(folder, Path.Combine(destination, Path.GetFileName(folder)));
   }
   [JSInvokable]
-  public async Task NavigateAssetsPanel(string panelId, string folderPath)
+  public async Task NavigateAssetsPane(string paneId, string folderPath)
   {
       if (!Directory.Exists(folderPath)) return;
-      Root = SetPanelLocation(Root, panelId, folderPath);
+      Root = SetPaneLocation(Root, paneId, folderPath);
       await InvokeAsync(StateHasChanged);
   }
-  private static DockNode SetPanelLocation(DockNode node, string panelId, string folderPath) => node switch
+  private static DockNode SetPaneLocation(DockNode node, string paneId, string folderPath) => node switch
   {
-      TabGroupNode group when group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "assets")
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "assets")
           => group with
           {
-              Panels = group.Panels.Select(panel => panel.Id == panelId ? panel with { Location = folderPath } : panel).ToList(),
-              ActiveId = panelId
+              Panes = group.Panes.Select(pane => pane.Id == paneId ? pane with { Location = folderPath } : pane).ToList(),
+              ActiveId = paneId
           },
-      SplitNode split => split with { First = SetPanelLocation(split.First, panelId, folderPath), Second = SetPanelLocation(split.Second, panelId, folderPath) },
+      SplitNode split => split with { First = SetPaneLocation(split.First, paneId, folderPath), Second = SetPaneLocation(split.Second, paneId, folderPath) },
       _ => node
   };
   [JSInvokable]
-  public async Task<string> RenameAsset(string assetPath, string assetsRoot, string newName, string panelId)
+  public async Task<string> RenameAsset(string assetPath, string assetsRoot, string newName, string paneId)
   {
       try
       {
@@ -541,9 +826,13 @@
           foreach (var item in metadata)
           {
               File.WriteAllText(item.NewPath, item.Content);
-              if (!string.Equals(item.OldPath, item.NewPath, StringComparison.OrdinalIgnoreCase)) File.Delete(item.OldPath);
+              if (!string.Equals(item.OldPath, item.NewPath, StringComparison.OrdinalIgnoreCase))
+              {
+                  File.Delete(item.OldPath);
+                  AssetMetadataPaths.PruneEmptyFolders(projectFolder, Path.GetDirectoryName(item.OldPath)!);
+              }
           }
-          Root = RewriteRenamedPaths(Root, source, destination, panelId);
+          Root = RewriteRenamedPaths(Root, source, destination, paneId);
           await InvokeAsync(StateHasChanged);
           return JsonSerializer.Serialize(new { success = true, message = $"Renamed to {newName}." }, WorkflowJsonOptions);
       }
@@ -553,19 +842,19 @@
       }
   }
   private static string AssetMetadataPath(string projectFolder, string relativePath)
-      => Path.Combine(projectFolder, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativePath))).ToLowerInvariant() + ".json");
+      => AssetMetadataPaths.ForRelativeAsset(projectFolder, relativePath, createDirectory: true);
   private static string? RewriteRenamedPath(string? path, string source, string destination)
       => path is not null && IsInFolder(path, source) ? destination + path[source.Length..] : path;
-  private static DockNode RewriteRenamedPaths(DockNode node, string source, string destination, string panelId) => node switch
+  private static DockNode RewriteRenamedPaths(DockNode node, string source, string destination, string paneId) => node switch
   {
-      TabGroupNode group => group with { Panels = group.Panels.Select(panel => panel with
+      TabGroupNode group => group with { Panes = group.Panes.Select(pane => pane with
       {
-          Context = RewriteRenamedPath(panel.Context, source, destination),
-          Location = RewriteRenamedPath(panel.Location, source, destination),
-          Title = panel.Kind == "asset-details" && IsInFolder(panel.Context ?? string.Empty, source)
-              ? $"Asset · {Path.GetFileName(RewriteRenamedPath(panel.Context, source, destination))}" : panel.Title
-      }).ToList(), ActiveId = group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "assets") ? panelId : group.ActiveId },
-      SplitNode split => split with { First = RewriteRenamedPaths(split.First, source, destination, panelId), Second = RewriteRenamedPaths(split.Second, source, destination, panelId) },
+          Context = RewriteRenamedPath(pane.Context, source, destination),
+          Location = RewriteRenamedPath(pane.Location, source, destination),
+          Title = pane.Kind is "asset-details" or "mask-editor" && IsInFolder(pane.Context ?? string.Empty, source)
+              ? $"{(pane.Kind == "mask-editor" ? "Mask" : "Asset")} · {Path.GetFileName(RewriteRenamedPath(pane.Context, source, destination))}" : pane.Title
+      }).ToList(), ActiveId = group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "assets") ? paneId : group.ActiveId },
+      SplitNode split => split with { First = RewriteRenamedPaths(split.First, source, destination, paneId), Second = RewriteRenamedPaths(split.Second, source, destination, paneId) },
       _ => node
   };
   [JSInvokable]
@@ -630,9 +919,12 @@
           foreach (var file in files)
           {
               var relativePath = Path.GetRelativePath(projectFolder, file).Replace('\\', '/');
-              var metadataName = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(relativePath))).ToLowerInvariant() + ".json";
-              var metadataPath = Path.Combine(projectFolder, metadataName);
-              if (File.Exists(metadataPath)) DeleteFile(metadataPath);
+              var metadataPath = AssetMetadataPaths.ForRelativeAsset(projectFolder, relativePath);
+              if (File.Exists(metadataPath))
+              {
+                  DeleteFile(metadataPath);
+                  AssetMetadataPaths.PruneEmptyFolders(projectFolder, Path.GetDirectoryName(metadataPath)!);
+              }
           }
           await InvokeAsync(StateHasChanged);
           return JsonSerializer.Serialize(new { success = true, message = "Asset deleted." }, WorkflowJsonOptions);
@@ -764,7 +1056,7 @@
   }
   private Task ActivateTab(TabActivation activation)
   {
-      Root = SetActiveTab(Root, activation.GroupId, activation.PanelId);
+      Root = SetActiveTab(Root, activation.GroupId, activation.PaneId);
       return InvokeAsync(StateHasChanged);
   }
   private Task SelectGenerationWorkflow(GenerationWorkflowSelection selection)
@@ -772,108 +1064,133 @@
       if (!string.IsNullOrEmpty(selection.WorkflowId) && !WorkflowLibrary.GetAll().Any(workflow =>
           workflow.Id == selection.WorkflowId && !string.IsNullOrWhiteSpace(workflow.GraphFile)))
           return Task.CompletedTask;
-      Root = UpdateGenerationPanel(Root, selection.PanelId, panel =>
-          panel with { WorkflowId = selection.WorkflowId, InputValues = new Dictionary<string, string>() });
+      Root = UpdateGenerationPane(Root, selection.PaneId, pane =>
+          pane with { WorkflowId = selection.WorkflowId, InputValues = new Dictionary<string, string>() });
       return InvokeAsync(StateHasChanged);
   }
   private Task ChangeGenerationInput(GenerationInputChange change)
   {
       if (string.IsNullOrWhiteSpace(change.Name)) return Task.CompletedTask;
-      Root = UpdateGenerationPanel(Root, change.PanelId, panel =>
+      Root = UpdateGenerationPane(Root, change.PaneId, pane =>
       {
-          var values = new Dictionary<string, string>(panel.InputValues ?? [], StringComparer.Ordinal);
+          var values = new Dictionary<string, string>(pane.InputValues ?? [], StringComparer.Ordinal);
           values[change.Name] = change.Value;
-          return panel with { InputValues = values };
+          return pane with { InputValues = values };
       });
       return InvokeAsync(StateHasChanged);
   }
-  private static DockNode UpdateGenerationPanel(DockNode node, string panelId, Func<DockPanel, DockPanel> update) => node switch
+  private Task ChangeGenerationOutputFolder(GenerationOutputFolderChange change)
   {
-      TabGroupNode group when group.Panels.Any(panel => panel.Id == panelId && panel.Kind == "generation")
+      Root = UpdateGenerationPane(Root, change.PaneId, pane => pane with
+      {
+          OutputFolder = string.IsNullOrWhiteSpace(change.Folder) ? null : change.Folder.Trim()
+      });
+      return InvokeAsync(StateHasChanged);
+  }
+  private Task ChangeGenerationOutputTags(GenerationOutputTagsChange change)
+  {
+      Root = UpdateGenerationPane(Root, change.PaneId, pane => pane with { OutputTags = change.Tags.ToList() });
+      return InvokeAsync(StateHasChanged);
+  }
+  private static DockNode UpdateGenerationPane(DockNode node, string paneId, Func<DockPane, DockPane> update) => node switch
+  {
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "generation")
           => group with
           {
-              Panels = group.Panels.Select(panel => panel.Id == panelId ? update(panel) : panel).ToList(),
-              ActiveId = panelId
+              Panes = group.Panes.Select(pane => pane.Id == paneId ? update(pane) : pane).ToList(),
+              ActiveId = paneId
           },
       SplitNode split => split with
       {
-          First = UpdateGenerationPanel(split.First, panelId, update),
-          Second = UpdateGenerationPanel(split.Second, panelId, update)
+          First = UpdateGenerationPane(split.First, paneId, update),
+          Second = UpdateGenerationPane(split.Second, paneId, update)
       },
       _ => node
   };
   [JSInvokable]
-  public async Task ClosePanel(string panelId)
+  public async Task ClosePane(string paneId)
   {
-      var remaining = RemovePanel(Root, panelId, out var removed);
+      var remaining = RemovePane(Root, paneId, out var removed);
       if (removed is null) return;
       Root = remaining is null ? BuildTree() : CollapseEmptyGroups(remaining) ?? BuildTree();
       await InvokeAsync(StateHasChanged);
   }
-  private static DockNode AddToFirstGroup(DockNode node, DockPanel panel) => node switch
+  private static DockNode AddToFirstGroup(DockNode node, DockPane pane) => node switch
   {
-      TabGroupNode group => group with { Panels = group.Panels.Append(panel).ToList(), ActiveId = panel.Id },
-      SplitNode split => split with { First = AddToFirstGroup(split.First, panel) },
+      TabGroupNode group => group with { Panes = group.Panes.Append(pane).ToList(), ActiveId = pane.Id },
+      SplitNode split => split with { First = AddToFirstGroup(split.First, pane) },
       _ => node
   };
-  private static DockNode SetActiveTab(DockNode node, string groupId, string panelId) => node switch
+  private static DockNode AddPaneAfter(DockNode node, string sourcePaneId, DockPane pane) => node switch
   {
-      TabGroupNode group when group.Id == groupId && group.Panels.Any(panel => panel.Id == panelId)
-          => group with { ActiveId = panelId },
+      TabGroupNode group when group.Panes.Any(item => item.Id == sourcePaneId) => InsertAfter(group, sourcePaneId, pane),
+      SplitNode split => split with { First = AddPaneAfter(split.First, sourcePaneId, pane), Second = AddPaneAfter(split.Second, sourcePaneId, pane) },
+      _ => node
+  };
+  private static TabGroupNode InsertAfter(TabGroupNode group, string sourcePaneId, DockPane pane)
+  {
+      var panes = group.Panes.ToList();
+      panes.Insert(panes.FindIndex(item => item.Id == sourcePaneId) + 1, pane);
+      return group with { Panes = panes, ActiveId = pane.Id };
+  }
+  private static DockNode SetActiveTab(DockNode node, string groupId, string paneId) => node switch
+  {
+      TabGroupNode group when group.Id == groupId && group.Panes.Any(pane => pane.Id == paneId)
+          => group with { ActiveId = paneId },
       SplitNode split => split with
       {
-          First = SetActiveTab(split.First, groupId, panelId),
-          Second = SetActiveTab(split.Second, groupId, panelId)
+          First = SetActiveTab(split.First, groupId, paneId),
+          Second = SetActiveTab(split.Second, groupId, paneId)
       },
       _ => node
   };
   [JSInvokable("ApplyDockDrop")]
-  public async Task DockPanel(string panelId, string targetGroupId, string zone)
+  public async Task DockPane(string paneId, string targetGroupId, string zone)
   {
-      var withoutSource = RemovePanel(Root, panelId, out var panel);
-      if (panel is null || withoutSource is null) return;
-      Root = CollapseEmptyGroups(InsertPanel(withoutSource, targetGroupId, panel, zone)) ?? BuildTree();
+      var withoutSource = RemovePane(Root, paneId, out var pane);
+      if (pane is null || withoutSource is null) return;
+      Root = CollapseEmptyGroups(InsertPane(withoutSource, targetGroupId, pane, zone)) ?? BuildTree();
       await InvokeAsync(StateHasChanged);
   }
   [JSInvokable("ApplyRootDockDrop")]
-  public async Task DockAtRoot(string panelId, string edge)
+  public async Task DockAtRoot(string paneId, string edge)
   {
-      var remaining = RemovePanel(Root, panelId, out var panel);
-      if (remaining is null || panel is null) return;
-      var incoming = new TabGroupNode($"group-{panel.Id}", [panel], panel.Id);
+      var remaining = RemovePane(Root, paneId, out var pane);
+      if (remaining is null || pane is null) return;
+      var incoming = new TabGroupNode($"group-{pane.Id}", [pane], pane.Id);
       Root = CollapseEmptyGroups(edge switch
       {
-          "top" => new SplitNode($"root-top-{panel.Id}", DockAxis.Vertical, .25, incoming, remaining),
-          "bottom" => new SplitNode($"root-bottom-{panel.Id}", DockAxis.Vertical, .75, remaining, incoming),
-          "left" => new SplitNode($"root-left-{panel.Id}", DockAxis.Horizontal, .25, incoming, remaining),
-          _ => new SplitNode($"root-right-{panel.Id}", DockAxis.Horizontal, .75, remaining, incoming)
+          "top" => new SplitNode($"root-top-{pane.Id}", DockAxis.Vertical, .25, incoming, remaining),
+          "bottom" => new SplitNode($"root-bottom-{pane.Id}", DockAxis.Vertical, .75, remaining, incoming),
+          "left" => new SplitNode($"root-left-{pane.Id}", DockAxis.Horizontal, .25, incoming, remaining),
+          _ => new SplitNode($"root-right-{pane.Id}", DockAxis.Horizontal, .75, remaining, incoming)
       }) ?? BuildTree();
       await InvokeAsync(StateHasChanged);
   }
-  private static DockNode? RemovePanel(DockNode node, string panelId, out DockPanel? removed)
+  private static DockNode? RemovePane(DockNode node, string paneId, out DockPane? removed)
   {
       removed = null;
       if (node is TabGroupNode group)
       {
-          var removedIndex = group.Panels.ToList().FindIndex(panel => panel.Id == panelId);
+          var removedIndex = group.Panes.ToList().FindIndex(pane => pane.Id == paneId);
           if (removedIndex < 0) return group;
-          removed = group.Panels[removedIndex];
-          var remaining = group.Panels.Where(panel => panel.Id != panelId).ToList();
+          removed = group.Panes[removedIndex];
+          var remaining = group.Panes.Where(pane => pane.Id != paneId).ToList();
           if (remaining.Count == 0) return null;
-          var activeId = remaining.Any(panel => panel.Id == group.ActiveId)
+          var activeId = remaining.Any(pane => pane.Id == group.ActiveId)
               ? group.ActiveId
               : remaining[Math.Min(removedIndex, remaining.Count - 1)].Id;
-          return group with { Panels = remaining, ActiveId = activeId };
+          return group with { Panes = remaining, ActiveId = activeId };
       }
       var split = (SplitNode)node;
-      var first = RemovePanel(split.First, panelId, out removed);
+      var first = RemovePane(split.First, paneId, out removed);
       if (removed is not null) return first is null ? split.Second : split with { First = first };
-      var second = RemovePanel(split.Second, panelId, out removed);
+      var second = RemovePane(split.Second, paneId, out removed);
       return second is null ? split.First : split with { Second = second };
   }
   private static DockNode? CollapseEmptyGroups(DockNode node) => node switch
   {
-      TabGroupNode group => group.Panels.Count == 0 ? null : group,
+      TabGroupNode group => group.Panes.Count == 0 ? null : group,
       SplitNode split => CollapseSplit(split),
       _ => node
   };
@@ -883,20 +1200,20 @@
       var second = CollapseEmptyGroups(split.Second);
       return first is null ? second : second is null ? first : split with { First = first, Second = second };
   }
-  private static DockNode InsertPanel(DockNode node, string groupId, DockPanel panel, string zone)
+  private static DockNode InsertPane(DockNode node, string groupId, DockPane pane, string zone)
   {
       if (node is TabGroupNode group)
       {
           if (group.Id != groupId) return group;
-          if (zone == "stack") return group with { Panels = group.Panels.Append(panel).ToList(), ActiveId = panel.Id };
-          var incoming = new TabGroupNode($"group-{panel.Id}", [panel], panel.Id);
+          if (zone == "stack") return group with { Panes = group.Panes.Append(pane).ToList(), ActiveId = pane.Id };
+          var incoming = new TabGroupNode($"group-{pane.Id}", [pane], pane.Id);
           var axis = zone is "left" or "right" ? DockAxis.Horizontal : DockAxis.Vertical;
           return zone is "left" or "top"
-              ? new SplitNode($"split-{panel.Id}", axis, .5, incoming, group)
-              : new SplitNode($"split-{panel.Id}", axis, .5, group, incoming);
+              ? new SplitNode($"split-{pane.Id}", axis, .5, incoming, group)
+              : new SplitNode($"split-{pane.Id}", axis, .5, group, incoming);
       }
       var split = (SplitNode)node;
-      return split with { First = InsertPanel(split.First, groupId, panel, zone), Second = InsertPanel(split.Second, groupId, panel, zone) };
+      return split with { First = InsertPane(split.First, groupId, pane, zone), Second = InsertPane(split.Second, groupId, pane, zone) };
   }
   [JSInvokable]
   public Task SetSplitRatio(string splitId, double ratio)
@@ -919,12 +1236,12 @@
   {
       if (node is TabGroupNode group)
       {
-          var panels = (group.Panels ?? []).Select(RestorePanel).OfType<DockPanel>()
-              .DistinctBy(panel => panel.Id).ToList();
-          if (panels.Count == 0) return null;
-          var activeId = panels.Any(panel => panel.Id == group.ActiveId) ? group.ActiveId : panels[0].Id;
+          var panes = (group.Panes ?? []).Select(RestorePane).OfType<DockPane>()
+              .DistinctBy(pane => pane.Id).ToList();
+          if (panes.Count == 0) return null;
+          var activeId = panes.Any(pane => pane.Id == group.ActiveId) ? group.ActiveId : panes[0].Id;
           return group with { Id = string.IsNullOrWhiteSpace(group.Id) ? $"group-{Guid.NewGuid():N}" : group.Id,
-              Panels = panels, ActiveId = activeId };
+              Panes = panes, ActiveId = activeId };
       }
       if (node is SplitNode split)
       {
@@ -937,60 +1254,89 @@
       }
       return null;
   }
-  private DockPanel? RestorePanel(DockPanel panel)
+  private DockPane? RestorePane(DockPane pane)
   {
-      if (string.IsNullOrWhiteSpace(panel.Id)) return null;
+      if (string.IsNullOrWhiteSpace(pane.Id)) return null;
       try
       {
-          if (panel.Kind == "assets")
+          if (pane.Kind == "assets")
           {
-              if (string.IsNullOrWhiteSpace(panel.Context))
-                  return panel with { Title = "Assets", Context = null, Location = null };
-              var root = NormalizeFolder(panel.Context);
+              if (string.IsNullOrWhiteSpace(pane.Context))
+                  return pane with { Title = "Assets", Context = null, Location = null };
+              var root = NormalizeFolder(pane.Context);
               var projectFolder = Directory.GetParent(root)?.FullName;
               var project = FindRegisteredProject(projectFolder);
               if (project is null || !Directory.Exists(root) ||
                   !string.Equals(root, NormalizeFolder(Path.Combine(project.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase))
-                  return panel with { Title = "Assets", Context = null, Location = null };
-              var location = string.IsNullOrWhiteSpace(panel.Location) ? root : NormalizeFolder(panel.Location);
+                  return pane with { Title = "Assets", Context = null, Location = null };
+              var location = string.IsNullOrWhiteSpace(pane.Location) ? root : NormalizeFolder(pane.Location);
               if (!IsInFolder(location, root) || !Directory.Exists(location)) location = root;
-              return panel with { Title = $"Assets · {project.DisplayName}", Context = root, Location = location };
+              return pane with { Title = $"Assets · {project.DisplayName}", Context = root, Location = location };
           }
-          if (panel.Kind == "generation")
+          if (pane.Kind == "generation")
           {
-              var project = FindRegisteredProject(panel.Context);
+              var project = FindRegisteredProject(pane.Context);
               return project is null
-                  ? panel with { Title = "Generation", Context = null, Location = null }
-                  : panel with { Title = $"Generation · {project.DisplayName}", Context = project.FolderPath };
+                  ? pane with { Title = "Generation", Context = null, Location = null, OutputFolder = null, OutputTags = null }
+                  : pane with { Title = $"Generation · {project.DisplayName}", Context = project.FolderPath };
           }
-          if (panel.Kind == "asset-details")
+          if (pane.Kind == "panel-editor")
           {
-              if (string.IsNullOrWhiteSpace(panel.Context) || string.IsNullOrWhiteSpace(panel.Location)) return null;
-              var root = NormalizeFolder(panel.Location);
+              var project = FindRegisteredProject(pane.Context);
+              if (project is null) return pane with { Title = "Panel", Context = null, Location = null };
+              if (string.IsNullOrWhiteSpace(pane.Location))
+                  return pane with { Title = $"Panel · {project.DisplayName}", Context = project.FolderPath, Location = null };
+              try
+              {
+                  var panel = PanelStore.Load(project.FolderPath, pane.Location);
+                  return pane with { Title = $"Panel · {panel.Name}", Context = project.FolderPath, Location = panel.Id };
+              }
+              catch
+              {
+                  // Keep the editor open so it can report the file problem and offer a new Panel.
+                  return pane with { Title = $"Panel · {project.DisplayName}", Context = project.FolderPath };
+              }
+          }
+          if (pane.Kind == "asset-details")
+          {
+              if (string.IsNullOrWhiteSpace(pane.Context) || string.IsNullOrWhiteSpace(pane.Location)) return null;
+              var root = NormalizeFolder(pane.Location);
               var project = FindRegisteredProject(Directory.GetParent(root)?.FullName);
-              var asset = Path.GetFullPath(panel.Context);
+              var asset = Path.GetFullPath(pane.Context);
               if (project is null || !File.Exists(asset) || !IsInFolder(asset, root) ||
                   !string.Equals(root, NormalizeFolder(Path.Combine(project.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase)) return null;
-              return panel with { Title = $"Asset · {Path.GetFileName(asset)}", Context = asset, Location = root };
+              return pane with { Title = $"Asset · {Path.GetFileName(asset)}", Context = asset, Location = root };
+          }
+          if (pane.Kind == "mask-editor")
+          {
+              if (string.IsNullOrWhiteSpace(pane.Context) || string.IsNullOrWhiteSpace(pane.Location)) return null;
+              var root = NormalizeFolder(pane.Location);
+              var project = FindRegisteredProject(Directory.GetParent(root)?.FullName);
+              var asset = Path.GetFullPath(pane.Context);
+              if (project is null || !File.Exists(asset) || !IsInFolder(asset, root) || !IsGenerationImage(asset) ||
+                  !string.Equals(root, NormalizeFolder(Path.Combine(project.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase)) return null;
+              return pane with { Title = $"Mask · {Path.GetFileName(asset)}", Context = asset, Location = root };
           }
       }
       catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
       {
-          return panel.Kind is "assets" or "generation" ? panel with { Title = panel.Kind == "assets" ? "Assets" : "Generation", Context = null, Location = null } : null;
+          return pane.Kind is "assets" or "generation" or "panel-editor"
+              ? pane with { Title = pane.Kind switch { "assets" => "Assets", "generation" => "Generation", _ => "Panel" }, Context = null, Location = null }
+              : null;
       }
       return null;
   }
   private ProjectDefinition? FindRegisteredProject(string? folderPath) =>
       string.IsNullOrWhiteSpace(folderPath) ? null : ProjectLibrary.GetAll().FirstOrDefault(project =>
           string.Equals(project.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase) && Directory.Exists(project.FolderPath));
-  private static int MaximumPanelNumber(DockNode node) => node switch
+  private static int MaximumPaneNumber(DockNode node) => node switch
   {
-      TabGroupNode group => group.Panels.Select(panel =>
+      TabGroupNode group => group.Panes.Select(pane =>
       {
-          var digits = new string(panel.Id.Reverse().TakeWhile(char.IsDigit).Reverse().ToArray());
+          var digits = new string(pane.Id.Reverse().TakeWhile(char.IsDigit).Reverse().ToArray());
           return int.TryParse(digits, out var number) ? number : 0;
       }).DefaultIfEmpty().Max(),
-      SplitNode split => Math.Max(MaximumPanelNumber(split.First), MaximumPanelNumber(split.Second)),
+      SplitNode split => Math.Max(MaximumPaneNumber(split.First), MaximumPaneNumber(split.Second)),
       _ => 0
   };
   protected override async Task OnAfterRenderAsync(bool firstRender)
