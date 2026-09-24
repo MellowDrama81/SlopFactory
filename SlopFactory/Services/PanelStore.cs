@@ -18,9 +18,9 @@ public sealed class PanelStore
 
     public PanelDocument CreateNew() => new();
 
-    public IReadOnlyList<PanelSummary> GetAll(string projectFolder)
+    public IReadOnlyList<PanelSummary> GetAll(string projectFolder, string? relativeFolder = null)
     {
-        var folder = PanelFolder(projectFolder);
+        var folder = ResolveFolder(projectFolder, relativeFolder);
         if (!Directory.Exists(folder)) return [];
         var panels = new List<PanelSummary>();
         foreach (var file in Directory.EnumerateFiles(folder, "*.json", SearchOption.TopDirectoryOnly))
@@ -31,11 +31,48 @@ public sealed class PanelStore
             {
                 var panel = JsonSerializer.Deserialize<PanelDocument>(File.ReadAllText(file), JsonOptions);
                 if (panel is not null && panel.Id == id)
-                    panels.Add(new PanelSummary(id, panel.Name, panel.Width, panel.Height));
+                {
+                    Validate(projectFolder, panel, requireUsableSources: false);
+                    panels.Add(new PanelSummary(id, panel.Name, panel.Width, panel.Height,
+                        Path.GetRelativePath(PanelFolder(projectFolder), file).Replace('\\', '/'), panel));
+                }
             }
-            catch (JsonException) { /* An invalid file should not hide the other panels. */ }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+            { /* An invalid file should not hide the other panels. */ }
         }
         return panels.OrderBy(panel => panel.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public IReadOnlyList<string> GetFolders(string projectFolder, string? relativeFolder)
+    {
+        var folder = ResolveFolder(projectFolder, relativeFolder);
+        if (!Directory.Exists(folder)) return [];
+        return Directory.EnumerateDirectories(folder).Select(Path.GetFileName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public string NormalizeFolder(string projectFolder, string? relativeFolder)
+    {
+        var folder = ResolveFolder(projectFolder, relativeFolder);
+        if (!Directory.Exists(folder)) throw new DirectoryNotFoundException("The Panel folder no longer exists.");
+        var relative = Path.GetRelativePath(PanelFolder(projectFolder), folder).Replace('\\', '/');
+        return relative == "." ? string.Empty : relative;
+    }
+
+    public string CreateFolder(string projectFolder, string? parentFolder, string name)
+    {
+        name = name.Trim();
+        if (name.Length is < 1 or > 100 || name is "." or ".." ||
+            name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/') || name.Contains('\\'))
+            throw new InvalidOperationException("Enter a valid folder name of 1–100 characters.");
+        var parent = ResolveFolder(projectFolder, parentFolder);
+        if (!Directory.Exists(parent)) throw new DirectoryNotFoundException("The parent Panel folder no longer exists.");
+        var path = Path.Combine(parent, name);
+        if (Directory.Exists(path) || File.Exists(path)) throw new InvalidOperationException("A folder with that name already exists.");
+        Directory.CreateDirectory(path);
+        return NormalizeFolder(projectFolder, Path.GetRelativePath(PanelFolder(projectFolder), path));
     }
 
     public PanelDocument Load(string projectFolder, string panelId)
@@ -44,18 +81,19 @@ public sealed class PanelStore
         if (!File.Exists(path)) throw new FileNotFoundException("The selected Panel no longer exists.");
         var panel = JsonSerializer.Deserialize<PanelDocument>(File.ReadAllText(path), JsonOptions)
             ?? throw new InvalidOperationException("The Panel JSON is invalid.");
-        if (panel.Id != panelId) throw new InvalidOperationException("The Panel ID does not match its file name.");
+        if (panel.Id != Path.GetFileNameWithoutExtension(path)) throw new InvalidOperationException("The Panel ID does not match its file name.");
         Validate(projectFolder, panel, requireUsableSources: false);
         return panel;
     }
 
-    public async Task SaveAsync(string projectFolder, PanelDocument panel)
+    public async Task SaveAsync(string projectFolder, PanelDocument panel, string? relativeFolder = null)
     {
         Validate(projectFolder, panel, requireUsableSources: true);
         panel.Name = panel.Name.Trim();
         foreach (var layer in panel.Layers) layer.Name = layer.Name.Trim();
-        var path = PanelPath(projectFolder, panel.Id);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var folder = ResolveFolder(projectFolder, relativeFolder);
+        if (!Directory.Exists(folder)) throw new DirectoryNotFoundException("The Panel folder no longer exists.");
+        var path = Path.Combine(folder, panel.Id + ".json");
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
@@ -63,6 +101,21 @@ public sealed class PanelStore
             File.Move(temporary, path, overwrite: true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    public string Move(string projectFolder, string panelReference, string? destinationFolder)
+    {
+        var source = PanelPath(projectFolder, panelReference);
+        if (!File.Exists(source)) throw new FileNotFoundException("The selected Panel no longer exists.");
+        var destinationDirectory = ResolveFolder(projectFolder, destinationFolder);
+        if (!Directory.Exists(destinationDirectory)) throw new DirectoryNotFoundException("The destination Panel folder no longer exists.");
+        var destination = Path.Combine(destinationDirectory, Path.GetFileName(source));
+        if (!string.Equals(source, destination, StringComparison.OrdinalIgnoreCase))
+        {
+            if (File.Exists(destination)) throw new IOException("A Panel with this ID already exists in the destination folder.");
+            File.Move(source, destination);
+        }
+        return Path.GetRelativePath(PanelFolder(projectFolder), destination).Replace('\\', '/');
     }
 
     public IReadOnlyList<string> GetRasterAssets(string projectFolder)
@@ -118,13 +171,31 @@ public sealed class PanelStore
                 }
             }
         }
+        Directory.CreateDirectory(folder);
         return folder;
     }
 
     private static string PanelPath(string projectFolder, string panelId)
     {
-        if (!Guid.TryParseExact(panelId, "N", out _)) throw new InvalidOperationException("The Panel ID is invalid.");
-        return Path.Combine(PanelFolder(projectFolder), panelId + ".json");
+        if (Guid.TryParseExact(panelId, "N", out _)) panelId += ".json";
+        var file = Path.GetFileNameWithoutExtension(panelId);
+        if (!Guid.TryParseExact(file, "N", out _) || !panelId.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The Panel reference is invalid.");
+        var path = Path.GetFullPath(Path.Combine(PanelFolder(projectFolder), panelId.Replace('/', Path.DirectorySeparatorChar)));
+        if (!path.StartsWith(Path.GetFullPath(PanelFolder(projectFolder)) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The Panel reference is outside the panels folder.");
+        return path;
+    }
+
+    private static string ResolveFolder(string projectFolder, string? relativeFolder)
+    {
+        var root = Path.GetFullPath(PanelFolder(projectFolder));
+        if (string.IsNullOrWhiteSpace(relativeFolder)) return root;
+        if (Path.IsPathRooted(relativeFolder)) throw new InvalidOperationException("The Panel folder must be within this project.");
+        var path = Path.GetFullPath(Path.Combine(root, relativeFolder.Replace('/', Path.DirectorySeparatorChar)));
+        if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The Panel folder must be within this project.");
+        return path;
     }
 
     private static string AssetsFolder(string projectFolder) => Path.Combine(Path.GetFullPath(projectFolder), "assets");

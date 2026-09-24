@@ -74,93 +74,7 @@ else if (Pane.Kind == "generation")
           {
             @if (placeholder.Type == "image")
             {
-              var selectedAsset = GenerationValue(placeholder.Name);
-              <div class="generation-field generation-image-field" data-generation-image-drop data-generation-pane="@Pane.Id" data-generation-input="@placeholder.Name" @key="placeholder.Name">
-                <span>@placeholder.Label</span>
-                <div class="generation-image-controls">
-                  <button type="button" class="generation-image-selection" aria-label="Choose @placeholder.Label.ToLowerInvariant()" aria-expanded="@(openGenerationImagePicker == placeholder.Name)" @onclick="() => ToggleGenerationImagePicker(placeholder.Name)">
-                    @if (selectedAsset.Length > 0 && GenerationThumbnail(selectedAsset) is { } selectedThumbnail)
-                    {
-                      <img src="@selectedThumbnail" alt="Selected @placeholder.Label.ToLowerInvariant()" />
-                    }
-                    else
-                    {
-                      <span class="generation-image-empty" aria-hidden="true">▧</span>
-                    }
-                    <span class="generation-image-selection-text"><strong>@(selectedAsset.Length > 0 ? Path.GetFileName(selectedAsset) : "Choose a project image")</strong><small>@(selectedAsset.Length > 0 ? selectedAsset : "Browse image thumbnails")</small></span>
-                    <span class="generation-image-chevron" aria-hidden="true">@(openGenerationImagePicker == placeholder.Name ? "▴" : "▾")</span>
-                  </button>
-                  <button type="button" class="generation-image-import" disabled="@(importingImageFor is not null)" @onclick="() => ImportGenerationImage(placeholder.Name)">@(importingImageFor == placeholder.Name ? "Importing…" : "Import image…")</button>
-                </div>
-                <small class="generation-image-import-hint">Imported images go to assets/imported.</small>
-                @if (importErrorFor == placeholder.Name)
-                {
-                  <p class="generation-status" role="alert">@generationImportError</p>
-                }
-                <p class="generation-drop-status" data-generation-drop-status role="status"></p>
-                @if (openGenerationImagePicker == placeholder.Name)
-                {
-                  <div class="generation-picker-toolbar">
-                    <button type="button" class="generation-picker-up" disabled="@(!CanGenerationPickerNavigateUp)" @onclick="NavigateGenerationPickerUp">↑ Up</button>
-                    <span class="generation-picker-path" title="@GenerationPickerLocation">@GenerationPickerLocation</span>
-                    <div class="generation-picker-filter">
-                      <span>Filter by tag</span>
-                      <input type="text" class="generation-picker-tag-trigger" aria-label="Filter by tag" aria-haspopup="listbox" aria-expanded="@generationTagMenuOpen" placeholder="All tags" autocomplete="off" value="@generationTagQuery" @oninput="OnGenerationTagInput" @onfocus="OpenGenerationTagMenu" @onkeydown="HandleGenerationTagKeyDown" />
-                      @if (generationTagMenuOpen)
-                      {
-                        <div class="generation-picker-tag-menu" role="listbox" aria-label="Filter by tag">
-                          @if (string.IsNullOrWhiteSpace(generationTagQuery))
-                          {
-                            <button type="button" role="option" aria-selected="@(generationPickerTag.Length == 0)" @onclick="() => SetGenerationPickerTag(string.Empty)">All tags</button>
-                          }
-                          @foreach (var tag in MatchingGenerationTags)
-                          {
-                            <button type="button" role="option" aria-selected="@(string.Equals(generationPickerTag, tag, StringComparison.OrdinalIgnoreCase))" @key="tag" @onclick="() => SetGenerationPickerTag(tag)">@tag</button>
-                          }
-                          @if (!MatchingGenerationTags.Any() && !string.IsNullOrWhiteSpace(generationTagQuery)) { <span class="tag-no-match">No matching tags</span> }
-                        </div>
-                      }
-                    </div>
-                  </div>
-                  @if (generationPickerTag.Length > 0)
-                  {
-                    <p class="generation-picker-hint">Showing matching images in this folder and subfolders</p>
-                  }
-                  @if (generationPickerEntries.Count == 0)
-                  {
-                    <p class="generation-image-picker-empty">@(generationPickerTag.Length > 0 ? "No images with this tag in this folder or its subfolders." : "This folder has no images or subfolders.")</p>
-                  }
-                  else
-                  {
-                    <div class="generation-image-grid" aria-label="Choose @placeholder.Label.ToLowerInvariant()">
-                      @foreach (var entry in generationPickerEntries)
-                      {
-                        @if (entry.IsDirectory)
-                        {
-                          <button type="button" class="generation-image-option generation-folder-option" title="Open @entry.RelativePath" aria-label="Open folder @entry.RelativePath" @key="entry.FullPath" @onclick="() => NavigateGenerationPicker(entry.FullPath)">
-                            <span class="generation-folder-icon" aria-hidden="true"><FolderThumbnail /></span><span>@Path.GetFileName(entry.FullPath)</span><small>Folder</small>
-                          </button>
-                        }
-                        else
-                        {
-                          <button type="button" class="generation-image-option @(string.Equals(entry.RelativePath, selectedAsset, StringComparison.OrdinalIgnoreCase) ? "is-selected" : "")" title="@entry.RelativePath" aria-label="Select @entry.RelativePath" aria-pressed="@(string.Equals(entry.RelativePath, selectedAsset, StringComparison.OrdinalIgnoreCase))" @key="entry.FullPath" @onclick="() => SelectGenerationImage(placeholder.Name, entry.RelativePath)">
-                            @if (GenerationThumbnail(entry.RelativePath) is { } thumbnail)
-                            {
-                              <img src="@thumbnail" alt="" loading="lazy" />
-                            }
-                            else
-                            {
-                              <span class="generation-image-unavailable" aria-hidden="true">▧</span>
-                            }
-                            <span>@Path.GetFileName(entry.FullPath)</span>
-                            @if (generationPickerTag.Length > 0) { <small>@Path.GetDirectoryName(entry.RelativePath)?.Replace('\\', '/')</small> }
-                          </button>
-                        }
-                      }
-                    </div>
-                  }
-                }
-              </div>
+              <ProjectImagePicker @key="placeholder.Name" ProjectFolder="@Pane.Context" Label="@placeholder.Label" SelectedAsset="@GenerationValue(placeholder.Name)" OnSelected="asset => SelectGenerationImage(placeholder.Name, asset)" />
             }
             else
             {
@@ -257,6 +171,10 @@ else if (Pane.Kind == "generation")
 else if (Pane.Kind == "mask-editor")
 {
   <MaskEditor AssetPath="@(Pane.Context ?? string.Empty)" AssetsRoot="@(Pane.Location ?? string.Empty)" />
+}
+else if (Pane.Kind == "panel-browser")
+{
+  <PanelBrowser Pane="Pane" OnSelectionChanged="OnPanelSelectionChanged" />
 }
 else if (Pane.Kind == "panel-editor")
 {
@@ -363,27 +281,7 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   [Parameter] public EventCallback<PanelPaneSelection> OnPanelSelectionChanged { get; set; }
   private string? loadedGenerationWorkflowId;
   private List<WorkflowPlaceholder> generationInputs = [];
-  private List<string> generationImages = [];
-  private HashSet<string> generationImagePaths = new(StringComparer.OrdinalIgnoreCase);
-  private List<GenerationPickerEntry> generationPickerEntries = [];
-  private List<string> generationPickerTags = [];
-  private string generationPickerTag = string.Empty;
-  private string generationTagQuery = string.Empty;
-  private bool generationTagMenuOpen;
-  private IEnumerable<string> MatchingGenerationTags => generationPickerTags.Where(tag => tag.Contains(generationTagQuery.Trim(), StringComparison.OrdinalIgnoreCase));
-  private string? generationPickerRoot;
-  private string? generationPickerFolder;
-  private readonly Dictionary<string, string?> generationThumbnails = new(StringComparer.OrdinalIgnoreCase);
-  private string? openGenerationImagePicker;
-  private string? importingImageFor;
-  private string? importErrorFor;
-  private string generationImportError = string.Empty;
-  private static readonly FilePickerFileType GenerationImageFileTypes = new(new Dictionary<DevicePlatform, IEnumerable<string>>
-  {
-      [DevicePlatform.WinUI] = [".jpg", ".jpeg", ".png", ".gif", ".webp"],
-      [DevicePlatform.Android] = ["image/jpeg", "image/png", "image/gif", "image/webp"]
-  });
-  private string? generationImageProject;
+  private string? generationProject;
   private string outputFolderDraft = "generated";
   private string? loadedOutputFolder;
   private IReadOnlyList<string> generationProjectTags = [];
@@ -400,146 +298,12 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   private string GenerationValue(string name) => Pane.InputValues?.GetValueOrDefault(name) ?? string.Empty;
   private Task ChangeGenerationWorkflow(ChangeEventArgs args)
   {
-      openGenerationImagePicker = null;
       return OnGenerationWorkflowChanged.InvokeAsync(new GenerationWorkflowSelection(Pane.Id, args.Value?.ToString() ?? string.Empty));
   }
   private Task ChangeGenerationInput(string name, ChangeEventArgs args) =>
       OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, name, args.Value?.ToString() ?? string.Empty));
-  private void ToggleGenerationImagePicker(string name)
-  {
-      if (openGenerationImagePicker == name) { openGenerationImagePicker = null; generationTagMenuOpen = false; return; }
-      openGenerationImagePicker = name;
-      generationPickerTag = string.Empty;
-      generationTagQuery = string.Empty;
-      generationTagMenuOpen = false;
-      generationPickerFolder = generationPickerRoot;
-      var selected = GenerationValue(name);
-      if (generationImagePaths.Contains(selected) && Pane.Context is not null)
-      {
-          var selectedFolder = Path.GetDirectoryName(Path.Combine(Pane.Context, selected.Replace('/', Path.DirectorySeparatorChar)));
-          if (selectedFolder is not null && IsInsideGenerationPicker(selectedFolder)) generationPickerFolder = selectedFolder;
-      }
-      RefreshGenerationPicker();
-  }
-  private bool CanGenerationPickerNavigateUp => generationPickerRoot is not null && generationPickerFolder is not null &&
-      !string.Equals(generationPickerRoot, generationPickerFolder, StringComparison.OrdinalIgnoreCase);
-  private string GenerationPickerLocation => generationPickerFolder is null || Pane.Context is null ? "assets" :
-      Path.GetRelativePath(Pane.Context, generationPickerFolder).Replace('\\', '/');
-  private bool IsInsideGenerationPicker(string folder) => generationPickerRoot is not null &&
-      (string.Equals(Path.GetFullPath(folder), generationPickerRoot, StringComparison.OrdinalIgnoreCase) ||
-       Path.GetFullPath(folder).StartsWith(generationPickerRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
-  private void NavigateGenerationPicker(string folder)
-  {
-      if (!Directory.Exists(folder) || !IsInsideGenerationPicker(folder)) return;
-      generationTagMenuOpen = false;
-      generationPickerFolder = Path.GetFullPath(folder);
-      RefreshGenerationPicker();
-  }
-  private void NavigateGenerationPickerUp()
-  {
-      if (!CanGenerationPickerNavigateUp) return;
-      var parent = Directory.GetParent(generationPickerFolder!)?.FullName;
-      if (parent is not null) NavigateGenerationPicker(parent);
-  }
-  private void OpenGenerationTagMenu() => generationTagMenuOpen = true;
-  private void OnGenerationTagInput(ChangeEventArgs args)
-  {
-      generationTagQuery = args.Value?.ToString() ?? string.Empty;
-      generationTagMenuOpen = true;
-  }
-  private void HandleGenerationTagKeyDown(KeyboardEventArgs args)
-  {
-      if (args.Key == "Escape") { generationTagMenuOpen = false; generationTagQuery = generationPickerTag; }
-      else if (args.Key == "Enter") SetGenerationPickerTag(string.IsNullOrWhiteSpace(generationTagQuery) ? string.Empty : MatchingGenerationTags.FirstOrDefault() ?? generationPickerTag);
-  }
-  private void SetGenerationPickerTag(string tag)
-  {
-      generationPickerTag = tag;
-      generationTagQuery = tag;
-      generationTagMenuOpen = false;
-      RefreshGenerationPicker();
-  }
-  private Task SelectGenerationImage(string name, string asset)
-  {
-      openGenerationImagePicker = null;
-      return OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, name, asset));
-  }
-  private async Task ImportGenerationImage(string name)
-  {
-      if (importingImageFor is not null || string.IsNullOrWhiteSpace(Pane.Context)) return;
-      importingImageFor = name;
-      importErrorFor = null;
-      string? destination = null;
-      string? metadataPath = null;
-      var imported = false;
-      try
-      {
-          var file = await FilePicker.Default.PickAsync(new PickOptions
-          {
-              PickerTitle = "Choose an image to import",
-              FileTypes = GenerationImageFileTypes
-          });
-          if (file is null) return;
-
-          var fileName = Path.GetFileName(file.FileName);
-          if (string.IsNullOrWhiteSpace(fileName) || !IsGenerationImage(fileName))
-              throw new InvalidOperationException("Choose a JPG, PNG, GIF, or WebP image.");
-
-          var projectFolder = Path.GetFullPath(Pane.Context);
-          if (!Directory.Exists(projectFolder)) throw new DirectoryNotFoundException("The selected project folder is unavailable.");
-          var importedFolder = Path.Combine(projectFolder, "assets", "imported");
-          Directory.CreateDirectory(importedFolder);
-          destination = UniqueGenerationImagePath(importedFolder, fileName);
-          await using (var source = await file.OpenReadAsync())
-          await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-              await source.CopyToAsync(target);
-
-          var relativePath = Path.GetRelativePath(projectFolder, destination).Replace('\\', '/');
-          metadataPath = AssetMetadataPaths.ForRelativeAsset(projectFolder, relativePath, createDirectory: true);
-          var metadata = new { asset = relativePath, name = Path.GetFileName(destination), tags = Array.Empty<string>() };
-          await File.WriteAllTextAsync(metadataPath, System.Text.Json.JsonSerializer.Serialize(metadata));
-          imported = true;
-
-          LoadGenerationImages();
-          openGenerationImagePicker = null;
-          await OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, name, relativePath));
-      }
-      catch (Exception ex)
-      {
-          if (!imported && destination is not null)
-          {
-              try { File.Delete(destination); } catch { /* Keep the original import error. */ }
-              if (metadataPath is not null)
-              {
-                  try { File.Delete(metadataPath); } catch { /* Keep the original import error. */ }
-              }
-          }
-          importErrorFor = name;
-          generationImportError = imported
-              ? $"Image imported, but could not select it: {ex.Message}"
-              : $"Could not import image: {ex.Message}";
-      }
-      finally { importingImageFor = null; }
-  }
-  private static string UniqueGenerationImagePath(string folder, string fileName)
-  {
-      var stem = Path.GetFileNameWithoutExtension(fileName);
-      var extension = Path.GetExtension(fileName);
-      var path = Path.Combine(folder, fileName);
-      for (var suffix = 2; File.Exists(path) || Directory.Exists(path); suffix++)
-          path = Path.Combine(folder, $"{stem} ({suffix}){extension}");
-      return path;
-  }
-  private string? GenerationThumbnail(string asset)
-  {
-      if (!generationImagePaths.Contains(asset)) return null;
-      if (generationThumbnails.TryGetValue(asset, out var thumbnail)) return thumbnail;
-      if (string.IsNullOrWhiteSpace(Pane.Context)) return null;
-      var path = Path.Combine(Pane.Context, asset.Replace('/', Path.DirectorySeparatorChar));
-      thumbnail = CreateImageSource(path);
-      generationThumbnails[asset] = thumbnail;
-      return thumbnail;
-  }
+  private Task SelectGenerationImage(string name, string asset) =>
+      OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, name, asset));
   private void OnOutputFolderInput(ChangeEventArgs args) => outputFolderDraft = args.Value?.ToString() ?? string.Empty;
   private Task CommitOutputFolder(ChangeEventArgs args)
   {
@@ -642,7 +406,7 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
               outputFolderDraft = Pane.OutputFolder ?? "generated";
               loadedOutputFolder = Pane.OutputFolder;
           }
-          LoadGenerationImages();
+          ResetGenerationProject();
           return;
       }
       if (Pane.Kind == "asset-details") { LoadAssetDetails(); return; }
@@ -678,83 +442,19 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
       }
       finally { if (Pane.WorkflowId == workflow.Id) generationLoading = false; }
   }
-  private void LoadGenerationImages()
+  private void ResetGenerationProject()
   {
-      generationImages = [];
-      generationImagePaths.Clear();
-      if (!string.Equals(generationImageProject, Pane.Context, StringComparison.OrdinalIgnoreCase))
-      {
-          generationThumbnails.Clear();
-          openGenerationImagePicker = null;
-          importErrorFor = null;
-          generationImportError = string.Empty;
-          outputFolderDraft = Pane.OutputFolder ?? "generated";
-          loadedOutputFolder = Pane.OutputFolder;
-          newOutputTag = string.Empty;
-          outputTagSuggestionsOpen = false;
-          outputTagStatus = string.Empty;
-          try { generationProjectTags = string.IsNullOrWhiteSpace(Pane.Context) ? [] : ProjectLibrary.GetProjectTags(Pane.Context); }
-          catch { generationProjectTags = []; }
-          generationImageProject = Pane.Context;
-          generationPickerTag = string.Empty;
-          generationTagQuery = string.Empty;
-          generationTagMenuOpen = false;
-          generationPickerFolder = null;
-      }
-      if (string.IsNullOrWhiteSpace(Pane.Context)) return;
-      var assetsFolder = Path.Combine(Pane.Context, "assets");
-      generationPickerRoot = Path.GetFullPath(assetsFolder);
-      if (generationPickerFolder is null || !IsInsideGenerationPicker(generationPickerFolder) || !Directory.Exists(generationPickerFolder))
-          generationPickerFolder = generationPickerRoot;
-      if (!Directory.Exists(assetsFolder)) return;
-      try
-      {
-          generationImages = Directory.EnumerateFiles(assetsFolder, "*", new EnumerationOptions
-          {
-              RecurseSubdirectories = true,
-              IgnoreInaccessible = true
-          }).Where(path => Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp")
-              .Select(path => Path.GetRelativePath(Pane.Context, path).Replace('\\', '/'))
-              .OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
-      }
-      catch { generationImages = []; }
-      generationImagePaths = generationImages.ToHashSet(StringComparer.OrdinalIgnoreCase);
-      if (openGenerationImagePicker is not null) RefreshGenerationPicker();
-  }
-  private void RefreshGenerationPicker()
-  {
-      generationPickerEntries = [];
-      generationPickerTags = [];
-      if (generationPickerFolder is null || Pane.Context is null || !Directory.Exists(generationPickerFolder) ||
-          !IsInsideGenerationPicker(generationPickerFolder)) return;
-      try
-      {
-          var imageFiles = Directory.EnumerateFiles(generationPickerFolder, "*", new EnumerationOptions
-          {
-              RecurseSubdirectories = true,
-              IgnoreInaccessible = true
-          }).Where(IsGenerationImage).ToList();
-          var taggedImages = imageFiles.Select(path => (Path: path, Tags: ReadAssetTags(path, Pane.Context))).ToList();
-          generationPickerTags = taggedImages.SelectMany(item => item.Tags)
-              .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase).ToList();
-          if (generationPickerTag.Length > 0 && !generationPickerTags.Contains(generationPickerTag, StringComparer.OrdinalIgnoreCase))
-          {
-              generationPickerTag = string.Empty;
-              generationTagQuery = string.Empty;
-          }
-          IEnumerable<string> paths = generationPickerTag.Length > 0
-              ? taggedImages.Where(item => item.Tags.Contains(generationPickerTag, StringComparer.OrdinalIgnoreCase)).Select(item => item.Path)
-              : Directory.EnumerateFileSystemEntries(generationPickerFolder)
-                  .Where(path => Directory.Exists(path) || IsGenerationImage(path));
-          generationPickerEntries = paths.OrderBy(path => !Directory.Exists(path))
-              .ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
-              .Select(path => new GenerationPickerEntry(path, Path.GetRelativePath(Pane.Context, path).Replace('\\', '/'), Directory.Exists(path)))
-              .ToList();
-      }
-      catch { generationPickerEntries = []; generationPickerTags = []; }
+      if (string.Equals(generationProject, Pane.Context, StringComparison.OrdinalIgnoreCase)) return;
+      outputFolderDraft = Pane.OutputFolder ?? "generated";
+      loadedOutputFolder = Pane.OutputFolder;
+      newOutputTag = string.Empty;
+      outputTagSuggestionsOpen = false;
+      outputTagStatus = string.Empty;
+      try { generationProjectTags = string.IsNullOrWhiteSpace(Pane.Context) ? [] : ProjectLibrary.GetProjectTags(Pane.Context); }
+      catch { generationProjectTags = []; }
+      generationProject = Pane.Context;
   }
   private static bool IsGenerationImage(string path) => Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp";
-  private sealed record GenerationPickerEntry(string FullPath, string RelativePath, bool IsDirectory);
   private bool CanNavigateUp => !string.Equals(currentAssetsPath, assetsRoot, StringComparison.OrdinalIgnoreCase);
   private string ParentAssetsPath => CanNavigateUp ? Directory.GetParent(currentAssetsPath)?.FullName ?? assetsRoot! : currentAssetsPath;
   private void OpenAssetTagMenu() => assetTagMenuOpen = true;

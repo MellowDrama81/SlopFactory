@@ -1,0 +1,36 @@
+@using System.Globalization
+@using SlopFactory.Models
+@using SlopFactory.Services
+@inject PanelStore PanelStore
+
+<svg class="panel-browser-preview" viewBox="@($"0 0 {Panel.Width} {Panel.Height}")" role="img" aria-label="Preview of @Panel.Name">
+  <rect width="100%" height="100%" fill="#fff" />
+  @foreach (var layer in Panel.Layers.Where(item => item.Visible))
+  {
+    <g transform="@($"matrix({string.Join(" ", layer.Matrix.Select(value => value.ToString("G17", CultureInfo.InvariantCulture)))})")">
+      @if (layer.Kind == "raster" && RasterImage(layer) is { } source)
+      {
+        <image href="@source" width="@Panel.Width" height="@Panel.Height" preserveAspectRatio="xMidYMid meet" />
+      }
+      else if (layer.Kind == "vector" && layer.Svg is { Length: > 0 })
+      {
+        <image href="@PanelStore.VectorDataUrl(layer.Svg)" width="@Panel.Width" height="@Panel.Height" preserveAspectRatio="none" />
+      }
+    </g>
+  }
+  <rect x="1" y="1" width="@Math.Max(0, Panel.Width - 2)" height="@Math.Max(0, Panel.Height - 2)" fill="none" stroke="#202027" stroke-width="2" />
+</svg>
+
+@code {
+  [Parameter, EditorRequired] public PanelDocument Panel { get; set; } = default!;
+  [Parameter, EditorRequired] public string ProjectFolder { get; set; } = default!;
+  private readonly Dictionary<string, string> imageCache = new(StringComparer.OrdinalIgnoreCase);
+
+  private string? RasterImage(PanelLayer layer)
+  {
+      if (string.IsNullOrWhiteSpace(layer.Asset)) return null;
+      if (imageCache.TryGetValue(layer.Asset, out var source)) return source;
+      try { return imageCache[layer.Asset] = PanelStore.RasterDataUrl(ProjectFolder, layer.Asset); }
+      catch { return null; }
+  }
+}

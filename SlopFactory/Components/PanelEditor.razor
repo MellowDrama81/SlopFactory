@@ -1,50 +1,27 @@
 @using System.Globalization
 @using SlopFactory.Models
 @using SlopFactory.Services
-@inject ProjectLibrary ProjectLibrary
 @inject PanelStore PanelStore
+@inject ProjectImageImporter ImageImporter
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <div class="panel-editor">
   <p class="eyebrow">PANEL EDITOR</p>
   @if (string.IsNullOrWhiteSpace(Pane.Context))
   {
-    <h2>Select a project</h2>
-    <p>Panels are saved as JSON in the project's panels folder.</p>
-    @if (ProjectLibrary.GetAll().Count == 0)
-    {
-      <p class="panel-editor-message">Add a project from Projects before creating a Panel.</p>
-    }
-    else
-    {
-      <div class="assets-project-list">
-        @foreach (var project in ProjectLibrary.GetAll())
-        {
-          <button type="button" @onclick="() => SelectProject(project)">@project.DisplayName</button>
-        }
-      </div>
-    }
+    <h2>Panel editor</h2><p>Open a Panel from the Panels browser.</p>
   }
   else
   {
     <div class="panel-editor-header">
       <div><h2>@(document?.Name ?? "Panel")</h2><p>@Pane.Context\panels</p></div>
-      <button type="button" class="panel-editor-secondary" @onclick="ChangeProject">Change project</button>
     </div>
     @if (!string.IsNullOrWhiteSpace(loadError))
     {
       <p class="panel-editor-error" role="alert">@loadError</p>
     }
     <div class="panel-editor-layout">
-      <aside class="panel-editor-list">
-        <div class="panel-editor-list-heading"><h3>Panels</h3><button type="button" @onclick="NewPanel">＋ New</button></div>
-        @foreach (var panel in savedPanels)
-        {
-          <button type="button" class="panel-editor-list-item @(document?.Id == panel.Id ? "is-selected" : "")" @key="panel.Id" @onclick="() => SelectPanel(panel)">
-            <strong>@panel.Name</strong><small>@panel.Width × @panel.Height</small>
-          </button>
-        }
-        @if (savedPanels.Count == 0) { <p>No Panels saved yet.</p> }
-      </aside>
       @if (document is not null)
       {
         <div class="panel-editor-workspace">
@@ -54,7 +31,7 @@
             <label>Height<input type="number" min="1" max="8192" value="@document.Height" @onchange="args => ChangeDimension(args, false)" /></label>
             <button type="button" class="panel-editor-primary" disabled="@saving" @onclick="SavePanel">@(saving ? "Saving…" : "Save Panel")</button>
           </div>
-          <div class="panel-editor-composition">
+          <div class="panel-editor-composition" data-image-drop="@compositionDrop.Id">
             <div class="panel-editor-preview-wrap">
               <svg class="panel-editor-preview" viewBox="@($"0 0 {document.Width} {document.Height}")" aria-label="Panel composition preview">
                 <rect width="100%" height="100%" fill="#fff" />
@@ -73,23 +50,27 @@
                 }
                 <rect x="1" y="1" width="@Math.Max(0, document.Width - 2)" height="@Math.Max(0, document.Height - 2)" fill="none" stroke="#202027" stroke-width="2" pointer-events="none" />
               </svg>
-              <span class="panel-editor-preview-caption">@document.Width × @document.Height px · layers render bottom to top</span>
+              <span class="panel-editor-preview-caption">@document.Width × @document.Height px · layers render bottom to top · drop an image anywhere here to add a raster layer</span>
+              <p class="generation-drop-status" data-image-drop-status role="status"></p>
             </div>
             <div class="panel-editor-layers">
               <div class="panel-editor-list-heading"><h3>Layers</h3></div>
               <div class="panel-editor-add-actions">
-                <button type="button" @onclick="AddRaster">＋ Raster</button>
-                <button type="button" @onclick='() => AddVector("vector")'>＋ SVG</button>
-                <button type="button" @onclick='() => AddVector("text")'>＋ Text</button>
-                <button type="button" @onclick='() => AddVector("bubble")'>＋ Speech bubble</button>
+                <button type="button" aria-expanded="@choosingRaster" @onclick="() => choosingRaster = !choosingRaster">＋ Add asset</button>
+                <button type="button" disabled="@importing" @onclick="ImportRaster">@(importing ? "Importing…" : "Import asset…")</button>
+                <button type="button" @onclick="AddVector">＋ Vector</button>
               </div>
+              @if (choosingRaster)
+              {
+                <ProjectImagePicker ProjectFolder="@Pane.Context" Label="New raster layer" BrowseOnly="true" OnSelected="AddRaster" />
+              }
               @foreach (var layer in document.Layers.AsEnumerable().Reverse())
               {
                 <button type="button" class="panel-editor-layer-item @(layer.Id == selectedLayerId ? "is-selected" : "")" @key="layer.Id" @onclick="() => SelectLayer(layer.Id)">
                   <span>@(layer.Kind == "raster" ? "▧" : "◇")</span><strong>@layer.Name</strong><small>@(layer.Visible ? layer.Kind : "hidden")</small>
                 </button>
               }
-              @if (document.Layers.Count == 0) { <p>Add a raster image or an SVG layer to begin.</p> }
+              @if (document.Layers.Count == 0) { <p>Add a raster or vector layer to begin.</p> }
               @if (SelectedLayer is { } selected)
               {
                 <div class="panel-editor-properties">
@@ -98,24 +79,22 @@
                   <label class="panel-editor-checkbox"><input type="checkbox" checked="@selected.Visible" @onchange="args => ChangeVisibility(selected, args)" /> Visible</label>
                   @if (selected.Kind == "raster")
                   {
-                    <label>Image asset<select value="@selected.Asset" @onchange="args => ChangeRasterAsset(selected, args)">
-                      @if (selected.Asset is { Length: > 0 } && !rasterAssets.Contains(selected.Asset, StringComparer.OrdinalIgnoreCase))
-                      {
-                        <option value="@selected.Asset">Missing: @selected.Asset</option>
-                      }
-                      @foreach (var asset in rasterAssets) { <option value="@asset">@asset</option> }
-                    </select></label>
+                    <ProjectImagePicker @key="selected.Id" ProjectFolder="@Pane.Context" Label="Image asset" SelectedAsset="@ProjectAssetPath(selected.Asset)" OnSelected="asset => ChangeRasterAsset(selected, asset)" />
                   }
                   else
                   {
+                    <div class="panel-editor-add-actions">
+                      <button type="button" @onclick='() => InsertVectorElement(selected, "text")'>＋ Text</button>
+                      <button type="button" @onclick='() => InsertVectorElement(selected, "bubble")'>＋ Speech bubble</button>
+                    </div>
                     <label>SVG<textarea rows="10" spellcheck="false" value="@selected.Svg" @oninput="args => ChangeSvg(selected, args)"></textarea></label>
                     <p>Edit SVG text, paths, and shapes here. Its viewBox maps to the Panel border.</p>
                   }
                   <div class="panel-editor-transform">
-                    <label>X<input type="number" step="1" value="@TransformX(selected)" @onchange="args => ChangeTransform(selected, "x", args)" /></label>
-                    <label>Y<input type="number" step="1" value="@TransformY(selected)" @onchange="args => ChangeTransform(selected, "y", args)" /></label>
-                    <label>Scale %<input type="number" min="1" max="1000" step="1" value="@TransformScale(selected)" @onchange="args => ChangeTransform(selected, "scale", args)" /></label>
-                    <label>Rotation °<input type="number" step="1" value="@TransformRotation(selected)" @onchange="args => ChangeTransform(selected, "rotation", args)" /></label>
+                    <label>X<input type="number" step="1" value="@TransformX(selected)" @onchange='args => ChangeTransform(selected, "x", args)' /></label>
+                    <label>Y<input type="number" step="1" value="@TransformY(selected)" @onchange='args => ChangeTransform(selected, "y", args)' /></label>
+                    <label>Scale %<input type="number" min="1" max="1000" step="1" value="@TransformScale(selected)" @onchange='args => ChangeTransform(selected, "scale", args)' /></label>
+                    <label>Rotation °<input type="number" step="1" value="@TransformRotation(selected)" @onchange='args => ChangeTransform(selected, "rotation", args)' /></label>
                   </div>
                   <details class="panel-editor-matrix">
                     <summary>Affine matrix (a, b, c, d, x, y)</summary>
@@ -149,60 +128,39 @@
 
   private string? loadedKey;
   private PanelDocument? document;
-  private List<PanelSummary> savedPanels = [];
-  private List<string> rasterAssets = [];
+  private ImageDropTarget compositionDrop = default!;
+  private bool choosingRaster;
+  private bool importing;
   private readonly Dictionary<string, string> imageCache = new(StringComparer.OrdinalIgnoreCase);
   private string? selectedLayerId;
   private string loadError = string.Empty;
   private string status = string.Empty;
   private bool saving;
   private PanelLayer? SelectedLayer => document?.Layers.FirstOrDefault(layer => layer.Id == selectedLayerId);
+  private string SelectedPanelFolder => string.IsNullOrWhiteSpace(Pane.Location) ? Pane.PanelFolder ?? string.Empty :
+      (Path.GetDirectoryName(Pane.Location.Replace('/', Path.DirectorySeparatorChar)) ?? string.Empty).Replace('\\', '/');
 
   protected override void OnParametersSet()
   {
-      var key = $"{Pane.Context}|{Pane.Location}";
+      var key = $"{Pane.Context}|{Pane.Location}|{Pane.PanelFolder}";
       if (key == loadedKey) return;
       loadedKey = key;
       loadError = string.Empty;
       status = string.Empty;
       selectedLayerId = null;
       document = null;
-      savedPanels = [];
-      rasterAssets = [];
+      choosingRaster = false;
       imageCache.Clear();
       if (string.IsNullOrWhiteSpace(Pane.Context)) return;
       try
       {
-          savedPanels = PanelStore.GetAll(Pane.Context).ToList();
-          rasterAssets = PanelStore.GetRasterAssets(Pane.Context).ToList();
+          _ = PanelStore.NormalizeFolder(Pane.Context, Pane.PanelFolder);
           document = string.IsNullOrWhiteSpace(Pane.Location)
               ? PanelStore.CreateNew()
               : PanelStore.Load(Pane.Context, Pane.Location);
           selectedLayerId = document.Layers.LastOrDefault()?.Id;
       }
       catch (Exception ex) { loadError = ex.Message; }
-  }
-
-  private Task SelectProject(ProjectDefinition project)
-      => OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, project.FolderPath, null, null));
-  private Task ChangeProject()
-      => OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, null, null, null));
-  private async Task SelectPanel(PanelSummary panel)
-  {
-      try { await OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, panel.Id, panel.Name)); }
-      catch (Exception ex) { status = $"Could not open Panel: {ex.Message}"; }
-  }
-  private async Task NewPanel()
-  {
-      if (!string.IsNullOrWhiteSpace(Pane.Location))
-      {
-          await OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, null, null));
-          return;
-      }
-      document = PanelStore.CreateNew();
-      selectedLayerId = null;
-      status = string.Empty;
-      loadError = string.Empty;
   }
 
   private void ChangeName(ChangeEventArgs args) { if (document is not null) document.Name = args.Value?.ToString() ?? string.Empty; }
@@ -218,44 +176,77 @@
       status = string.Empty;
       try
       {
-          await PanelStore.SaveAsync(Pane.Context, document);
-          savedPanels = PanelStore.GetAll(Pane.Context).ToList();
-          status = $"Saved {document.Name} to panels/{document.Id}.json.";
-          await OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, document.Id, document.Name));
+          var folder = SelectedPanelFolder;
+          await PanelStore.SaveAsync(Pane.Context, document, folder);
+          var path = string.IsNullOrEmpty(folder) ? document.Id + ".json" : folder + "/" + document.Id + ".json";
+          status = $"Saved {document.Name} to panels/{path}.";
+          await OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, path, document.Name, Pane.PanelFolder));
       }
       catch (Exception ex) { status = $"Could not save Panel: {ex.Message}"; }
       finally { saving = false; }
   }
 
-  private void AddRaster()
+  protected override void OnInitialized() =>
+      compositionDrop = new ImageDropTarget(JS, ImageImporter, () => document is null ? null : Pane.Context, asset => InvokeAsync(() => { AddRaster(asset); StateHasChanged(); }));
+  protected override Task OnAfterRenderAsync(bool firstRender) => firstRender ? compositionDrop.RegisterAsync() : Task.CompletedTask;
+  public ValueTask DisposeAsync() => compositionDrop.DisposeAsync();
+
+  // Pickers use project-relative paths ("assets/x.png"); raster layers store paths relative to the assets folder ("x.png").
+  private static string? ProjectAssetPath(string? layerAsset) => string.IsNullOrWhiteSpace(layerAsset) ? null : "assets/" + layerAsset;
+  private static string LayerAssetPath(string projectAsset) =>
+      projectAsset.StartsWith("assets/", StringComparison.OrdinalIgnoreCase) ? projectAsset["assets/".Length..] : projectAsset;
+  private async Task ImportRaster()
+  {
+      if (importing || document is null || string.IsNullOrWhiteSpace(Pane.Context)) return;
+      importing = true;
+      status = string.Empty;
+      try
+      {
+          if (await ImageImporter.PickAndImportAsync(Pane.Context) is { } asset) AddRaster(asset);
+      }
+      catch (Exception ex) { status = $"Could not import image: {ex.Message}"; }
+      finally { importing = false; }
+  }
+  private void AddRaster(string projectAsset)
   {
       if (document is null) return;
-      if (rasterAssets.Count == 0) { status = "Add an image to this project's assets first."; return; }
-      var layer = new PanelLayer { Name = Path.GetFileName(rasterAssets[0]), Kind = "raster", Asset = rasterAssets[0] };
+      var asset = LayerAssetPath(projectAsset);
+      var layer = new PanelLayer { Name = Path.GetFileName(asset), Kind = "raster", Asset = asset };
+      document.Layers.Add(layer);
+      selectedLayerId = layer.Id;
+      choosingRaster = false;
+      status = string.Empty;
+  }
+  private void AddVector()
+  {
+      if (document is null) return;
+      var svg = $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {document.Width} {document.Height}\">\n</svg>";
+      var layer = new PanelLayer { Name = "Vector", Kind = "vector", Svg = svg };
       document.Layers.Add(layer);
       selectedLayerId = layer.Id;
       status = string.Empty;
   }
-  private void AddVector(string template)
+  // Appends a text or speech bubble element to a vector layer's SVG, just before its closing tag.
+  private void InsertVectorElement(PanelLayer layer, string element)
   {
       if (document is null) return;
       var width = document.Width;
       var height = document.Height;
-      var svg = template switch
+      var snippet = element switch
       {
-          "text" => $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {height}\"><text x=\"{width / 2}\" y=\"{height / 2}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"64\" fill=\"#202027\">Edit this text</text></svg>",
-          "bubble" => $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {height}\"><path d=\"M 80 80 H {width - 80} Q {width - 35} 80 {width - 35} 125 V {height - 180} Q {width - 35} {height - 135} {width - 80} {height - 135} H 230 L 125 {height - 45} L 145 {height - 135} H 80 Q 35 {height - 135} 35 {height - 180} V 125 Q 35 80 80 80 Z\" fill=\"white\" stroke=\"#202027\" stroke-width=\"12\"/><text x=\"{width / 2}\" y=\"{height / 2}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"52\" fill=\"#202027\">Your text</text></svg>",
-          _ => $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {height}\"><rect x=\"100\" y=\"100\" width=\"300\" height=\"200\" rx=\"12\" fill=\"#b498ff\"/></svg>"
+          "bubble" => $"<g><path d=\"M 80 80 H {width - 80} Q {width - 35} 80 {width - 35} 125 V {height - 180} Q {width - 35} {height - 135} {width - 80} {height - 135} H 230 L 125 {height - 45} L 145 {height - 135} H 80 Q 35 {height - 135} 35 {height - 180} V 125 Q 35 80 80 80 Z\" fill=\"white\" stroke=\"#202027\" stroke-width=\"12\"/><text x=\"{width / 2}\" y=\"{height / 2}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"52\" fill=\"#202027\">Your text</text></g>",
+          _ => $"<text x=\"{width / 2}\" y=\"{height / 2}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"64\" fill=\"#202027\">Edit this text</text>"
       };
-      var layer = new PanelLayer { Name = template switch { "text" => "Text", "bubble" => "Speech bubble", _ => "Vector" }, Kind = "vector", Svg = svg };
-      document.Layers.Add(layer);
-      selectedLayerId = layer.Id;
-      status = string.Empty;
+      var svg = string.IsNullOrWhiteSpace(layer.Svg)
+          ? $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {height}\">\n</svg>"
+          : layer.Svg;
+      var close = svg.LastIndexOf("</svg>", StringComparison.OrdinalIgnoreCase);
+      layer.Svg = close < 0 ? svg + snippet : svg.Insert(close, "  " + snippet + "\n");
   }
   private void SelectLayer(string id) => selectedLayerId = id;
   private void ChangeLayerName(PanelLayer layer, ChangeEventArgs args) => layer.Name = args.Value?.ToString() ?? string.Empty;
   private void ChangeVisibility(PanelLayer layer, ChangeEventArgs args) => layer.Visible = args.Value is true;
-  private void ChangeRasterAsset(PanelLayer layer, ChangeEventArgs args) { layer.Asset = args.Value?.ToString(); status = string.Empty; }
+  private void ChangeRasterAsset(PanelLayer layer, string projectAsset) { layer.Asset = LayerAssetPath(projectAsset); status = string.Empty; }
   private void ChangeSvg(PanelLayer layer, ChangeEventArgs args) => layer.Svg = args.Value?.ToString() ?? string.Empty;
   private void MoveLayer(PanelLayer layer, int direction)
   {

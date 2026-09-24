@@ -1,0 +1,288 @@
+@using SlopFactory.Services
+@inject ProjectImageImporter ImageImporter
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* Chooses an image from a project's assets folder, by browsing, importing, or drag and drop.
+   Selections are reported as project-relative paths, for example "assets/imported/hero.png". *@
+<div class="generation-field generation-image-field" data-image-drop="@drop.Id">
+  @if (!BrowseOnly)
+  {
+    <span>@Label</span>
+    <div class="generation-image-controls">
+      <button type="button" class="generation-image-selection" aria-label="Choose @Label.ToLowerInvariant()" aria-expanded="@open" @onclick="TogglePicker">
+        @if (HasSelection && Thumbnail(SelectedAsset!) is { } selectedThumbnail)
+        {
+          <img src="@selectedThumbnail" alt="Selected @Label.ToLowerInvariant()" />
+        }
+        else
+        {
+          <span class="generation-image-empty" aria-hidden="true">▧</span>
+        }
+        <span class="generation-image-selection-text"><strong>@(HasSelection ? Path.GetFileName(SelectedAsset) : EmptyText)</strong><small>@(HasSelection ? SelectedAsset : "Browse image thumbnails or drop an image")</small></span>
+        <span class="generation-image-chevron" aria-hidden="true">@(open ? "▴" : "▾")</span>
+      </button>
+      <button type="button" class="generation-image-import" disabled="@importing" @onclick="ImportImage">@(importing ? "Importing…" : "Import image…")</button>
+    </div>
+    <small class="generation-image-import-hint">Imported images go to assets/imported.</small>
+    @if (importError.Length > 0)
+    {
+      <p class="generation-status" role="alert">@importError</p>
+    }
+  }
+  <p class="generation-drop-status" data-image-drop-status role="status"></p>
+  @if (open)
+  {
+    <div class="generation-picker-toolbar">
+      <button type="button" class="generation-picker-up" disabled="@(!CanNavigateUp)" @onclick="NavigateUp">↑ Up</button>
+      <span class="generation-picker-path" title="@Location">@Location</span>
+      <div class="generation-picker-filter">
+        <span>Filter by tag</span>
+        <input type="text" class="generation-picker-tag-trigger" aria-label="Filter by tag" aria-haspopup="listbox" aria-expanded="@tagMenuOpen" placeholder="All tags" autocomplete="off" value="@tagQuery" @oninput="OnTagInput" @onfocus="() => tagMenuOpen = true" @onkeydown="HandleTagKeyDown" />
+        @if (tagMenuOpen)
+        {
+          <div class="generation-picker-tag-menu" role="listbox" aria-label="Filter by tag">
+            @if (string.IsNullOrWhiteSpace(tagQuery))
+            {
+              <button type="button" role="option" aria-selected="@(tag.Length == 0)" @onclick="() => SetTag(string.Empty)">All tags</button>
+            }
+            @foreach (var option in MatchingTags)
+            {
+              <button type="button" role="option" aria-selected="@(string.Equals(tag, option, StringComparison.OrdinalIgnoreCase))" @key="option" @onclick="() => SetTag(option)">@option</button>
+            }
+            @if (!MatchingTags.Any() && !string.IsNullOrWhiteSpace(tagQuery)) { <span class="tag-no-match">No matching tags</span> }
+          </div>
+        }
+      </div>
+    </div>
+    @if (tag.Length > 0)
+    {
+      <p class="generation-picker-hint">Showing matching images in this folder and subfolders</p>
+    }
+    @if (entries.Count == 0)
+    {
+      <p class="generation-image-picker-empty">@(tag.Length > 0 ? "No images with this tag in this folder or its subfolders." : "This folder has no images or subfolders.")</p>
+    }
+    else
+    {
+      <div class="generation-image-grid" aria-label="Choose @Label.ToLowerInvariant()">
+        @foreach (var entry in entries)
+        {
+          @if (entry.IsDirectory)
+          {
+            <button type="button" class="generation-image-option generation-folder-option" title="Open @entry.RelativePath" aria-label="Open folder @entry.RelativePath" @key="entry.FullPath" @onclick="() => Navigate(entry.FullPath)">
+              <span class="generation-folder-icon" aria-hidden="true"><FolderThumbnail /></span><span>@Path.GetFileName(entry.FullPath)</span><small>Folder</small>
+            </button>
+          }
+          else
+          {
+            var isSelected = string.Equals(entry.RelativePath, SelectedAsset, StringComparison.OrdinalIgnoreCase);
+            <button type="button" class="generation-image-option @(isSelected ? "is-selected" : "")" title="@entry.RelativePath" aria-label="Select @entry.RelativePath" aria-pressed="@isSelected" @key="entry.FullPath" @onclick="() => Select(entry.RelativePath)">
+              @if (Thumbnail(entry.RelativePath) is { } thumbnail)
+              {
+                <img src="@thumbnail" alt="" loading="lazy" />
+              }
+              else
+              {
+                <span class="generation-image-unavailable" aria-hidden="true">▧</span>
+              }
+              <span>@Path.GetFileName(entry.FullPath)</span>
+              @if (tag.Length > 0) { <small>@Path.GetDirectoryName(entry.RelativePath)?.Replace('\\', '/')</small> }
+            </button>
+          }
+        }
+      </div>
+    }
+  }
+</div>
+
+@code {
+  [Parameter] public string? ProjectFolder { get; set; }
+  [Parameter] public string Label { get; set; } = "Image";
+  [Parameter] public string? SelectedAsset { get; set; }
+  [Parameter] public string EmptyText { get; set; } = "Choose a project image";
+  // Shows only the folder and tag browser, always open, for callers that supply their own buttons.
+  [Parameter] public bool BrowseOnly { get; set; }
+  [Parameter] public EventCallback<string> OnSelected { get; set; }
+
+  private ImageDropTarget drop = default!;
+  private string? loadedProject;
+  private string? root;
+  private string? folder;
+  private bool open;
+  private List<PickerEntry> entries = [];
+  private List<string> tags = [];
+  private string tag = string.Empty;
+  private string tagQuery = string.Empty;
+  private bool tagMenuOpen;
+  private bool importing;
+  private string importError = string.Empty;
+  private readonly Dictionary<string, string?> thumbnails = new(StringComparer.OrdinalIgnoreCase);
+  private IEnumerable<string> MatchingTags => tags.Where(option => option.Contains(tagQuery.Trim(), StringComparison.OrdinalIgnoreCase));
+  private bool HasSelection => !string.IsNullOrWhiteSpace(SelectedAsset);
+  private bool CanNavigateUp => root is not null && folder is not null && !string.Equals(root, folder, StringComparison.OrdinalIgnoreCase);
+  private string Location => folder is null || ProjectFolder is null ? "assets" : Path.GetRelativePath(ProjectFolder, folder).Replace('\\', '/');
+
+  protected override void OnInitialized()
+  {
+      drop = new ImageDropTarget(JS, ImageImporter, () => ProjectFolder, relativePath => InvokeAsync(async () =>
+      {
+          open = BrowseOnly;
+          await OnSelected.InvokeAsync(relativePath);
+          StateHasChanged();
+      }));
+      open = BrowseOnly;
+  }
+
+  protected override void OnParametersSet()
+  {
+      if (string.Equals(loadedProject, ProjectFolder, StringComparison.OrdinalIgnoreCase)) return;
+      loadedProject = ProjectFolder;
+      thumbnails.Clear();
+      importError = string.Empty;
+      tag = tagQuery = string.Empty;
+      tagMenuOpen = false;
+      root = string.IsNullOrWhiteSpace(ProjectFolder) ? null : Path.GetFullPath(Path.Combine(ProjectFolder, "assets"));
+      folder = root;
+      if (open) Refresh();
+  }
+
+  protected override Task OnAfterRenderAsync(bool firstRender) => firstRender ? drop.RegisterAsync() : Task.CompletedTask;
+
+  private void TogglePicker()
+  {
+      if (open) { open = false; tagMenuOpen = false; return; }
+      open = true;
+      tag = tagQuery = string.Empty;
+      tagMenuOpen = false;
+      folder = root;
+      if (HasSelection && ProjectFolder is not null)
+      {
+          var selectedFolder = Path.GetDirectoryName(Path.Combine(ProjectFolder, SelectedAsset!.Replace('/', Path.DirectorySeparatorChar)));
+          if (selectedFolder is not null && IsInsideRoot(selectedFolder) && Directory.Exists(selectedFolder)) folder = Path.GetFullPath(selectedFolder);
+      }
+      Refresh();
+  }
+
+  private bool IsInsideRoot(string path) => root is not null &&
+      (string.Equals(Path.GetFullPath(path), root, StringComparison.OrdinalIgnoreCase) ||
+       Path.GetFullPath(path).StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+
+  private void Navigate(string path)
+  {
+      if (!Directory.Exists(path) || !IsInsideRoot(path)) return;
+      tagMenuOpen = false;
+      folder = Path.GetFullPath(path);
+      Refresh();
+  }
+
+  private void NavigateUp()
+  {
+      if (!CanNavigateUp) return;
+      var parent = Directory.GetParent(folder!)?.FullName;
+      if (parent is not null) Navigate(parent);
+  }
+
+  private void OnTagInput(ChangeEventArgs args)
+  {
+      tagQuery = args.Value?.ToString() ?? string.Empty;
+      tagMenuOpen = true;
+  }
+
+  private void HandleTagKeyDown(KeyboardEventArgs args)
+  {
+      if (args.Key == "Escape") { tagMenuOpen = false; tagQuery = tag; }
+      else if (args.Key == "Enter") SetTag(string.IsNullOrWhiteSpace(tagQuery) ? string.Empty : MatchingTags.FirstOrDefault() ?? tag);
+  }
+
+  private void SetTag(string value)
+  {
+      tag = tagQuery = value;
+      tagMenuOpen = false;
+      Refresh();
+  }
+
+  private Task Select(string relativePath)
+  {
+      open = BrowseOnly;
+      tagMenuOpen = false;
+      return OnSelected.InvokeAsync(relativePath);
+  }
+
+  private async Task ImportImage()
+  {
+      if (importing || string.IsNullOrWhiteSpace(ProjectFolder)) return;
+      importing = true;
+      importError = string.Empty;
+      string? relativePath = null;
+      try
+      {
+          relativePath = await ImageImporter.PickAndImportAsync(ProjectFolder);
+          if (relativePath is null) return;
+          await Select(relativePath);
+      }
+      catch (Exception ex)
+      {
+          importError = relativePath is null ? $"Could not import image: {ex.Message}" : $"Image imported, but could not select it: {ex.Message}";
+      }
+      finally { importing = false; }
+  }
+
+  private void Refresh()
+  {
+      entries = [];
+      tags = [];
+      if (folder is null || ProjectFolder is null || !Directory.Exists(folder) || !IsInsideRoot(folder)) return;
+      try
+      {
+          var taggedImages = Directory.EnumerateFiles(folder, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true })
+              .Where(ProjectImageImporter.IsImage)
+              .Select(path => (Path: path, Tags: ReadAssetTags(path, ProjectFolder))).ToList();
+          tags = taggedImages.SelectMany(item => item.Tags)
+              .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(option => option, StringComparer.OrdinalIgnoreCase).ToList();
+          if (tag.Length > 0 && !tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) tag = tagQuery = string.Empty;
+          IEnumerable<string> paths = tag.Length > 0
+              ? taggedImages.Where(item => item.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase)).Select(item => item.Path)
+              : Directory.EnumerateFileSystemEntries(folder).Where(path => Directory.Exists(path) || ProjectImageImporter.IsImage(path));
+          entries = paths.OrderBy(path => !Directory.Exists(path))
+              .ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+              .Select(path => new PickerEntry(path, Path.GetRelativePath(ProjectFolder, path).Replace('\\', '/'), Directory.Exists(path)))
+              .ToList();
+      }
+      catch { entries = []; tags = []; }
+  }
+
+  private static IReadOnlyList<string> ReadAssetTags(string assetPath, string projectFolder)
+  {
+      try
+      {
+          var metadataPath = AssetMetadataPaths.ForAsset(projectFolder, assetPath);
+          if (!File.Exists(metadataPath)) return [];
+          using var metadata = System.Text.Json.JsonDocument.Parse(File.ReadAllText(metadataPath));
+          if (!metadata.RootElement.TryGetProperty("tags", out var values) || values.ValueKind != System.Text.Json.JsonValueKind.Array) return [];
+          return values.EnumerateArray()
+              .Where(value => value.ValueKind == System.Text.Json.JsonValueKind.String)
+              .Select(value => value.GetString()?.Trim() ?? string.Empty)
+              .Where(value => value.Length > 0)
+              .ToList();
+      }
+      catch { return []; }
+  }
+
+  private string? Thumbnail(string relativePath)
+  {
+      if (thumbnails.TryGetValue(relativePath, out var thumbnail)) return thumbnail;
+      if (ProjectFolder is null) return null;
+      var path = Path.GetFullPath(Path.Combine(ProjectFolder, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+      var mimeType = Path.GetExtension(path).ToLowerInvariant() switch { ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".gif" => "image/gif", ".webp" => "image/webp", _ => null };
+      if (mimeType is null || !IsInsideRoot(path) || !File.Exists(path)) return null;
+      try { thumbnail = $"data:{mimeType};base64,{Convert.ToBase64String(File.ReadAllBytes(path))}"; }
+      catch { thumbnail = null; }
+      thumbnails[relativePath] = thumbnail;
+      return thumbnail;
+  }
+
+  public ValueTask DisposeAsync() => drop.DisposeAsync();
+
+  private sealed record PickerEntry(string FullPath, string RelativePath, bool IsDirectory);
+}

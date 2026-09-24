@@ -225,30 +225,100 @@
       return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
   }
   [JSInvokable]
-  public async Task<string> OpenPanelEditorPane()
+  public async Task<string> OpenPanelsBrowserPane()
   {
       added++;
-      Root = AddToFirstGroup(Root, new DockPane($"panel-editor{added}", "Panel", "▣", "blue", "panel-editor"));
+      Root = AddToFirstGroup(Root, new DockPane($"panel-browser{added}", "Panels", "▣", "blue", "panel-browser"));
       await InvokeAsync(StateHasChanged);
       return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
   }
+  [JSInvokable]
+  public async Task<string> SetPanelPaneProject(string paneId, string folderPath)
+  {
+      try
+      {
+          var project = FindRegisteredProject(folderPath)
+              ?? throw new InvalidOperationException("The selected project is no longer available.");
+          if (FindPane(Root, paneId)?.Kind != "panel-browser")
+              throw new InvalidOperationException("The Panels browser is no longer open.");
+          await ChangePanelPaneSelection(new PanelPaneSelection(paneId, project.FolderPath, null, null));
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
   private Task ChangePanelPaneSelection(PanelPaneSelection selection)
   {
+      var source = FindPane(Root, selection.PaneId);
+      if (source is null || source.Kind is not ("panel-browser" or "panel-editor")) return Task.CompletedTask;
       var project = FindRegisteredProject(selection.ProjectFolder);
       PanelDocument? panel = null;
       if (project is not null && !string.IsNullOrWhiteSpace(selection.PanelId))
           panel = PanelStore.Load(project.FolderPath, selection.PanelId);
+      var folder = project is not null ? PanelStore.NormalizeFolder(project.FolderPath, selection.Folder) : null;
+      if (source.Kind == "panel-browser")
+      {
+          Root = UpdatePanelPane(Root, selection.PaneId, pane => pane with
+          {
+              Title = project is not null ? $"Panels · {project.DisplayName}" : "Panels",
+              Context = project?.FolderPath,
+              Location = panel is not null ? selection.PanelId : null,
+              PanelFolder = folder
+          });
+          if (selection.OpenEditor && project is not null)
+          {
+              var editor = FindOwnedPanelEditor(Root, selection.PaneId);
+              if (editor is not null)
+              {
+                  Root = UpdatePanelPane(Root, editor.Id, pane => pane with
+                  {
+                      Title = panel is not null ? $"Panel · {panel.Name}" : "New Panel",
+                      Context = project.FolderPath,
+                      Location = panel is not null ? selection.PanelId : null,
+                      PanelFolder = folder
+                  });
+              }
+              else
+              {
+                  added++;
+                  var incoming = new DockPane($"panel-editor{added}", panel is not null ? $"Panel · {panel.Name}" : "New Panel",
+                      "▣", "blue", "panel-editor", project.FolderPath, panel is not null ? selection.PanelId : null,
+                      selection.PaneId, PanelFolder: folder);
+                  var groupId = FindGroupContaining(Root, selection.PaneId);
+                  if (groupId is not null) Root = InsertPane(Root, groupId, incoming, "right");
+              }
+          }
+          return InvokeAsync(StateHasChanged);
+      }
       Root = UpdatePanelPane(Root, selection.PaneId, pane => pane with
       {
           Title = panel is not null ? $"Panel · {panel.Name}" : project is not null ? $"Panel · {project.DisplayName}" : "Panel",
           Context = project?.FolderPath,
-          Location = panel?.Id
+          Location = panel is not null ? selection.PanelId : null,
+          PanelFolder = folder
       });
+      if (source.Owner is not null && FindPane(Root, source.Owner) is { Kind: "panel-browser" } browser &&
+          string.Equals(browser.Context, project?.FolderPath, StringComparison.OrdinalIgnoreCase))
+          Root = UpdatePanelPane(Root, browser.Id, pane => pane with { Location = selection.PanelId });
       return InvokeAsync(StateHasChanged);
   }
+  private static DockPane? FindOwnedPanelEditor(DockNode node, string browserId) => node switch
+  {
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Kind == "panel-editor" && pane.Owner == browserId),
+      SplitNode split => FindOwnedPanelEditor(split.First, browserId) ?? FindOwnedPanelEditor(split.Second, browserId),
+      _ => null
+  };
+  private static string? FindGroupContaining(DockNode node, string paneId) => node switch
+  {
+      TabGroupNode group => group.Panes.Any(pane => pane.Id == paneId) ? group.Id : null,
+      SplitNode split => FindGroupContaining(split.First, paneId) ?? FindGroupContaining(split.Second, paneId),
+      _ => null
+  };
   private static DockNode UpdatePanelPane(DockNode node, string paneId, Func<DockPane, DockPane> update) => node switch
   {
-      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "panel-editor")
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId && pane.Kind is ("panel-browser" or "panel-editor"))
           => group with { Panes = group.Panes.Select(pane => pane.Id == paneId ? update(pane) : pane).ToList(), ActiveId = paneId },
       SplitNode split => split with { First = UpdatePanelPane(split.First, paneId, update), Second = UpdatePanelPane(split.Second, paneId, update) },
       _ => node
@@ -436,121 +506,6 @@
   }
   [JSInvokable]
   public Task RefreshAssetsPanes() => InvokeAsync(StateHasChanged);
-  [JSInvokable]
-  public async Task<string> SetGenerationInputFromAsset(string paneId, string inputName, string sourcePath, string sourceRoot)
-  {
-      string? copiedPath = null;
-      string? metadataPath = null;
-      var copied = false;
-      try
-      {
-          var projectFolder = await GenerationDropProjectAsync(paneId, inputName);
-          var source = Path.GetFullPath(sourcePath);
-          var root = NormalizeFolder(sourceRoot);
-          var sourceProject = FindRegisteredProject(Directory.GetParent(root)?.FullName);
-          if (sourceProject is null ||
-              !string.Equals(root, NormalizeFolder(Path.Combine(sourceProject.FolderPath, "assets")), StringComparison.OrdinalIgnoreCase) ||
-              !IsInFolder(source, root) || !File.Exists(source) || !IsGenerationImage(source))
-              throw new InvalidOperationException("Drop an image asset from a registered project.");
-
-          var destinationRoot = NormalizeFolder(Path.Combine(projectFolder, "assets"));
-          string selectedPath;
-          if (string.Equals(root, destinationRoot, StringComparison.OrdinalIgnoreCase))
-          {
-              selectedPath = source;
-          }
-          else
-          {
-              var importedFolder = Path.Combine(destinationRoot, "imported");
-              Directory.CreateDirectory(importedFolder);
-              copiedPath = UniqueAssetPath(importedFolder, Path.GetFileName(source));
-              File.Copy(source, copiedPath);
-              var relativeCopy = Path.GetRelativePath(projectFolder, copiedPath).Replace('\\', '/');
-              metadataPath = AssetMetadataPath(projectFolder, relativeCopy);
-              var metadata = new { asset = relativeCopy, name = Path.GetFileName(copiedPath), tags = Array.Empty<string>() };
-              await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(metadata, WorkflowJsonOptions));
-              copied = true;
-              selectedPath = copiedPath;
-          }
-
-          var relativePath = Path.GetRelativePath(projectFolder, selectedPath).Replace('\\', '/');
-          await ChangeGenerationInput(new GenerationInputChange(paneId, inputName, relativePath));
-          return JsonSerializer.Serialize(new { success = true, message = copied ? "Copied and selected image." : "Selected image." }, WorkflowJsonOptions);
-      }
-      catch (Exception ex)
-      {
-          if (!copied && copiedPath is not null)
-          {
-              try { File.Delete(copiedPath); } catch { /* Preserve the original error. */ }
-              if (metadataPath is not null)
-              {
-                  try { File.Delete(metadataPath); } catch { /* Preserve the original error. */ }
-              }
-          }
-          return JsonSerializer.Serialize(new { success = false, message = copied ? $"Image copied, but could not select it: {ex.Message}" : ex.Message }, WorkflowJsonOptions);
-      }
-  }
-  [JSInvokable]
-  public async Task<string> SetGenerationInputFromFile(string paneId, string inputName, string fileName, IJSStreamReference file)
-  {
-      const long maxFileSize = 1024L * 1024 * 1024;
-      string? targetPath = null;
-      string? metadataPath = null;
-      var imported = false;
-      try
-      {
-          var projectFolder = await GenerationDropProjectAsync(paneId, inputName);
-          if (string.IsNullOrWhiteSpace(fileName) || fileName != Path.GetFileName(fileName) ||
-              fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || !IsGenerationImage(fileName))
-              throw new InvalidOperationException("Drop a JPG, PNG, GIF, or WebP image file.");
-          if (file.Length > maxFileSize) throw new InvalidOperationException("The image exceeds the 1 GB file limit.");
-
-          var importedFolder = Path.Combine(projectFolder, "assets", "imported");
-          Directory.CreateDirectory(importedFolder);
-          targetPath = UniqueAssetPath(importedFolder, fileName);
-          await using (var source = await file.OpenReadStreamAsync(maxAllowedSize: maxFileSize))
-          await using (var target = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-              await source.CopyToAsync(target);
-
-          var relativePath = Path.GetRelativePath(projectFolder, targetPath).Replace('\\', '/');
-          metadataPath = AssetMetadataPath(projectFolder, relativePath);
-          var metadata = new { asset = relativePath, name = Path.GetFileName(targetPath), tags = Array.Empty<string>() };
-          await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(metadata, WorkflowJsonOptions));
-          imported = true;
-          await ChangeGenerationInput(new GenerationInputChange(paneId, inputName, relativePath));
-          return JsonSerializer.Serialize(new { success = true, message = "Imported and selected image." }, WorkflowJsonOptions);
-      }
-      catch (Exception ex)
-      {
-          if (!imported && targetPath is not null)
-          {
-              try { File.Delete(targetPath); } catch { /* Preserve the original error. */ }
-              if (metadataPath is not null)
-              {
-                  try { File.Delete(metadataPath); } catch { /* Preserve the original error. */ }
-              }
-          }
-          return JsonSerializer.Serialize(new { success = false, message = imported ? $"Image imported, but could not select it: {ex.Message}" : ex.Message }, WorkflowJsonOptions);
-      }
-      finally { await file.DisposeAsync(); }
-  }
-  private async Task<string> GenerationDropProjectAsync(string paneId, string inputName)
-  {
-      var pane = FindGenerationPane(Root, paneId);
-      var project = FindRegisteredProject(pane?.Context);
-      var workflow = WorkflowLibrary.GetAll().FirstOrDefault(item => item.Id == pane?.WorkflowId && !string.IsNullOrWhiteSpace(item.GraphFile));
-      if (project is null || workflow is null) throw new InvalidOperationException("Select a project and workflow before dropping an image.");
-      var placeholders = await WorkflowTemplateService.GetPlaceholdersAsync(workflow);
-      if (!placeholders.Any(item => item.Name == inputName && item.Type == "image"))
-          throw new InvalidOperationException("This workflow input does not accept an image.");
-      return project.FolderPath;
-  }
-  private static DockPane? FindGenerationPane(DockNode node, string paneId) => node switch
-  {
-      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Id == paneId && pane.Kind == "generation"),
-      SplitNode split => FindGenerationPane(split.First, paneId) ?? FindGenerationPane(split.Second, paneId),
-      _ => null
-  };
   private static bool IsGenerationImage(string path) => Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp";
   [JSInvokable]
   public async Task<string> CopyAsset(string sourcePath, string sourceRoot, string destinationFolder, string destinationRoot)
@@ -1280,16 +1235,30 @@
                   ? pane with { Title = "Generation", Context = null, Location = null, OutputFolder = null, OutputTags = null }
                   : pane with { Title = $"Generation · {project.DisplayName}", Context = project.FolderPath };
           }
+          if (pane.Kind == "panel-browser")
+          {
+              var project = FindRegisteredProject(pane.Context);
+              if (project is null) return pane with { Title = "Panels", Context = null, Location = null, PanelFolder = null };
+              var panelFolder = PanelStore.NormalizeFolder(project.FolderPath, pane.PanelFolder);
+              string? selection = pane.Location;
+              if (!string.IsNullOrWhiteSpace(selection))
+              {
+                  try { _ = PanelStore.Load(project.FolderPath, selection); }
+                  catch { selection = null; }
+              }
+              return pane with { Title = $"Panels · {project.DisplayName}", Context = project.FolderPath, Location = selection, PanelFolder = panelFolder };
+          }
           if (pane.Kind == "panel-editor")
           {
               var project = FindRegisteredProject(pane.Context);
-              if (project is null) return pane with { Title = "Panel", Context = null, Location = null };
+              if (project is null) return pane with { Title = "Panel", Context = null, Location = null, PanelFolder = null };
+              var panelFolder = PanelStore.NormalizeFolder(project.FolderPath, pane.PanelFolder);
               if (string.IsNullOrWhiteSpace(pane.Location))
-                  return pane with { Title = $"Panel · {project.DisplayName}", Context = project.FolderPath, Location = null };
+                  return pane with { Title = $"Panel · {project.DisplayName}", Context = project.FolderPath, Location = null, PanelFolder = panelFolder };
               try
               {
                   var panel = PanelStore.Load(project.FolderPath, pane.Location);
-                  return pane with { Title = $"Panel · {panel.Name}", Context = project.FolderPath, Location = panel.Id };
+                  return pane with { Title = $"Panel · {panel.Name}", Context = project.FolderPath, PanelFolder = panelFolder };
               }
               catch
               {
@@ -1320,8 +1289,8 @@
       }
       catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
       {
-          return pane.Kind is "assets" or "generation" or "panel-editor"
-              ? pane with { Title = pane.Kind switch { "assets" => "Assets", "generation" => "Generation", _ => "Panel" }, Context = null, Location = null }
+          return pane.Kind is "assets" or "generation" or "panel-browser" or "panel-editor"
+              ? pane with { Title = pane.Kind switch { "assets" => "Assets", "generation" => "Generation", "panel-browser" => "Panels", _ => "Panel" }, Context = null, Location = null }
               : null;
       }
       return null;

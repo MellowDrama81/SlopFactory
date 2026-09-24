@@ -367,7 +367,9 @@
   window.addEventListener('pointerdown',begin,true);window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',cancel,true);
   window.addEventListener('mousedown',begin,true);window.addEventListener('mousemove',move,true);window.addEventListener('mouseup',end,true);
   let assetDrag=null;
-  const clearAssetDropTargets=()=>document.querySelectorAll('.assets-drop-ready,.assets-external-drop-ready,.generation-image-drop-ready').forEach(pane=>pane.classList.remove('assets-drop-ready','assets-external-drop-ready','generation-image-drop-ready'));
+  const clearAssetDropTargets=()=>document.querySelectorAll('.assets-drop-ready,.assets-external-drop-ready,.image-drop-ready').forEach(pane=>pane.classList.remove('assets-drop-ready','assets-external-drop-ready','image-drop-ready'));
+  // Image pickers and editors register a .NET target per data-image-drop element.
+  const imageDropTargets=new Map();
   const hasExternalFiles=event=>!assetDrag&&Array.from(event.dataTransfer?.types??[]).includes('Files');
   window.addEventListener('dragstart',event=>{
     const asset=event.target.closest?.('[data-assets-drag]');
@@ -379,14 +381,14 @@
   },true);
   window.addEventListener('dragover',event=>{
     const pane=event.target.closest?.('[data-assets-drop-target]');
-    const generationInput=event.target.closest?.('[data-generation-image-drop]');
+    const imageTarget=event.target.closest?.('[data-image-drop]');
     const external=hasExternalFiles(event);
     if(!assetDrag&&!external)return;
     event.preventDefault();
-    if(generationInput){
+    if(imageTarget){
       event.dataTransfer.dropEffect='copy';
       clearAssetDropTargets();
-      generationInput.classList.add('generation-image-drop-ready');
+      imageTarget.classList.add('image-drop-ready');
       return;
     }
     if(!pane){clearAssetDropTargets();return;}
@@ -397,41 +399,36 @@
   window.addEventListener('dragleave',event=>{
     const pane=event.target.closest?.('[data-assets-drop-target]');
     if(pane&&!pane.contains(event.relatedTarget))pane.classList.remove('assets-drop-ready','assets-external-drop-ready');
-    const generationInput=event.target.closest?.('[data-generation-image-drop]');
-    if(generationInput&&!generationInput.contains(event.relatedTarget))generationInput.classList.remove('generation-image-drop-ready');
+    const imageTarget=event.target.closest?.('[data-image-drop]');
+    if(imageTarget&&!imageTarget.contains(event.relatedTarget))imageTarget.classList.remove('image-drop-ready');
   },true);
   window.addEventListener('drop',async event=>{
     const pane=event.target.closest?.('[data-assets-drop-target]');
-    const generationInput=event.target.closest?.('[data-generation-image-drop]');
+    const imageTarget=event.target.closest?.('[data-image-drop]');
     const external=hasExternalFiles(event);
     if(!assetDrag&&!external)return;
     event.preventDefault();
-    if(generationInput){
-      const paneId=generationInput.dataset.generationPane??'';
-      const inputName=generationInput.dataset.generationInput??'';
+    if(imageTarget){
+      const id=imageTarget.dataset.imageDrop??'';
       const source=assetDrag;
       if(source)source.element.classList.remove('asset-dragging');
       assetDrag=null;
       clearAssetDropTargets();
-      const findStatus=()=>[...document.querySelectorAll('[data-generation-image-drop]')]
-        .find(item=>item.dataset.generationPane===paneId&&item.dataset.generationInput===inputName)
-        ?.querySelector('[data-generation-drop-status]');
-      const status=findStatus();
-      if(status)status.textContent=external?'Importing image…':'Selecting image…';
-      if(!reference)return;
+      // The target may re-render while .NET works, so look its status element up again each time.
+      const findStatus=()=>[...document.querySelectorAll('[data-image-drop]')].find(item=>item.dataset.imageDrop===id)?.querySelector('[data-image-drop-status]');
+      const setStatus=text=>{const status=findStatus();if(status)status.textContent=text;};
+      const target=imageDropTargets.get(id);
+      if(!target)return;
+      setStatus(external?'Importing image…':'Selecting image…');
       try{
         const files=Array.from(event.dataTransfer?.files??[]);
         if(external&&files.length!==1)throw new Error('Drop one image at a time.');
         const response=external
-          ? await reference.invokeMethodAsync('SetGenerationInputFromFile',paneId,inputName,files[0].name,DotNet.createJSStreamReference(files[0]))
-          : await reference.invokeMethodAsync('SetGenerationInputFromAsset',paneId,inputName,source.path,source.root);
+          ? await target.invokeMethodAsync('DropFile',files[0].name,DotNet.createJSStreamReference(files[0]))
+          : await target.invokeMethodAsync('DropAsset',source.path,source.root);
         const result=JSON.parse(response);
-        const currentStatus=findStatus();
-        if(currentStatus)currentStatus.textContent=result.success?'':(result.message??'Could not select image.');
-      }catch(error){
-        const currentStatus=findStatus();
-        if(currentStatus)currentStatus.textContent=error?.message??'Could not select image.';
-      }
+        setStatus(result.success?'':(result.message??'Could not use image.'));
+      }catch(error){setStatus(error?.message??'Could not use image.');}
       return;
     }
     if(!pane){clearAssetDropTargets();return;}
@@ -499,7 +496,7 @@
       if (ribbonAction === 'projects') restoreProjects();
       if (ribbonAction === 'assets' && reference) reference.invokeMethodAsync('OpenAssetsPane', '', '');
       if (ribbonAction === 'generation' && reference) reference.invokeMethodAsync('OpenGenerationPane');
-      if (ribbonAction === 'panels' && reference) reference.invokeMethodAsync('OpenPanelEditorPane');
+      if (ribbonAction === 'panels' && reference) reference.invokeMethodAsync('OpenPanelsBrowserPane');
       if (ribbonAction === 'clear-workspace' && reference) reference.invokeMethodAsync('ClearWorkspace');
       return;
     }
@@ -513,6 +510,16 @@
       reference.invokeMethodAsync('SetGenerationPaneProject', generationProject.dataset.generationPane ?? '', generationProject.dataset.projectFolder ?? '')
         .then(result=>{const selected=JSON.parse(result);if(!selected.success&&status?.isConnected)status.textContent=selected.message??'Could not select project.';})
         .catch(()=>{if(status?.isConnected)status.textContent='Could not select project.';});
+      return;
+    }
+    const panelProject = event.target.closest?.('[data-panel-project-select]');
+    if (panelProject && reference) {
+      const status = panelProject.closest('.panel-browser')?.querySelector('[data-panel-project-status]');
+      panelProject.disabled = true;
+      reference.invokeMethodAsync('SetPanelPaneProject', panelProject.dataset.panelPane ?? '', panelProject.dataset.projectFolder ?? '')
+        .then(result => { const selected = JSON.parse(result); if (!selected.success && status?.isConnected) status.textContent = selected.message ?? 'Could not select project.'; })
+        .catch(() => { if (status?.isConnected) status.textContent = 'Could not select project.'; })
+        .finally(() => { if (panelProject.isConnected) panelProject.disabled = false; });
       return;
     }
     const generationChange = event.target.closest?.('[data-generation-change-project]');
@@ -786,5 +793,6 @@
       const saved=key ? getComfyConnections()[key] : null;
       if (saved) reference.invokeMethodAsync('SetCurrentComfyConnection',saved.serverUrl ?? '',saved.apiKey ?? '',key);
     } catch { /* Use the connection already restored by .NET preferences. */ }
-  },setSplitRatio:(id,ratio)=>reference?.invokeMethodAsync('SetSplitRatio',id,ratio),imageDimensions:image=>[image.naturalWidth,image.naturalHeight]};
+  },setSplitRatio:(id,ratio)=>reference?.invokeMethodAsync('SetSplitRatio',id,ratio),imageDimensions:image=>[image.naturalWidth,image.naturalHeight],
+    registerImageDrop:(id,target)=>imageDropTargets.set(id,target),unregisterImageDrop:id=>imageDropTargets.delete(id)};
 })();

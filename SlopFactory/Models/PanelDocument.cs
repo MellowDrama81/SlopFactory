@@ -24,5 +24,5 @@ public sealed class PanelLayer
     public double[] Matrix { get; set; } = [1, 0, 0, 1, 0, 0];
 }
 
-public sealed record PanelSummary(string Id, string Name, int Width, int Height);
-public sealed record PanelPaneSelection(string PaneId, string? ProjectFolder, string? PanelId, string? PanelName);
+public sealed record PanelSummary(string Id, string Name, int Width, int Height, string Path, PanelDocument Document);
+public sealed record PanelPaneSelection(string PaneId, string? ProjectFolder, string? PanelId, string? PanelName, string? Folder = null, bool OpenEditor = false);

@@ -1,0 +1,129 @@
+@using Microsoft.AspNetCore.Components.Web
+@using SlopFactory.Models
+@using SlopFactory.Services
+@inject ProjectLibrary ProjectLibrary
+@inject PanelStore PanelStore
+
+<div class="panel-editor panel-browser">
+  <p class="eyebrow">PANELS</p>
+  @if (string.IsNullOrWhiteSpace(Pane.Context))
+  {
+    <h2>Select a project</h2>
+    <p>Browse Panels saved in the project's panels folder.</p>
+    @if (ProjectLibrary.GetAll().Count == 0)
+    {
+      <p class="panel-editor-message">Add a project from Projects before creating a Panel.</p>
+    }
+    else
+    {
+      <div class="assets-project-list">
+        @foreach (var project in ProjectLibrary.GetAll())
+        {
+          <button type="button" data-panel-project-select data-panel-pane="@Pane.Id" data-project-folder="@project.FolderPath">@project.DisplayName</button>
+        }
+      </div>
+      <p class="panel-editor-error" data-panel-project-status role="status"></p>
+    }
+  }
+  else
+  {
+    <div class="panel-editor-header"><div><h2>Panels</h2><p>@Pane.Context\panels</p></div><button type="button" class="panel-editor-secondary" @onclick="ChangeProject">Change project</button></div>
+    @if (!string.IsNullOrWhiteSpace(error)) { <p class="panel-editor-error" role="alert">@error</p> }
+    <div class="panel-browser-actions">
+      <button type="button" class="panel-editor-secondary" disabled="@(currentFolder.Length == 0)" @onclick="GoUp">↑ Up</button>
+      <button type="button" class="panel-editor-secondary" @onclick="() => showCreateFolder = true">＋ Folder</button>
+      <button type="button" class="panel-editor-primary" @onclick="NewPanel">＋ New Panel</button>
+      @if (!string.IsNullOrWhiteSpace(Pane.Location) && !string.Equals(SelectedPanelFolder, currentFolder, StringComparison.OrdinalIgnoreCase))
+      {
+        <button type="button" class="panel-editor-secondary" @onclick="MovePanelHere">Move selected here</button>
+      }
+    </div>
+    <p class="panel-browser-path">panels@(currentFolder.Length == 0 ? "" : "/" + currentFolder)</p>
+    <div class="panel-browser-grid">
+      @foreach (var folder in folders)
+      {
+        <button type="button" class="panel-browser-tile" @key="folder" @onclick="() => OpenFolder(folder)">
+          <span class="panel-browser-folder"><FolderThumbnail /></span><strong>@folder</strong><small>Folder</small>
+        </button>
+      }
+      @foreach (var panel in savedPanels)
+      {
+        <button type="button" class="panel-browser-tile @(Pane.Location == panel.Path ? "is-selected" : "")" @key="panel.Path" @onclick="() => OpenPanel(panel)">
+          <PanelThumbnail Panel="panel.Document" ProjectFolder="Pane.Context!" />
+          <strong>@panel.Name</strong><small>@panel.Width × @panel.Height</small>
+        </button>
+      }
+    </div>
+    @if (folders.Count == 0 && savedPanels.Count == 0) { <p class="panel-browser-empty">This folder is empty.</p> }
+  }
+</div>
+@if (showCreateFolder)
+{
+  <div class="panel-folder-backdrop" role="presentation">
+    <div class="app-modal panel-folder-dialog" role="dialog" aria-modal="true" aria-label="Create Panel folder">
+      <div class="panel-folder-dialog-body">
+        <h2>Create folder</h2><p class="app-modal-message">Inside panels@(currentFolder.Length == 0 ? "" : "/" + currentFolder)</p>
+        <label class="app-modal-field">Folder name<input type="text" maxlength="100" placeholder="Folder name" @bind="newFolderName" @bind:event="oninput" @onkeydown="FolderKeyDown" /></label>
+        @if (!string.IsNullOrWhiteSpace(folderError)) { <p class="panel-editor-error" role="alert">@folderError</p> }
+        <div class="app-modal-actions"><button type="button" class="app-modal-cancel" @onclick="() => showCreateFolder = false">Cancel</button><button type="button" class="app-modal-confirm" @onclick="CreateFolder">Create</button></div>
+      </div>
+    </div>
+  </div>
+}
+
+@code {
+  [Parameter, EditorRequired] public DockPane Pane { get; set; } = default!;
+  [Parameter] public EventCallback<PanelPaneSelection> OnSelectionChanged { get; set; }
+  private string? loadedKey;
+  private string currentFolder = string.Empty;
+  private string error = string.Empty;
+  private string folderError = string.Empty;
+  private string newFolderName = string.Empty;
+  private bool showCreateFolder;
+  private List<string> folders = [];
+  private List<PanelSummary> savedPanels = [];
+  private string SelectedPanelFolder => (Path.GetDirectoryName(Pane.Location?.Replace('/', Path.DirectorySeparatorChar) ?? string.Empty) ?? string.Empty).Replace('\\', '/');
+
+  protected override void OnParametersSet()
+  {
+      var key = $"{Pane.Context}|{Pane.PanelFolder}";
+      if (key != loadedKey)
+      {
+          loadedKey = key;
+          error = string.Empty;
+          if (string.IsNullOrWhiteSpace(Pane.Context)) { currentFolder = string.Empty; folders = []; savedPanels = []; return; }
+          try { currentFolder = PanelStore.NormalizeFolder(Pane.Context, Pane.PanelFolder); }
+          catch (Exception ex) { error = ex.Message; return; }
+      }
+      RefreshBrowser();
+  }
+  private void RefreshBrowser()
+  {
+      if (Pane.Context is null) return;
+      try { folders = PanelStore.GetFolders(Pane.Context, currentFolder).ToList(); savedPanels = PanelStore.GetAll(Pane.Context, currentFolder).ToList(); }
+      catch (Exception ex) { error = ex.Message; }
+  }
+  private Task ChangeProject() => OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, null, null, null));
+  private Task NewPanel() => OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, null, null, currentFolder, true));
+  private Task OpenPanel(PanelSummary panel) => OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, panel.Path, panel.Name, currentFolder, true));
+  private Task OpenFolder(string folder) => NavigateTo(string.IsNullOrEmpty(currentFolder) ? folder : currentFolder + "/" + folder);
+  private Task GoUp() { var index = currentFolder.LastIndexOf('/'); return NavigateTo(index < 0 ? string.Empty : currentFolder[..index]); }
+  private Task NavigateTo(string folder) => OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, Pane.Location, null, folder));
+  private async Task CreateFolder()
+  {
+      if (Pane.Context is null) return;
+      try { PanelStore.CreateFolder(Pane.Context, currentFolder, newFolderName); RefreshBrowser(); showCreateFolder = false; newFolderName = string.Empty; folderError = string.Empty; }
+      catch (Exception ex) { folderError = ex.Message; }
+  }
+  private Task FolderKeyDown(KeyboardEventArgs args) => args.Key == "Enter" ? CreateFolder() : Task.CompletedTask;
+  private async Task MovePanelHere()
+  {
+      if (Pane.Context is null || string.IsNullOrWhiteSpace(Pane.Location)) return;
+      try
+      {
+          var path = PanelStore.Move(Pane.Context, Pane.Location, currentFolder);
+          await OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, path, null, currentFolder, true));
+      }
+      catch (Exception ex) { error = $"Could not move Panel: {ex.Message}"; }
+  }
+}
