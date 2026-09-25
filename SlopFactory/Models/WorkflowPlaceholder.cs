@@ -4,6 +4,8 @@ public sealed record WorkflowPlaceholder(string Name, string Type)
 {
     public bool IsSeed => Type.Equals("seed", StringComparison.OrdinalIgnoreCase) ||
         Name.Contains("SEED", StringComparison.OrdinalIgnoreCase);
+    public bool IsMaskedImage => Type.Equals("image", StringComparison.OrdinalIgnoreCase) &&
+        Name.Contains("MASKED", StringComparison.OrdinalIgnoreCase);
 
     public string Label => Name switch
     {

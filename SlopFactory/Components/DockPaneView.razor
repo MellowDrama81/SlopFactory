@@ -6,6 +6,7 @@
 @inject WorkflowLibrary WorkflowLibrary
 @inject WorkflowTemplateService WorkflowTemplateService
 @inject ComfyGenerationService ComfyGenerationService
+@inject AssetMaskStore AssetMaskStore
 @inject IJSRuntime JS
 @implements IDisposable
 <div class="pane-view @Pane.Kind">
@@ -89,11 +90,18 @@ else if (Pane.Kind == "generation")
         <div class="generation-inputs">
           @foreach (var placeholder in generationInputs)
           {
-            @if (placeholder.Type == "image")
+            @if (placeholder.Type == "image" && !placeholder.IsMaskedImage)
             {
               <ProjectImagePicker @key="placeholder.Name" ProjectFolder="@Pane.Context" Label="@placeholder.Label" SelectedAsset="@GenerationValue(placeholder.Name)" OnSelected="asset => SelectGenerationImage(placeholder.Name, asset)" />
+              @if (WorkflowNeedsMask && GenerationAssetPath(placeholder.Name) is { } assetPath)
+              {
+                <div class="generation-mask-picker">
+                  <label class="generation-field"><span>Mask for @placeholder.Label</span><select value="@GenerationMaskValue(placeholder.Name)" @onchange="args => ChangeGenerationMask(placeholder.Name, args)"><option value="">Select a saved mask</option>@foreach (var mask in MasksFor(assetPath)) { <option value="@mask.Id">@mask.Name</option> }</select></label>
+                  <button type="button" class="panel-editor-secondary" data-assets-mask data-asset-path="@assetPath" data-assets-root="@AssetsRoot" data-source-pane="@Pane.Id">Create or edit mask…</button>
+                </div>
+              }
             }
-            else
+            else if (!placeholder.IsMaskedImage)
             {
               <label class="generation-field" @key="placeholder.Name">
                 <span>@placeholder.Label</span>
@@ -314,14 +322,34 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   private WorkflowDefinition? SelectedGenerationWorkflow => WorkflowLibrary.GetAll()
       .FirstOrDefault(workflow => workflow.Id == Pane.WorkflowId && !string.IsNullOrWhiteSpace(workflow.GraphFile));
   private string GenerationValue(string name) => Pane.InputValues?.GetValueOrDefault(name) ?? string.Empty;
+  private bool WorkflowNeedsMask => SelectedGenerationWorkflow?.Capabilities.RequiresMask == true && generationInputs.Any(item => item.IsMaskedImage);
+  private string AssetsRoot => string.IsNullOrWhiteSpace(Pane.Context) ? string.Empty : Path.Combine(Pane.Context, "assets");
+  private string? GenerationAssetPath(string name)
+  {
+      var relative = GenerationValue(name);
+      if (string.IsNullOrWhiteSpace(Pane.Context) || string.IsNullOrWhiteSpace(relative)) return null;
+      var path = Path.GetFullPath(Path.Combine(Pane.Context, relative.Replace('/', Path.DirectorySeparatorChar)));
+      return File.Exists(path) && path.StartsWith(Path.GetFullPath(AssetsRoot) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? path : null;
+  }
+  private IReadOnlyList<AssetMask> MasksFor(string assetPath)
+  {
+      try { return string.IsNullOrWhiteSpace(Pane.Context) ? [] : AssetMaskStore.GetMasks(Pane.Context, assetPath); }
+      catch { return []; }
+  }
+  private string GenerationMaskValue(string imageName) => GenerationValue(ComfyGenerationService.MaskValueName(imageName));
   private Task ChangeGenerationWorkflow(ChangeEventArgs args)
   {
       return OnGenerationWorkflowChanged.InvokeAsync(new GenerationWorkflowSelection(Pane.Id, args.Value?.ToString() ?? string.Empty));
   }
   private Task ChangeGenerationInput(string name, ChangeEventArgs args) =>
       OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, name, args.Value?.ToString() ?? string.Empty));
-  private Task SelectGenerationImage(string name, string asset) =>
-      OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, name, asset));
+  private async Task SelectGenerationImage(string name, string asset)
+  {
+      await OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, name, asset));
+      await OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, ComfyGenerationService.MaskValueName(name), string.Empty));
+  }
+  private Task ChangeGenerationMask(string imageName, ChangeEventArgs args) =>
+      OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, ComfyGenerationService.MaskValueName(imageName), args.Value?.ToString() ?? string.Empty));
   private void OnOutputFolderInput(ChangeEventArgs args) => outputFolderDraft = args.Value?.ToString() ?? string.Empty;
   private Task CommitOutputFolder(ChangeEventArgs args)
   {

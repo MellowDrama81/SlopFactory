@@ -10,7 +10,7 @@ public sealed record GeneratedOutput(string Path, bool IsImage);
 public sealed record GenerationRunState(bool IsRunning, string Status, string? PromptId, IReadOnlyList<GeneratedOutput> Outputs);
 
 public sealed class ComfyGenerationService(ComfyConnectionSettings settings, WorkflowTemplateService templates,
-    ComfyAssetReferenceStore assetReferences)
+    ComfyAssetReferenceStore assetReferences, AssetMaskStore maskStore)
 {
     private readonly HttpClient client = new(new HttpClientHandler { AllowAutoRedirect = false })
     {
@@ -45,6 +45,8 @@ public sealed class ComfyGenerationService(ComfyConnectionSettings settings, Wor
         return true;
     }
 
+    public static string MaskValueName(string imagePlaceholderName) => "__mask:" + imagePlaceholderName;
+
     private void Update(string paneId, bool running, string status, string? promptId = null, IReadOnlyList<GeneratedOutput>? outputs = null)
     {
         lock (gate)
@@ -61,6 +63,7 @@ public sealed class ComfyGenerationService(ComfyConnectionSettings settings, Wor
     {
         try
         {
+            var rawValues = new Dictionary<string, string>(values, StringComparer.Ordinal);
             if (!Uri.TryCreate(serverUrl.TrimEnd('/') + "/", UriKind.Absolute, out var server) ||
                 server.Scheme is not ("http" or "https"))
                 throw new InvalidOperationException("Configure a valid Comfy connection URL before running.");
@@ -72,13 +75,13 @@ public sealed class ComfyGenerationService(ComfyConnectionSettings settings, Wor
             var outputDirectory = ResolveOutputDirectory(projectFolder, outputFolder);
 
             var placeholders = await templates.GetPlaceholdersAsync(workflow);
-            foreach (var placeholder in placeholders.Where(item => !item.IsSeed))
+            foreach (var placeholder in placeholders.Where(item => !item.IsSeed && !item.IsMaskedImage))
                 if (!values.TryGetValue(placeholder.Name, out var value) || string.IsNullOrWhiteSpace(value))
                     throw new InvalidOperationException($"Choose or enter {placeholder.Label.ToLowerInvariant()}.");
             Directory.CreateDirectory(outputDirectory);
 
             var uploaded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var placeholder in placeholders.Where(item => item.Type == "image"))
+            foreach (var placeholder in placeholders.Where(item => item.Type == "image" && !item.IsMaskedImage))
             {
                 var assetPath = ResolveAssetPath(projectFolder, values[placeholder.Name]);
                 if (!uploaded.TryGetValue(assetPath, out var remoteName))
@@ -100,6 +103,17 @@ public sealed class ComfyGenerationService(ComfyConnectionSettings settings, Wor
                     uploaded[assetPath] = remoteName;
                 }
                 values[placeholder.Name] = remoteName;
+            }
+            foreach (var placeholder in placeholders.Where(item => item.IsMaskedImage))
+            {
+                var source = placeholders.FirstOrDefault(item => item.Type == "image" && !item.IsMaskedImage)
+                    ?? throw new InvalidOperationException("This workflow needs an image to pair with its mask.");
+                var assetPath = ResolveAssetPath(projectFolder, rawValues.GetValueOrDefault(source.Name) ?? string.Empty);
+                var maskId = rawValues.GetValueOrDefault(MaskValueName(source.Name));
+                if (string.IsNullOrWhiteSpace(maskId)) throw new InvalidOperationException($"Choose a mask for {source.Label.ToLowerInvariant()}.");
+                var maskPath = maskStore.GetMaskPath(projectFolder, assetPath, maskId);
+                Update(paneId, true, $"Uploading mask for {Path.GetFileName(assetPath)}…");
+                values[placeholder.Name] = (await UploadImageAsync(server, cloud, apiKey, maskPath)).WorkflowFilename;
             }
 
             var prepared = await templates.PrepareAsync(workflow, values);

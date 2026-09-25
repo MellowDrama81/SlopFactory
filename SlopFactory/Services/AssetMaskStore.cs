@@ -26,6 +26,15 @@ public sealed class AssetMaskStore
         return "data:image/png;base64," + Convert.ToBase64String(File.ReadAllBytes(filePath));
     }
 
+    public string GetMaskPath(string projectFolder, string assetPath, string maskId)
+    {
+        var mask = GetMasks(projectFolder, assetPath).FirstOrDefault(item => item.Id == maskId)
+            ?? throw new FileNotFoundException("The selected mask is no longer linked to this asset.");
+        var path = ResolveMaskPath(projectFolder, mask);
+        if (!File.Exists(path)) throw new FileNotFoundException("The selected mask file is missing.");
+        return path;
+    }
+
     public async Task<AssetMask> SaveAsync(string projectFolder, string assetPath, string? maskId, string name, string pngDataUrl)
     {
         name = name.Trim();
