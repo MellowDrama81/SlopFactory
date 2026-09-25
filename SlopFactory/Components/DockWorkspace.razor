@@ -272,6 +272,13 @@
               ?? throw new InvalidOperationException("The selected book no longer exists.");
           var page = book.Pages.FirstOrDefault(item => item.Id == pageId)
               ?? throw new InvalidOperationException("The selected page no longer exists.");
+          var existing = FindPageEditor(Root, source.Context, bookId, pageId);
+          if (existing is not null)
+          {
+              Root = ActivatePane(Root, existing.Id);
+              await InvokeAsync(StateHasChanged);
+              return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+          }
           added++;
           var editor = new DockPane($"page-editor{added}", $"Page · {page.Name}", "▧", "mint", "page-editor", source.Context, Owner: pagesPaneId, PageBookId: bookId, PageId: pageId);
           var groupId = FindGroupContaining(Root, pagesPaneId) ?? throw new InvalidOperationException("The Pages pane is no longer open.");
@@ -311,6 +318,13 @@
           }
           if (string.IsNullOrWhiteSpace(placement.PanelPath))
               throw new InvalidOperationException("This panel does not have a saved panel document.");
+          var existing = FindPanelEditor(Root, source.Context, placement.PanelPath);
+          if (existing is not null)
+          {
+              Root = ActivatePane(Root, existing.Id);
+              await InvokeAsync(StateHasChanged);
+              return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+          }
           var panelDocument = PanelStore.Load(source.Context, placement.PanelPath);
           added++;
           var editor = new DockPane($"panel-editor{added}", $"Panel · {panelDocument.Name}", "▣", "blue", "panel-editor", source.Context, placement.PanelPath, pageEditorPaneId, PanelFolder: string.Empty);
@@ -362,6 +376,12 @@
           });
           if (selection.OpenEditor && project is not null)
           {
+              var existing = panel is not null && selection.PanelId is not null ? FindPanelEditor(Root, project.FolderPath, selection.PanelId) : null;
+              if (existing is not null)
+              {
+                  Root = ActivatePane(Root, existing.Id);
+                  return InvokeAsync(StateHasChanged);
+              }
               var editor = FindOwnedPanelEditor(Root, selection.PaneId);
               if (editor is not null)
               {
@@ -408,6 +428,21 @@
   {
       TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Kind == "panel-editor" && pane.Owner == browserId),
       SplitNode split => FindOwnedPanelEditor(split.First, browserId) ?? FindOwnedPanelEditor(split.Second, browserId),
+      _ => null
+  };
+  private static DockPane? FindPanelEditor(DockNode node, string projectFolder, string panelPath) => node switch
+  {
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Kind == "panel-editor" &&
+          string.Equals(pane.Context, projectFolder, StringComparison.OrdinalIgnoreCase) &&
+          string.Equals(pane.Location, panelPath, StringComparison.OrdinalIgnoreCase)),
+      SplitNode split => FindPanelEditor(split.First, projectFolder, panelPath) ?? FindPanelEditor(split.Second, projectFolder, panelPath),
+      _ => null
+  };
+  private static DockPane? FindPageEditor(DockNode node, string projectFolder, string bookId, string pageId) => node switch
+  {
+      TabGroupNode group => group.Panes.FirstOrDefault(pane => pane.Kind == "page-editor" &&
+          string.Equals(pane.Context, projectFolder, StringComparison.OrdinalIgnoreCase) && pane.PageBookId == bookId && pane.PageId == pageId),
+      SplitNode split => FindPageEditor(split.First, projectFolder, bookId, pageId) ?? FindPageEditor(split.Second, projectFolder, bookId, pageId),
       _ => null
   };
   private static string? FindGroupContaining(DockNode node, string paneId) => node switch

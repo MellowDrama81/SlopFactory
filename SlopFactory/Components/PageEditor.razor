@@ -17,11 +17,11 @@
     <div class="page-editor-heading"><div><p class="eyebrow">PAGE EDITOR</p><h2>@currentPage.Name</h2><p>@book.Name · @PageDimensions()</p></div><div class="page-editor-export"><select @bind="exportFormat"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select><button type="button" class="panel-editor-secondary" @onclick="ExportImage" disabled="@exporting">Export image</button><button type="button" class="panel-editor-secondary" @onclick="ExportPdf" disabled="@exporting">Export PDF</button></div></div>
     <div class="page-editor-layout">
       <section class="page-editor-canvas-wrap">
-        <div @ref="canvasElement" class="page-editor-canvas @(currentPage.Layout == "double" ? "is-double" : "")" style="@CanvasStyle()" aria-label="Page layout preview">
+        <div @ref="canvasElement" class="page-editor-canvas @(currentPage.Layout == "double" ? "is-double" : "")" style="@CanvasStyle()" aria-label="Page layout preview" @onpointermove="UpdatePlacementTransform" @onpointerup="EndPlacementTransform" @onpointercancel="EndPlacementTransform">
           @if (currentPage.Panels.Count == 0) { <p class="page-editor-empty">Add saved panels to arrange this @(currentPage.Layout == "double" ? "spread" : "page").</p> }
           @foreach (var placement in currentPage.Panels)
           {
-            <article class="page-editor-panel @(placement.Kind == "placeholder" ? "is-placeholder" : "") @(selectedPlacementId == placement.Id ? "is-selected" : "")" style="@PlacementStyle(placement)" @onclick="() => SelectPlacement(placement.Id)"><span>@placement.PanelName</span><small>@(placement.Kind == "placeholder" ? PlaceholderDimensions(placement) : "Panel")</small></article>
+            <article class="page-editor-panel @(placement.Kind == "placeholder" ? "is-placeholder" : "") @(selectedPlacementId == placement.Id ? "is-selected" : "")" style="@PlacementStyle(placement)" @onclick="() => SelectPlacement(placement.Id)" @onpointerdown="args => BeginPlacementTransform(placement, args)"><span>@placement.PanelName</span><small>@(placement.Kind == "placeholder" ? PlaceholderDimensions(placement) : "Panel")</small><button type="button" class="page-editor-resize-handle edge-top" aria-label="Resize @placement.PanelName from top" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "top")'></button><button type="button" class="page-editor-resize-handle edge-right" aria-label="Resize @placement.PanelName from right" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "right")'></button><button type="button" class="page-editor-resize-handle edge-bottom" aria-label="Resize @placement.PanelName from bottom" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "bottom")'></button><button type="button" class="page-editor-resize-handle edge-left" aria-label="Resize @placement.PanelName from left" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "left")'></button><button type="button" class="page-editor-resize-handle edge-corner" aria-label="Resize @placement.PanelName from corner" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "corner")'></button></article>
           }
         </div>
         <p class="page-editor-caption">Panels align to a shared outer margin and gutter. Reorder them to change their position.</p>
@@ -69,6 +69,14 @@
   private bool exporting;
   private string exportStatus = string.Empty;
   private string? selectedPlacementId;
+  private readonly Dictionary<long, (double X, double Y)> activePlacementPointers = [];
+  private string? transformingPlacementId;
+  private (double X, double Y, double Width, double Height) placementOrigin;
+  private (double X, double Y) placementGestureCenter;
+  private double placementGestureDistance;
+  private double placementXScale = 1;
+  private double placementYScale = 1;
+  private string? resizeEdge;
   private string placeholderName = string.Empty;
   private double placeholderWidth;
   private double placeholderHeight;
@@ -119,6 +127,83 @@
   }
   private void RemovePanel(PagePanelPlacement placement) { currentPage?.Panels.Remove(placement); Save(); }
   private void SelectPlacement(string id) => selectedPlacementId = id;
+  private Task BeginPlacementTransform(PagePanelPlacement placement, PointerEventArgs args) => BeginPlacementGesture(placement, args, null);
+  private Task BeginPlacementResize(PagePanelPlacement placement, PointerEventArgs args, string edge) => BeginPlacementGesture(placement, args, edge);
+  private async Task BeginPlacementGesture(PagePanelPlacement placement, PointerEventArgs args, string? edge)
+  {
+      if (currentPage is null || book is null) return;
+      if (transformingPlacementId is not null && transformingPlacementId != placement.Id) EndPlacementGesture(false);
+      selectedPlacementId = placement.Id;
+      await JS.InvokeVoidAsync("recursiveDock.capturePointer", canvasElement, args.PointerId);
+      if (transformingPlacementId is null)
+      {
+          var bounds = await JS.InvokeAsync<double[]>("recursiveDock.elementBounds", canvasElement);
+          var width = book.PageWidthCm * (currentPage.Layout == "double" ? 2 : 1);
+          placementXScale = bounds.Length == 2 && bounds[0] > 0 ? width / bounds[0] : 1;
+          placementYScale = bounds.Length == 2 && bounds[1] > 0 ? book.PageHeightCm / bounds[1] : 1;
+          transformingPlacementId = placement.Id;
+          resizeEdge = edge;
+      }
+      activePlacementPointers[args.PointerId] = (args.ClientX, args.ClientY);
+      CapturePlacementOrigin();
+  }
+  private void UpdatePlacementTransform(PointerEventArgs args)
+  {
+      if (transformingPlacementId is null || !activePlacementPointers.ContainsKey(args.PointerId) || SelectedPlacement is not { } placement) return;
+      activePlacementPointers[args.PointerId] = (args.ClientX, args.ClientY);
+      var points = activePlacementPointers.Values.ToList();
+      var center = points.Count == 1 ? points[0] : (X: (points[0].X + points[1].X) / 2, Y: (points[0].Y + points[1].Y) / 2);
+      var dx = (center.X - placementGestureCenter.X) * placementXScale;
+      var dy = (center.Y - placementGestureCenter.Y) * placementYScale;
+      if (points.Count > 1)
+      {
+          var x = points[1].X - points[0].X; var y = points[1].Y - points[0].Y;
+          var scale = Math.Clamp(Math.Sqrt(x * x + y * y) / Math.Max(placementGestureDistance, .001), .05, 20);
+          placement.Xcm = Math.Max(0, placementOrigin.X + dx); placement.Ycm = Math.Max(0, placementOrigin.Y + dy);
+          placement.WidthCm = Math.Max(.1, placementOrigin.Width * scale); placement.HeightCm = Math.Max(.1, placementOrigin.Height * scale);
+      }
+      else if (resizeEdge is not null)
+      {
+          ResizePlacement(placement, dx, dy);
+      }
+      else { placement.Xcm = Math.Max(0, placementOrigin.X + dx); placement.Ycm = Math.Max(0, placementOrigin.Y + dy); }
+  }
+  private void EndPlacementTransform(PointerEventArgs args)
+  {
+      if (!activePlacementPointers.ContainsKey(args.PointerId)) return;
+      _ = JS.InvokeVoidAsync("recursiveDock.releasePointer", canvasElement, args.PointerId);
+      activePlacementPointers.Remove(args.PointerId);
+      if (activePlacementPointers.Count == 0) EndPlacementGesture(true); else CapturePlacementOrigin();
+  }
+  private void CapturePlacementOrigin()
+  {
+      if (SelectedPlacement is not { } placement) return;
+      placementOrigin = (placement.Xcm, placement.Ycm, placement.WidthCm, placement.HeightCm);
+      var points = activePlacementPointers.Values.ToList();
+      placementGestureCenter = points.Count == 1 ? points[0] : (X: (points[0].X + points[1].X) / 2, Y: (points[0].Y + points[1].Y) / 2);
+      if (points.Count > 1) { var x = points[1].X - points[0].X; var y = points[1].Y - points[0].Y; placementGestureDistance = Math.Sqrt(x * x + y * y); }
+  }
+  private void EndPlacementGesture(bool save)
+  {
+      activePlacementPointers.Clear(); transformingPlacementId = null; resizeEdge = null;
+      if (save) Save();
+  }
+  private void ResizePlacement(PagePanelPlacement placement, double dx, double dy)
+  {
+      switch (resizeEdge)
+      {
+          case "left":
+              var left = Math.Clamp(placementOrigin.X + dx, 0, placementOrigin.X + placementOrigin.Width - .1);
+              placement.Xcm = left; placement.WidthCm = placementOrigin.X + placementOrigin.Width - left; break;
+          case "top":
+              var top = Math.Clamp(placementOrigin.Y + dy, 0, placementOrigin.Y + placementOrigin.Height - .1);
+              placement.Ycm = top; placement.HeightCm = placementOrigin.Y + placementOrigin.Height - top; break;
+          case "right": placement.WidthCm = Math.Max(.1, placementOrigin.Width + dx); break;
+          case "bottom": placement.HeightCm = Math.Max(.1, placementOrigin.Height + dy); break;
+          default:
+              placement.WidthCm = Math.Max(.1, placementOrigin.Width + dx); placement.HeightCm = Math.Max(.1, placementOrigin.Height + dy); break;
+      }
+  }
   private void ChangePlacement(PagePanelPlacement placement, string part, ChangeEventArgs args)
   {
       if (!double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value)) return;
