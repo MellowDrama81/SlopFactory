@@ -33,8 +33,16 @@ public sealed class PanelStore
                 if (panel is not null && panel.Id == id)
                 {
                     Validate(projectFolder, panel, requireUsableSources: false);
-                    panels.Add(new PanelSummary(id, panel.Name, panel.Width, panel.Height,
-                        Path.GetRelativePath(PanelFolder(projectFolder), file).Replace('\\', '/'), panel));
+                    var relativePath = Path.GetRelativePath(PanelFolder(projectFolder), file).Replace('\\', '/');
+                    var thumbnailPath = Path.Combine(Path.GetDirectoryName(file)!, id + ".thumb.png");
+                    string? thumbnail = null;
+                    try
+                    {
+                        if (File.Exists(thumbnailPath))
+                            thumbnail = "data:image/png;base64," + Convert.ToBase64String(File.ReadAllBytes(thumbnailPath));
+                    }
+                    catch (IOException) { /* Fall back to rendering the panel preview. */ }
+                    panels.Add(new PanelSummary(id, panel.Name, panel.Width, panel.Height, relativePath, panel, thumbnail));
                 }
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
@@ -103,6 +111,22 @@ public sealed class PanelStore
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
+    public async Task SaveThumbnailAsync(string projectFolder, PanelDocument panel, string? relativeFolder, string dataUrl)
+    {
+        const string marker = ";base64,";
+        var index = dataUrl.IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0) throw new InvalidOperationException("The panel thumbnail could not be encoded.");
+        var folder = ResolveFolder(projectFolder, relativeFolder);
+        var path = Path.Combine(folder, panel.Id + ".thumb.png");
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllBytesAsync(temporary, Convert.FromBase64String(dataUrl[(index + marker.Length)..]));
+            File.Move(temporary, path, overwrite: true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
     public string Move(string projectFolder, string panelReference, string? destinationFolder)
     {
         var source = PanelPath(projectFolder, panelReference);
@@ -110,10 +134,15 @@ public sealed class PanelStore
         var destinationDirectory = ResolveFolder(projectFolder, destinationFolder);
         if (!Directory.Exists(destinationDirectory)) throw new DirectoryNotFoundException("The destination Panel folder no longer exists.");
         var destination = Path.Combine(destinationDirectory, Path.GetFileName(source));
+        var sourceThumbnail = Path.Combine(Path.GetDirectoryName(source)!, Path.GetFileNameWithoutExtension(source) + ".thumb.png");
+        var destinationThumbnail = Path.Combine(destinationDirectory, Path.GetFileNameWithoutExtension(destination) + ".thumb.png");
         if (!string.Equals(source, destination, StringComparison.OrdinalIgnoreCase))
         {
             if (File.Exists(destination)) throw new IOException("A Panel with this ID already exists in the destination folder.");
+            if (File.Exists(sourceThumbnail) && File.Exists(destinationThumbnail))
+                throw new IOException("A thumbnail for this Panel already exists in the destination folder.");
             File.Move(source, destination);
+            if (File.Exists(sourceThumbnail)) File.Move(sourceThumbnail, destinationThumbnail);
         }
         return Path.GetRelativePath(PanelFolder(projectFolder), destination).Replace('\\', '/');
     }

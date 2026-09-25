@@ -1,0 +1,195 @@
+@using System.Globalization
+@using SlopFactory.Models
+@using SlopFactory.Services
+@inject PagesStore PagesStore
+@inject PagePdfExporter PagePdfExporter
+@inject IJSRuntime JS
+
+<div class="pages-pane">
+  <div class="pages-heading"><div><p class="eyebrow">PROJECT PAGES</p><h2>@Pane.Title</h2><p>@Pane.Context</p></div><button type="button" class="panel-editor-secondary" @onclick="AddBook">＋ Book</button></div>
+  @if (!string.IsNullOrWhiteSpace(error)) { <p class="panel-editor-error" role="alert">@error</p> }
+  <div class="pages-layout">
+    <nav class="pages-tree" aria-label="Books and pages">
+      @if (document?.Books.Count == 0) { <p>No books yet. Create a book to start organizing pages.</p> }
+      @foreach (var book in document?.Books ?? [])
+      {
+        <div class="pages-book">
+          <button type="button" class="pages-tree-item @(selectedBookId == book.Id && selectedPageId is null ? "is-selected" : "")" @onclick="() => SelectBook(book.Id)">▾ <strong>@book.Name</strong></button>
+          <div class="pages-tree-pages">
+            @foreach (var pageItem in book.Pages)
+            {
+              <div class="pages-page-row"><button type="button" class="pages-tree-item pages-page @(selectedPageId == pageItem.Id ? "is-selected" : "") @(IsInvalidSpread(book, pageItem) ? "is-invalid" : "")" @onclick="() => SelectPage(book.Id, pageItem.Id)">@(pageItem.Layout == "double" ? "▤" : "▧") @pageItem.Name</button><div class="pages-order-actions"><button type="button" title="Move page up" aria-label="Move @pageItem.Name up" disabled="@(book.Pages.IndexOf(pageItem) == 0)" @onclick="() => MovePage(book, pageItem, -1)">↑</button><button type="button" title="Move page down" aria-label="Move @pageItem.Name down" disabled="@(book.Pages.IndexOf(pageItem) == book.Pages.Count - 1)" @onclick="() => MovePage(book, pageItem, 1)">↓</button></div></div>
+            }
+            <button type="button" class="pages-add-page" @onclick="() => AddPage(book)">＋ Page</button>
+          </div>
+        </div>
+      }
+    </nav>
+    <section class="pages-settings">
+      @if (SelectedPage is { } entry)
+      {
+        <p class="eyebrow">PAGE SETTINGS</p><h3>Page</h3>
+        <label>Name<input value="@entry.Name" @oninput="args => UpdatePage(entry, args, false)" maxlength="100" /></label>
+        <div class="page-layout-settings"><span>Format</span><div class="page-layout-toggle" role="group" aria-label="Page format"><button type="button" class="@(entry.Layout == "single" ? "is-selected" : "")" @onclick='() => SetPageLayout(entry, "single")'><i class="single-page-icon"></i>Single</button><button type="button" class="@(entry.Layout == "double" ? "is-selected" : "")" @onclick='() => SetPageLayout(entry, "double")'><i class="double-page-icon"></i>Double</button></div></div>
+        <p class="pages-inherited-size">@(entry.Layout == "double" ? "Spread size" : "Page size"): <b>@PageSizeLabel(SelectedBook!, entry.Layout == "double")</b><br />Inherited from “@SelectedBook!.Name”.</p>
+        <button type="button" class="panel-editor-secondary" data-page-edit data-pages-pane="@Pane.Id" data-book-id="@SelectedBook!.Id" data-page-id="@entry.Id">Edit page layout →</button>
+        <label>Notes<textarea rows="8" value="@entry.Notes" @oninput="args => UpdatePage(entry, args, true)"></textarea></label>
+        <button type="button" class="panel-editor-danger pages-delete" @onclick="DeletePage">Delete page</button>
+      }
+      else if (SelectedBook is { } book)
+      {
+        <p class="eyebrow">BOOK SETTINGS</p><h3>Book</h3>
+        <label>Title<input value="@book.Name" @oninput="args => UpdateBook(book, args, false)" maxlength="100" /></label>
+        <div class="book-size-settings">
+          <div class="book-size-heading"><span>Page size</span><div class="book-unit-toggle" role="group" aria-label="Page size unit"><button type="button" class="@(book.SizeUnit == "cm" ? "is-selected" : "")" @onclick='() => SetSizeUnit(book, "cm")'>cm</button><button type="button" class="@(book.SizeUnit == "in" ? "is-selected" : "")" @onclick='() => SetSizeUnit(book, "in")'>in</button></div></div>
+          <label>Preset<select value="@book.SizePreset" @onchange="args => ChangeSizePreset(book, args)"><option value="a4">A4 · 21 × 29.7 cm</option><option value="a5">A5 · 14.8 × 21 cm</option><option value="letter">US Letter · 8.5 × 11 in</option><option value="legal">US Legal · 8.5 × 14 in</option><option value="comic">US Comic · 6.625 × 10.25 in</option><option value="digest">Comic digest · 5.5 × 8.5 in</option><option value="custom">Custom size</option></select></label>
+          <div class="book-size-inputs"><label>Width<input type="number" min="0.1" step="0.1" value="@DisplaySize(book.PageWidthCm, book.SizeUnit)" @onchange="args => ChangeCustomSize(book, true, args)" /></label><label>Height<input type="number" min="0.1" step="0.1" value="@DisplaySize(book.PageHeightCm, book.SizeUnit)" @onchange="args => ChangeCustomSize(book, false, args)" /></label><span>@(book.SizeUnit == "in" ? "inches" : "centimetres")</span></div>
+        </div>
+        <label>Description<textarea rows="8" value="@book.Description" @oninput="args => UpdateBook(book, args, true)"></textarea></label>
+        @if (SpreadWarnings(book).Count > 0)
+        {
+          <div class="book-spread-warning" role="alert"><strong>Double-page spread warning</strong><span>These spreads cannot sit side-by-side in the current sequence:</span><ul>@foreach (var warning in SpreadWarnings(book)) { <li>@warning</li> }</ul><p>Add or move a single page before each listed spread.</p></div>
+        }
+        <button type="button" class="panel-editor-secondary" @onclick="() => ExportBookPdf(book)" disabled="@exportingBook">Export book PDF</button>
+        @if (!string.IsNullOrWhiteSpace(exportStatus)) { <p class="panel-editor-status" role="status">@exportStatus</p> }
+        <button type="button" class="panel-editor-danger pages-delete" @onclick="DeleteBook">Delete book</button>
+      }
+      else { <p>Select a book or page to edit its settings.</p> }
+    </section>
+  </div>
+</div>
+
+@code {
+  [Parameter, EditorRequired] public DockPane Pane { get; set; } = default!;
+  private string? loadedProject;
+  private PagesDocument? document;
+  private string? selectedBookId;
+  private string? selectedPageId;
+  private string error = string.Empty;
+  private bool exportingBook;
+  private string exportStatus = string.Empty;
+  private BookDocument? SelectedBook => document?.Books.FirstOrDefault(book => book.Id == selectedBookId);
+  private PageDocument? SelectedPage => SelectedBook?.Pages.FirstOrDefault(page => page.Id == selectedPageId);
+  private static readonly IReadOnlyDictionary<string, (double WidthCm, double HeightCm)> PageSizes = new Dictionary<string, (double, double)>
+  {
+      ["a4"] = (21, 29.7), ["a5"] = (14.8, 21), ["letter"] = (21.59, 27.94),
+      ["legal"] = (21.59, 35.56), ["comic"] = (16.8275, 26.035), ["digest"] = (13.97, 21.59)
+  };
+
+  protected override void OnParametersSet()
+  {
+      if (string.Equals(loadedProject, Pane.Context, StringComparison.OrdinalIgnoreCase)) return;
+      loadedProject = Pane.Context; selectedBookId = null; selectedPageId = null; error = string.Empty;
+      try { document = string.IsNullOrWhiteSpace(Pane.Context) ? null : PagesStore.Load(Pane.Context); }
+      catch (Exception ex) { document = null; error = ex.Message; }
+  }
+  private void SelectBook(string id) { selectedBookId = id; selectedPageId = null; }
+  private void SelectPage(string bookId, string pageId) { selectedBookId = bookId; selectedPageId = pageId; }
+  private void AddBook()
+  {
+      if (document is null) return;
+      var book = new BookDocument(); document.Books.Add(book); SelectBook(book.Id); Save();
+  }
+  private void AddPage(BookDocument book)
+  {
+      var page = new PageDocument(); book.Pages.Add(page); SelectPage(book.Id, page.Id); Save();
+  }
+  private void MovePage(BookDocument book, PageDocument page, int direction)
+  {
+      var index = book.Pages.IndexOf(page);
+      var target = index + direction;
+      if (index < 0 || target < 0 || target >= book.Pages.Count) return;
+      book.Pages.RemoveAt(index);
+      book.Pages.Insert(target, page);
+      Save();
+  }
+  private void UpdateBook(BookDocument book, ChangeEventArgs args, bool description)
+  {
+      if (description) book.Description = args.Value?.ToString() ?? string.Empty; else book.Name = args.Value?.ToString() ?? string.Empty; Save();
+  }
+  private void SetSizeUnit(BookDocument book, string unit)
+  {
+      book.SizeUnit = unit; Save();
+  }
+  private void ChangeSizePreset(BookDocument book, ChangeEventArgs args)
+  {
+      var preset = args.Value?.ToString() ?? "custom";
+      book.SizePreset = preset;
+      if (PageSizes.TryGetValue(preset, out var size))
+      {
+          book.PageWidthCm = size.WidthCm;
+          book.PageHeightCm = size.HeightCm;
+      }
+      Save();
+  }
+  private void ChangeCustomSize(BookDocument book, bool width, ChangeEventArgs args)
+  {
+      if (!double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value) || value <= 0) return;
+      var centimetres = book.SizeUnit == "in" ? value * 2.54 : value;
+      if (width) book.PageWidthCm = centimetres; else book.PageHeightCm = centimetres;
+      book.SizePreset = "custom";
+      Save();
+  }
+  private static string DisplaySize(double centimetres, string? unit) => (unit == "in" ? centimetres / 2.54 : centimetres).ToString("0.##", CultureInfo.InvariantCulture);
+  private static string PageSizeLabel(BookDocument book, bool doublePage) => $"{DisplaySize(book.PageWidthCm * (doublePage ? 2 : 1), book.SizeUnit)} × {DisplaySize(book.PageHeightCm, book.SizeUnit)} {(book.SizeUnit == "in" ? "in" : "cm")}";
+  private void UpdatePage(PageDocument page, ChangeEventArgs args, bool notes)
+  {
+      if (notes) page.Notes = args.Value?.ToString() ?? string.Empty; else page.Name = args.Value?.ToString() ?? string.Empty; Save();
+  }
+  private void SetPageLayout(PageDocument page, string layout)
+  {
+      page.Layout = layout; Save();
+  }
+  private void DeleteBook()
+  {
+      if (document is null || SelectedBook is not { } book) return;
+      document.Books.Remove(book); selectedBookId = null; selectedPageId = null; Save();
+  }
+  private void DeletePage()
+  {
+      if (SelectedBook is not { } book || SelectedPage is not { } page) return;
+      book.Pages.Remove(page); selectedPageId = null; Save();
+  }
+  private async Task ExportBookPdf(BookDocument book)
+  {
+      if (book.Pages.Count == 0) { exportStatus = "Add at least one page before exporting the book."; return; }
+      exportingBook = true; exportStatus = string.Empty;
+      try
+      {
+          var rasters = await JS.InvokeAsync<PageRaster[]>("recursiveDock.rasterizeBook", book, 2000);
+          var pages = book.Pages.Select((item, index) => new PdfPageRaster(rasters[index], book.PageWidthCm * (item.Layout == "double" ? 2 : 1), book.PageHeightCm)).ToList();
+          var path = await PagePdfExporter.ExportAsync(book.Name, pages);
+          exportStatus = path is null ? "Book export cancelled." : "Book PDF exported.";
+      }
+      catch (Exception ex) { exportStatus = $"Could not export book: {ex.Message}"; }
+      finally { exportingBook = false; }
+  }
+  private static List<string> SpreadWarnings(BookDocument book)
+  {
+      var warnings = new List<string>();
+      var physicalPagesBefore = 0;
+      foreach (var item in book.Pages)
+      {
+          if (item.Layout == "double" && physicalPagesBefore % 2 == 0)
+              warnings.Add($"“{item.Name}” starts on page {physicalPagesBefore + 1} (a right-hand page).");
+          physicalPagesBefore += item.Layout == "double" ? 2 : 1;
+      }
+      return warnings;
+  }
+  private static bool IsInvalidSpread(BookDocument book, PageDocument target)
+  {
+      var physicalPagesBefore = 0;
+      foreach (var item in book.Pages)
+      {
+          if (item.Id == target.Id) return item.Layout == "double" && physicalPagesBefore % 2 == 0;
+          physicalPagesBefore += item.Layout == "double" ? 2 : 1;
+      }
+      return false;
+  }
+  private void Save()
+  {
+      if (document is null || string.IsNullOrWhiteSpace(Pane.Context)) return;
+      try { PagesStore.Save(Pane.Context, document); error = string.Empty; }
+      catch (Exception ex) { error = ex.Message; }
+  }
+}

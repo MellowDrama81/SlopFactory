@@ -10,6 +10,7 @@
 @inject WorkflowTemplateService WorkflowTemplateService
 @inject ProjectLibrary ProjectLibrary
 @inject PanelStore PanelStore
+@inject PagesStore PagesStore
 @inject ProjectFolderPicker ProjectFolderPicker
 @inject ProjectExporter ProjectExporter
 @inject AssetExporter AssetExporter
@@ -19,7 +20,7 @@
   <header class="ribbon">
     <div class="ribbon-brand"><span>◈</span> SlopFactory</div>
     <div class="ribbon-tabs"><button type="button" class="ribbon-tab active" data-ribbon-action="workspace">Workspace</button><button type="button" class="ribbon-tab" data-ribbon-action="projects">Projects</button></div>
-    <div class="ribbon-actions"><button type="button" class="ribbon-button" data-ribbon-action="clear-workspace">↶ Clear workspace</button><button type="button" class="ribbon-button" data-ribbon-action="generation">✦ Generation</button><button type="button" class="ribbon-button" data-ribbon-action="assets">▤ Assets</button><button type="button" class="ribbon-button" data-ribbon-action="panels">▣ Panels</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Comfy Settings</button><button type="button" class="ribbon-button" data-ribbon-action="workflows">⛭ Workflows</button></div>
+    <div class="ribbon-actions"><button type="button" class="ribbon-button" data-ribbon-action="clear-workspace">↶ Clear workspace</button><button type="button" class="ribbon-button" data-ribbon-action="generation">✦ Generation</button><button type="button" class="ribbon-button" data-ribbon-action="assets">▤ Assets</button><button type="button" class="ribbon-button" data-ribbon-action="panels">▣ Panels</button><button type="button" class="ribbon-button" data-ribbon-action="pages">▤ Pages</button><button type="button" class="ribbon-button" data-ribbon-action="settings">⚙ Comfy Settings</button><button type="button" class="ribbon-button" data-ribbon-action="workflows">⛭ Workflows</button></div>
   </header>
   <section class="settings-screen">
       <div class="settings-heading"><div><p>INTEGRATIONS</p><h1>ComfyUI connection</h1><span>Choose where SlopFactory sends ComfyUI workflow requests.</span></div></div>
@@ -121,7 +122,7 @@
       </div>
     </section>
   </section>
-  <section class="dock-host" data-root-dock><DockSurface @key="Root" Node="Root" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" /></section>
+  <section class="dock-host" data-root-dock><DockSurface Node="Root" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" OnPanelDraftChanged="ChangePanelDraft" /></section>
 </main>
 
 @code {
@@ -233,6 +234,97 @@
       return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
   }
   [JSInvokable]
+  public async Task<string> OpenPagesPane()
+  {
+      added++;
+      Root = AddToFirstGroup(Root, new DockPane($"pages{added}", "Pages", "▤", "mint", "pages"));
+      await InvokeAsync(StateHasChanged);
+      return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+  }
+  [JSInvokable]
+  public async Task<string> SetPagesPaneProject(string paneId, string folderPath)
+  {
+      try
+      {
+          var project = FindRegisteredProject(folderPath)
+              ?? throw new InvalidOperationException("The selected project is no longer available.");
+          if (FindPane(Root, paneId)?.Kind != "pages")
+              throw new InvalidOperationException("The Pages pane is no longer open.");
+          Root = UpdatePagesPane(Root, paneId, pane => pane with { Title = $"Pages · {project.DisplayName}", Context = project.FolderPath, Location = null });
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> OpenPageEditor(string pagesPaneId, string bookId, string pageId)
+  {
+      try
+      {
+          var source = FindPane(Root, pagesPaneId);
+          if (source?.Kind != "pages" || string.IsNullOrWhiteSpace(source.Context))
+              throw new InvalidOperationException("Select a project in the Pages pane first.");
+          var document = PagesStore.Load(source.Context);
+          var book = document.Books.FirstOrDefault(item => item.Id == bookId)
+              ?? throw new InvalidOperationException("The selected book no longer exists.");
+          var page = book.Pages.FirstOrDefault(item => item.Id == pageId)
+              ?? throw new InvalidOperationException("The selected page no longer exists.");
+          added++;
+          var editor = new DockPane($"page-editor{added}", $"Page · {page.Name}", "▧", "mint", "page-editor", source.Context, Owner: pagesPaneId, PageBookId: bookId, PageId: pageId);
+          var groupId = FindGroupContaining(Root, pagesPaneId) ?? throw new InvalidOperationException("The Pages pane is no longer open.");
+          Root = InsertPane(Root, groupId, editor, "right");
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
+  public async Task<string> OpenPagePlacementPanelEditor(string pageEditorPaneId, string placementId)
+  {
+      try
+      {
+          var source = FindPane(Root, pageEditorPaneId);
+          if (source?.Kind != "page-editor" || string.IsNullOrWhiteSpace(source.Context) || string.IsNullOrWhiteSpace(source.PageBookId) || string.IsNullOrWhiteSpace(source.PageId))
+              throw new InvalidOperationException("The Page editor is no longer available.");
+          var pages = PagesStore.Load(source.Context);
+          var book = pages.Books.FirstOrDefault(item => item.Id == source.PageBookId)
+              ?? throw new InvalidOperationException("The page's book no longer exists.");
+          var page = book.Pages.FirstOrDefault(item => item.Id == source.PageId)
+              ?? throw new InvalidOperationException("The page no longer exists.");
+          var placement = page.Panels.FirstOrDefault(item => item.Id == placementId)
+              ?? throw new InvalidOperationException("The selected panel placement no longer exists.");
+          if (placement.Kind == "placeholder")
+          {
+              var panel = PanelStore.CreateNew();
+              panel.Name = string.IsNullOrWhiteSpace(placement.PanelName) ? "New Panel" : placement.PanelName;
+              await PanelStore.SaveAsync(source.Context, panel, string.Empty);
+              placement.Kind = "panel";
+              placement.PanelPath = panel.Id + ".json";
+              placement.PanelName = panel.Name;
+              PagesStore.Save(source.Context, pages);
+          }
+          if (string.IsNullOrWhiteSpace(placement.PanelPath))
+              throw new InvalidOperationException("This panel does not have a saved panel document.");
+          var panelDocument = PanelStore.Load(source.Context, placement.PanelPath);
+          added++;
+          var editor = new DockPane($"panel-editor{added}", $"Panel · {panelDocument.Name}", "▣", "blue", "panel-editor", source.Context, placement.PanelPath, pageEditorPaneId, PanelFolder: string.Empty);
+          var groupId = FindGroupContaining(Root, pageEditorPaneId) ?? throw new InvalidOperationException("The Page editor is no longer open.");
+          Root = InsertPane(Root, groupId, editor, "right");
+          await InvokeAsync(StateHasChanged);
+          return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
+      }
+      catch (Exception ex)
+      {
+          return JsonSerializer.Serialize(new { success = false, message = ex.Message }, WorkflowJsonOptions);
+      }
+  }
+  [JSInvokable]
   public async Task<string> SetPanelPaneProject(string paneId, string folderPath)
   {
       try
@@ -265,7 +357,8 @@
               Title = project is not null ? $"Panels · {project.DisplayName}" : "Panels",
               Context = project?.FolderPath,
               Location = panel is not null ? selection.PanelId : null,
-              PanelFolder = folder
+              PanelFolder = folder,
+              PanelDraft = null
           });
           if (selection.OpenEditor && project is not null)
           {
@@ -277,7 +370,8 @@
                       Title = panel is not null ? $"Panel · {panel.Name}" : "New Panel",
                       Context = project.FolderPath,
                       Location = panel is not null ? selection.PanelId : null,
-                      PanelFolder = folder
+                      PanelFolder = folder,
+                      PanelDraft = null
                   });
               }
               else
@@ -297,11 +391,17 @@
           Title = panel is not null ? $"Panel · {panel.Name}" : project is not null ? $"Panel · {project.DisplayName}" : "Panel",
           Context = project?.FolderPath,
           Location = panel is not null ? selection.PanelId : null,
-          PanelFolder = folder
+          PanelFolder = folder,
+          PanelDraft = null
       });
       if (source.Owner is not null && FindPane(Root, source.Owner) is { Kind: "panel-browser" } browser &&
           string.Equals(browser.Context, project?.FolderPath, StringComparison.OrdinalIgnoreCase))
-          Root = UpdatePanelPane(Root, browser.Id, pane => pane with { Location = selection.PanelId });
+          Root = UpdatePanelPane(Root, browser.Id, pane => pane with { Location = selection.PanelId, PanelRevision = pane.PanelRevision + 1 });
+      return InvokeAsync(StateHasChanged);
+  }
+  private Task ChangePanelDraft(PanelDraftChange change)
+  {
+      Root = UpdatePanelPane(Root, change.PaneId, pane => pane with { PanelDraft = change.Draft });
       return InvokeAsync(StateHasChanged);
   }
   private static DockPane? FindOwnedPanelEditor(DockNode node, string browserId) => node switch
@@ -1060,6 +1160,13 @@
           First = UpdateGenerationPane(split.First, paneId, update),
           Second = UpdateGenerationPane(split.Second, paneId, update)
       },
+      _ => node
+  };
+  private static DockNode UpdatePagesPane(DockNode node, string paneId, Func<DockPane, DockPane> update) => node switch
+  {
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "pages")
+          => group with { Panes = group.Panes.Select(pane => pane.Id == paneId ? update(pane) : pane).ToList(), ActiveId = paneId },
+      SplitNode split => split with { First = UpdatePagesPane(split.First, paneId, update), Second = UpdatePagesPane(split.Second, paneId, update) },
       _ => node
   };
   [JSInvokable]

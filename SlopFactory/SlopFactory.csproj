@@ -14,6 +14,9 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.20" />
   </ItemGroup>
   <ItemGroup>
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" />
+  </ItemGroup>
+  <ItemGroup>
     <MauiAsset Include="..\Workflows\*.json" Exclude="..\Workflows\*.meta.json" LogicalName="Workflows/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

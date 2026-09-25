@@ -19,6 +19,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<Services.ComfyAssetReferenceStore>();
         builder.Services.AddSingleton<Services.AssetMaskStore>();
         builder.Services.AddSingleton<Services.PanelStore>();
+        builder.Services.AddSingleton<Services.PagesStore>();
+        builder.Services.AddSingleton<Services.PanelImageExporter>();
+        builder.Services.AddSingleton<Services.PagePdfExporter>();
         builder.Services.AddSingleton<Services.ProjectImageImporter>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

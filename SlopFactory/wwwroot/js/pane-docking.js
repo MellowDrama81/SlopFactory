@@ -367,9 +367,22 @@
   window.addEventListener('pointerdown',begin,true);window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',cancel,true);
   window.addEventListener('mousedown',begin,true);window.addEventListener('mousemove',move,true);window.addEventListener('mouseup',end,true);
   let assetDrag=null;
+  // Use pointer events rather than HTML drag-and-drop. The embedded WebView
+  // does not reliably start native drags from asset tiles on either touch or
+  // mouse input.
+  let touchAssetDrag=null;
+  let suppressAssetClick=false;
   const clearAssetDropTargets=()=>document.querySelectorAll('.assets-drop-ready,.assets-external-drop-ready,.image-drop-ready').forEach(pane=>pane.classList.remove('assets-drop-ready','assets-external-drop-ready','image-drop-ready'));
   // Image pickers and editors register a .NET target per data-image-drop element.
   const imageDropTargets=new Map();
+  const panelTransformTargets=new WeakMap();
+  window.addEventListener('wheel',event=>{
+    const preview=event.target.closest?.('.panel-editor-preview');
+    const target=preview&&panelTransformTargets.get(preview);
+    if(!target)return;
+    event.preventDefault();
+    target.invokeMethodAsync('TransformSelectedLayer',event.deltaY,event.shiftKey);
+  },{capture:true,passive:false});
   const hasExternalFiles=event=>!assetDrag&&Array.from(event.dataTransfer?.types??[]).includes('Files');
   window.addEventListener('dragstart',event=>{
     const asset=event.target.closest?.('[data-assets-drag]');
@@ -474,9 +487,77 @@
     assetDrag=null;
     clearAssetDropTargets();
   },true);
+  const isAssetControl=element=>{
+    const control=element?.closest?.('button,input,a,select,textarea');
+    return control && !control.classList.contains('asset-folder');
+  };
+  const updateTouchAssetTarget=event=>{
+    const hovered=document.elementFromPoint(event.clientX,event.clientY);
+    const imageTarget=hovered?.closest?.('[data-image-drop]');
+    const pane=hovered?.closest?.('[data-assets-drop-target]');
+    clearAssetDropTargets();
+    if(imageTarget) imageTarget.classList.add('image-drop-ready');
+    else pane?.classList.add('assets-drop-ready');
+    return { imageTarget, pane };
+  };
+  window.addEventListener('pointerdown',event=>{
+    if(!event.isPrimary||assetDrag||isAssetControl(event.target))return;
+    const asset=event.target.closest?.('[data-assets-drag]');
+    if(!asset)return;
+    touchAssetDrag={path:asset.dataset.assetsSourcePath??'',root:asset.dataset.assetsSourceRoot??'',element:asset,x:event.clientX,y:event.clientY,active:false};
+  },true);
+  window.addEventListener('pointermove',event=>{
+    const pending=touchAssetDrag;
+    if(!pending||!event.isPrimary)return;
+    if(!pending.active){
+      if(Math.hypot(event.clientX-pending.x,event.clientY-pending.y)<8)return;
+      pending.active=true;
+      assetDrag=pending;
+      pending.element.classList.add('asset-dragging');
+    }
+    event.preventDefault();
+    updateTouchAssetTarget(event);
+  },true);
+  window.addEventListener('pointerup',event=>{
+    const pending=touchAssetDrag;
+    touchAssetDrag=null;
+    if(!pending?.active||!event.isPrimary)return;
+    event.preventDefault();
+    suppressAssetClick=true;
+    const { imageTarget, pane }=updateTouchAssetTarget(event);
+    pending.element.classList.remove('asset-dragging');
+    assetDrag=null;
+    clearAssetDropTargets();
+    if(imageTarget){
+      const id=imageTarget.dataset.imageDrop??'';
+      const status=imageTarget.querySelector('[data-image-drop-status]');
+      const target=imageDropTargets.get(id);
+      if(!target)return;
+      if(status)status.textContent='Selecting image…';
+      target.invokeMethodAsync('DropAsset',pending.path,pending.root).then(result=>{
+        const selected=JSON.parse(result);
+        if(status?.isConnected)status.textContent=selected.success?'':(selected.message??'Could not use image.');
+      }).catch(error=>{if(status?.isConnected)status.textContent=error?.message??'Could not use image.';});
+      return;
+    }
+    if(!pane||!reference)return;
+    const status=pane.querySelector('[data-assets-status]');
+    reference.invokeMethodAsync('CopyAsset',pending.path,pending.root,pane.dataset.assetsFolder??'',pane.dataset.assetsRoot??'').then(result=>{
+      const copied=JSON.parse(result);
+      if(status?.isConnected)status.textContent=copied.message??(copied.success?'Asset copied.':'Could not copy asset.');
+    }).catch(()=>{if(status?.isConnected)status.textContent='Could not copy asset.';});
+  },true);
+  window.addEventListener('pointercancel',()=>{
+    if(!touchAssetDrag)return;
+    touchAssetDrag.element.classList.remove('asset-dragging');
+    touchAssetDrag=null;
+    assetDrag=null;
+    clearAssetDropTargets();
+  },true);
   // The DOM update gives tab selection instant feedback while Blazor persists
   // the active tab in the recursive dock tree through the button callback.
   window.addEventListener('click', event => {
+    if (suppressAssetClick && event.target.closest?.('[data-assets-drag]')) { suppressAssetClick = false; event.preventDefault(); event.stopImmediatePropagation(); return; }
     const tab = event.target.closest?.('[data-tab]');
     if (suppressTabClick && tab) { suppressTabClick = false; event.preventDefault(); event.stopImmediatePropagation(); return; }
     // A drag may not produce a browser click event. Never let its stale flag
@@ -485,7 +566,7 @@
     const ribbonAction = event.target.closest?.('[data-ribbon-action]')?.dataset.ribbonAction;
     if (ribbonAction) {
       const app = document.querySelector('.dock-app');
-      const activeTab=ribbonAction==='projects'?'projects':(['workspace','assets','generation','panels','clear-workspace'].includes(ribbonAction)?'workspace':null);
+      const activeTab=ribbonAction==='projects'?'projects':(['workspace','assets','generation','panels','pages','clear-workspace'].includes(ribbonAction)?'workspace':null);
       app?.querySelectorAll('.ribbon-tab').forEach(button=>button.classList.toggle('active',button.dataset.ribbonAction===activeTab));
       app?.classList.toggle('settings-open', ribbonAction === 'settings');
       app?.classList.toggle('workflows-open', ribbonAction === 'workflows');
@@ -497,6 +578,7 @@
       if (ribbonAction === 'assets' && reference) reference.invokeMethodAsync('OpenAssetsPane', '', '');
       if (ribbonAction === 'generation' && reference) reference.invokeMethodAsync('OpenGenerationPane');
       if (ribbonAction === 'panels' && reference) reference.invokeMethodAsync('OpenPanelsBrowserPane');
+      if (ribbonAction === 'pages' && reference) reference.invokeMethodAsync('OpenPagesPane');
       if (ribbonAction === 'clear-workspace' && reference) reference.invokeMethodAsync('ClearWorkspace');
       return;
     }
@@ -520,6 +602,32 @@
         .then(result => { const selected = JSON.parse(result); if (!selected.success && status?.isConnected) status.textContent = selected.message ?? 'Could not select project.'; })
         .catch(() => { if (status?.isConnected) status.textContent = 'Could not select project.'; })
         .finally(() => { if (panelProject.isConnected) panelProject.disabled = false; });
+      return;
+    }
+    const pagesProject = event.target.closest?.('[data-pages-project-select]');
+    if (pagesProject && reference) {
+      const status = pagesProject.closest('.assets-project-picker')?.querySelector('[data-pages-project-status]');
+      pagesProject.disabled = true;
+      reference.invokeMethodAsync('SetPagesPaneProject', pagesProject.dataset.pagesPane ?? '', pagesProject.dataset.projectFolder ?? '')
+        .then(result => { const selected = JSON.parse(result); if (!selected.success && status?.isConnected) status.textContent = selected.message ?? 'Could not select project.'; })
+        .catch(() => { if (status?.isConnected) status.textContent = 'Could not select project.'; })
+        .finally(() => { if (pagesProject.isConnected) pagesProject.disabled = false; });
+      return;
+    }
+    const pageEdit = event.target.closest?.('[data-page-edit]');
+    if (pageEdit && reference) {
+      reference.invokeMethodAsync('OpenPageEditor', pageEdit.dataset.pagesPane ?? '', pageEdit.dataset.bookId ?? '', pageEdit.dataset.pageId ?? '');
+      return;
+    }
+    const pagePlacementEdit = event.target.closest?.('[data-page-placement-edit]');
+    if (pagePlacementEdit && reference) {
+      reference.invokeMethodAsync('OpenPagePlacementPanelEditor', pagePlacementEdit.dataset.pageEditor ?? '', pagePlacementEdit.dataset.placementId ?? '');
+      return;
+    }
+    const pageEditorBack = event.target.closest?.('[data-page-editor-back]');
+    if (pageEditorBack && reference) {
+      const tab = document.querySelector(`[data-pane-tab="${pageEditorBack.closest?.('[data-pane-view]')?.dataset.paneView ?? ''}"]`);
+      tab?.querySelector('[data-close-pane]')?.click();
       return;
     }
     const generationChange = event.target.closest?.('[data-generation-change-project]');
@@ -793,6 +901,8 @@
       const saved=key ? getComfyConnections()[key] : null;
       if (saved) reference.invokeMethodAsync('SetCurrentComfyConnection',saved.serverUrl ?? '',saved.apiKey ?? '',key);
     } catch { /* Use the connection already restored by .NET preferences. */ }
-  },setSplitRatio:(id,ratio)=>reference?.invokeMethodAsync('SetSplitRatio',id,ratio),imageDimensions:image=>[image.naturalWidth,image.naturalHeight],
-    registerImageDrop:(id,target)=>imageDropTargets.set(id,target),unregisterImageDrop:id=>imageDropTargets.delete(id)};
+  },setSplitRatio:(id,ratio)=>reference?.invokeMethodAsync('SetSplitRatio',id,ratio),imageDimensions:image=>[image.naturalWidth,image.naturalHeight],elementBounds:element=>{const bounds=element.getBoundingClientRect();return [bounds.width,bounds.height]},capturePointer:(element,id)=>element.setPointerCapture?.(id),releasePointer:(element,id)=>{if(element.hasPointerCapture?.(id))element.releasePointerCapture(id)},rasterizePanel:(element,mime,maxDimension)=>new Promise((resolve,reject)=>{try{const viewBox=element.viewBox.baseVal;const factor=maxDimension?Math.min(1,maxDimension/Math.max(viewBox.width,viewBox.height)):1;const width=Math.max(1,Math.round(viewBox.width*factor));const height=Math.max(1,Math.round(viewBox.height*factor));const xml=new XMLSerializer().serializeToString(element);const source=`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(xml)))}`;const image=new Image();image.onload=()=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const context=canvas.getContext('2d');context.drawImage(image,0,0,width,height);resolve(canvas.toDataURL(mime,.92));};image.onerror=()=>reject(new Error('The panel could not be rasterized.'));image.src=source;}catch(error){reject(error)} }),
+    rasterizePage:(element,mime,maxDimension)=>new Promise((resolve,reject)=>{try{const bounds=element.getBoundingClientRect(),factor=maxDimension?Math.min(1,maxDimension/Math.max(bounds.width,bounds.height)):1,width=Math.max(1,Math.round(bounds.width*factor)),height=Math.max(1,Math.round(bounds.height*factor)),canvas=document.createElement('canvas'),context=canvas.getContext('2d');canvas.width=width;canvas.height=height;context.scale(factor,factor);context.fillStyle='#f8f5ed';context.fillRect(0,0,bounds.width,bounds.height);element.querySelectorAll('.page-editor-panel').forEach(panel=>{const rect=panel.getBoundingClientRect(),x=rect.left-bounds.left,y=rect.top-bounds.top;context.fillStyle=panel.classList.contains('is-placeholder')?'#e8efeb':'#dff1e9';context.fillRect(x,y,rect.width,rect.height);context.strokeStyle=panel.classList.contains('is-placeholder')?'#76968e':'#5d9689';context.lineWidth=2;context.strokeRect(x,y,rect.width,rect.height);context.fillStyle='#24574b';context.font='bold 12px sans-serif';context.textAlign='center';context.fillText(panel.querySelector('span')?.textContent??'',x+rect.width/2,y+rect.height/2);});resolve({dataUrl:canvas.toDataURL(mime,.92),width,height});}catch(error){reject(error)}}),
+    rasterizeBook:(book,maxDimension)=>{const pages=book.pages??[];return pages.map(page=>{const pageWidth=(book.pageWidthCm??21)*(page.layout==='double'?2:1),pageHeight=book.pageHeightCm??29.7,factor=maxDimension/Math.max(pageWidth,pageHeight),width=Math.max(1,Math.round(pageWidth*factor)),height=Math.max(1,Math.round(pageHeight*factor)),canvas=document.createElement('canvas'),context=canvas.getContext('2d');canvas.width=width;canvas.height=height;context.fillStyle='#f8f5ed';context.fillRect(0,0,width,height);(page.panels??[]).forEach(item=>{const x=(item.xcm??0)/pageWidth*width,y=(item.ycm??0)/pageHeight*height,w=(item.widthCm??0)/pageWidth*width,h=(item.heightCm??0)/pageHeight*height;context.fillStyle=item.kind==='placeholder'?'#e8efeb':'#dff1e9';context.fillRect(x,y,w,h);context.strokeStyle=item.kind==='placeholder'?'#76968e':'#5d9689';context.lineWidth=2;context.strokeRect(x,y,w,h);context.fillStyle='#24574b';context.font='bold 12px sans-serif';context.textAlign='center';context.fillText(item.panelName??'Panel',x+w/2,y+h/2);});return {dataUrl:canvas.toDataURL('image/jpeg',.92),width,height};})},
+    registerImageDrop:(id,target)=>imageDropTargets.set(id,target),unregisterImageDrop:id=>imageDropTargets.delete(id),registerPanelTransform:(element,target)=>panelTransformTargets.set(element,target),unregisterPanelTransform:element=>panelTransformTargets.delete(element)};
 })();

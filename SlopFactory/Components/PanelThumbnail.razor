@@ -1,25 +1,10 @@
 @using System.Globalization
+@using System.Text
 @using SlopFactory.Models
 @using SlopFactory.Services
 @inject PanelStore PanelStore
 
-<svg class="panel-browser-preview" viewBox="@($"0 0 {Panel.Width} {Panel.Height}")" role="img" aria-label="Preview of @Panel.Name">
-  <rect width="100%" height="100%" fill="#fff" />
-  @foreach (var layer in Panel.Layers.Where(item => item.Visible))
-  {
-    <g transform="@($"matrix({string.Join(" ", layer.Matrix.Select(value => value.ToString("G17", CultureInfo.InvariantCulture)))})")">
-      @if (layer.Kind == "raster" && RasterImage(layer) is { } source)
-      {
-        <image href="@source" width="@Panel.Width" height="@Panel.Height" preserveAspectRatio="xMidYMid meet" />
-      }
-      else if (layer.Kind == "vector" && layer.Svg is { Length: > 0 })
-      {
-        <image href="@PanelStore.VectorDataUrl(layer.Svg)" width="@Panel.Width" height="@Panel.Height" preserveAspectRatio="none" />
-      }
-    </g>
-  }
-  <rect x="1" y="1" width="@Math.Max(0, Panel.Width - 2)" height="@Math.Max(0, Panel.Height - 2)" fill="none" stroke="#202027" stroke-width="2" />
-</svg>
+<img class="panel-browser-preview" src="@PreviewSource()" alt="Preview of @Panel.Name" />
 
 @code {
   [Parameter, EditorRequired] public PanelDocument Panel { get; set; } = default!;
@@ -32,5 +17,27 @@
       if (imageCache.TryGetValue(layer.Asset, out var source)) return source;
       try { return imageCache[layer.Asset] = PanelStore.RasterDataUrl(ProjectFolder, layer.Asset); }
       catch { return null; }
+  }
+  private string PreviewSource()
+  {
+      var clipId = "panel-bounds";
+      var innerWidth = Math.Max(0, Panel.Width - 2);
+      var innerHeight = Math.Max(0, Panel.Height - 2);
+      var svg = new StringBuilder($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {Panel.Width} {Panel.Height}\"><defs><clipPath id=\"{clipId}\"><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" /></clipPath></defs><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" fill=\"white\"/><g clip-path=\"url(#{clipId})\">");
+      foreach (var layer in Panel.Layers.Where(item => item.Visible))
+      {
+          var source = layer.Kind == "raster" ? RasterImage(layer) : layer.Kind == "vector" && layer.Svg is { Length: > 0 } ? PanelStore.VectorDataUrl(layer.Svg) : null;
+          if (source is null) continue;
+          var matrix = CenteredMatrix(layer);
+          var aspect = layer.Kind == "raster" ? "xMidYMid meet" : "none";
+          svg.Append($"<g transform=\"{matrix}\"><image href=\"{source}\" width=\"{Panel.Width}\" height=\"{Panel.Height}\" preserveAspectRatio=\"{aspect}\"/></g>");
+      }
+      svg.Append($"</g><rect x=\"1\" y=\"1\" width=\"{Math.Max(0, Panel.Width - 2)}\" height=\"{Math.Max(0, Panel.Height - 2)}\" fill=\"none\" stroke=\"#202027\" stroke-width=\"2\"/></svg>");
+      return "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(svg.ToString()));
+  }
+  private string CenteredMatrix(PanelLayer layer)
+  {
+      var matrix = string.Join(" ", layer.Matrix.Select(value => value.ToString("G17", CultureInfo.InvariantCulture)));
+      return $"translate({Panel.Width / 2} {Panel.Height / 2}) matrix({matrix}) translate({-Panel.Width / 2} {-Panel.Height / 2})";
   }
 }

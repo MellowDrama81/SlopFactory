@@ -2,6 +2,7 @@
 @using SlopFactory.Models
 @using SlopFactory.Services
 @inject PanelStore PanelStore
+@inject PanelImageExporter PanelImageExporter
 @inject ProjectImageImporter ImageImporter
 @inject IJSRuntime JS
 @implements IAsyncDisposable
@@ -30,40 +31,48 @@
             <label>Width<input type="number" min="1" max="8192" value="@document.Width" @onchange="args => ChangeDimension(args, true)" /></label>
             <label>Height<input type="number" min="1" max="8192" value="@document.Height" @onchange="args => ChangeDimension(args, false)" /></label>
             <button type="button" class="panel-editor-primary" disabled="@saving" @onclick="SavePanel">@(saving ? "Saving…" : "Save Panel")</button>
+            <label>Export format<select @bind="exportFormat" aria-label="Panel image export format"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select></label>
+            <button type="button" class="panel-editor-secondary" disabled="@exporting" @onclick="ExportImage">@(exporting ? "Exporting…" : "Export image…")</button>
           </div>
+          @if (choosingRaster)
+          {
+            <section class="panel-editor-asset-picker" aria-label="Choose an image asset">
+              <div class="panel-editor-list-heading"><h3>Choose an image asset</h3><button type="button" @onclick="CloseAssetPicker">Close</button></div>
+              <ProjectImagePicker ProjectFolder="@Pane.Context" Label="Image asset" BrowseOnly="true" OnSelected="ChooseRaster" />
+            </section>
+          }
           <div class="panel-editor-composition" data-image-drop="@compositionDrop.Id">
             <div class="panel-editor-preview-wrap">
-              <svg class="panel-editor-preview" viewBox="@($"0 0 {document.Width} {document.Height}")" aria-label="Panel composition preview">
-                <rect width="100%" height="100%" fill="#fff" />
-                @foreach (var layer in document.Layers.Where(item => item.Visible))
-                {
-                  <g @key="layer.Id" transform="@MatrixTransform(layer)" @onclick="() => SelectLayer(layer.Id)">
-                    @if (layer.Kind == "raster" && RasterImage(layer) is { } rasterSource)
-                    {
-                      <image href="@rasterSource" width="@document.Width" height="@document.Height" preserveAspectRatio="xMidYMid meet" />
-                    }
-                    else if (layer.Kind == "vector" && layer.Svg is { Length: > 0 })
-                    {
-                      <image href="@PanelStore.VectorDataUrl(layer.Svg)" width="@document.Width" height="@document.Height" preserveAspectRatio="none" />
-                    }
-                  </g>
-                }
+              <svg @ref="previewElement" class="panel-editor-preview" viewBox="@($"0 0 {document.Width} {document.Height}")" aria-label="Panel composition preview" @onpointerdown="BeginSelectedLayerTransform" @onpointermove="UpdateLayerTransform" @onpointerup="EndLayerTransform" @onpointercancel="EndLayerTransform">
+                <defs><clipPath id="@PanelClipId"><rect x="1" y="1" width="@Math.Max(0, document.Width - 2)" height="@Math.Max(0, document.Height - 2)" /></clipPath></defs>
+                <rect x="1" y="1" width="@Math.Max(0, document.Width - 2)" height="@Math.Max(0, document.Height - 2)" fill="#fff" />
+                <g clip-path="@($"url(#{PanelClipId})")">
+                  @foreach (var layer in document.Layers.Where(item => item.Visible))
+                  {
+                    <g @key="layer.Id" transform="@MatrixTransform(layer)" @onclick="() => SelectLayer(layer.Id)" @oncontextmenu:preventDefault="true">
+                      @if (layer.Kind == "raster" && RasterImage(layer) is { } rasterSource)
+                      {
+                        <image href="@rasterSource" width="@document.Width" height="@document.Height" preserveAspectRatio="xMidYMid meet" />
+                      }
+                      else if (layer.Kind == "vector" && layer.Svg is { Length: > 0 })
+                      {
+                        <image href="@PanelStore.VectorDataUrl(layer.Svg)" width="@document.Width" height="@document.Height" preserveAspectRatio="none" />
+                      }
+                    </g>
+                  }
+                </g>
                 <rect x="1" y="1" width="@Math.Max(0, document.Width - 2)" height="@Math.Max(0, document.Height - 2)" fill="none" stroke="#202027" stroke-width="2" pointer-events="none" />
               </svg>
-              <span class="panel-editor-preview-caption">@document.Width × @document.Height px · layers render bottom to top · drop an image anywhere here to add a raster layer</span>
+              <span class="panel-editor-preview-caption">@document.Width × @document.Height px · drag to move · wheel to scale · Shift+wheel to rotate · pinch/twist on touch</span>
               <p class="generation-drop-status" data-image-drop-status role="status"></p>
             </div>
             <div class="panel-editor-layers">
               <div class="panel-editor-list-heading"><h3>Layers</h3></div>
               <div class="panel-editor-add-actions">
-                <button type="button" aria-expanded="@choosingRaster" @onclick="() => choosingRaster = !choosingRaster">＋ Add asset</button>
+                <button type="button" aria-expanded="@choosingRaster" @onclick="() => OpenAssetPicker(null)">＋ Add asset</button>
                 <button type="button" disabled="@importing" @onclick="ImportRaster">@(importing ? "Importing…" : "Import asset…")</button>
                 <button type="button" @onclick="AddVector">＋ Vector</button>
               </div>
-              @if (choosingRaster)
-              {
-                <ProjectImagePicker ProjectFolder="@Pane.Context" Label="New raster layer" BrowseOnly="true" OnSelected="AddRaster" />
-              }
               @foreach (var layer in document.Layers.AsEnumerable().Reverse())
               {
                 <button type="button" class="panel-editor-layer-item @(layer.Id == selectedLayerId ? "is-selected" : "")" @key="layer.Id" @onclick="() => SelectLayer(layer.Id)">
@@ -79,7 +88,8 @@
                   <label class="panel-editor-checkbox"><input type="checkbox" checked="@selected.Visible" @onchange="args => ChangeVisibility(selected, args)" /> Visible</label>
                   @if (selected.Kind == "raster")
                   {
-                    <ProjectImagePicker @key="selected.Id" ProjectFolder="@Pane.Context" Label="Image asset" SelectedAsset="@ProjectAssetPath(selected.Asset)" OnSelected="asset => ChangeRasterAsset(selected, asset)" />
+                    <button type="button" class="panel-editor-secondary" @onclick="() => OpenAssetPicker(selected.Id)">Change image asset…</button>
+                    @if (!string.IsNullOrWhiteSpace(selected.Asset)) { <p>Using assets/@selected.Asset</p> }
                   }
                   else
                   {
@@ -93,19 +103,15 @@
                   <div class="panel-editor-transform">
                     <label>X<input type="number" step="1" value="@TransformX(selected)" @onchange='args => ChangeTransform(selected, "x", args)' /></label>
                     <label>Y<input type="number" step="1" value="@TransformY(selected)" @onchange='args => ChangeTransform(selected, "y", args)' /></label>
-                    <label>Scale %<input type="number" min="1" max="1000" step="1" value="@TransformScale(selected)" @onchange='args => ChangeTransform(selected, "scale", args)' /></label>
-                    <label>Rotation °<input type="number" step="1" value="@TransformRotation(selected)" @onchange='args => ChangeTransform(selected, "rotation", args)' /></label>
                   </div>
-                  <details class="panel-editor-matrix">
-                    <summary>Affine matrix (a, b, c, d, x, y)</summary>
-                    <div class="panel-editor-transform">
-                      @for (var index = 0; index < 6; index++)
-                      {
-                        var element = index;
-                        <label>@("abcdxy"[element])<input type="number" step="0.01" value="@Format(selected.Matrix[element])" @onchange="args => ChangeMatrixElement(selected, element, args)" /></label>
-                      }
+                  <div class="panel-editor-visual-transform">
+                    <label class="panel-editor-scale-control">Scale <output>@TransformScale(selected)%</output><input type="range" min="10" max="400" step="1" style="@($"--scale: {TransformScale(selected)}")" value="@TransformScale(selected)" @oninput='args => ChangeTransform(selected, "scale", args)' /></label>
+                    <div class="panel-editor-rotation-control">
+                      <span>Rotation</span>
+                      <button @ref="rotationWheelElement" type="button" class="panel-editor-rotation-wheel" style="@($"--rotation: {TransformRotation(selected)}deg")" aria-label="Drag vertically to rotate the layer" @onpointerdown="args => BeginRotationDrag(selected, args)" @onpointermove="UpdateRotationDrag" @onpointerup="EndRotationDrag" @onpointercancel="EndRotationDrag" @onpointerdown:preventDefault="true"><i></i></button>
+                      <output>@TransformRotation(selected)°</output>
                     </div>
-                  </details>
+                  </div>
                   <div class="panel-editor-layer-actions">
                     <button type="button" @onclick="() => MoveLayer(selected, 1)">↑ Raise</button>
                     <button type="button" @onclick="() => MoveLayer(selected, -1)">↓ Lower</button>
@@ -125,22 +131,42 @@
 @code {
   [Parameter, EditorRequired] public DockPane Pane { get; set; } = default!;
   [Parameter] public EventCallback<PanelPaneSelection> OnSelectionChanged { get; set; }
+  [Parameter] public EventCallback<PanelDraftChange> OnDraftChanged { get; set; }
 
   private string? loadedKey;
   private PanelDocument? document;
   private ImageDropTarget compositionDrop = default!;
+  private DotNetObjectReference<PanelEditor>? transformReference;
   private bool choosingRaster;
+  private string? assetPickerLayerId;
   private bool importing;
   private readonly Dictionary<string, string> imageCache = new(StringComparer.OrdinalIgnoreCase);
   private string? selectedLayerId;
+  private ElementReference previewElement;
+  private ElementReference rotationWheelElement;
+  private readonly Dictionary<long, (double X, double Y)> activePointers = [];
+  private string? gestureLayerId;
+  private double[]? gestureMatrix;
+  private (double X, double Y) gestureCenter;
+  private double gestureDistance;
+  private double gestureAngle;
+  private double gestureXScale = 1;
+  private double gestureYScale = 1;
+  private string? rotationLayerId;
+  private long? rotationPointerId;
+  private double rotationStartY;
+  private double rotationStartAngle;
   private string loadError = string.Empty;
   private string status = string.Empty;
   private bool saving;
+  private bool exporting;
+  private string exportFormat = "png";
   private PanelLayer? SelectedLayer => document?.Layers.FirstOrDefault(layer => layer.Id == selectedLayerId);
+  private string PanelClipId => $"panel-clip-{Pane.Id}";
   private string SelectedPanelFolder => string.IsNullOrWhiteSpace(Pane.Location) ? Pane.PanelFolder ?? string.Empty :
       (Path.GetDirectoryName(Pane.Location.Replace('/', Path.DirectorySeparatorChar)) ?? string.Empty).Replace('\\', '/');
 
-  protected override void OnParametersSet()
+  protected override async Task OnParametersSetAsync()
   {
       var key = $"{Pane.Context}|{Pane.Location}|{Pane.PanelFolder}";
       if (key == loadedKey) return;
@@ -150,15 +176,17 @@
       selectedLayerId = null;
       document = null;
       choosingRaster = false;
+      assetPickerLayerId = null;
       imageCache.Clear();
       if (string.IsNullOrWhiteSpace(Pane.Context)) return;
       try
       {
           _ = PanelStore.NormalizeFolder(Pane.Context, Pane.PanelFolder);
-          document = string.IsNullOrWhiteSpace(Pane.Location)
+          document = Pane.PanelDraft ?? (string.IsNullOrWhiteSpace(Pane.Location)
               ? PanelStore.CreateNew()
-              : PanelStore.Load(Pane.Context, Pane.Location);
+              : PanelStore.Load(Pane.Context, Pane.Location));
           selectedLayerId = document.Layers.LastOrDefault()?.Id;
+          await OnDraftChanged.InvokeAsync(new PanelDraftChange(Pane.Id, document));
       }
       catch (Exception ex) { loadError = ex.Message; }
   }
@@ -178,6 +206,8 @@
       {
           var folder = SelectedPanelFolder;
           await PanelStore.SaveAsync(Pane.Context, document, folder);
+          var thumbnail = await JS.InvokeAsync<string>("recursiveDock.rasterizePanel", previewElement, "image/png", 320);
+          await PanelStore.SaveThumbnailAsync(Pane.Context, document, folder, thumbnail);
           var path = string.IsNullOrEmpty(folder) ? document.Id + ".json" : folder + "/" + document.Id + ".json";
           status = $"Saved {document.Name} to panels/{path}.";
           await OnSelectionChanged.InvokeAsync(new PanelPaneSelection(Pane.Id, Pane.Context, path, document.Name, Pane.PanelFolder));
@@ -185,11 +215,39 @@
       catch (Exception ex) { status = $"Could not save Panel: {ex.Message}"; }
       finally { saving = false; }
   }
+  private async Task ExportImage()
+  {
+      if (document is null || exporting) return;
+      exporting = true;
+      status = string.Empty;
+      try
+      {
+          var mime = exportFormat switch { "jpeg" => "image/jpeg", "webp" => "image/webp", _ => "image/png" };
+          var image = await JS.InvokeAsync<string>("recursiveDock.rasterizePanel", previewElement, mime);
+          var destination = await PanelImageExporter.ExportAsync(document.Name, exportFormat, image);
+          status = destination is null ? "Image export cancelled." : $"Exported {Path.GetFileName(destination)}.";
+      }
+      catch (Exception ex) { status = $"Could not export image: {ex.Message}"; }
+      finally { exporting = false; }
+  }
 
   protected override void OnInitialized() =>
       compositionDrop = new ImageDropTarget(JS, ImageImporter, () => document is null ? null : Pane.Context, asset => InvokeAsync(() => { AddRaster(asset); StateHasChanged(); }));
-  protected override Task OnAfterRenderAsync(bool firstRender) => firstRender ? compositionDrop.RegisterAsync() : Task.CompletedTask;
-  public ValueTask DisposeAsync() => compositionDrop.DisposeAsync();
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+      if (firstRender) await compositionDrop.RegisterAsync();
+      if (transformReference is not null || document is null) return;
+      transformReference = DotNetObjectReference.Create(this);
+      await JS.InvokeVoidAsync("recursiveDock.registerPanelTransform", previewElement, transformReference);
+  }
+  public async ValueTask DisposeAsync()
+  {
+      try { await JS.InvokeVoidAsync("recursiveDock.unregisterPanelTransform", previewElement); }
+      catch (JSDisconnectedException) { /* The WebView is closing. */ }
+      catch (TaskCanceledException) { /* The WebView is closing. */ }
+      transformReference?.Dispose();
+      await compositionDrop.DisposeAsync();
+  }
 
   // Pickers use project-relative paths ("assets/x.png"); raster layers store paths relative to the assets folder ("x.png").
   private static string? ProjectAssetPath(string? layerAsset) => string.IsNullOrWhiteSpace(layerAsset) ? null : "assets/" + layerAsset;
@@ -216,6 +274,23 @@
       selectedLayerId = layer.Id;
       choosingRaster = false;
       status = string.Empty;
+  }
+  private void OpenAssetPicker(string? layerId)
+  {
+      assetPickerLayerId = layerId;
+      choosingRaster = true;
+  }
+  private void CloseAssetPicker()
+  {
+      assetPickerLayerId = null;
+      choosingRaster = false;
+  }
+  private void ChooseRaster(string projectAsset)
+  {
+      var layer = assetPickerLayerId is null ? null : document?.Layers.FirstOrDefault(item => item.Id == assetPickerLayerId);
+      if (layer is null) AddRaster(projectAsset);
+      else ChangeRasterAsset(layer, projectAsset);
+      CloseAssetPicker();
   }
   private void AddVector()
   {
@@ -244,6 +319,116 @@
       layer.Svg = close < 0 ? svg + snippet : svg.Insert(close, "  " + snippet + "\n");
   }
   private void SelectLayer(string id) => selectedLayerId = id;
+  private Task BeginSelectedLayerTransform(PointerEventArgs args) =>
+      SelectedLayer is { } layer ? BeginLayerTransform(layer, args) : Task.CompletedTask;
+  [JSInvokable]
+  public Task TransformSelectedLayer(double deltaY, bool rotate)
+  {
+      if (SelectedLayer is { } layer) AdjustLayerWithWheel(layer, deltaY, rotate);
+      return InvokeAsync(StateHasChanged);
+  }
+  private async Task BeginLayerTransform(PanelLayer layer, PointerEventArgs args)
+  {
+      if (document is null) return;
+      if (gestureLayerId is not null && gestureLayerId != layer.Id) EndGesture();
+      selectedLayerId = layer.Id;
+      await JS.InvokeVoidAsync("recursiveDock.capturePointer", previewElement, args.PointerId);
+      if (gestureLayerId is null)
+      {
+          var bounds = await JS.InvokeAsync<double[]>("recursiveDock.elementBounds", previewElement);
+          gestureXScale = bounds.Length == 2 && bounds[0] > 0 ? document.Width / bounds[0] : 1;
+          gestureYScale = bounds.Length == 2 && bounds[1] > 0 ? document.Height / bounds[1] : 1;
+          gestureLayerId = layer.Id;
+          gestureMatrix = layer.Matrix.ToArray();
+      }
+      activePointers[args.PointerId] = (args.ClientX, args.ClientY);
+      CaptureGestureOrigin();
+  }
+  private void UpdateLayerTransform(PointerEventArgs args)
+  {
+      if (gestureLayerId is null || !activePointers.ContainsKey(args.PointerId) || document is null) return;
+      activePointers[args.PointerId] = (args.ClientX, args.ClientY);
+      var layer = document.Layers.FirstOrDefault(item => item.Id == gestureLayerId);
+      if (layer is null || gestureMatrix is null) return;
+      var points = activePointers.Values.ToList();
+      var center = points.Count == 1 ? points[0] : (X: (points[0].X + points[1].X) / 2, Y: (points[0].Y + points[1].Y) / 2);
+      var dx = (center.X - gestureCenter.X) * gestureXScale;
+      var dy = (center.Y - gestureCenter.Y) * gestureYScale;
+      var scale = 1d;
+      var rotation = 0d;
+      if (points.Count > 1)
+      {
+          var x = points[1].X - points[0].X;
+          var y = points[1].Y - points[0].Y;
+          scale = Math.Clamp(Math.Sqrt(x * x + y * y) / Math.Max(gestureDistance, .001), .01, 100);
+          rotation = Math.Atan2(y, x) - gestureAngle;
+      }
+      var baseScale = Math.Sqrt(gestureMatrix[0] * gestureMatrix[0] + gestureMatrix[1] * gestureMatrix[1]);
+      var baseRotation = Math.Atan2(gestureMatrix[1], gestureMatrix[0]);
+      var finalScale = Math.Clamp(baseScale * scale, .01, 10);
+      var finalRotation = baseRotation + rotation;
+      var cosine = Math.Cos(finalRotation) * finalScale;
+      var sine = Math.Sin(finalRotation) * finalScale;
+      layer.Matrix = [cosine, sine, -sine, cosine, gestureMatrix[4] + dx, gestureMatrix[5] + dy];
+  }
+  private void EndLayerTransform(PointerEventArgs args)
+  {
+      _ = JS.InvokeVoidAsync("recursiveDock.releasePointer", previewElement, args.PointerId);
+      activePointers.Remove(args.PointerId);
+      if (activePointers.Count == 0) EndGesture();
+      else CaptureGestureOrigin();
+  }
+  private void CaptureGestureOrigin()
+  {
+      if (document?.Layers.FirstOrDefault(item => item.Id == gestureLayerId) is not { } layer) return;
+      gestureMatrix = layer.Matrix.ToArray();
+      var points = activePointers.Values.ToList();
+      gestureCenter = points.Count == 1 ? points[0] : (X: (points[0].X + points[1].X) / 2, Y: (points[0].Y + points[1].Y) / 2);
+      if (points.Count > 1)
+      {
+          var x = points[1].X - points[0].X;
+          var y = points[1].Y - points[0].Y;
+          gestureDistance = Math.Sqrt(x * x + y * y);
+          gestureAngle = Math.Atan2(y, x);
+      }
+  }
+  private void EndGesture()
+  {
+      activePointers.Clear();
+      gestureLayerId = null;
+      gestureMatrix = null;
+  }
+  private async Task BeginRotationDrag(PanelLayer layer, PointerEventArgs args)
+  {
+      rotationLayerId = layer.Id;
+      rotationPointerId = args.PointerId;
+      rotationStartY = args.ClientY;
+      rotationStartAngle = Math.Atan2(layer.Matrix[1], layer.Matrix[0]);
+      await JS.InvokeVoidAsync("recursiveDock.capturePointer", rotationWheelElement, args.PointerId);
+  }
+  private void UpdateRotationDrag(PointerEventArgs args)
+  {
+      if (rotationPointerId != args.PointerId || document?.Layers.FirstOrDefault(layer => layer.Id == rotationLayerId) is not { } layer) return;
+      SetLayerTransform(layer, Math.Sqrt(layer.Matrix[0] * layer.Matrix[0] + layer.Matrix[1] * layer.Matrix[1]), rotationStartAngle + (args.ClientY - rotationStartY) * .0125);
+  }
+  private void EndRotationDrag(PointerEventArgs args)
+  {
+      if (rotationPointerId != args.PointerId) return;
+      _ = JS.InvokeVoidAsync("recursiveDock.releasePointer", rotationWheelElement, args.PointerId);
+      rotationPointerId = null;
+      rotationLayerId = null;
+  }
+  private void AdjustLayerWithWheel(PanelLayer layer, double deltaY, bool rotate)
+  {
+      var scale = Math.Sqrt(layer.Matrix[0] * layer.Matrix[0] + layer.Matrix[1] * layer.Matrix[1]);
+      var rotation = Math.Atan2(layer.Matrix[1], layer.Matrix[0]);
+      if (rotate) rotation -= deltaY * .004;
+      else scale = Math.Clamp(scale * Math.Pow(1.002, -deltaY), .01, 10);
+      var cosine = Math.Cos(rotation) * scale;
+      var sine = Math.Sin(rotation) * scale;
+      layer.Matrix = [cosine, sine, -sine, cosine, layer.Matrix[4], layer.Matrix[5]];
+      selectedLayerId = layer.Id;
+  }
   private void ChangeLayerName(PanelLayer layer, ChangeEventArgs args) => layer.Name = args.Value?.ToString() ?? string.Empty;
   private void ChangeVisibility(PanelLayer layer, ChangeEventArgs args) => layer.Visible = args.Value is true;
   private void ChangeRasterAsset(PanelLayer layer, string projectAsset) { layer.Asset = LayerAssetPath(projectAsset); status = string.Empty; }
@@ -264,8 +449,13 @@
   }
 
   private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
-  private static string MatrixTransform(PanelLayer layer) =>
-      $"matrix({string.Join(" ", layer.Matrix.Select(value => value.ToString("G17", CultureInfo.InvariantCulture)))})";
+  private string MatrixTransform(PanelLayer layer)
+  {
+      var width = document?.Width ?? 0;
+      var height = document?.Height ?? 0;
+      var matrix = string.Join(" ", layer.Matrix.Select(value => value.ToString("G17", CultureInfo.InvariantCulture)));
+      return $"translate({width / 2} {height / 2}) matrix({matrix}) translate({-width / 2} {-height / 2})";
+  }
   private static string TransformX(PanelLayer layer) => Format(layer.Matrix[4]);
   private static string TransformY(PanelLayer layer) => Format(layer.Matrix[5]);
   private static string TransformScale(PanelLayer layer) => Format(Math.Sqrt(layer.Matrix[0] * layer.Matrix[0] + layer.Matrix[1] * layer.Matrix[1]) * 100);
@@ -284,14 +474,13 @@
           case "scale": scale = Math.Clamp(value / 100, .01, 10); break;
           case "rotation": rotation = value * Math.PI / 180; break;
       }
+      SetLayerTransform(layer, scale, rotation, x, y);
+  }
+  private static void SetLayerTransform(PanelLayer layer, double scale, double rotation, double? x = null, double? y = null)
+  {
       var cosine = Math.Cos(rotation) * scale;
       var sine = Math.Sin(rotation) * scale;
-      layer.Matrix = [cosine, sine, -sine, cosine, x, y];
-  }
-  private static void ChangeMatrixElement(PanelLayer layer, int element, ChangeEventArgs args)
-  {
-      if (!double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value)) return;
-      layer.Matrix[element] = value;
+      layer.Matrix = [cosine, sine, -sine, cosine, x ?? layer.Matrix[4], y ?? layer.Matrix[5]];
   }
   private string? RasterImage(PanelLayer layer)
   {

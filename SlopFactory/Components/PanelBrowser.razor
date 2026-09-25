@@ -49,7 +49,8 @@
       @foreach (var panel in savedPanels)
       {
         <button type="button" class="panel-browser-tile @(Pane.Location == panel.Path ? "is-selected" : "")" @key="panel.Path" @onclick="() => OpenPanel(panel)">
-          <PanelThumbnail Panel="panel.Document" ProjectFolder="Pane.Context!" />
+          @if (panel.Thumbnail is { } thumbnail) { <img class="panel-browser-preview" src="@thumbnail" alt="Preview of @panel.Name" /> }
+          else { <PanelThumbnail Panel="panel.Document" ProjectFolder="Pane.Context!" /> }
           <strong>@panel.Name</strong><small>@panel.Width × @panel.Height</small>
         </button>
       }
@@ -86,7 +87,7 @@
 
   protected override void OnParametersSet()
   {
-      var key = $"{Pane.Context}|{Pane.PanelFolder}";
+      var key = $"{Pane.Context}|{Pane.PanelFolder}|{Pane.PanelRevision}";
       if (key != loadedKey)
       {
           loadedKey = key;

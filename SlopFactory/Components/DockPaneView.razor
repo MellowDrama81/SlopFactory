@@ -38,6 +38,23 @@ else if (Pane.Kind == "generation" && string.IsNullOrWhiteSpace(Pane.Context))
     <p class="generation-status" data-generation-status role="status"></p>
   </div>
 }
+else if (Pane.Kind == "pages" && string.IsNullOrWhiteSpace(Pane.Context))
+{
+  <div class="assets-pane assets-project-picker">
+    <p class="eyebrow">PROJECT PAGES</p><h2>Select a project</h2><p>Choose the project whose books and pages this pane should show.</p>
+    @if (ProjectLibrary.GetAll().Count == 0) { <p class="assets-empty">No projects have been added yet. Add one from Projects, then open a Pages pane.</p> }
+    else { <div class="assets-project-list">@foreach (var project in ProjectLibrary.GetAll()) { <button type="button" data-pages-project-select data-pages-pane="@Pane.Id" data-project-folder="@project.FolderPath">@project.DisplayName</button> }</div> }
+    <p class="generation-status" data-pages-project-status role="status"></p>
+  </div>
+}
+else if (Pane.Kind == "pages")
+{
+  <PagesPane Pane="Pane" />
+}
+else if (Pane.Kind == "page-editor")
+{
+  <PageEditor Pane="Pane" />
+}
 else if (Pane.Kind == "generation")
 {
   <div class="generation-pane">
@@ -178,7 +195,7 @@ else if (Pane.Kind == "panel-browser")
 }
 else if (Pane.Kind == "panel-editor")
 {
-  <PanelEditor Pane="Pane" OnSelectionChanged="OnPanelSelectionChanged" />
+  <PanelEditor Pane="Pane" OnSelectionChanged="OnPanelSelectionChanged" OnDraftChanged="OnPanelDraftChanged" />
 }
 else if (Pane.Kind == "asset-details")
 {
@@ -266,7 +283,7 @@ else if (Pane.Kind == "assets")
     @if (assetEntries.Count == 0) { <p class="assets-empty">@(string.IsNullOrEmpty(selectedTag) ? "This folder is empty." : "No assets with this tag in this folder or its subfolders.")</p> }
     else
     {
-      <div class="assets-grid">@foreach (var entry in assetEntries) { <article class="asset-tile @(entry.IsDirectory ? "" : "asset-file")" draggable="true" data-assets-drag data-assets-source-path="@entry.Path" data-assets-source-root="@assetsRoot" data-asset-path="@entry.Path" data-assets-open-details="@(entry.IsDirectory ? "" : "file")"><input type="checkbox" class="asset-select" data-asset-select data-asset-path="@entry.Path" data-assets-root="@assetsRoot" aria-label="Select @entry.Name" />@if (entry.IsDirectory) { <button type="button" class="asset-folder" data-assets-navigate data-assets-pane="@Pane.Id" data-assets-folder="@entry.Path"><div class="asset-tile-placeholder"><FolderThumbnail /></div><strong>@entry.Name</strong><small>Folder</small></button><div class="asset-folder-actions"><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename folder" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export folder as ZIP">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete folder">×</button></div> } else { @if (entry.Thumbnail is not null) { <img src="@entry.Thumbnail" alt="@entry.Name" /> } else { <div class="asset-tile-placeholder">◌</div> }<div class="asset-tile-footer"><strong>@entry.Name</strong>@if (IsGenerationImage(entry.Path)) { <button type="button" class="asset-mask-icon" data-assets-mask data-asset-path="@entry.Path" data-assets-root="@assetsRoot" data-source-pane="@Pane.Id" title="Define mask" aria-label="Define mask for @entry.Name">◐</button> }<button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename asset" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export asset">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete asset">×</button></div><small>@entry.Detail</small> }</article> }</div>
+      <div class="assets-grid">@foreach (var entry in assetEntries) { <article class="asset-tile @(entry.IsDirectory ? "" : "asset-file")" data-assets-drag data-assets-source-path="@entry.Path" data-assets-source-root="@assetsRoot" data-asset-path="@entry.Path" data-assets-open-details="@(entry.IsDirectory ? "" : "file")"><input type="checkbox" class="asset-select" data-asset-select data-asset-path="@entry.Path" data-assets-root="@assetsRoot" aria-label="Select @entry.Name" />@if (entry.IsDirectory) { <button type="button" class="asset-folder" data-assets-navigate data-assets-pane="@Pane.Id" data-assets-folder="@entry.Path"><div class="asset-tile-placeholder"><FolderThumbnail /></div><strong>@entry.Name</strong><small>Folder</small></button><div class="asset-folder-actions"><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename folder" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export folder as ZIP">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete folder">×</button></div> } else { @if (entry.Thumbnail is not null) { <img src="@entry.Thumbnail" alt="@entry.Name" draggable="false" /> } else { <div class="asset-tile-placeholder">◌</div> }<div class="asset-tile-footer"><strong>@entry.Name</strong>@if (IsGenerationImage(entry.Path)) { <button type="button" class="asset-mask-icon" data-assets-mask data-asset-path="@entry.Path" data-assets-root="@assetsRoot" data-source-pane="@Pane.Id" title="Define mask" aria-label="Define mask for @entry.Name">◐</button> }<button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename asset" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export asset">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete asset">×</button></div><small>@entry.Detail</small> }</article> }</div>
     }
   </div>
 }
@@ -279,6 +296,7 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   [Parameter] public EventCallback<GenerationOutputFolderChange> OnGenerationOutputFolderChanged { get; set; }
   [Parameter] public EventCallback<GenerationOutputTagsChange> OnGenerationOutputTagsChanged { get; set; }
   [Parameter] public EventCallback<PanelPaneSelection> OnPanelSelectionChanged { get; set; }
+  [Parameter] public EventCallback<PanelDraftChange> OnPanelDraftChanged { get; set; }
   private string? loadedGenerationWorkflowId;
   private List<WorkflowPlaceholder> generationInputs = [];
   private string? generationProject;

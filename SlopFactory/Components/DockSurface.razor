@@ -2,7 +2,7 @@
 @if (Node is SplitNode split)
 {
   <div class="dock-split @(split.Axis == DockAxis.Horizontal ? "split-horizontal" : "split-vertical")" data-split-id="@split.Id" style="--first:@(split.Ratio * 100)%">
-    <div class="dock-branch"><DockSurface @key="split.First" Node="split.First" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" /></div><div class="splitter" title="Resize dock branch"><i></i></div><div class="dock-branch"><DockSurface @key="split.Second" Node="split.Second" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" /></div>
+    <div class="dock-branch"><DockSurface Node="split.First" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" OnPanelDraftChanged="OnPanelDraftChanged" /></div><div class="splitter" title="Resize dock branch"><i></i></div><div class="dock-branch"><DockSurface Node="split.Second" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" OnPanelDraftChanged="OnPanelDraftChanged" /></div>
   </div>
 }
 else if (Node is TabGroupNode group)
@@ -18,7 +18,7 @@ else if (Node is TabGroupNode group)
       <div class="dock-content">
       @foreach (var pane in group.Panes)
       {
-        <div class="dock-pane-slot @(pane.Id == group.ActiveId ? "is-active" : "")" data-pane-view="@pane.Id"><DockPaneView @key="pane.Id" Pane="pane" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" /></div>
+        <div class="dock-pane-slot @(pane.Id == group.ActiveId ? "is-active" : "")" data-pane-view="@pane.Id"><DockPaneView @key="pane.Id" Pane="pane" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" OnPanelDraftChanged="OnPanelDraftChanged" /></div>
       }
       </div>
     }
@@ -33,6 +33,7 @@ else if (Node is TabGroupNode group)
   [Parameter] public EventCallback<GenerationOutputFolderChange> OnGenerationOutputFolderChanged { get; set; }
   [Parameter] public EventCallback<GenerationOutputTagsChange> OnGenerationOutputTagsChanged { get; set; }
   [Parameter] public EventCallback<PanelPaneSelection> OnPanelSelectionChanged { get; set; }
+  [Parameter] public EventCallback<PanelDraftChange> OnPanelDraftChanged { get; set; }
   private static DockPane Active(TabGroupNode group) => group.Panes.First(pane => pane.Id == group.ActiveId);
   private Task Activate(string groupId, string paneId) => OnActivateTab.InvokeAsync(new TabActivation(groupId, paneId));
 }
