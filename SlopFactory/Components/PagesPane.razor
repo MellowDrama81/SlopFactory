@@ -2,6 +2,7 @@
 @using SlopFactory.Models
 @using SlopFactory.Services
 @inject PagesStore PagesStore
+@inject PanelStore PanelStore
 @inject PagePdfExporter PagePdfExporter
 @inject IJSRuntime JS
 
@@ -153,10 +154,15 @@
   private async Task ExportBookPdf(BookDocument book)
   {
       if (book.Pages.Count == 0) { exportStatus = "Add at least one page before exporting the book."; return; }
+      var projectFolder = Pane.Context;
+      if (string.IsNullOrWhiteSpace(projectFolder)) { exportStatus = "Choose a project before exporting the book."; return; }
       exportingBook = true; exportStatus = string.Empty;
       try
       {
-          var rasters = await JS.InvokeAsync<PageRaster[]>("recursiveDock.rasterizeBook", book, 2000);
+          var previews = book.Pages.SelectMany(page => page.Panels)
+              .Where(placement => placement.Kind == "panel" && !string.IsNullOrWhiteSpace(placement.PanelPath))
+              .ToDictionary(placement => placement.Id, placement => PanelStore.PreviewDataUrl(projectFolder, placement.PanelPath), StringComparer.Ordinal);
+          var rasters = await JS.InvokeAsync<PageRaster[]>("recursiveDock.rasterizeBook", book, previews, 2000);
           var pages = book.Pages.Select((item, index) => new PdfPageRaster(rasters[index], book.PageWidthCm * (item.Layout == "double" ? 2 : 1), book.PageHeightCm)).ToList();
           var path = await PagePdfExporter.ExportAsync(book.Name, pages);
           exportStatus = path is null ? "Book export cancelled." : "Book PDF exported.";

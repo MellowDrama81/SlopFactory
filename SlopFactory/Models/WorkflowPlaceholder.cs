@@ -7,6 +7,10 @@ public sealed record WorkflowPlaceholder(string Name, string Type)
     public bool IsMaskedImage => Type.Equals("image", StringComparison.OrdinalIgnoreCase) &&
         Name.Contains("MASKED", StringComparison.OrdinalIgnoreCase);
 
+    public string? SourceImagePlaceholderName => IsMaskedImage
+        ? Name.Replace("MASKED_", string.Empty, StringComparison.OrdinalIgnoreCase)
+        : null;
+
     public string Label => Name switch
     {
         "PROMPT" => "Prompt",

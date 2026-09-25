@@ -408,12 +408,25 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
       ComfyGenerationService.Start(Pane.Id, Pane.Context, workflow,
           Pane.InputValues ?? new Dictionary<string, string>(), outputFolderDraft, Pane.OutputTags ?? []);
   }
-  protected override void OnInitialized() => ComfyGenerationService.Changed += OnGenerationChanged;
+  protected override void OnInitialized()
+  {
+      ComfyGenerationService.Changed += OnGenerationChanged;
+      AssetMaskStore.Changed += OnMasksChanged;
+  }
   private void OnGenerationChanged(string paneId)
   {
       if (Pane.Id == paneId) _ = InvokeAsync(StateHasChanged);
   }
-  public void Dispose() => ComfyGenerationService.Changed -= OnGenerationChanged;
+  private void OnMasksChanged(string projectFolder, string assetPath)
+  {
+      if (Pane.Kind == "generation" && string.Equals(Pane.Context, projectFolder, StringComparison.OrdinalIgnoreCase))
+          _ = InvokeAsync(StateHasChanged);
+  }
+  public void Dispose()
+  {
+      ComfyGenerationService.Changed -= OnGenerationChanged;
+      AssetMaskStore.Changed -= OnMasksChanged;
+  }
   private List<AssetEntry> assetEntries = [];
   private List<string> availableTags = [];
   private string selectedTag = string.Empty;

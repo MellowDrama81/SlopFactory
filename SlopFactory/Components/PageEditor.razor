@@ -21,7 +21,7 @@
           @if (currentPage.Panels.Count == 0) { <p class="page-editor-empty">Add saved panels to arrange this @(currentPage.Layout == "double" ? "spread" : "page").</p> }
           @foreach (var placement in currentPage.Panels)
           {
-            <article class="page-editor-panel @(placement.Kind == "placeholder" ? "is-placeholder" : "") @(selectedPlacementId == placement.Id ? "is-selected" : "")" style="@PlacementStyle(placement)" @onclick="() => SelectPlacement(placement.Id)" @onpointerdown="args => BeginPlacementTransform(placement, args)"><span>@placement.PanelName</span><small>@(placement.Kind == "placeholder" ? PlaceholderDimensions(placement) : "Panel")</small><button type="button" class="page-editor-resize-handle edge-top" aria-label="Resize @placement.PanelName from top" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "top")'></button><button type="button" class="page-editor-resize-handle edge-right" aria-label="Resize @placement.PanelName from right" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "right")'></button><button type="button" class="page-editor-resize-handle edge-bottom" aria-label="Resize @placement.PanelName from bottom" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "bottom")'></button><button type="button" class="page-editor-resize-handle edge-left" aria-label="Resize @placement.PanelName from left" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "left")'></button><button type="button" class="page-editor-resize-handle edge-corner" aria-label="Resize @placement.PanelName from corner" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "corner")'></button></article>
+            <article class="page-editor-panel @(placement.Kind == "placeholder" ? "is-placeholder" : "") @(selectedPlacementId == placement.Id ? "is-selected" : "")" style="@PlacementStyle(placement)" @onclick="() => SelectPlacement(placement.Id)" @onpointerdown="args => BeginPlacementTransform(placement, args)">@if (PanelPreview(placement) is { } preview) { <img class="page-editor-panel-art" src="@preview" alt="" draggable="false" /> }<span>@placement.PanelName</span><small>@(placement.Kind == "placeholder" ? PlaceholderDimensions(placement) : "Panel")</small><button type="button" class="page-editor-resize-handle edge-top" aria-label="Resize @placement.PanelName from top" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "top")'></button><button type="button" class="page-editor-resize-handle edge-right" aria-label="Resize @placement.PanelName from right" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "right")'></button><button type="button" class="page-editor-resize-handle edge-bottom" aria-label="Resize @placement.PanelName from bottom" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "bottom")'></button><button type="button" class="page-editor-resize-handle edge-left" aria-label="Resize @placement.PanelName from left" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "left")'></button><button type="button" class="page-editor-resize-handle edge-corner" aria-label="Resize @placement.PanelName from corner" @onpointerdown:stopPropagation="true" @onpointerdown='args => BeginPlacementResize(placement, args, "corner")'></button></article>
           }
         </div>
         <p class="page-editor-caption">Panels align to a shared outer margin and gutter. Reorder them to change their position.</p>
@@ -63,6 +63,7 @@
   private BookDocument? book;
   private PageDocument? currentPage;
   private List<PanelSummary> savedPanels = [];
+  private readonly Dictionary<string, string> panelPreviews = new(StringComparer.Ordinal);
   private string selectedPanelPath = string.Empty;
   private ElementReference canvasElement;
   private string exportFormat = "png";
@@ -87,7 +88,7 @@
   {
       var key = $"{Pane.Context}|{Pane.PageBookId}|{Pane.PageId}";
       if (key == loadedKey) return;
-      loadedKey = key; document = null; book = null; currentPage = null; savedPanels = [];
+      loadedKey = key; document = null; book = null; currentPage = null; savedPanels = []; panelPreviews.Clear();
       if (string.IsNullOrWhiteSpace(Pane.Context) || string.IsNullOrWhiteSpace(Pane.PageBookId) || string.IsNullOrWhiteSpace(Pane.PageId)) return;
       document = PagesStore.Load(Pane.Context);
       book = document.Books.FirstOrDefault(item => item.Id == Pane.PageBookId);
@@ -100,9 +101,10 @@
       if (currentPage is null || string.IsNullOrWhiteSpace(selectedPanelPath)) return;
       var summary = savedPanels.FirstOrDefault(panel => panel.Path == selectedPanelPath);
       if (summary is null) return;
-      var bookWidth = book?.PageWidthCm ?? 10;
+      var bookWidth = (book?.PageWidthCm ?? 10) * (currentPage.Layout == "double" ? 2 : 1);
       var bookHeight = book?.PageHeightCm ?? 10;
-      currentPage.Panels.Add(new PagePanelPlacement { PanelPath = summary.Path, PanelName = summary.Name, Xcm = currentPage.MarginCm, Ycm = currentPage.MarginCm, WidthCm = Math.Max(.1, bookWidth - currentPage.MarginCm * 2), HeightCm = Math.Max(.1, bookHeight - currentPage.MarginCm * 2) });
+      var placement = new PagePanelPlacement { PanelPath = summary.Path, PanelName = summary.Name, Xcm = currentPage.MarginCm, Ycm = currentPage.MarginCm, WidthCm = Math.Max(.1, bookWidth - currentPage.MarginCm * 2), HeightCm = Math.Max(.1, bookHeight - currentPage.MarginCm * 2) };
+      ConstrainPlacement(placement); currentPage.Panels.Add(placement);
       selectedPlacementId = currentPage.Panels.Last().Id;
       selectedPanelPath = string.Empty; Save();
   }
@@ -117,11 +119,12 @@
   {
       if (currentPage is null || book is null || placeholderWidth <= 0 || placeholderHeight <= 0) return;
       var conversion = book.SizeUnit == "in" ? 2.54 : 1;
-      currentPage.Panels.Add(new PagePanelPlacement
+      var placement = new PagePanelPlacement
       {
           Kind = "placeholder", PanelName = string.IsNullOrWhiteSpace(placeholderName) ? "Empty placeholder" : placeholderName.Trim(),
           WidthCm = placeholderWidth * conversion, HeightCm = placeholderHeight * conversion, Xcm = currentPage.MarginCm, Ycm = currentPage.MarginCm
-      });
+      };
+      ConstrainPlacement(placement); currentPage.Panels.Add(placement);
       selectedPlacementId = currentPage.Panels.Last().Id;
       placeholderName = string.Empty; Save();
   }
@@ -167,6 +170,7 @@
           ResizePlacement(placement, dx, dy);
       }
       else { placement.Xcm = Math.Max(0, placementOrigin.X + dx); placement.Ycm = Math.Max(0, placementOrigin.Y + dy); }
+      ConstrainPlacement(placement);
   }
   private void EndPlacementTransform(PointerEventArgs args)
   {
@@ -203,6 +207,7 @@
           default:
               placement.WidthCm = Math.Max(.1, placementOrigin.Width + dx); placement.HeightCm = Math.Max(.1, placementOrigin.Height + dy); break;
       }
+      ConstrainPlacement(placement);
   }
   private void ChangePlacement(PagePanelPlacement placement, string part, ChangeEventArgs args)
   {
@@ -220,6 +225,7 @@
           case "crop-right": placement.CropRight = Math.Clamp(value, 0, 95); break;
           case "crop-bottom": placement.CropBottom = Math.Clamp(value, 0, 95); break;
       }
+      ConstrainPlacement(placement);
       Save();
   }
   private void ChangeMargin(ChangeEventArgs args)
@@ -237,6 +243,7 @@
       {
           var item = currentPage.Panels[index]; var row = index / columns; var column = index % columns;
           item.Xcm = currentPage.MarginCm + column * (width + gutter); item.Ycm = currentPage.MarginCm + row * (height + gutter); item.WidthCm = width; item.HeightCm = height;
+          ConstrainPlacement(item);
       }
       Save();
   }
@@ -286,7 +293,24 @@
       return $"{(book.PageWidthCm * (currentPage.Layout == "double" ? 2 : 1) * factor):0.##} × {(book.PageHeightCm * factor):0.##} {unit}";
   }
   private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+  private string? PanelPreview(PagePanelPlacement placement)
+  {
+      if (placement.Kind != "panel" || string.IsNullOrWhiteSpace(placement.PanelPath) || string.IsNullOrWhiteSpace(Pane.Context)) return null;
+      if (panelPreviews.TryGetValue(placement.PanelPath, out var preview)) return preview;
+      try { return panelPreviews[placement.PanelPath] = PanelStore.PreviewDataUrl(Pane.Context, placement.PanelPath); }
+      catch { return null; }
+  }
   private double DisplayValue(double centimetres) => book?.SizeUnit == "in" ? centimetres / 2.54 : centimetres;
+  private void ConstrainPlacement(PagePanelPlacement placement)
+  {
+      if (currentPage is null || book is null) return;
+      var pageWidth = book.PageWidthCm * (currentPage.Layout == "double" ? 2 : 1);
+      var pageHeight = book.PageHeightCm;
+      placement.WidthCm = Math.Clamp(double.IsFinite(placement.WidthCm) ? placement.WidthCm : .1, .1, pageWidth);
+      placement.HeightCm = Math.Clamp(double.IsFinite(placement.HeightCm) ? placement.HeightCm : .1, .1, pageHeight);
+      placement.Xcm = Math.Clamp(double.IsFinite(placement.Xcm) ? placement.Xcm : 0, 0, pageWidth - placement.WidthCm);
+      placement.Ycm = Math.Clamp(double.IsFinite(placement.Ycm) ? placement.Ycm : 0, 0, pageHeight - placement.HeightCm);
+  }
   private string PlaceholderDimensions(PagePanelPlacement placement) => $"{DisplayValue(placement.WidthCm):0.##} × {DisplayValue(placement.HeightCm):0.##} {DisplayUnit}";
   private string PlacementStyle(PagePanelPlacement placement)
   {

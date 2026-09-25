@@ -11,6 +11,8 @@ public sealed class AssetMaskStore
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private const int MaxMaskBytes = 32 * 1024 * 1024;
 
+    public event Action<string, string>? Changed;
+
     public IReadOnlyList<AssetMask> GetMasks(string projectFolder, string assetPath)
     {
         var metadata = ReadOrCreateMetadata(projectFolder, assetPath, out _);
@@ -75,6 +77,7 @@ public sealed class AssetMaskStore
             else masks[masks.FindIndex(item => item.Id == existing.Id)] = mask;
             metadata["masks"] = JsonSerializer.SerializeToNode(masks.Select(item => new { id = item.Id, name = item.Name, file = item.File }));
             await WriteMetadataAsync(metadataPath, metadata);
+            Changed?.Invoke(projectFolder, assetPath);
             return mask;
         }
         catch

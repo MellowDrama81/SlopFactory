@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Xml;
@@ -92,6 +93,40 @@ public sealed class PanelStore
         if (panel.Id != Path.GetFileNameWithoutExtension(path)) throw new InvalidOperationException("The Panel ID does not match its file name.");
         Validate(projectFolder, panel, requireUsableSources: false);
         return panel;
+    }
+
+    public string PreviewDataUrl(string projectFolder, string panelReference)
+    {
+        var path = PanelPath(projectFolder, panelReference);
+        var thumbnailPath = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + ".thumb.png");
+        if (File.Exists(thumbnailPath))
+            return "data:image/png;base64," + Convert.ToBase64String(File.ReadAllBytes(thumbnailPath));
+
+        var panel = Load(projectFolder, panelReference);
+        var clipId = "panel-bounds-" + panel.Id;
+        var innerWidth = Math.Max(0, panel.Width - 2);
+        var innerHeight = Math.Max(0, panel.Height - 2);
+        var svg = new StringBuilder($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {panel.Width} {panel.Height}\"><defs><clipPath id=\"{clipId}\"><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" /></clipPath></defs><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" fill=\"white\"/><g clip-path=\"url(#{clipId})\">");
+        foreach (var layer in panel.Layers.Where(item => item.Visible))
+        {
+            string? source;
+            try
+            {
+                source = layer.Kind == "raster" ? RasterDataUrl(projectFolder, layer.Asset ?? string.Empty) :
+                    layer.Kind == "vector" && !string.IsNullOrWhiteSpace(layer.Svg) ? VectorDataUrl(layer.Svg) : null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                source = null;
+            }
+            if (source is null) continue;
+            var matrix = string.Join(" ", layer.Matrix.Select(value => value.ToString("G17", CultureInfo.InvariantCulture)));
+            var centeredMatrix = $"translate({panel.Width / 2} {panel.Height / 2}) matrix({matrix}) translate({-panel.Width / 2} {-panel.Height / 2})";
+            var aspect = layer.Kind == "raster" ? "xMidYMid meet" : "none";
+            svg.Append($"<g transform=\"{centeredMatrix}\"><image href=\"{source}\" width=\"{panel.Width}\" height=\"{panel.Height}\" preserveAspectRatio=\"{aspect}\"/></g>");
+        }
+        svg.Append($"</g><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" fill=\"none\" stroke=\"#202027\" stroke-width=\"2\"/></svg>");
+        return VectorDataUrl(svg.ToString());
     }
 
     public async Task SaveAsync(string projectFolder, PanelDocument panel, string? relativeFolder = null)

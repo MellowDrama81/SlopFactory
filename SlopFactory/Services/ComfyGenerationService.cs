@@ -81,7 +81,9 @@ public sealed class ComfyGenerationService(ComfyConnectionSettings settings, Wor
             Directory.CreateDirectory(outputDirectory);
 
             var uploaded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var placeholder in placeholders.Where(item => item.Type == "image" && !item.IsMaskedImage))
+            var imagePlaceholders = placeholders.Where(item => item.Type == "image" && !item.IsMaskedImage).ToList();
+            var maskPlaceholders = placeholders.Where(item => item.IsMaskedImage).ToList();
+            foreach (var placeholder in imagePlaceholders)
             {
                 var assetPath = ResolveAssetPath(projectFolder, values[placeholder.Name]);
                 if (!uploaded.TryGetValue(assetPath, out var remoteName))
@@ -104,10 +106,14 @@ public sealed class ComfyGenerationService(ComfyConnectionSettings settings, Wor
                 }
                 values[placeholder.Name] = remoteName;
             }
-            foreach (var placeholder in placeholders.Where(item => item.IsMaskedImage))
+            for (var maskIndex = 0; maskIndex < maskPlaceholders.Count; maskIndex++)
             {
-                var source = placeholders.FirstOrDefault(item => item.Type == "image" && !item.IsMaskedImage)
-                    ?? throw new InvalidOperationException("This workflow needs an image to pair with its mask.");
+                var placeholder = maskPlaceholders[maskIndex];
+                var source = imagePlaceholders.FirstOrDefault(item => string.Equals(item.Name, placeholder.SourceImagePlaceholderName, StringComparison.OrdinalIgnoreCase));
+                if (source is null && imagePlaceholders.Count == maskPlaceholders.Count)
+                    source = imagePlaceholders[maskIndex];
+                if (source is null)
+                    throw new InvalidOperationException($"Could not find an image to pair with {placeholder.Label.ToLowerInvariant()}.");
                 var assetPath = ResolveAssetPath(projectFolder, rawValues.GetValueOrDefault(source.Name) ?? string.Empty);
                 var maskId = rawValues.GetValueOrDefault(MaskValueName(source.Name));
                 if (string.IsNullOrWhiteSpace(maskId)) throw new InvalidOperationException($"Choose a mask for {source.Label.ToLowerInvariant()}.");
