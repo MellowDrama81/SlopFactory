@@ -66,13 +66,23 @@ else if (Pane.Kind == "generation")
     </div>
     <label class="generation-field">
       <span>Workflow</span>
-      <select value="@Pane.WorkflowId" @onchange="ChangeGenerationWorkflow">
-        <option value="">Select a workflow</option>
-        @foreach (var workflow in WorkflowLibrary.GetAll().Where(item => !string.IsNullOrWhiteSpace(item.GraphFile)))
+      <div class="workflow-select">
+        <button type="button" class="workflow-select-trigger" aria-haspopup="listbox" aria-expanded="@workflowMenuOpen" @onclick="ToggleWorkflowMenu">@(SelectedGenerationWorkflow?.DisplayName ?? "Select a workflow")<span>⌄</span></button>
+        @if (workflowMenuOpen)
         {
-          <option value="@workflow.Id">@workflow.DisplayName</option>
+          <div class="workflow-select-menu" role="listbox" aria-label="Workflow">
+            <button type="button" role="option" aria-selected="@(string.IsNullOrEmpty(Pane.WorkflowId))" @onclick="() => ChooseGenerationWorkflow(string.Empty)">Select a workflow</button>
+            @foreach (var group in GenerationWorkflowGroups)
+            {
+              <div class="workflow-select-group">@group.Name</div>
+              @foreach (var workflow in group.Workflows)
+              {
+                <button type="button" role="option" aria-selected="@(workflow.Id == Pane.WorkflowId)" @key="workflow.Id" @onclick="() => ChooseGenerationWorkflow(workflow.Id)">@workflow.DisplayName</button>
+              }
+            }
+          </div>
         }
-      </select>
+      </div>
     </label>
     @if (SelectedGenerationWorkflow is not null)
     {
@@ -329,6 +339,7 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   [Parameter] public EventCallback<PanelPaneSelection> OnPanelSelectionChanged { get; set; }
   [Parameter] public EventCallback<PanelDraftChange> OnPanelDraftChanged { get; set; }
   private string? loadedGenerationWorkflowId;
+  private bool workflowMenuOpen;
   private List<WorkflowPlaceholder> generationInputs = [];
   private string? generationProject;
   private string outputFolderDraft = "generated";
@@ -344,6 +355,26 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   private GenerationRunState? GenerationState => ComfyGenerationService.GetState(Pane.Id);
   private WorkflowDefinition? SelectedGenerationWorkflow => WorkflowLibrary.GetAll()
       .FirstOrDefault(workflow => workflow.Id == Pane.WorkflowId && !string.IsNullOrWhiteSpace(workflow.GraphFile));
+  private IReadOnlyList<(string Name, IReadOnlyList<WorkflowDefinition> Workflows)> GenerationWorkflowGroups => WorkflowLibrary.GetAll()
+      .Where(workflow => !string.IsNullOrWhiteSpace(workflow.GraphFile))
+      .GroupBy(WorkflowInputGroup)
+      .OrderBy(group => WorkflowInputGroupOrder(group.Key))
+      .Select(group => (Name: group.Key, Workflows: (IReadOnlyList<WorkflowDefinition>)group.OrderBy(workflow => workflow.DisplayName, StringComparer.OrdinalIgnoreCase).ToList()))
+      .ToList();
+  private static string WorkflowInputGroup(WorkflowDefinition workflow) => workflow.Capabilities switch
+  {
+      { RequiresMask: true } => "Masked image",
+      { MaxImages: <= 0 } => "Text to image",
+      { MaxImages: 1 } => "Single reference image",
+      _ => "Multiple reference images"
+  };
+  private static int WorkflowInputGroupOrder(string group) => group switch
+  {
+      "Text to image" => 0,
+      "Single reference image" => 1,
+      "Multiple reference images" => 2,
+      _ => 3
+  };
   private string GenerationValue(string name) => Pane.InputValues?.GetValueOrDefault(name) ?? string.Empty;
   private bool WorkflowNeedsMask => SelectedGenerationWorkflow?.Capabilities.RequiresMask == true && generationInputs.Any(item => item.IsMaskedImage);
   private string AssetsRoot => string.IsNullOrWhiteSpace(Pane.Context) ? string.Empty : Path.Combine(Pane.Context, "assets");
@@ -362,9 +393,11 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
       catch { return []; }
   }
   private string GenerationMaskValue(string imageName) => GenerationValue(ComfyGenerationService.MaskValueName(imageName));
-  private Task ChangeGenerationWorkflow(ChangeEventArgs args)
+  private void ToggleWorkflowMenu() => workflowMenuOpen = !workflowMenuOpen;
+  private async Task ChooseGenerationWorkflow(string workflowId)
   {
-      return OnGenerationWorkflowChanged.InvokeAsync(new GenerationWorkflowSelection(Pane.Id, args.Value?.ToString() ?? string.Empty));
+      workflowMenuOpen = false;
+      await OnGenerationWorkflowChanged.InvokeAsync(new GenerationWorkflowSelection(Pane.Id, workflowId));
   }
   private Task ChangeGenerationInput(string name, ChangeEventArgs args) =>
       OnGenerationInputChanged.InvokeAsync(new GenerationInputChange(Pane.Id, name, args.Value?.ToString() ?? string.Empty));

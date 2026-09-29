@@ -24,3 +24,11 @@
 .asset-details-inline { min-width: 0; overflow: auto; border-left: 1px solid #3a3e4b; background: #20232d; }
 .asset-details-resize { border: 0; padding: 0; background: #282b36; cursor: col-resize; z-index: 2; }
 .asset-details-resize:hover, .asset-details-resize:focus-visible { background: #a58af2; outline: none; }
+.workflow-select { position: relative; }
+.workflow-select-trigger { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid #665295; border-radius: 6px; background: #1d202a; color: #ecebf2; font: inherit; text-align: left; cursor: pointer; }
+.workflow-select-trigger:hover, .workflow-select-trigger:focus-visible { border-color: #a88cff; outline: 2px solid #a88cff55; outline-offset: 1px; }
+.workflow-select-trigger span { color: #c4afff; font-size: 16px; }
+.workflow-select-menu { position: absolute; z-index: 60; top: calc(100% + 3px); left: 0; right: 0; max-height: min(360px, 55vh); overflow: auto; padding: 5px 0; border: 1px solid #665295; border-radius: 6px; background: #1d202a; box-shadow: 0 10px 25px #090a0faa; }
+.workflow-select-menu button { display: block; width: 100%; padding: 7px 12px; border: 0; background: transparent; color: #e5e3ed; font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.workflow-select-menu button:hover, .workflow-select-menu button[aria-selected="true"] { background: #4a4458; color: #fff; }
+.workflow-select-group { padding: 9px 12px 4px; color: #c4afff; font-size: 10px; font-weight: 800; }
