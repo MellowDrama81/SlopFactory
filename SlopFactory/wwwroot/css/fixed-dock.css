@@ -1,0 +1,26 @@
+.dock-region { position: relative; }
+.fixed-dock { --left-width: 0px; --right-width: 0px; --top-height: 0px; --bottom-height: 0px; gap: 0; }
+.fixed-dock.has-left { --left-width: minmax(180px, 24%); gap: 1px; }
+.fixed-dock.has-right { --right-width: minmax(180px, 24%); gap: 1px; }
+.fixed-dock.has-top { --top-height: minmax(130px, 22%); gap: 1px; }
+.fixed-dock.has-bottom { --bottom-height: minmax(130px, 22%); gap: 1px; }
+.fixed-dock:not(.has-left) .dock-region-left, .fixed-dock:not(.has-right) .dock-region-right, .fixed-dock:not(.has-top) .dock-region-top, .fixed-dock:not(.has-bottom) .dock-region-bottom { display: none; }
+.fixed-dock.dock-empty-drop-top::after, .fixed-dock.dock-empty-drop-bottom::after, .fixed-dock.dock-empty-drop-left::after, .fixed-dock.dock-empty-drop-right::after { content: 'Drop pane here'; position: absolute; z-index: 40; display: grid; place-items: center; background: #9f82f03a; color: #f4f0ff; font-size: 11px; font-weight: 800; pointer-events: none; }
+.fixed-dock.dock-empty-drop-top::after { top: 0; left: 0; right: 0; height: 32px; border-bottom: 2px solid #b498ff; }
+.fixed-dock.dock-empty-drop-bottom::after { bottom: 0; left: 0; right: 0; height: 32px; border-top: 2px solid #b498ff; }
+.fixed-dock.dock-empty-drop-left::after { top: 0; bottom: 0; left: 0; width: 32px; border-right: 2px solid #b498ff; }
+.fixed-dock.dock-empty-drop-right::after { top: 0; bottom: 0; right: 0; width: 32px; border-left: 2px solid #b498ff; }
+.dock-resize-handle { position: absolute; z-index: 30; border: 0; background: transparent; padding: 0; opacity: 0; transition: opacity .15s, background .15s; }
+.dock-region:hover > .dock-resize-handle, .dock-resize-handle:focus-visible { opacity: 1; background: #a58af2; outline: none; }
+.dock-resize-right, .dock-resize-left { top: 0; bottom: 0; width: 7px; cursor: col-resize; }
+.dock-resize-right { right: -3px; }
+.dock-resize-left { left: -3px; }
+.dock-resize-bottom, .dock-resize-top { left: 0; right: 0; height: 7px; cursor: row-resize; }
+.dock-resize-bottom { bottom: -3px; }
+.dock-resize-top { top: -3px; }
+.assets-split { height: 100%; min-height: 0; }
+.assets-split.has-details { --asset-details-width: 38%; display: grid; grid-template-columns: minmax(0, 1fr) 7px minmax(260px, var(--asset-details-width)); }
+.assets-browser { min-width: 0; min-height: 0; overflow: auto; }
+.asset-details-inline { min-width: 0; overflow: auto; border-left: 1px solid #3a3e4b; background: #20232d; }
+.asset-details-resize { border: 0; padding: 0; background: #282b36; cursor: col-resize; z-index: 2; }
+.asset-details-resize:hover, .asset-details-resize:focus-visible { background: #a58af2; outline: none; }

@@ -17,7 +17,7 @@ public sealed class WorkspaceLayoutStore
             if (!File.Exists(FilePath)) return null;
             await using var stream = File.OpenRead(FilePath);
             var saved = await JsonNode.ParseAsync(stream);
-            if (saved is not JsonObject snapshot || !int.TryParse(snapshot["Version"]?.ToString(), out var version) || version is not (1 or 2))
+            if (saved is not JsonObject snapshot || !int.TryParse(snapshot["Version"]?.ToString(), out var version) || version is not (1 or 2 or 3))
                 return null;
             if (version == 1) UpgradeLegacyPaneNames(snapshot["Root"]);
             return snapshot.Deserialize<WorkspaceSnapshot>(JsonOptions)?.Root;
@@ -35,7 +35,7 @@ public sealed class WorkspaceLayoutStore
         var temporaryPath = path + ".tmp";
         try
         {
-            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(new WorkspaceSnapshot(2, root), JsonOptions));
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(new WorkspaceSnapshot(3, root), JsonOptions));
             File.Move(temporaryPath, path, overwrite: true);
         }
         finally

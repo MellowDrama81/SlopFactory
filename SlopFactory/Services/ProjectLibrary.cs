@@ -85,6 +85,9 @@ public sealed class ProjectLibrary
     public async Task<ProjectDefinition> SaveAsync(string folderPath, string name, bool createFolder)
     {
         var normalizedPath = Path.GetFullPath(folderPath.Trim());
+        var containingProject = FindContainingProject(normalizedPath);
+        if (containingProject is not null)
+            throw new InvalidOperationException($"Cannot add this folder as a project because it is inside the project at '{containingProject}'. Choose a folder outside that project.");
         if (createFolder) Directory.CreateDirectory(normalizedPath);
         if (!Directory.Exists(normalizedPath)) throw new DirectoryNotFoundException("The selected project folder does not exist.");
         Directory.CreateDirectory(Path.Combine(normalizedPath, "assets"));
@@ -115,6 +118,15 @@ public sealed class ProjectLibrary
     }
 
     private static string ProjectSettingsPath(string folderPath) => Path.Combine(folderPath, ProjectSettingsFileName);
+
+    private static string? FindContainingProject(string folderPath)
+    {
+        for (var parent = Directory.GetParent(folderPath); parent is not null; parent = parent.Parent)
+        {
+            if (File.Exists(Path.Combine(parent.FullName, ProjectSettingsFileName))) return parent.FullName;
+        }
+        return null;
+    }
 
     private static async Task<ProjectSettings?> LoadProjectSettingsAsync(string folderPath)
     {

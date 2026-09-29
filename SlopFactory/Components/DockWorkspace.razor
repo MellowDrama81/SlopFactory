@@ -122,7 +122,13 @@
       </div>
     </section>
   </section>
-  <section class="dock-host" data-root-dock><DockSurface Node="Root" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" OnPanelDraftChanged="ChangePanelDraft" /></section>
+  <section class="dock-host fixed-dock @(Layout.Top.Panes.Count > 0 ? "has-top" : "") @(Layout.Bottom.Panes.Count > 0 ? "has-bottom" : "") @(Layout.Left.Panes.Count > 0 ? "has-left" : "") @(Layout.Right.Panes.Count > 0 ? "has-right" : "")" data-root-dock>
+    <div class="dock-region dock-region-top" data-dock-region="top"><DockSurface Group="Layout.Top" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" OnPanelDraftChanged="ChangePanelDraft" />@if (Layout.Top.Panes.Count > 0) { <button type="button" class="dock-resize-handle dock-resize-bottom" data-dock-resize="top" aria-label="Resize top dock" title="Drag to resize" /> }</div>
+    <div class="dock-region dock-region-left" data-dock-region="left"><DockSurface Group="Layout.Left" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" OnPanelDraftChanged="ChangePanelDraft" />@if (Layout.Left.Panes.Count > 0) { <button type="button" class="dock-resize-handle dock-resize-right" data-dock-resize="left" aria-label="Resize left dock" title="Drag to resize" /> }</div>
+    <div class="dock-region dock-region-center" data-dock-region="center"><DockSurface Group="Layout.Center" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" OnPanelDraftChanged="ChangePanelDraft" /></div>
+    <div class="dock-region dock-region-right" data-dock-region="right"><DockSurface Group="Layout.Right" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" OnPanelDraftChanged="ChangePanelDraft" />@if (Layout.Right.Panes.Count > 0) { <button type="button" class="dock-resize-handle dock-resize-left" data-dock-resize="right" aria-label="Resize right dock" title="Drag to resize" /> }</div>
+    <div class="dock-region dock-region-bottom" data-dock-region="bottom"><DockSurface Group="Layout.Bottom" OnActivateTab="ActivateTab" OnGenerationWorkflowChanged="SelectGenerationWorkflow" OnGenerationInputChanged="ChangeGenerationInput" OnGenerationOutputFolderChanged="ChangeGenerationOutputFolder" OnGenerationOutputTagsChanged="ChangeGenerationOutputTags" OnPanelSelectionChanged="ChangePanelPaneSelection" OnPanelDraftChanged="ChangePanelDraft" />@if (Layout.Bottom.Panes.Count > 0) { <button type="button" class="dock-resize-handle dock-resize-top" data-dock-resize="bottom" aria-label="Resize bottom dock" title="Drag to resize" /> }</div>
+  </section>
 </main>
 
 @code {
@@ -134,7 +140,23 @@
   private string connectionStatus = "";
   private string connectionStatusClass = "";
   private bool isTesting;
-  private static DockNode BuildTree() => new TabGroupNode("workspace", [], string.Empty);
+  private sealed record DockRegions(TabGroupNode Center, TabGroupNode Top, TabGroupNode Bottom, TabGroupNode Left, TabGroupNode Right);
+  private DockRegions Layout => new(
+      FindGroup(Root, "center") ?? EmptyGroup("center"), FindGroup(Root, "top") ?? EmptyGroup("top"),
+      FindGroup(Root, "bottom") ?? EmptyGroup("bottom"), FindGroup(Root, "left") ?? EmptyGroup("left"), FindGroup(Root, "right") ?? EmptyGroup("right"));
+  private static TabGroupNode EmptyGroup(string id) => new(id, [], string.Empty);
+  private static DockNode BuildTree()
+  {
+      var center = EmptyGroup("center");
+      var middle = new SplitNode("fixed-middle", DockAxis.Horizontal, .22, EmptyGroup("left"), new SplitNode("fixed-middle-right", DockAxis.Horizontal, .78, center, EmptyGroup("right")));
+      return new SplitNode("fixed-top", DockAxis.Vertical, .18, EmptyGroup("top"), new SplitNode("fixed-bottom", DockAxis.Vertical, .82, middle, EmptyGroup("bottom")));
+  }
+  private static TabGroupNode? FindGroup(DockNode node, string id) => node switch
+  {
+      TabGroupNode group when group.Id == id => group,
+      SplitNode split => FindGroup(split.First, id) ?? FindGroup(split.Second, id),
+      _ => null
+  };
   private static readonly JsonSerializerOptions WorkflowJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
   [JSInvokable]
   public Task ClearWorkspace()
@@ -680,23 +702,9 @@
           var root = NormalizeFolder(assetsRoot);
           if (!File.Exists(asset) || !IsInFolder(asset, root))
               return JsonSerializer.Serialize(new { success = false, message = "The asset is not available." }, WorkflowJsonOptions);
-          var existingDetails = FindAssetDetails(Root, sourcePaneId);
-          if (existingDetails is not null)
-          {
-              Root = UpdateAssetDetails(Root, existingDetails.Id, asset, root);
-          }
-          else
-          {
-              added++;
-              var detailsPane = new DockPane($"asset-details{added}", $"Asset · {Path.GetFileName(asset)}", "◉", "mint", "asset-details", asset, root, sourcePaneId);
-              var relatedMask = FindRelatedMaskPane(Root, sourcePaneId, root);
-              if (relatedMask is not null && relatedMask.Owner is null)
-                  Root = SetPaneOwner(Root, relatedMask.Id, sourcePaneId);
-              Root = relatedMask is not null
-                  ? AddPaneAfter(Root, relatedMask.Id, detailsPane)
-                  : ContainsPane(Root, sourcePaneId) ? DockDetailsRightOfPane(Root, sourcePaneId, detailsPane) : AddToFirstGroup(Root, detailsPane);
-          }
-          Root = CollapseEmptyGroups(Root) ?? BuildTree();
+          if (FindAssetsPane(Root, sourcePaneId) is null)
+              throw new InvalidOperationException("The Assets pane is no longer open.");
+          Root = SetAssetsPaneSelection(Root, sourcePaneId, asset);
           await InvokeAsync(StateHasChanged);
           return JsonSerializer.Serialize(new { success = true }, WorkflowJsonOptions);
       }
@@ -834,15 +842,8 @@
       },
       _ => node
   };
-  private static DockNode DockDetailsRightOfPane(DockNode node, string sourcePaneId, DockPane detailsPane) => node switch
-  {
-      TabGroupNode group when group.Panes.Any(pane => pane.Id == sourcePaneId)
-          => new SplitNode($"asset-details-split-{detailsPane.Id}", DockAxis.Horizontal, .6, group, new TabGroupNode($"asset-details-group-{detailsPane.Id}", [detailsPane], detailsPane.Id)),
-      SplitNode split when ContainsPane(split.First, sourcePaneId)
-          => split with { First = DockDetailsRightOfPane(split.First, sourcePaneId, detailsPane) },
-      SplitNode split => split with { Second = DockDetailsRightOfPane(split.Second, sourcePaneId, detailsPane) },
-      _ => node
-  };
+  private static DockNode DockDetailsRightOfPane(DockNode node, string sourcePaneId, DockPane detailsPane)
+      => AddToGroup(node, "right", detailsPane);
   private static string NormalizeFolder(string path) => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
   private static bool IsInFolder(string path, string folder) => string.Equals(path, folder, StringComparison.OrdinalIgnoreCase) || path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
   private static void CopyDirectory(string source, string destination)
@@ -867,6 +868,19 @@
               ActiveId = paneId
           },
       SplitNode split => split with { First = SetPaneLocation(split.First, paneId, folderPath), Second = SetPaneLocation(split.Second, paneId, folderPath) },
+      _ => node
+  };
+  [JSInvokable]
+  public async Task CloseAssetDetails(string paneId)
+  {
+      Root = SetAssetsPaneSelection(Root, paneId, null);
+      await InvokeAsync(StateHasChanged);
+  }
+  private static DockNode SetAssetsPaneSelection(DockNode node, string paneId, string? assetPath) => node switch
+  {
+      TabGroupNode group when group.Panes.Any(pane => pane.Id == paneId && pane.Kind == "assets")
+          => group with { Panes = group.Panes.Select(pane => pane.Id == paneId ? pane with { SelectedAssetPath = assetPath } : pane).ToList(), ActiveId = paneId },
+      SplitNode split => split with { First = SetAssetsPaneSelection(split.First, paneId, assetPath), Second = SetAssetsPaneSelection(split.Second, paneId, assetPath) },
       _ => node
   };
   [JSInvokable]
@@ -1214,8 +1228,8 @@
   }
   private static DockNode AddToFirstGroup(DockNode node, DockPane pane) => node switch
   {
-      TabGroupNode group => group with { Panes = group.Panes.Append(pane).ToList(), ActiveId = pane.Id },
-      SplitNode split => split with { First = AddToFirstGroup(split.First, pane) },
+      TabGroupNode group when group.Id == "center" => group with { Panes = group.Panes.Append(pane).ToList(), ActiveId = pane.Id },
+      SplitNode split => split with { First = AddToFirstGroup(split.First, pane), Second = AddToFirstGroup(split.Second, pane) },
       _ => node
   };
   private static DockNode AddPaneAfter(DockNode node, string sourcePaneId, DockPane pane) => node switch
@@ -1241,27 +1255,12 @@
       },
       _ => node
   };
-  [JSInvokable("ApplyDockDrop")]
-  public async Task DockPane(string paneId, string targetGroupId, string zone)
+  [JSInvokable("MovePaneToRegion")]
+  public async Task MovePaneToRegion(string paneId, string region)
   {
       var withoutSource = RemovePane(Root, paneId, out var pane);
       if (pane is null || withoutSource is null) return;
-      Root = CollapseEmptyGroups(InsertPane(withoutSource, targetGroupId, pane, zone)) ?? BuildTree();
-      await InvokeAsync(StateHasChanged);
-  }
-  [JSInvokable("ApplyRootDockDrop")]
-  public async Task DockAtRoot(string paneId, string edge)
-  {
-      var remaining = RemovePane(Root, paneId, out var pane);
-      if (remaining is null || pane is null) return;
-      var incoming = new TabGroupNode($"group-{pane.Id}", [pane], pane.Id);
-      Root = CollapseEmptyGroups(edge switch
-      {
-          "top" => new SplitNode($"root-top-{pane.Id}", DockAxis.Vertical, .25, incoming, remaining),
-          "bottom" => new SplitNode($"root-bottom-{pane.Id}", DockAxis.Vertical, .75, remaining, incoming),
-          "left" => new SplitNode($"root-left-{pane.Id}", DockAxis.Horizontal, .25, incoming, remaining),
-          _ => new SplitNode($"root-right-{pane.Id}", DockAxis.Horizontal, .75, remaining, incoming)
-      }) ?? BuildTree();
+      Root = AddToGroup(withoutSource, region is "top" or "bottom" or "left" or "right" ? region : "center", pane);
       await InvokeAsync(StateHasChanged);
   }
   private static DockNode? RemovePane(DockNode node, string paneId, out DockPane? removed)
@@ -1273,7 +1272,7 @@
           if (removedIndex < 0) return group;
           removed = group.Panes[removedIndex];
           var remaining = group.Panes.Where(pane => pane.Id != paneId).ToList();
-          if (remaining.Count == 0) return null;
+          if (remaining.Count == 0) return group with { Panes = [], ActiveId = string.Empty };
           var activeId = remaining.Any(pane => pane.Id == group.ActiveId)
               ? group.ActiveId
               : remaining[Math.Min(removedIndex, remaining.Count - 1)].Id;
@@ -1285,33 +1284,18 @@
       var second = RemovePane(split.Second, paneId, out removed);
       return second is null ? split.First : split with { Second = second };
   }
-  private static DockNode? CollapseEmptyGroups(DockNode node) => node switch
-  {
-      TabGroupNode group => group.Panes.Count == 0 ? null : group,
-      SplitNode split => CollapseSplit(split),
-      _ => node
-  };
-  private static DockNode? CollapseSplit(SplitNode split)
-  {
-      var first = CollapseEmptyGroups(split.First);
-      var second = CollapseEmptyGroups(split.Second);
-      return first is null ? second : second is null ? first : split with { First = first, Second = second };
-  }
+  private static DockNode? CollapseEmptyGroups(DockNode node) => node;
   private static DockNode InsertPane(DockNode node, string groupId, DockPane pane, string zone)
   {
-      if (node is TabGroupNode group)
-      {
-          if (group.Id != groupId) return group;
-          if (zone == "stack") return group with { Panes = group.Panes.Append(pane).ToList(), ActiveId = pane.Id };
-          var incoming = new TabGroupNode($"group-{pane.Id}", [pane], pane.Id);
-          var axis = zone is "left" or "right" ? DockAxis.Horizontal : DockAxis.Vertical;
-          return zone is "left" or "top"
-              ? new SplitNode($"split-{pane.Id}", axis, .5, incoming, group)
-              : new SplitNode($"split-{pane.Id}", axis, .5, group, incoming);
-      }
-      var split = (SplitNode)node;
-      return split with { First = InsertPane(split.First, groupId, pane, zone), Second = InsertPane(split.Second, groupId, pane, zone) };
+      var target = zone is "left" or "right" or "top" or "bottom" ? zone : groupId;
+      return AddToGroup(node, target, pane);
   }
+  private static DockNode AddToGroup(DockNode node, string groupId, DockPane pane) => node switch
+  {
+      TabGroupNode group when group.Id == groupId => group with { Panes = group.Panes.Append(pane).ToList(), ActiveId = pane.Id },
+      SplitNode split => split with { First = AddToGroup(split.First, groupId, pane), Second = AddToGroup(split.Second, groupId, pane) },
+      _ => node
+  };
   [JSInvokable]
   public Task SetSplitRatio(string splitId, double ratio)
   {
@@ -1331,25 +1315,30 @@
   };
   private DockNode? RestoreWorkspace(DockNode? node)
   {
-      if (node is TabGroupNode group)
+      if (node is null) return null;
+      var restored = BuildTree();
+      var paneIds = new HashSet<string>(StringComparer.Ordinal);
+      void RestoreGroups(DockNode current)
       {
-          var panes = (group.Panes ?? []).Select(RestorePane).OfType<DockPane>()
-              .DistinctBy(pane => pane.Id).ToList();
-          if (panes.Count == 0) return null;
-          var activeId = panes.Any(pane => pane.Id == group.ActiveId) ? group.ActiveId : panes[0].Id;
-          return group with { Id = string.IsNullOrWhiteSpace(group.Id) ? $"group-{Guid.NewGuid():N}" : group.Id,
-              Panes = panes, ActiveId = activeId };
+          if (current is TabGroupNode group)
+          {
+              var target = group.Id is "top" or "bottom" or "left" or "right" or "center" ? group.Id : "center";
+              foreach (var pane in group.Panes ?? [])
+              {
+                  var valid = RestorePane(pane);
+                  if (valid is not null && paneIds.Add(valid.Id)) restored = AddToGroup(restored, target, valid);
+              }
+              return;
+          }
+          if (current is SplitNode split) { RestoreGroups(split.First); RestoreGroups(split.Second); }
+          if (current is FixedDockNode fixedLayout)
+          {
+              RestoreGroups(fixedLayout.Center); RestoreGroups(fixedLayout.Top); RestoreGroups(fixedLayout.Bottom);
+              RestoreGroups(fixedLayout.Left); RestoreGroups(fixedLayout.Right);
+          }
       }
-      if (node is SplitNode split)
-      {
-          var first = RestoreWorkspace(split.First);
-          var second = RestoreWorkspace(split.Second);
-          if (first is null) return second;
-          if (second is null) return first;
-          return split with { First = first, Second = second,
-              Ratio = double.IsFinite(split.Ratio) ? Math.Clamp(split.Ratio, .22, .78) : .5 };
-      }
-      return null;
+      RestoreGroups(node);
+      return restored;
   }
   private DockPane? RestorePane(DockPane pane)
   {

@@ -209,11 +209,10 @@ else if (Pane.Kind == "asset-details")
 {
   <div class="asset-details">
     <p class="eyebrow">ASSET DETAILS</p>
-    <h2>@assetName</h2>
-    <p class="assets-path">@Pane.Context</p>
+    <div class="assets-heading"><div><h2>@assetName</h2><p class="assets-path">@AssetDetailsPath</p></div>@if (Pane.Kind == "assets") { <button type="button" class="assets-up" data-assets-close-details data-assets-pane="@Pane.Id">← Assets</button> }</div>
     @if (assetImage is not null)
     {
-      <div class="asset-details-actions"><button type="button" data-assets-mask data-asset-path="@Pane.Context" data-assets-root="@Pane.Location" data-source-pane="@Pane.Id">✎ Define mask</button><span data-mask-open-status role="status"></span></div>
+      <div class="asset-details-actions"><button type="button" data-assets-mask data-asset-path="@AssetDetailsPath" data-assets-root="@AssetDetailsRoot" data-source-pane="@Pane.Id">✎ Define mask</button><span data-mask-open-status role="status"></span></div>
       <p class="asset-dimensions">Dimensions: @(assetDimensions ?? "Loading…")</p>
       <div class="asset-full-image"><img @ref="assetImageElement" @onload="UpdateImageDimensions" src="@assetImage" alt="@assetName" /></div>
     }
@@ -261,6 +260,7 @@ else if (Pane.Kind == "asset-details")
 else if (Pane.Kind == "assets")
 {
   <div class="assets-pane" data-assets-drop-target data-assets-pane="@Pane.Id" data-assets-folder="@currentAssetsPath" data-assets-root="@assetsRoot">
+    <div class="assets-split @(string.IsNullOrWhiteSpace(Pane.SelectedAssetPath) ? "" : "has-details")"><div class="assets-browser">
     <p class="eyebrow">PROJECT ASSETS</p>
     <div class="assets-heading">
       <div><h2>@Pane.Title</h2><p class="assets-path">@currentAssetsPath</p></div>
@@ -293,6 +293,29 @@ else if (Pane.Kind == "assets")
     {
       <div class="assets-grid">@foreach (var entry in assetEntries) { <article class="asset-tile @(entry.IsDirectory ? "" : "asset-file")" data-assets-drag data-assets-source-path="@entry.Path" data-assets-source-root="@assetsRoot" data-asset-path="@entry.Path" data-assets-open-details="@(entry.IsDirectory ? "" : "file")"><input type="checkbox" class="asset-select" data-asset-select data-asset-path="@entry.Path" data-assets-root="@assetsRoot" aria-label="Select @entry.Name" />@if (entry.IsDirectory) { <button type="button" class="asset-folder" data-assets-navigate data-assets-pane="@Pane.Id" data-assets-folder="@entry.Path"><div class="asset-tile-placeholder"><FolderThumbnail /></div><strong>@entry.Name</strong><small>Folder</small></button><div class="asset-folder-actions"><button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename folder" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export folder as ZIP">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete folder">×</button></div> } else { @if (entry.Thumbnail is not null) { <img src="@entry.Thumbnail" alt="@entry.Name" draggable="false" /> } else { <div class="asset-tile-placeholder">◌</div> }<div class="asset-tile-footer"><strong>@entry.Name</strong>@if (IsGenerationImage(entry.Path)) { <button type="button" class="asset-mask-icon" data-assets-mask data-asset-path="@entry.Path" data-assets-root="@assetsRoot" data-source-pane="@Pane.Id" title="Define mask" aria-label="Define mask for @entry.Name">◐</button> }<button type="button" class="asset-rename-icon" data-assets-rename data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Rename asset" aria-label="Rename @entry.Name">✎</button><button type="button" class="asset-export-icon" data-assets-export data-asset-path="@entry.Path" title="Export asset">⇩</button><button type="button" class="asset-delete-icon" data-assets-delete data-asset-path="@entry.Path" data-assets-root="@assetsRoot" title="Delete asset">×</button></div><small>@entry.Detail</small> }</article> }</div>
     }
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Pane.SelectedAssetPath))
+    {
+      <button type="button" class="asset-details-resize" data-assets-details-resize aria-label="Resize asset details" title="Drag to resize asset details" />
+      <aside class="asset-details asset-details-inline">
+        <div class="assets-heading"><div><p class="eyebrow">ASSET DETAILS</p><h2>@assetName</h2><p class="assets-path">@AssetDetailsPath</p></div><button type="button" class="assets-up" data-assets-close-details data-assets-pane="@Pane.Id">×</button></div>
+        @if (assetImage is not null)
+        {
+          <div class="asset-details-actions"><button type="button" data-assets-mask data-asset-path="@AssetDetailsPath" data-assets-root="@AssetDetailsRoot" data-source-pane="@Pane.Id">✎ Define mask</button><span data-mask-open-status role="status"></span></div>
+          <p class="asset-dimensions">Dimensions: @(assetDimensions ?? "Loading…")</p><div class="asset-full-image"><img @ref="assetImageElement" @onload="UpdateImageDimensions" src="@assetImage" alt="@assetName" /></div>
+        }
+        else { <div class="asset-image-unavailable">Preview is available for JPG, PNG, GIF, and WebP images.</div> }
+        <section class="asset-tags-section" aria-label="Asset tags"><h3>Tags</h3>
+          @if (assetTags.Count == 0) { <p class="asset-tags-empty">No tags yet.</p> }
+          else { <div class="asset-tag-list">@foreach (var tag in assetTags) { <span class="asset-tag" @key="tag">@tag<button type="button" title="Remove @tag" aria-label="Remove @tag" @onclick="() => RemoveTag(tag)">×</button></span> }</div> }
+          <div class="asset-tag-form"><div class="asset-tag-input-wrap"><input type="text" placeholder="Add a tag" aria-label="New tag" aria-haspopup="listbox" aria-expanded="@tagSuggestionsOpen" autocomplete="off" maxlength="64" value="@newTag" @oninput="OnNewTagInput" @onfocus="OpenTagSuggestions" @onkeydown="HandleTagKeyDown" />
+            @if (tagSuggestionsOpen && MatchingProjectTags.Count > 0) { <div class="asset-tag-suggestions" role="listbox" aria-label="Suggested project tags">@foreach (var tag in MatchingProjectTags) { <button type="button" role="option" @key="tag" @onclick="() => SelectTagSuggestion(tag)">@tag</button> }</div> }
+          </div><button type="button" @onclick="AddTag">Add tag</button></div>
+          @if (!string.IsNullOrWhiteSpace(tagStatus)) { <p class="asset-tag-status" role="status">@tagStatus</p> }
+        </section>
+      </aside>
+    }
+    </div>
   </div>
 }
 else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people asked for easier handoffs between product and design this week.</p><button>Review insights →</button></div> }
@@ -324,6 +347,8 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   private string GenerationValue(string name) => Pane.InputValues?.GetValueOrDefault(name) ?? string.Empty;
   private bool WorkflowNeedsMask => SelectedGenerationWorkflow?.Capabilities.RequiresMask == true && generationInputs.Any(item => item.IsMaskedImage);
   private string AssetsRoot => string.IsNullOrWhiteSpace(Pane.Context) ? string.Empty : Path.Combine(Pane.Context, "assets");
+  private string AssetDetailsPath => Pane.Kind == "assets" ? Pane.SelectedAssetPath ?? string.Empty : Pane.Context ?? string.Empty;
+  private string AssetDetailsRoot => Pane.Kind == "assets" ? Pane.Context ?? string.Empty : Pane.Location ?? string.Empty;
   private string? GenerationAssetPath(string name)
   {
       var relative = GenerationValue(name);
@@ -468,7 +493,11 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
           ResetGenerationProject();
           return;
       }
-      if (Pane.Kind == "asset-details") { LoadAssetDetails(); return; }
+      if (Pane.Kind == "asset-details" || (Pane.Kind == "assets" && !string.IsNullOrWhiteSpace(Pane.SelectedAssetPath)))
+      {
+          LoadAssetDetails();
+          if (Pane.Kind == "asset-details") return;
+      }
       if (Pane.Kind != "assets" || string.IsNullOrWhiteSpace(Pane.Context) || !Directory.Exists(Pane.Context)) { assetEntries = []; return; }
       if (!string.Equals(assetsRoot, Pane.Context, StringComparison.OrdinalIgnoreCase))
       {
@@ -611,29 +640,31 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   }
   private void LoadAssetDetails()
   {
-      if (!string.Equals(dimensionsForPath, Pane.Context, StringComparison.OrdinalIgnoreCase))
+      var detailPath = AssetDetailsPath;
+      var detailRoot = AssetDetailsRoot;
+      if (!string.Equals(dimensionsForPath, detailPath, StringComparison.OrdinalIgnoreCase))
       {
           assetDimensions = null;
-          dimensionsForPath = Pane.Context;
+          dimensionsForPath = detailPath;
           newTag = string.Empty;
           tagSuggestionsOpen = false;
           tagStatus = string.Empty;
       }
-      assetName = Path.GetFileName(Pane.Context) ?? "Asset";
+      assetName = Path.GetFileName(detailPath) ?? "Asset";
       assetImage = null;
       assetTags = [];
       assetMetadataPath = null;
       assetProjectFolder = null;
       projectTags = [];
-      if (string.IsNullOrWhiteSpace(Pane.Context) || string.IsNullOrWhiteSpace(Pane.Location) || !File.Exists(Pane.Context)) return;
+      if (string.IsNullOrWhiteSpace(detailPath) || string.IsNullOrWhiteSpace(detailRoot) || !File.Exists(detailPath)) return;
       try
       {
-          assetsRoot = Pane.Location;
-          EnsureAssetMetadata(Pane.Context);
-          assetImage = CreateImageSource(Pane.Context);
-          var projectFolder = Directory.GetParent(Pane.Location)!.FullName;
+          assetsRoot = detailRoot;
+          EnsureAssetMetadata(detailPath);
+          assetImage = CreateImageSource(detailPath);
+          var projectFolder = Directory.GetParent(detailRoot)!.FullName;
           assetProjectFolder = projectFolder;
-          assetMetadataPath = AssetMetadataPaths.ForAsset(projectFolder, Pane.Context, createDirectory: true);
+          assetMetadataPath = AssetMetadataPaths.ForAsset(projectFolder, detailPath, createDirectory: true);
           if (File.Exists(assetMetadataPath))
           {
               using var metadata = System.Text.Json.JsonDocument.Parse(File.ReadAllText(assetMetadataPath));

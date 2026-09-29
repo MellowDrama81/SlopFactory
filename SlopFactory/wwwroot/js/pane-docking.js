@@ -41,8 +41,21 @@
     if(hasInput){input.focus();input.select();}
     else dialog.querySelector('.app-modal-cancel').focus();
   });
-  const clear=()=>{target?.classList.remove('dock-stack','dock-left','dock-right','dock-top','dock-bottom','root-dock-top','root-dock-bottom','root-dock-left','root-dock-right');target=null;zone=null;};
-  const groupAt=(x,y)=>{const points=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];return points.map(e=>e?.closest?.('[data-group]')).find(Boolean)||null;};
+  const clear=()=>{target?.classList.remove('dock-region-drop-target','dock-empty-drop-top','dock-empty-drop-bottom','dock-empty-drop-left','dock-empty-drop-right');target=null;zone=null;};
+  const regionAt=(x,y)=>{const points=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];return points.map(e=>e?.closest?.('[data-dock-region]')).find(Boolean)||null;};
+  const hiddenRegionAt=(x,y)=>{
+    const host=document.querySelector('[data-root-dock]');
+    if(!host)return null;
+    const rect=host.getBoundingClientRect();
+    if(x<rect.left||x>rect.right||y<rect.top||y>rect.bottom)return null;
+    const candidates=[];
+    if(!host.classList.contains('has-top'))candidates.push({region:'top',distance:y-rect.top});
+    if(!host.classList.contains('has-bottom'))candidates.push({region:'bottom',distance:rect.bottom-y});
+    if(!host.classList.contains('has-left'))candidates.push({region:'left',distance:x-rect.left});
+    if(!host.classList.contains('has-right'))candidates.push({region:'right',distance:rect.right-x});
+    const closest=candidates.sort((first,second)=>first.distance-second.distance)[0];
+    return closest&&closest.distance<32?{host,region:closest.region}:null;
+  };
   const show = (event, text) => {
     if (!ghost) {
       ghost = document.createElement('div');
@@ -345,27 +358,51 @@
       if (selectedId) loadWorkflow(library, selectedId); else resetWorkflowForm(library);
     });
   };
-  const pick=(group,e)=>{const r=group.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height,edge=Math.min(x,1-x,y,1-y);if(edge>.24)return 'stack';if(edge===x)return'left';if(edge===1-x)return'right';return edge===y?'top':'bottom';};
-  const rootEdge = event => {
-    const host = document.querySelector('[data-root-dock]');
-    if (!host) return null;
-    const rect = host.getBoundingClientRect();
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return null;
-    const edges = [
-      { zone: 'root-top', distance: event.clientY - rect.top },
-      { zone: 'root-bottom', distance: rect.bottom - event.clientY },
-      { zone: 'root-left', distance: event.clientX - rect.left },
-      { zone: 'root-right', distance: rect.right - event.clientX }
-    ].sort((first, second) => first.distance - second.distance);
-    return edges[0].distance < 36 ? { host, zone: edges[0].zone } : null;
-  };
   const begin=e=>{if(drag)return;const pane=e.target.closest?.('[data-drag-pane]');if(!pane||(e.button!==undefined&&e.button!==0))return;if(e.pointerId!==undefined)pane.setPointerCapture?.(e.pointerId);drag={id:pane.dataset.dragPane,source:pane.closest('[data-group]')?.dataset.group,pane,isTab:true,x:e.clientX,y:e.clientY,moved:false};};
-  const move=e=>{if(!drag)return;if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<5)return;drag.moved=true;drag.pane.classList.add('dragging-tab');const root=rootEdge(e);if(root){if(target!==root.host||zone!==root.zone){clear();target=root.host;zone=root.zone;target.classList.add(`root-dock-${root.zone.substring(5)}`);}show(e,`Drop to dock ${root.zone.substring(5)}`);return;}const group=groupAt(e.clientX,e.clientY);if(!group||group.dataset.group===drag.source){clear();show(e,'Moving pane');return;}const next=pick(group,e);if(target!==group||zone!==next){clear();target=group;zone=next;target.classList.add(`dock-${zone}`);}show(e,next==='stack'?'Drop to stack':`Drop to split ${next}`);};
-  const end=()=>{if(!drag)return;const item=drag;drag=null;item.pane.classList.remove('dragging-tab');hide();const destination=target,next=zone;clear();if(item.moved&&item.isTab)suppressTabClick=true;if(item.moved&&destination&&next&&reference){if(next?.startsWith('root-'))reference.invokeMethodAsync('ApplyRootDockDrop',item.id,next.substring(5));else reference.invokeMethodAsync('ApplyDockDrop',item.id,destination.dataset.group,next);}};
+  const move=e=>{if(!drag)return;if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<5)return;drag.moved=true;drag.pane.classList.add('dragging-tab');const region=regionAt(e.clientX,e.clientY);const hidden=region?null:hiddenRegionAt(e.clientX,e.clientY);if(!region&&!hidden){clear();show(e,'Moving pane');return;}const next=region?.dataset.dockRegion??hidden.region;const destination=region??hidden.host;if(target!==destination||zone!==next){clear();target=destination;zone=next;target.classList.add(region?'dock-region-drop-target':`dock-empty-drop-${next}`);}show(e,`Drop in ${next} dock`);};
+  const end=()=>{if(!drag)return;const item=drag;drag=null;item.pane.classList.remove('dragging-tab');hide();const destination=target,next=zone;clear();if(item.moved&&item.isTab)suppressTabClick=true;if(item.moved&&destination&&next&&reference)reference.invokeMethodAsync('MovePaneToRegion',item.id,next);};
   const cancel=()=>{drag?.pane.classList.remove('dragging-tab');drag=null;hide();clear();};
   // Ignore compatibility mousedown events while a pointer drag is already active.
   window.addEventListener('pointerdown',begin,true);window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',cancel,true);
   window.addEventListener('mousedown',begin,true);window.addEventListener('mousemove',move,true);window.addEventListener('mouseup',end,true);
+  let dockResize=null;
+  const beginDockResize=event=>{
+    const handle=event.target.closest?.('[data-dock-resize]');
+    const host=handle?.closest?.('[data-root-dock]');
+    if(!handle||!host||event.button!==undefined&&event.button!==0)return;
+    event.preventDefault();event.stopPropagation();
+    handle.setPointerCapture?.(event.pointerId);
+    dockResize={host,mode:handle.dataset.dockResize};
+    document.body.classList.add('resizing-dock');
+  };
+  const updateDockResize=event=>{
+    if(!dockResize)return;
+    const rect=dockResize.host.getBoundingClientRect();
+    const horizontal=dockResize.mode==='left'||dockResize.mode==='right';
+    const raw=horizontal
+      ? (dockResize.mode==='left'?event.clientX-rect.left:rect.right-event.clientX)/rect.width*100
+      : (dockResize.mode==='top'?event.clientY-rect.top:rect.bottom-event.clientY)/rect.height*100;
+    const size=Math.max(12,Math.min(45,raw));
+    dockResize.host.style.setProperty(`--${dockResize.mode==='top'||dockResize.mode==='bottom'?dockResize.mode+'-height':dockResize.mode+'-width'}`,`${size}%`);
+  };
+  const endDockResize=()=>{if(!dockResize)return;dockResize=null;document.body.classList.remove('resizing-dock');};
+  window.addEventListener('pointerdown',beginDockResize,true);window.addEventListener('pointermove',updateDockResize,true);window.addEventListener('pointerup',endDockResize,true);window.addEventListener('pointercancel',endDockResize,true);
+  let assetDetailsResize=null;
+  const beginAssetDetailsResize=event=>{
+    const handle=event.target.closest?.('[data-assets-details-resize]');
+    const split=handle?.closest?.('.assets-split.has-details');
+    if(!handle||!split||event.button!==undefined&&event.button!==0)return;
+    event.preventDefault();event.stopPropagation();handle.setPointerCapture?.(event.pointerId);
+    assetDetailsResize={split};document.body.classList.add('resizing-dock');
+  };
+  const updateAssetDetailsResize=event=>{
+    if(!assetDetailsResize)return;
+    const rect=assetDetailsResize.split.getBoundingClientRect();
+    const width=Math.max(260,Math.min(rect.width*.7,rect.right-event.clientX));
+    assetDetailsResize.split.style.setProperty('--asset-details-width',`${width}px`);
+  };
+  const endAssetDetailsResize=()=>{if(!assetDetailsResize)return;assetDetailsResize=null;document.body.classList.remove('resizing-dock');};
+  window.addEventListener('pointerdown',beginAssetDetailsResize,true);window.addEventListener('pointermove',updateAssetDetailsResize,true);window.addEventListener('pointerup',endAssetDetailsResize,true);window.addEventListener('pointercancel',endAssetDetailsResize,true);
   let assetDrag=null;
   // Use pointer events rather than HTML drag-and-drop. The embedded WebView
   // does not reliably start native drags from asset tiles on either touch or
@@ -740,6 +777,11 @@
       return;
     }
     const assetsExport = event.target.closest?.('[data-assets-export]');
+    const closeAssetDetails = event.target.closest?.('[data-assets-close-details]');
+    if (closeAssetDetails && reference) {
+      reference.invokeMethodAsync('CloseAssetDetails', closeAssetDetails.dataset.assetsPane ?? '');
+      return;
+    }
     const assetsMask = event.target.closest?.('[data-assets-mask]');
     if (assetsMask && reference) {
       const status = assetsMask.closest('.assets-pane')?.querySelector('[data-assets-status]')

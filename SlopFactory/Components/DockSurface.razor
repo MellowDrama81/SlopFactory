@@ -1,32 +1,23 @@
 @using SlopFactory.Models
-@if (Node is SplitNode split)
-{
-  <div class="dock-split @(split.Axis == DockAxis.Horizontal ? "split-horizontal" : "split-vertical")" data-split-id="@split.Id" style="--first:@(split.Ratio * 100)%">
-    <div class="dock-branch"><DockSurface Node="split.First" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" OnPanelDraftChanged="OnPanelDraftChanged" /></div><div class="splitter" title="Resize dock branch"><i></i></div><div class="dock-branch"><DockSurface Node="split.Second" OnActivateTab="OnActivateTab" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" OnPanelDraftChanged="OnPanelDraftChanged" /></div>
-  </div>
-}
-else if (Node is TabGroupNode group)
-{
-  <section class="tab-group" data-group="@group.Id">
-    @if (group.Panes.Count == 0)
+<section class="tab-group" data-group="@Group.Id">
+    @if (Group.Panes.Count == 0)
     {
       <div class="empty-workspace"><span>▤</span><h2>No panes open</h2><p>Open Assets or Generation from the ribbon to start working with a project.</p></div>
     }
     else
     {
-      <nav class="tabs">@foreach (var pane in group.Panes) { <div class="tab-item @(pane.Id == group.ActiveId ? "selected" : "")"><button type="button" data-tab="@pane.Id" data-drag-pane="@pane.Id" class="tab-label" @onclick="() => Activate(group.Id, pane.Id)"><span class="@pane.Accent">@pane.Icon</span>@pane.Title</button><button type="button" class="close-pane" data-close-pane="@pane.Id" title="Close @pane.Title" aria-label="Close @pane.Title">×</button></div> }</nav>
+      <nav class="tabs">@foreach (var pane in Group.Panes) { <div class="tab-item @(pane.Id == Group.ActiveId ? "selected" : "")"><button type="button" data-tab="@pane.Id" data-drag-pane="@pane.Id" class="tab-label" @onclick="() => Activate(Group.Id, pane.Id)"><span class="@pane.Accent">@pane.Icon</span>@pane.Title</button><button type="button" class="close-pane" data-close-pane="@pane.Id" title="Close @pane.Title" aria-label="Close @pane.Title">×</button></div> }</nav>
       <div class="dock-content">
-      @foreach (var pane in group.Panes)
+      @foreach (var pane in Group.Panes)
       {
-        <div class="dock-pane-slot @(pane.Id == group.ActiveId ? "is-active" : "")" data-pane-view="@pane.Id"><DockPaneView @key="pane.Id" Pane="pane" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" OnPanelDraftChanged="OnPanelDraftChanged" /></div>
+        <div class="dock-pane-slot @(pane.Id == Group.ActiveId ? "is-active" : "")" data-pane-view="@pane.Id"><DockPaneView @key="pane.Id" Pane="pane" OnGenerationWorkflowChanged="OnGenerationWorkflowChanged" OnGenerationInputChanged="OnGenerationInputChanged" OnGenerationOutputFolderChanged="OnGenerationOutputFolderChanged" OnGenerationOutputTagsChanged="OnGenerationOutputTagsChanged" OnPanelSelectionChanged="OnPanelSelectionChanged" OnPanelDraftChanged="OnPanelDraftChanged" /></div>
       }
       </div>
     }
-  </section>
-}
+</section>
 
 @code {
-  [Parameter, EditorRequired] public DockNode Node { get; set; } = default!;
+  [Parameter, EditorRequired] public TabGroupNode Group { get; set; } = default!;
   [Parameter] public EventCallback<TabActivation> OnActivateTab { get; set; }
   [Parameter] public EventCallback<GenerationWorkflowSelection> OnGenerationWorkflowChanged { get; set; }
   [Parameter] public EventCallback<GenerationInputChange> OnGenerationInputChanged { get; set; }
