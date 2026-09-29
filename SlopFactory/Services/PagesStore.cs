@@ -60,6 +60,9 @@ public sealed class PagesStore
                     placement.HeightCm = Math.Clamp(ValidDimension(placement.HeightCm, .1), .1, book.PageHeightCm);
                     placement.Xcm = Math.Clamp(ValidCoordinate(placement.Xcm), 0, pageWidth - placement.WidthCm);
                     placement.Ycm = Math.Clamp(ValidCoordinate(placement.Ycm), 0, book.PageHeightCm - placement.HeightCm);
+                    placement.Scale = Math.Clamp(ValidDimension(placement.Scale, 1), 1, 3);
+                    placement.ContentPositionX = Math.Clamp(ValidCoordinate(placement.ContentPositionX), 0, 100);
+                    placement.ContentPositionY = Math.Clamp(ValidCoordinate(placement.ContentPositionY), 0, 100);
                 }
             }
         }

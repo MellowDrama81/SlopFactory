@@ -46,8 +46,9 @@
           <div class="page-editor-measurements"><span>Measurements in @DisplayUnit</span><label>X<input type="number" step="0.1" value="@Format(DisplayValue(selected.Xcm))" @onchange='args => ChangePlacement(selected, "x", args)' /></label><label>Y<input type="number" step="0.1" value="@Format(DisplayValue(selected.Ycm))" @onchange='args => ChangePlacement(selected, "y", args)' /></label><label>Width<input type="number" min="0.1" step="0.1" value="@Format(DisplayValue(selected.WidthCm))" @onchange='args => ChangePlacement(selected, "width", args)' /></label><label>Height<input type="number" min="0.1" step="0.1" value="@Format(DisplayValue(selected.HeightCm))" @onchange='args => ChangePlacement(selected, "height", args)' /></label></div>
           @if (selected.Kind == "panel")
           {
-            <label>Content scale <output>@Format(selected.Scale * 100)%</output><input type="range" min="10" max="300" step="1" value="@(selected.Scale * 100)" @oninput='args => ChangePlacement(selected, "scale", args)' /></label>
-            <div class="page-editor-crop"><span>Crop (%)</span><label>Left<input type="number" min="0" max="95" value="@Format(selected.CropLeft)" @onchange='args => ChangePlacement(selected, "crop-left", args)' /></label><label>Top<input type="number" min="0" max="95" value="@Format(selected.CropTop)" @onchange='args => ChangePlacement(selected, "crop-top", args)' /></label><label>Right<input type="number" min="0" max="95" value="@Format(selected.CropRight)" @onchange='args => ChangePlacement(selected, "crop-right", args)' /></label><label>Bottom<input type="number" min="0" max="95" value="@Format(selected.CropBottom)" @onchange='args => ChangePlacement(selected, "crop-bottom", args)' /></label></div>
+            <label>Artwork scale <output>@Format(selected.Scale * 100)%</output><input type="range" min="100" max="300" step="1" value="@(selected.Scale * 100)" @oninput='args => ChangePlacement(selected, "scale", args)' /></label>
+            <label>Artwork horizontal position <output>@Format(selected.ContentPositionX)%</output><input type="range" min="0" max="100" step="1" value="@selected.ContentPositionX" @oninput='args => ChangePlacement(selected, "position-x", args)' /></label>
+            <label>Artwork vertical position <output>@Format(selected.ContentPositionY)%</output><input type="range" min="0" max="100" step="1" value="@selected.ContentPositionY" @oninput='args => ChangePlacement(selected, "position-y", args)' /></label>
           }
         }
       </aside>
@@ -219,11 +220,9 @@
           case "y": placement.Ycm = Math.Max(0, value * conversion); break;
           case "width": placement.WidthCm = Math.Max(.1, value * conversion); break;
           case "height": placement.HeightCm = Math.Max(.1, value * conversion); break;
-          case "scale": placement.Scale = Math.Clamp(value / 100, .1, 3); break;
-          case "crop-left": placement.CropLeft = Math.Clamp(value, 0, 95); break;
-          case "crop-top": placement.CropTop = Math.Clamp(value, 0, 95); break;
-          case "crop-right": placement.CropRight = Math.Clamp(value, 0, 95); break;
-          case "crop-bottom": placement.CropBottom = Math.Clamp(value, 0, 95); break;
+          case "scale": placement.Scale = Math.Clamp(value / 100, 1, 3); break;
+          case "position-x": placement.ContentPositionX = Math.Clamp(value, 0, 100); break;
+          case "position-y": placement.ContentPositionY = Math.Clamp(value, 0, 100); break;
       }
       ConstrainPlacement(placement);
       Save();
@@ -316,6 +315,6 @@
   {
       if (currentPage is null || book is null) return string.Empty;
       var pageWidth = book.PageWidthCm * (currentPage.Layout == "double" ? 2 : 1);
-      return $"--panel-x: {(placement.Xcm / pageWidth * 100).ToString("0.###", CultureInfo.InvariantCulture)}%;--panel-y: {(placement.Ycm / book.PageHeightCm * 100).ToString("0.###", CultureInfo.InvariantCulture)}%;--panel-width: {(placement.WidthCm / pageWidth * 100).ToString("0.###", CultureInfo.InvariantCulture)}%;--panel-height: {(placement.HeightCm / book.PageHeightCm * 100).ToString("0.###", CultureInfo.InvariantCulture)}%;--panel-scale: {placement.Scale.ToString("0.###", CultureInfo.InvariantCulture)};--crop-left: {placement.CropLeft.ToString("0.###", CultureInfo.InvariantCulture)}%;--crop-top: {placement.CropTop.ToString("0.###", CultureInfo.InvariantCulture)}%;--crop-right: {placement.CropRight.ToString("0.###", CultureInfo.InvariantCulture)}%;--crop-bottom: {placement.CropBottom.ToString("0.###", CultureInfo.InvariantCulture)}%;";
+      return $"--panel-x: {(placement.Xcm / pageWidth * 100).ToString("0.###", CultureInfo.InvariantCulture)}%;--panel-y: {(placement.Ycm / book.PageHeightCm * 100).ToString("0.###", CultureInfo.InvariantCulture)}%;--panel-width: {(placement.WidthCm / pageWidth * 100).ToString("0.###", CultureInfo.InvariantCulture)}%;--panel-height: {(placement.HeightCm / book.PageHeightCm * 100).ToString("0.###", CultureInfo.InvariantCulture)}%;--content-scale: {placement.Scale.ToString("0.###", CultureInfo.InvariantCulture)};--content-position-x: {placement.ContentPositionX.ToString("0.###", CultureInfo.InvariantCulture)}%;--content-position-y: {placement.ContentPositionY.ToString("0.###", CultureInfo.InvariantCulture)}%;";
   }
 }

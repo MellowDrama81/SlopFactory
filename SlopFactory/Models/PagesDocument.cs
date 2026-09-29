@@ -39,8 +39,7 @@ public sealed class PagePanelPlacement
     public double Xcm { get; set; }
     public double Ycm { get; set; }
     public double Scale { get; set; } = 1;
-    public double CropLeft { get; set; }
-    public double CropTop { get; set; }
-    public double CropRight { get; set; }
-    public double CropBottom { get; set; }
+    // Object-position percentages keep a cover-fitted panel visible while it is panned within its frame.
+    public double ContentPositionX { get; set; } = 50;
+    public double ContentPositionY { get; set; } = 50;
 }

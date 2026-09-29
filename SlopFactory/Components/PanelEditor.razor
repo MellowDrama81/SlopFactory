@@ -43,13 +43,13 @@
           }
           <div class="panel-editor-composition" data-image-drop="@compositionDrop.Id">
             <div class="panel-editor-preview-wrap">
-              <svg @ref="previewElement" class="panel-editor-preview" viewBox="@($"0 0 {document.Width} {document.Height}")" aria-label="Panel composition preview" @onpointerdown="BeginSelectedLayerTransform" @onpointermove="UpdateLayerTransform" @onpointerup="EndLayerTransform" @onpointercancel="EndLayerTransform">
+              <svg @ref="previewElement" class="panel-editor-preview" viewBox="@($"0 0 {document.Width} {document.Height}")" aria-label="Panel composition preview" @onpointerdown="BeginSelectedLayerTransform" @onpointermove="UpdateLayerTransform" @onpointerup="EndLayerTransform" @onpointercancel="EndLayerTransform" @onwheel="args => OnPreviewWheel(args, null)" @onwheel:preventDefault="true" @onwheel:stopPropagation="true">
                 <defs><clipPath id="@PanelClipId"><rect x="1" y="1" width="@Math.Max(0, document.Width - 2)" height="@Math.Max(0, document.Height - 2)" /></clipPath></defs>
                 <rect x="1" y="1" width="@Math.Max(0, document.Width - 2)" height="@Math.Max(0, document.Height - 2)" fill="#fff" />
                 <g clip-path="@($"url(#{PanelClipId})")">
                   @foreach (var layer in document.Layers.Where(item => item.Visible))
                   {
-                    <g @key="layer.Id" transform="@MatrixTransform(layer)" @onclick="() => SelectLayer(layer.Id)" @oncontextmenu:preventDefault="true">
+                    <g @key="layer.Id" transform="@MatrixTransform(layer)" @onclick="() => SelectLayer(layer.Id)" @oncontextmenu:preventDefault="true" @onwheel="args => OnPreviewWheel(args, layer.Id)" @onwheel:preventDefault="true" @onwheel:stopPropagation="true">
                       @if (layer.Kind == "raster" && RasterImage(layer) is { } rasterSource)
                       {
                         <image href="@rasterSource" width="@document.Width" height="@document.Height" preserveAspectRatio="xMidYMid meet" />
@@ -63,8 +63,9 @@
                 </g>
                 <rect x="1" y="1" width="@Math.Max(0, document.Width - 2)" height="@Math.Max(0, document.Height - 2)" fill="none" stroke="#202027" stroke-width="2" pointer-events="none" />
               </svg>
-              <span class="panel-editor-preview-caption">@document.Width × @document.Height px · drag to move · wheel to scale · Shift+wheel to rotate · pinch/twist on touch</span>
+              <span class="panel-editor-preview-caption">@document.Width × @document.Height px · drag to move · wheel over artwork to scale · Shift+wheel to rotate · pinch/twist on touch</span>
               <p class="generation-drop-status" data-image-drop-status role="status"></p>
+              <p class="generation-drop-status" role="status">@wheelStatus</p>
             </div>
             <div class="panel-editor-layers">
               <div class="panel-editor-list-heading"><h3>Layers</h3></div>
@@ -136,7 +137,7 @@
   private string? loadedKey;
   private PanelDocument? document;
   private ImageDropTarget compositionDrop = default!;
-  private DotNetObjectReference<PanelEditor>? transformReference;
+  private string wheelStatus = string.Empty;
   private bool choosingRaster;
   private string? assetPickerLayerId;
   private bool importing;
@@ -236,16 +237,9 @@
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
       if (firstRender) await compositionDrop.RegisterAsync();
-      if (transformReference is not null || document is null) return;
-      transformReference = DotNetObjectReference.Create(this);
-      await JS.InvokeVoidAsync("recursiveDock.registerPanelTransform", previewElement, transformReference);
   }
   public async ValueTask DisposeAsync()
   {
-      try { await JS.InvokeVoidAsync("recursiveDock.unregisterPanelTransform", previewElement); }
-      catch (JSDisconnectedException) { /* The WebView is closing. */ }
-      catch (TaskCanceledException) { /* The WebView is closing. */ }
-      transformReference?.Dispose();
       await compositionDrop.DisposeAsync();
   }
 
@@ -321,11 +315,22 @@
   private void SelectLayer(string id) => selectedLayerId = id;
   private Task BeginSelectedLayerTransform(PointerEventArgs args) =>
       SelectedLayer is { } layer ? BeginLayerTransform(layer, args) : Task.CompletedTask;
-  [JSInvokable]
-  public Task TransformSelectedLayer(double deltaY, bool rotate)
+  private void OnPreviewWheel(WheelEventArgs args, string? hoveredLayerId)
   {
-      if (SelectedLayer is { } layer) AdjustLayerWithWheel(layer, deltaY, rotate);
-      return InvokeAsync(StateHasChanged);
+      // SVG hit testing identifies the frontmost artwork under the pointer.
+      // The preview background falls back to the top visible layer, regardless of selection.
+      var layer = document?.Layers.FirstOrDefault(item => item.Visible && item.Id == hoveredLayerId)
+          ?? document?.Layers.LastOrDefault(item => item.Visible);
+      if (layer is null)
+      {
+          wheelStatus = "Add or show artwork to scale or rotate.";
+          return;
+      }
+      if (!PanelWheelTransform.Apply(layer, args.DeltaX, args.DeltaY, args.DeltaMode, args.ShiftKey)) return;
+      selectedLayerId = layer.Id;
+      if (gestureLayerId == layer.Id && activePointers.Count > 0) CaptureGestureOrigin();
+      if (rotationLayerId == layer.Id) rotationStartAngle = Math.Atan2(layer.Matrix[1], layer.Matrix[0]);
+      wheelStatus = args.ShiftKey ? $"{layer.Name}: rotation {TransformRotation(layer)}°" : $"{layer.Name}: scale {TransformScale(layer)}%";
   }
   private async Task BeginLayerTransform(PanelLayer layer, PointerEventArgs args)
   {
@@ -417,17 +422,6 @@
       _ = JS.InvokeVoidAsync("recursiveDock.releasePointer", rotationWheelElement, args.PointerId);
       rotationPointerId = null;
       rotationLayerId = null;
-  }
-  private void AdjustLayerWithWheel(PanelLayer layer, double deltaY, bool rotate)
-  {
-      var scale = Math.Sqrt(layer.Matrix[0] * layer.Matrix[0] + layer.Matrix[1] * layer.Matrix[1]);
-      var rotation = Math.Atan2(layer.Matrix[1], layer.Matrix[0]);
-      if (rotate) rotation -= deltaY * .004;
-      else scale = Math.Clamp(scale * Math.Pow(1.002, -deltaY), .01, 10);
-      var cosine = Math.Cos(rotation) * scale;
-      var sine = Math.Sin(rotation) * scale;
-      layer.Matrix = [cosine, sine, -sine, cosine, layer.Matrix[4], layer.Matrix[5]];
-      selectedLayerId = layer.Id;
   }
   private void ChangeLayerName(PanelLayer layer, ChangeEventArgs args) => layer.Name = args.Value?.ToString() ?? string.Empty;
   private void ChangeVisibility(PanelLayer layer, ChangeEventArgs args) => layer.Visible = args.Value is true;

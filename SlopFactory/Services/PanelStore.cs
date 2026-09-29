@@ -106,7 +106,7 @@ public sealed class PanelStore
         var clipId = "panel-bounds-" + panel.Id;
         var innerWidth = Math.Max(0, panel.Width - 2);
         var innerHeight = Math.Max(0, panel.Height - 2);
-        var svg = new StringBuilder($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {panel.Width} {panel.Height}\"><defs><clipPath id=\"{clipId}\"><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" /></clipPath></defs><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" fill=\"white\"/><g clip-path=\"url(#{clipId})\">");
+        var svg = new StringBuilder($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{panel.Width}\" height=\"{panel.Height}\" viewBox=\"0 0 {panel.Width} {panel.Height}\"><defs><clipPath id=\"{clipId}\"><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" /></clipPath></defs><rect x=\"1\" y=\"1\" width=\"{innerWidth}\" height=\"{innerHeight}\" fill=\"white\"/><g clip-path=\"url(#{clipId})\">");
         foreach (var layer in panel.Layers.Where(item => item.Visible))
         {
             string? source;
