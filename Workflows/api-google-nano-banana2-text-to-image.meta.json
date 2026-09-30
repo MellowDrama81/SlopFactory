@@ -1,0 +1,14 @@
+{
+  "id": "api-google-nano-banana2-text-to-image",
+  "displayName": "Comfy Cloud — Google Nano Banana2 Text TO Image",
+  "description": "Imported from Comfy Cloud's official api_google_nano_banana2_text_to_image template using its embedded API prompt.",
+  "graphFile": "api-google-nano-banana2-text-to-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Nano Banana 2 (Gemini 3.1 Flash Image)"
+  }
+}

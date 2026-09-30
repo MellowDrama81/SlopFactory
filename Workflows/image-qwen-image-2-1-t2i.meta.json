@@ -1,0 +1,14 @@
+{
+  "id": "image-qwen-image-2-1-t2i",
+  "displayName": "Comfy Cloud — Qwen Image 2 1 T2I",
+  "description": "Imported from Comfy Cloud's official image_qwen_image_2_1_t2i template using its embedded API prompt.",
+  "graphFile": "image-qwen-image-2-1-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "qwen_image_2.1_int8_convrot.safetensors"
+  }
+}

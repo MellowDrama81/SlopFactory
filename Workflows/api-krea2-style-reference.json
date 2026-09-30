@@ -1,0 +1,89 @@
+{
+  "1": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "Krea 2 Medium",
+      "model.aspect_ratio": "16:9",
+      "model.resolution": "1K",
+      "model.creativity": "medium",
+      "model.moodboard_id": "",
+      "model.moodboard_strength": 0.35,
+      "seed": {{SEED:seed}},
+      "model.style_reference": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "Krea2ImageNode",
+    "_meta": {
+      "title": "Krea 2 Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "filename_prefix": "Krea2",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "7": {
+    "inputs": {
+      "strength": 1.0,
+      "image": [
+        "11",
+        0
+      ],
+      "style_reference": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "Krea2StyleReferenceNode",
+    "_meta": {
+      "title": "Krea 2 Style Reference"
+    }
+  },
+  "8": {
+    "inputs": {
+      "strength": 1.0,
+      "image": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "Krea2StyleReferenceNode",
+    "_meta": {
+      "title": "Krea 2 Style Reference"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "41e36a3f3e20211aff7c7d851ac830c3a337864cf670a0f45c484e29c2e3583b"
+    ]
+  },
+  "12": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "0af08604740d546f2e8adc8e658738174dea56f7f81dc5056ae7b11b0fca17ea"
+    ]
+  }
+}

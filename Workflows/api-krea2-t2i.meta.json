@@ -1,0 +1,14 @@
+{
+  "id": "api-krea2-t2i",
+  "displayName": "Comfy Cloud — Krea2 T2I",
+  "description": "Imported from Comfy Cloud's official api_krea2_t2i template using its embedded API prompt.",
+  "graphFile": "api-krea2-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Krea 2 Medium"
+  }
+}

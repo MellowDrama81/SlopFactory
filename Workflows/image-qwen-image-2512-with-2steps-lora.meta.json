@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_qwen_image_2512_with_2steps_lora template.",
+  "graphFile": "image-qwen-image-2512-with-2steps-lora.json",
+  "displayName": "Comfy Cloud — image qwen image 2512 with 2steps lora",
+  "id": "image-qwen-image-2512-with-2steps-lora",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "qwen_image_2512_fp8_e4m3fn.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

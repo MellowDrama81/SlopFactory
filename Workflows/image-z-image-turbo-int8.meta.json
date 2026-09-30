@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_z_image_turbo_int8 template.",
+  "graphFile": "image-z-image-turbo-int8.json",
+  "displayName": "Comfy Cloud — image z image turbo int8",
+  "id": "image-z-image-turbo-int8",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "z_image_turbo_int8_convrot.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official flux1_krea_dev template.",
+  "graphFile": "flux1-krea-dev.json",
+  "displayName": "Comfy Cloud — flux1 krea dev",
+  "id": "flux1-krea-dev",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "flux1-krea-dev_fp8_scaled.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

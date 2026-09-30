@@ -1,0 +1,78 @@
+{
+  "25": {
+    "inputs": {
+      "model": "seedream 5.0 lite",
+      "prompt": "{{PROMPT:string}}",
+      "size_preset": "2048x2048 (1:1)",
+      "width": 2048,
+      "height": 2048,
+      "sequential_image_generation": "disabled",
+      "max_images": 1,
+      "seed": {{SEED:seed}},
+      "watermark": false,
+      "fail_on_partial": true,
+      "$$node-text-preview": "Status: Completed\nTime elapsed: 58s",
+      "image": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "ByteDanceSeedreamNode",
+    "_meta": {
+      "title": "ByteDance Seedream 4.5"
+    }
+  },
+  "26": {
+    "inputs": {
+      "filename_prefix": "Seedream5.0_lite",
+      "images": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "29": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "73ecf8defd60fb67d2a63a043563da33afd22ae7353a91a2ee6aac6f73c915c8"
+    ]
+  },
+  "31": {
+    "inputs": {
+      "images.image0": [
+        "29",
+        0
+      ],
+      "images.image1": [
+        "32",
+        0
+      ]
+    },
+    "class_type": "BatchImagesNode",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  },
+  "32": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "7c3d09021edf4693190f7fe6c338b9072e216969af5ad169bbe721dd25faf6c4"
+    ]
+  }
+}

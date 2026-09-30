@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_krea2_turbo_t2i template.",
+  "graphFile": "image-krea2-turbo-t2i.json",
+  "displayName": "Comfy Cloud — image krea2 turbo t2i",
+  "id": "image-krea2-turbo-t2i",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "krea2_turbo_bf16.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": "Image description",
+    "requiresMask": false
+  }
+}

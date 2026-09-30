@@ -6,6 +6,7 @@
 @inject IJSRuntime JS
 @inject ComfyConnectionSettings ComfyConnection
 @inject ComfyConnectionTester ComfyConnectionTester
+@inject WorkflowValidationHarness WorkflowValidationHarness
 @inject WorkflowLibrary WorkflowLibrary
 @inject WorkflowTemplateService WorkflowTemplateService
 @inject ProjectLibrary ProjectLibrary
@@ -51,7 +52,7 @@
               </label>
               <p class="connection-note">The key is sent as the <code>X-API-Key</code> request header only when supplied. Settings are retained in this app’s local profile. For Comfy Cloud, use <code>https://cloud.comfy.org</code> and create a key in your <a href="https://platform.comfy.org/profile/api-keys" target="_blank">Comfy API key settings</a>.</p>
 
-              <div class="connection-actions"><button type="button" class="test-connection" data-comfy-action="test" disabled="@isTesting">@(isTesting ? "Testing…" : "Test connection")</button><button type="button" class="save-connection" data-comfy-action="save">Save connection</button><button type="button" class="use-current-connection" data-comfy-action="use-current">Use as current</button><span data-comfy-status class="@connectionStatusClass">@connectionStatus</span></div>
+              <div class="connection-actions"><button type="button" class="test-connection" data-comfy-action="test" disabled="@isTesting">@(isTesting ? "Testing…" : "Test connection")</button><button type="button" class="save-connection" data-comfy-action="save">Save connection</button><button type="button" class="use-current-connection" data-comfy-action="use-current">Use as current</button><button type="button" class="test-connection" @onclick="RunWorkflowPreflight" disabled="@isTesting">Preflight workflows</button><span data-comfy-status class="@connectionStatusClass">@connectionStatus</span></div>
             </div>
           </div>
         </section>
@@ -1118,6 +1119,29 @@
       {
           isTesting = false;
           await InvokeAsync(StateHasChanged);
+      }
+  }
+  private async Task RunWorkflowPreflight()
+  {
+      isTesting = true;
+      connectionStatus = "Preflighting workflows…";
+      connectionStatusClass = "";
+      try
+      {
+          var reportPath = Path.Combine(FileSystem.AppDataDirectory, "workflow-preflight.json");
+          var results = await WorkflowValidationHarness.PreflightAsync(reportPath);
+          var failed = results.Count(result => !result.Prepared);
+          connectionStatus = $"Preflight complete: {results.Count - failed}/{results.Count} prepared. Report saved locally.";
+          connectionStatusClass = failed == 0 ? "connection-success" : "connection-error";
+      }
+      catch (Exception ex)
+      {
+          connectionStatus = "Preflight failed: " + ex.Message;
+          connectionStatusClass = "connection-error";
+      }
+      finally
+      {
+          isTesting = false;
       }
   }
   [JSInvokable]

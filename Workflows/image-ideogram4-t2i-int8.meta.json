@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_ideogram4_t2i_int8 template.",
+  "graphFile": "image-ideogram4-t2i-int8.json",
+  "displayName": "Comfy Cloud — image ideogram4 t2i int8",
+  "id": "image-ideogram4-t2i-int8",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "ideogram4_unconditional_int8_convrot.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

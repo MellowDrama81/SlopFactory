@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_netayume_lumina_t2i template.",
+  "graphFile": "image-netayume-lumina-t2i.json",
+  "displayName": "Comfy Cloud — image netayume lumina t2i",
+  "id": "image-netayume-lumina-t2i",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "NetaYumev35_pretrained_all_in_one.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

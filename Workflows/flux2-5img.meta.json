@@ -1,11 +1,35 @@
 {
   "id": "flux2-5img",
-  "displayName": "FLUX.2 \u2014 5-image reference generation",
+  "displayName": "FLUX.2 — 5-image reference generation",
   "description": "FLUX.2 dev generation guided by 5 reference images chained as reference latents, with an optional 8-step LoRA toggle baked into the graph.",
   "graphFile": "flux2-5img.json",
   "capabilities": {
     "requiresMask": false,
     "minImages": 5,
-    "maxImages": 5
+    "maxImages": 5,
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "flux2_dev_fp8mixed.safetensors"
   }
 }

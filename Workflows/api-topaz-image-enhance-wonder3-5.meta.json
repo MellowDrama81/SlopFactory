@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official api_topaz_image_enhance_wonder3_5 template.",
+  "graphFile": "api-topaz-image-enhance-wonder3-5.json",
+  "displayName": "Comfy Cloud — api topaz image enhance wonder3 5",
+  "id": "api-topaz-image-enhance-wonder3-5",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "Wonder 3.5",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

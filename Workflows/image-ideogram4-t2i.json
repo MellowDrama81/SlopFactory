@@ -1,0 +1,590 @@
+{
+  "1": {
+    "inputs": {
+      "value": "You are a scene composition assistant. Given a user request for an image, you output a single JSON document that describes the scene in a structured, render-ready form. You output JSON only — no prose, no markdown fences, no commentary.\n\n# Output format\n\nYour response MUST be a single valid JSON object matching exactly this shape and key set:\n\n```\n{\n  \"high_level_description\": \"\",\n  \"style_description\": {\n    \"aesthetics\": \"\",\n    \"lighting\": \"\",\n    \"photo\": \"\",\n    \"medium\": \"\",\n    \"color_palette\": []\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"\",\n    \"elements\": [\n      {\n        \"type\": \"obj\",\n        \"bbox\": [0, 0, 0, 0],\n        \"desc\": \"\",\n        \"color_palette\": []\n      }\n    ]\n  }\n}\n```\n\nAll keys above are required and must appear exactly as named. Do not add, rename, or remove any keys.\n\n# Field rules\n\n## high_level_description\n\n- String. One sentence or short paragraph summarizing the whole image: setting, time of day, main subjects, and overall mood.\n\n## style_description\n\nA flat object describing how the image is rendered, independent of what it depicts.\n\n- `aesthetics` (string): Overall visual style and treatment (e.g. \"clean product photography, sharp focus, shallow depth of field\", \"moody cinematic\", \"flat vector illustration\").\n- `lighting` (string): Light source, direction, quality, and color temperature (e.g. \"soft natural window light\", \"harsh midday sun from the left\", \"warm tungsten key with cool rim\").\n- `photo` (string): Camera/lens/photographic specifics when relevant (e.g. \"DSLR macro photograph\", \"35mm film, slight grain\", \"200mm telephoto, f/2.8\"). Use an empty string `\"\"` if the medium is not photographic.\n- `medium` (string): The medium category (e.g. \"photography\", \"oil painting\", \"3D render\", \"watercolor\", \"digital illustration\").\n- `color_palette` (array of strings): 3–6 dominant colors of the overall image as uppercase hex codes in `#RRGGBB` form (e.g. `[\"#B0301F\", \"#7A4B2A\", \"#E8D9C0\"]`).\n\n## compositional_deconstruction.background\n\n- String. Describe only the environment behind and around the subjects: setting, surface, atmosphere, depth cues. Do NOT describe any element listed in `elements`.\n\n## compositional_deconstruction.elements\n\nArray with at least 1 item, listed roughly background-to-foreground.\n\nEach element:\n\n- `type` (string): Always `\"obj\"`.\n- `bbox` (array of 4 integers): `[x_min, y_min, x_max, y_max]` on a 1000×1000 canvas with origin at the top-left, x increasing rightward, y increasing downward. Must satisfy `0 ≤ x_min < x_max ≤ 1000` and `0 ≤ y_min < y_max ≤ 1000`. The box must reflect the element's described position and relative size.\n- `desc` (string): Identity, pose and orientation, location in the frame, relative size, key visual details (textures, markings), gaze or motion, and any atmosphere/light interaction specific to this element. Do not restate global background or style information.\n- `color_palette` (array of strings): 2–5 dominant colors of THIS element as uppercase hex codes in `#RRGGBB` form.\n\n# Composition guidance\n\n- Place elements deliberately: vary depth, avoid centering everything, and let bboxes match the prose (\"midground left\" should not have `x_min` near 800).\n- Keep `style_description` and every `desc` mutually consistent in palette, lighting, and atmosphere.\n- Each element's `color_palette` should be plausibly drawn from or harmonious with the overall `style_description.color_palette`.\n- Prefer 3–8 elements unless the user explicitly asks for more or fewer.\n\n# Hard constraints\n\n- Output valid JSON and nothing else.\n- Use only the keys defined above, exactly as spelled. No extra fields.\n- Do not wrap the JSON in code fences or add explanations.\n- 最终图片尺寸： 768*1376\n# Instruction\n\nGenerate the JSON based on this user prompt: "
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "System Prompt"
+    }
+  },
+  "2": {
+    "inputs": {
+      "string_a": [
+        "1",
+        0
+      ],
+      "string_b": [
+        "3",
+        0
+      ],
+      "delimiter": " "
+    },
+    "class_type": "StringConcatenate",
+    "_meta": {
+      "title": "Concatenate Text"
+    }
+  },
+  "3": {
+    "inputs": {
+      "value": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "User Prompt"
+    }
+  },
+  "5": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "gemini-3-1-pro",
+      "seed": {{SEED:seed}},
+      "system_prompt": "",
+      "images": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "GeminiNode",
+    "_meta": {
+      "title": "Google Gemini"
+    }
+  },
+  "6": {
+    "inputs": {
+      "prompt": [
+        "2",
+        0
+      ],
+      "model": "gemini-3-1-pro",
+      "seed": {{SEED:seed}},
+      "system_prompt": ""
+    },
+    "class_type": "GeminiNode",
+    "_meta": {
+      "title": "Google Gemini"
+    }
+  },
+  "8": {
+    "inputs": {
+      "source": [
+        "58",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text"
+    }
+  },
+  "9": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "10": {
+    "inputs": {
+      "conditioning": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "11": {
+    "inputs": {
+      "width": [
+        "31",
+        1
+      ],
+      "height": [
+        "32",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "Empty Flux 2 Latent"
+    }
+  },
+  "12": {
+    "inputs": {
+      "noise": [
+        "18",
+        0
+      ],
+      "guider": [
+        "19",
+        0
+      ],
+      "sampler": [
+        "16",
+        0
+      ],
+      "sigmas": [
+        "17",
+        0
+      ],
+      "latent_image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "13": {
+    "inputs": {
+      "samples": [
+        "12",
+        0
+      ],
+      "vae": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "14": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_fp8_perchannel_no_vision.safetensors",
+      "type": "ideogram4",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "16": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "17": {
+    "inputs": {
+      "steps": 12,
+      "width": [
+        "31",
+        1
+      ],
+      "height": [
+        "32",
+        1
+      ],
+      "mu": 0.5,
+      "std": 1.75
+    },
+    "class_type": "Ideogram4Scheduler",
+    "_meta": {
+      "title": "Ideogram 4 Scheduler"
+    }
+  },
+  "18": {
+    "inputs": {
+      "noise_seed": {{SEED:seed}}
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "19": {
+    "inputs": {
+      "cfg": 7.0,
+      "model": [
+        "20",
+        0
+      ],
+      "positive": [
+        "24",
+        0
+      ],
+      "negative": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGGuider"
+    }
+  },
+  "20": {
+    "inputs": {
+      "cfg": 3.0,
+      "start_percent": 0.7,
+      "end_percent": 1.0,
+      "model": [
+        "23",
+        0
+      ]
+    },
+    "class_type": "CFGOverride",
+    "_meta": {
+      "title": "CFG Override"
+    }
+  },
+  "23": {
+    "inputs": {
+      "unet_name": "ideogram_v4_fp8_perchannel.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "24": {
+    "inputs": {
+      "text": [
+        "8",
+        0
+      ],
+      "clip": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "25": {
+    "inputs": {
+      "images": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "27": {
+    "inputs": {
+      "value": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Width)"
+    }
+  },
+  "28": {
+    "inputs": {
+      "value": [
+        "37",
+        1
+      ]
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Height)"
+    }
+  },
+  "31": {
+    "inputs": {
+      "expression": "max(((a + 15) // 16) * 16, 256)",
+      "values.a": [
+        "27",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Math Expression"
+    }
+  },
+  "32": {
+    "inputs": {
+      "expression": "max(((a + 15) // 16) * 16, 256)",
+      "values.a": [
+        "28",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Math Expression"
+    }
+  },
+  "37": {
+    "inputs": {
+      "aspect_ratio": "9:16 (Portrait Widescreen)",
+      "megapixels": 1.0
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "Resolution Selector"
+    }
+  },
+  "38": {
+    "inputs": {
+      "value": "{\n  \"high_level_description\": \"A surreal, ethereal fashion portrait of a Black woman with a large afro and closed eyes adorned in neon pink eyeshadow, wearing a sheer cyan blouse with glowing orange spherical buttons, set against a serene water and hill landscape with soft glowing pink flowers in the foreground.\",\n  \"style_description\": {\n    \"aesthetics\": \"Surreal fashion editorial, ethereal and futuristic, striking high-contrast neon elements, soft depth of field\",\n    \"lighting\": \"Cinematic and ethereal lighting with a soft diffused ambient base, accented by intense, vibrant localized glows from the orange and pink neon elements\",\n    \"photo\": \"85mm portrait lens, f/1.4 for shallow depth of field, sharp focus on the face and glowing buttons\",\n    \"medium\": \"digital photography composite\",\n    \"color_palette\": [\n      \"#154360\",\n      \"#00FFFF\",\n      \"#FF8C00\",\n      \"#FF1493\",\n      \"#1C1918\",\n      \"#3E8271\"\n    ]\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"A serene, muted teal landscape featuring calm water reflecting soft ambient light, and gently rolling distant hills shrouded in a light mist, creating a tranquil and ethereal atmosphere that pushes the vibrant subjects forward.\",\n    \"elements\": [\n      {\n        \"type\": \"obj\",\n        \"bbox\": [250, 100, 750, 550],\n        \"desc\": \"The head and face of a Black woman with a voluminous, beautifully textured dark afro. Her eyes are peacefully closed, their lids painted with bold neon pink eyeshadow. Her rich, deep skin tone reflects subtle cyan and pink ambient highlights.\",\n        \"color_palette\": [\n          \"#1C1918\",\n          \"#FF1493\",\n          \"#4A2F25\",\n          \"#0E0D0D\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [200, 450, 800, 1000],\n        \"desc\": \"A sheer, high-neck cyan blouse draped elegantly over the woman's shoulders and torso. The fabric is highly translucent, catching the ethereal light and wrapping her in a soft, futuristic turquoise glow.\",\n        \"color_palette\": [\n          \"#00FFFF\",\n          \"#008B8B\",\n          \"#20B2AA\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [470, 500, 530, 950],\n        \"desc\": \"A vertical row of perfectly spherical, glowing orange buttons running down the center front of the cyan blouse, casting a warm, radiant neon light onto the surrounding sheer fabric.\",\n        \"color_palette\": [\n          \"#FF8C00\",\n          \"#FF4500\",\n          \"#FFA500\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [620, 380, 680, 480],\n        \"desc\": \"A matching glowing orange spherical earring dangling from the woman's visible ear on the right side of her face, illuminating her jawline and neck with a vibrant, warm neon cast.\",\n        \"color_palette\": [\n          \"#FF8C00\",\n          \"#FF4500\",\n          \"#FFA500\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [0, 600, 300, 1000],\n        \"desc\": \"Stylized, softly blurred neon pink flowers blooming in the lower left foreground. Their petals emit a gentle luminescence, creating a dreamy depth of field effect and softly framing the subject.\",\n        \"color_palette\": [\n          \"#FF1493\",\n          \"#FF69B4\",\n          \"#C71585\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [700, 650, 1000, 1000],\n        \"desc\": \"Softly glowing pink botanical elements and flowers anchoring the lower right foreground. They are heavily out of focus, enhancing the cinematic depth and contributing to the ethereal foreground framing.\",\n        \"color_palette\": [\n          \"#FF1493\",\n          \"#FF69B4\",\n          \"#DB7093\"\n        ]\n      }\n    ]\n  }\n}"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text String (Multiline)"
+    }
+  },
+  "40": {
+    "inputs": {
+      "string": "\n## Final Image Size\nImage size:\n- Width: {{width}} px\n- Height: {{Height}} px",
+      "find": "{{width}}",
+      "replace": [
+        "41",
+        0
+      ]
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Replace Text"
+    }
+  },
+  "41": {
+    "inputs": {
+      "source": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text"
+    }
+  },
+  "42": {
+    "inputs": {
+      "string": [
+        "40",
+        0
+      ],
+      "find": "{{Height}}",
+      "replace": [
+        "43",
+        0
+      ]
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Replace Text"
+    }
+  },
+  "43": {
+    "inputs": {
+      "source": [
+        "37",
+        1
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text"
+    }
+  },
+  "46": {
+    "inputs": {
+      "source": [
+        "42",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text"
+    }
+  },
+  "47": {
+    "inputs": {
+      "value": "{\n  \"high_level_description\": \"An extreme low angle streetwear fashion editorial featuring a model in an oversized off-white sweatshirt and vibrant orange cargo pants, leaning backward dramatically in a gravity-defying pose. A colossal chunky white sneaker with neon green accents dominates the extreme foreground through forced perspective, while glossy 3D ribbons of neon green paint swirl dynamically around her against a solid neon lime-green backdrop.\",\n  \"style_description\": {\n    \"aesthetics\": \"High fashion streetwear editorial, hyper-dynamic composition, extreme forced perspective, ultra-sharp focus, glossy 3D fluid accents, bold minimalist backdrop.\",\n    \"lighting\": \"High contrast studio lighting, bright key light from above and slightly front, sharp shadows, and intense specular highlights on the glossy ribbons and silver jewelry.\",\n    \"photo\": \"Shot with an ultra-wide angle 14mm lens, extreme low angle, deep depth of field to maintain clarity from the extreme foreground to the model's face, 8k resolution.\",\n    \"medium\": \"Photography integrated with 3D CGI fluid simulations.\",\n    \"color_palette\": [\n      \"#39FF14\",\n      \"#FF5E00\",\n      \"#F8F8F8\",\n      \"#C0C0C0\",\n      \"#1A1A1A\",\n      \"#BFFF00\"\n    ]\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"A completely solid, seamless, vibrant neon lime-green studio backdrop with highly detailed, clean surfaces and absolutely no text, typography, or distracting elements.\",\n    \"elements\": [\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          350,\n          50,\n          650,\n          450\n        ],\n        \"desc\": \"Upper body and head of a fashion model, located in the upper-middle of the frame. She is leaning backward dramatically in a gravity-defying pose away from the camera, staring intensely down at the lens. She has voluminous, messy curly dark hair and wears an oversized off-white long-sleeve sweatshirt with a chunky silver chain necklace.\",\n        \"color_palette\": [\n          \"#F8F8F8\",\n          \"#1A1A1A\",\n          \"#8D5524\",\n          \"#C0C0C0\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          250,\n          400,\n          750,\n          850\n        ],\n        \"desc\": \"Vibrant bright orange baggy cargo pants covering the midground. They feature a thick, reflective silver metal chain draped across the front. The low angle accentuates their width, fabric folds, and texture.\",\n        \"color_palette\": [\n          \"#FF5E00\",\n          \"#D94700\",\n          \"#C0C0C0\",\n          \"#E0E0E0\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          200,\n          150,\n          800,\n          850\n        ],\n        \"desc\": \"Glossy, 3D swirling ribbons of neon green liquid paint. These fluid, hyper-detailed shapes dynamically wrap and interweave around the model's torso, arms, and legs, catching bright studio highlights and adding a sense of explosive motion.\",\n        \"color_palette\": [\n          \"#39FF14\",\n          \"#BFFF00\",\n          \"#32CD32\",\n          \"#FFFFFF\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          100,\n          600,\n          600,\n          1000\n        ],\n        \"desc\": \"A colossal, chunky white sneaker with bright neon green accents and a high white ribbed sock. Placed in the extreme foreground on the bottom left, the severe low-angle forced perspective makes the shoe loom massive, anchoring the dynamic composition.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#F0F0F0\",\n          \"#39FF14\",\n          \"#DCDCDC\"\n        ]\n      }\n    ]\n  }\n}"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text String (Multiline)"
+    }
+  },
+  "48": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "adf4963d2ed603fbc6cc3ff2821cd08d03dad900e05700f7cba1e54541d4f324"
+    ]
+  },
+  "49": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "b943e9b7c5cc52b39510013a57fb902737d71f86f8dfdc8cc0fa94487c4d6361"
+    ]
+  },
+  "50": {
+    "inputs": {
+      "value": "You are a scene composition assistant. Given a user request for an image, you output a single JSON document that describes the scene in a structured, render-ready form. You output JSON only — no prose, no markdown fences, no commentary.\n\n# Output format\n\nYour response MUST be a single valid JSON object matching exactly this shape and key set:\n\n```\n{\n  \"high_level_description\": \"\",\n  \"style_description\": {\n    \"aesthetics\": \"\",\n    \"lighting\": \"\",\n    \"photo\": \"\",\n    \"medium\": \"\",\n    \"color_palette\": []\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"\",\n    \"elements\": [\n      {\n        \"type\": \"obj\",\n        \"bbox\": [0, 0, 0, 0],\n        \"desc\": \"\",\n        \"color_palette\": []\n      }\n    ]\n  }\n}\n```\n\nAll keys above are required and must appear exactly as named. Do not add, rename, or remove any keys.\n\n# Field rules\n\n## high_level_description\n\n- String. One sentence or short paragraph summarizing the whole image: setting, time of day, main subjects, and overall mood.\n\n## style_description\n\nA flat object describing how the image is rendered, independent of what it depicts.\n\n- `aesthetics` (string): Overall visual style and treatment (e.g. \"clean product photography, sharp focus, shallow depth of field\", \"moody cinematic\", \"flat vector illustration\").\n- `lighting` (string): Light source, direction, quality, and color temperature (e.g. \"soft natural window light\", \"harsh midday sun from the left\", \"warm tungsten key with cool rim\").\n- `photo` (string): Camera/lens/photographic specifics when relevant (e.g. \"DSLR macro photograph\", \"35mm film, slight grain\", \"200mm telephoto, f/2.8\"). Use an empty string `\"\"` if the medium is not photographic.\n- `medium` (string): The medium category (e.g. \"photography\", \"oil painting\", \"3D render\", \"watercolor\", \"digital illustration\").\n- `color_palette` (array of strings): 3–6 dominant colors of the overall image as uppercase hex codes in `#RRGGBB` form (e.g. `[\"#B0301F\", \"#7A4B2A\", \"#E8D9C0\"]`).\n\n## compositional_deconstruction.background\n\n- String. Describe only the environment behind and around the subjects: setting, surface, atmosphere, depth cues. Do NOT describe any element listed in `elements`.\n\n## compositional_deconstruction.elements\n\nArray with at least 1 item, listed roughly background-to-foreground.\n\nEach element:\n\n- `type` (string): Always `\"obj\"`.\n- `bbox` (array of 4 integers): `[x_min, y_min, x_max, y_max]` on a 1000×1000 canvas with origin at the top-left, x increasing rightward, y increasing downward. Must satisfy `0 ≤ x_min < x_max ≤ 1000` and `0 ≤ y_min < y_max ≤ 1000`. The box must reflect the element's described position and relative size.\n- `desc` (string): Identity, pose and orientation, location in the frame, relative size, key visual details (textures, markings), gaze or motion, and any atmosphere/light interaction specific to this element. Do not restate global background or style information.\n- `color_palette` (array of strings): 2–5 dominant colors of THIS element as uppercase hex codes in `#RRGGBB` form.\n\n# Composition guidance\n\n- Place elements deliberately: vary depth, avoid centering everything, and let bboxes match the prose (\"midground left\" should not have `x_min` near 800).\n- Keep `style_description` and every `desc` mutually consistent in palette, lighting, and atmosphere.\n- Each element's `color_palette` should be plausibly drawn from or harmonious with the overall `style_description.color_palette`.\n- Prefer 3–8 elements unless the user explicitly asks for more or fewer.\n\n# Hard constraints\n\n- Output valid JSON and nothing else.\n- Use only the keys defined above, exactly as spelled. No extra fields.\n- Do not wrap the JSON in code fences or add explanations.\n\n# Instruction\n\nGenerate the JSON based on this user prompt:  Streetwear fashion poster, neon green background. Woman leaning backward in oversized white sweatshirt and bright orange cargo pants with chains. Giant white and green Nike Air Max sneaker in the foreground. Swirling 3D green fluid strokes, large white typography, text \"VERDE\" and \"JUST DO IT\".\n\nSurreal fashion editorial layout. Vibrant neon green backdrop. Female model in orange cargo pants and white top. Disproportionately massive Nike sneaker in front. 3D green paint swooshes wrapping the model. High contrast, bold graphic design.\n\nDynamic neon green streetwear ad. Woman in white sweater and orange chain cargo pants. Massive white/green sneaker in foreground. 3D liquid green swirls, bold white text, surreal proportions, 90s aesthetic. \n## Final Image Size\nImage size:\n- Width: 768 px\n- Height: 1368 px"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text String (Multiline)"
+    }
+  },
+  "51": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_3:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "68ebe8025b203d32be21bfb3a5336d66c607d8c9a978070501b420e56dea8c67"
+    ]
+  },
+  "52": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_4:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "78662325c543969be66352e8d6e59415048fd5173e0648f6a21f82e89fc90102"
+    ]
+  },
+  "53": {
+    "inputs": {
+      "value": "{\n  \"high_level_description\": \"A warm, retro-style wide-angle film photograph of a young Asian woman lying on sunlit grass, with her legs playfully raised against a vintage yellow car. She reaches one hand directly toward the camera lens in extreme foreshortening, while holding a lollipop in the other, conveying a nostalgic and carefree summer mood.\",\n  \"style_description\": {\n    \"aesthetics\": \"retro vintage aesthetic, warm color grading, dynamic wide-angle perspective with extreme foreshortening, nostalgic 70s summer vibe\",\n    \"lighting\": \"golden hour sunlight, warm directional key light casting long soft shadows, subtle sun flares\",\n    \"photo\": \"wide-angle 16mm lens on 35mm film, noticeable film grain, slight optical distortion at the edges, cinematic depth of field\",\n    \"medium\": \"photography\",\n    \"color_palette\": [\n      \"#D6A62A\",\n      \"#9E2A2B\",\n      \"#4C723A\",\n      \"#E0D8C3\",\n      \"#E8B498\"\n    ]\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"A sun-drenched patch of lush green grass dominating the ground plane, transitioning into a softly out-of-focus background with subtle hints of hazy trees and a bright, warm late-afternoon sky.\",\n    \"elements\": [\n      {\n        \"type\": \"obj\",\n        \"bbox\": [400, 150, 980, 750],\n        \"desc\": \"A vintage yellow car parked on the grass, serving as the backdrop on the right side of the frame. Its chrome bumper and retro curves reflect the warm sunlight.\",\n        \"color_palette\": [\n          \"#D6A62A\",\n          \"#8B6B22\",\n          \"#C2C0B8\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [450, 350, 850, 750],\n        \"desc\": \"The woman's legs, raised and resting playfully against the side panel of the yellow car. She is wearing a colorful floral skirt and bright white knee-high socks.\",\n        \"color_palette\": [\n          \"#E0D8C3\",\n          \"#8C454B\",\n          \"#2D4A22\",\n          \"#F4F1EA\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [250, 500, 600, 900],\n        \"desc\": \"The torso and head of the young Asian woman lying back on the grass in the lower-middle of the frame. She wears a striking red vest over a crisp white shirt, looking up toward the camera with a joyful, carefree expression.\",\n        \"color_palette\": [\n          \"#9E2A2B\",\n          \"#E0D8C3\",\n          \"#E8B498\",\n          \"#1E1A1D\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [400, 420, 520, 550],\n        \"desc\": \"The woman's right hand holding a vibrant, swirled lollipop close to her face, catching the golden hour light.\",\n        \"color_palette\": [\n          \"#D62828\",\n          \"#F77F00\",\n          \"#E8B498\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [10, 600, 380, 990],\n        \"desc\": \"The woman's left hand and forearm reaching directly into the camera lens in the extreme foreground on the left. The wide-angle lens causes heavy foreshortening, making the hand appear disproportionately large and slightly distorted, drawing the viewer intimately into the scene.\",\n        \"color_palette\": [\n          \"#E8B498\",\n          \"#D99A78\",\n          \"#C48060\"\n        ]\n      }\n    ]\n  }\n}"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text String (Multiline)"
+    }
+  },
+  "54": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_5:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "70f0ed17458484d239d58239a265bcae4d6cc2b27e213002c1e48c196c5d14c4"
+    ]
+  },
+  "55": {
+    "inputs": {
+      "value": "{\n  \"high_level_description\": \"A surreal, high-fashion editorial photograph of a woman in a sweeping black leather coat standing on a jagged rock surrounded by dark waters, gracefully interacting with pure white doves as a gnarled bonsai tree frames the foreground against moody mountains.\",\n  \"style_description\": {\n    \"aesthetics\": \"Surreal high-fashion editorial, moody cinematic composition, sharp focus on the subject and foreground, striking contrast between dark elements and pure white doves\",\n    \"lighting\": \"Soft, diffused overcast daylight, cool atmospheric ambient light with a subtle edge light separating the dark subject from the dark background\",\n    \"photo\": \"Medium format digital photography, 85mm lens, f/5.6, crisp textures and rich tonal gradations\",\n    \"medium\": \"photography\",\n    \"color_palette\": [\n      \"#1C2026\",\n      \"#495361\",\n      \"#08090A\",\n      \"#FFFFFF\",\n      \"#233A29\"\n    ]\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"A desolate expanse of calm, dark rippling water stretching toward imposing, dark rocky mountains under a moody, overcast grey-blue sky, accented by faint, poetic mist hovering above the water's surface.\",\n    \"elements\": [\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          250,\n          700,\n          550,\n          950\n        ],\n        \"desc\": \"A dark, jagged rock formation jutting out from the calm waters, deeply textured with crevices and wet surfaces, serving as a stark pedestal in the midground.\",\n        \"color_palette\": [\n          \"#111418\",\n          \"#24272E\",\n          \"#0A0B0E\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          320,\n          300,\n          500,\n          800\n        ],\n        \"desc\": \"A woman standing in pure profile facing right, dressed in a sleek, ankle-length black leather coat. Her long black hair blows slightly backward, and her right arm is gracefully extended upward into the air.\",\n        \"color_palette\": [\n          \"#08090A\",\n          \"#1D1E22\",\n          \"#E8D8CC\",\n          \"#2A2D34\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          420,\n          180,\n          540,\n          290\n        ],\n        \"desc\": \"A pure white dove hovering in mid-air with outstretched wings, positioned delicately just above the woman's open, extended hand.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#F0F2F5\",\n          \"#D3D8E0\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          680,\n          500,\n          860,\n          650\n        ],\n        \"desc\": \"A second pure white dove flying low over the dark water on the right side of the frame, its wings beautifully illuminated against the moody background.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#E8ECF1\",\n          \"#BCC4CF\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          0,\n          600,\n          950,\n          1000\n        ],\n        \"desc\": \"A highly detailed, twisted bonsai-like pine tree with dark, gnarled branches and dense clusters of dark green needles. It emerges from the water in the extreme foreground on the left, sweeping diagonally across the frame and partially obscuring the woman's lower body and the rock.\",\n        \"color_palette\": [\n          \"#0A0D0B\",\n          \"#233A29\",\n          \"#151813\",\n          \"#3D5242\"\n        ]\n      }\n    ]\n  }\n}"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text String (Multiline)"
+    }
+  },
+  "56": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_6:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "8fc4a52056242d34f21c04925bdb118180851ffa08b1e44ae0c98b824787e45c"
+    ]
+  },
+  "57": {
+    "inputs": {
+      "value": "{\n  \"high_level_description\": \"A dynamic urban mixed-media graphic design poster entirely covered in a vintage black halftone dot print texture. A brightly lit daytime tennis court scene serves as the backdrop for a collage-style foreground featuring heavily styled typography and a prominent photo cutout of a young Black man with blonde hair and striking retro sunglasses.\",\n  \"style_description\": {\n    \"aesthetics\": \"urban collage, mixed-media graphic design, vintage black halftone dot print texture overlay, high contrast, bold poster layout\",\n    \"lighting\": \"bright daylight, high contrast with harsh shadows typical of vintage print techniques\",\n    \"photo\": \"\",\n    \"medium\": \"mixed-media digital collage\",\n    \"color_palette\": [\n      \"#3A86FF\",\n      \"#38B000\",\n      \"#FFFFFF\",\n      \"#000000\",\n      \"#FF006E\",\n      \"#FCA311\"\n    ]\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"A bright blue and green outdoor tennis court set in a high-contrast urban environment. Behind the court rises a tall, modern glass building reaching toward a blue sky with scattered clouds. The entire scene is heavily textured with a vintage black halftone dot overlay, giving it a retro printed feel.\",\n    \"elements\": [\n      {\n        \"type\": \"obj\",\n        \"bbox\": [40, 40, 220, 220],\n        \"desc\": \"A circular tennis club logo graphic located in the top left corner. Rendered in flat white with black halftone overlays, adding to the corporate yet gritty aesthetic.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#000000\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [250, 40, 750, 140],\n        \"desc\": \"Crisp white sans-serif typography in the top center. It reads 'AN ORIGINAL SERIES' stacked neatly above '65/365', floating above the sky background.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#000000\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [780, 40, 960, 160],\n        \"desc\": \"A standard rectangular 'PARENTAL ADVISORY EXPLICIT CONTENT' badge with stark black and white high-contrast borders and text, pinned in the top right corner.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#000000\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [400, 250, 700, 500],\n        \"desc\": \"A woman in a white top and bright pink shorts actively swinging a tennis racket. She is positioned in the midground on the court, rendered with bright highlights and halftone shadows.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#FF006E\",\n          \"#000000\",\n          \"#E0A96D\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [0, 380, 1000, 580],\n        \"desc\": \"A solid white diagonal banner slashing across the midground behind the main subject. It features repeating bold black text 'TENNIS' interspersed with small black graphic lightning bolts.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#000000\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [150, 350, 850, 950],\n        \"desc\": \"A stylized photographic cutout of a young Black man with short bleached blonde hair. He wears a crisp white long-sleeve shirt and distinctive retro oval sunglasses with thick white frames and green lenses. Posed dynamically leaning backward and looking upward, he holds a wooden stick near his right shoulder. The cutout is distressed with a heavy vintage black halftone dot texture.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#FCA311\",\n          \"#38B000\",\n          \"#6B4226\",\n          \"#D4A373\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [150, 700, 350, 900],\n        \"desc\": \"A large, flat, two-dimensional white graphic of a tennis ball with bold black line details, floating prominently near the lower left alongside the man's leg.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#000000\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [50, 800, 950, 980],\n        \"desc\": \"A heavy typography cluster filling the lower third. Massive, bold, arched white typography reads 'TENNIS'. Directly below it, slightly smaller bold text reads 'CHANGE'. At the absolute bottom edge, tiny text runs horizontally reading 'CREATIVE SYNDROME HAS THE PURPOSE TO INSPIRE PEOPLE'.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#000000\"\n        ]\n      }\n    ]\n  }\n}"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text String (Multiline)"
+    }
+  },
+  "58": {
+    "inputs": {
+      "switch": false,
+      "on_false": [
+        "6",
+        0
+      ],
+      "on_true": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch"
+    }
+  },
+  "59": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_7:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "c9e92a611e57c2ec13800ae58960568409b9b8d52a8319d6f44e1292436fcad5"
+    ]
+  },
+  "60": {
+    "inputs": {
+      "value": "{\n  \"high_level_description\": \"A dynamic streetwear fashion editorial photograph featuring a young Asian woman in an oversized translucent white outfit seated against a vibrant red backdrop, surrounded by bold graffiti and typography, with a secondary seated figure in the background.\",\n  \"style_description\": {\n    \"aesthetics\": \"Streetwear fashion editorial, high contrast, bold and graphic, dynamic composition with integrated typography\",\n    \"lighting\": \"Dramatic studio lighting, crisp directional key light to highlight fabric translucency, soft fill to retain details\",\n    \"photo\": \"Medium format digital camera, sharp focus on the main subject, shallow depth of field, high-end editorial finish\",\n    \"medium\": \"photography\",\n    \"color_palette\": [\n      \"#E60000\",\n      \"#FFFFFF\",\n      \"#000000\",\n      \"#FF6600\",\n      \"#2E1A11\"\n    ]\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"A solid, intensely vibrant red seamless studio backdrop with bright, even illumination to make the foreground elements dramatically pop.\",\n    \"elements\": [\n      {\n        \"type\": \"obj\",\n        \"bbox\": [100, 150, 900, 950],\n        \"desc\": \"Thick, abstract black graffiti brushstrokes swirling dynamically in the space behind and around the main subject's seating area, adding a gritty, textured streetwear contrast to the clean backdrop.\",\n        \"color_palette\": [\n          \"#000000\",\n          \"#1A1A1A\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [700, 450, 950, 850],\n        \"desc\": \"A smaller-scaled dark-skinned person seated in the background to the mid-right. They are casually sitting, wearing a crisp white t-shirt and matching white shorts, acting as a secondary focal point with a blurred edge due to depth of field.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#2E1A11\",\n          \"#E6E6E6\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [150, 150, 850, 950],\n        \"desc\": \"A young Asian woman with sleekly pulled-back hair sitting centrally in a dynamic, wide-legged pose. She is dressed in an oversized, semi-translucent white hooded windbreaker and matching baggy translucent white pants, paired with chunky white and orange sneakers. Her right hand holds a small, stark red square object close to her face. Dramatic studio light passes through her clothing, highlighting its sheer texture.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#F5F5F5\",\n          \"#FF6600\",\n          \"#E60000\",\n          \"#FFE0C2\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [50, 50, 550, 250],\n        \"desc\": \"Bold streetwear-style typography spelling 'ComfyUI', integrated seamlessly into the top-left layout. The text features heavy, stylized lettering that starkly contrasts against the red background.\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#000000\"\n        ]\n      }\n    ]\n  }\n}"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text String (Multiline)"
+    }
+  },
+  "61": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_8:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "9afcf2755afb73b5ba6d0dcfbee7e85215d1f473cfde4cbffd208adc80e2571f"
+    ]
+  }
+}

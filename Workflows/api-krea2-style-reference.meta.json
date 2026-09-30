@@ -1,0 +1,23 @@
+{
+  "id": "api-krea2-style-reference",
+  "displayName": "Comfy Cloud — Krea2 Style Reference",
+  "description": "Imported from Comfy Cloud's official api_krea2_style_reference template using its embedded API prompt.",
+  "graphFile": "api-krea2-style-reference.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Krea 2 Medium"
+  }
+}

@@ -64,26 +64,44 @@ else if (Pane.Kind == "generation")
       <div><h2>@Pane.Title</h2><p class="assets-path">@Pane.Context</p></div>
       <button type="button" data-generation-change-project data-generation-pane="@Pane.Id">Change project</button>
     </div>
-    <label class="generation-field">
-      <span>Workflow</span>
-      <div class="workflow-select">
-        <button type="button" class="workflow-select-trigger" aria-haspopup="listbox" aria-expanded="@workflowMenuOpen" @onclick="ToggleWorkflowMenu">@(SelectedGenerationWorkflow?.DisplayName ?? "Select a workflow")<span>⌄</span></button>
-        @if (workflowMenuOpen)
-        {
-          <div class="workflow-select-menu" role="listbox" aria-label="Workflow">
-            <button type="button" role="option" aria-selected="@(string.IsNullOrEmpty(Pane.WorkflowId))" @onclick="() => ChooseGenerationWorkflow(string.Empty)">Select a workflow</button>
-            @foreach (var group in GenerationWorkflowGroups)
-            {
-              <div class="workflow-select-group">@group.Name</div>
-              @foreach (var workflow in group.Workflows)
-              {
-                <button type="button" role="option" aria-selected="@(workflow.Id == Pane.WorkflowId)" @key="workflow.Id" @onclick="() => ChooseGenerationWorkflow(workflow.Id)">@workflow.DisplayName</button>
-              }
-            }
-          </div>
-        }
-      </div>
-    </label>
+    <section class="workflow-finder" aria-label="Find a workflow">
+      <p class="workflow-finder-heading">Build a generation request</p>
+      <div class="generation-field"><span>Output</span><div class="workflow-picker"><button type="button" class="workflow-picker-trigger" disabled="@(OutputPurposeOptions.Count == 1)" aria-expanded='@(openWorkflowPicker == "output")' @onclick='() => ToggleWorkflowPicker("output")'>@PurposeLabel(workflowOutputPurposeFilter, "Choose an output type")<i>⌄</i></button>@if (openWorkflowPicker == "output") { <div class="workflow-picker-menu">@foreach (var purpose in OutputPurposeOptions) { <button type="button" @onclick="() => ChangeWorkflowOutputPurpose(purpose)">@PurposeLabel(purpose, "Ordinary image")</button> }</div> }</div></div>
+      @if (!string.IsNullOrWhiteSpace(workflowOutputPurposeFilter))
+      {
+        <div class="generation-field"><span>Number of input images</span><div class="workflow-picker"><button type="button" class="workflow-picker-trigger" disabled="@(AvailableInputCounts.Count == 1)" aria-expanded='@(openWorkflowPicker == "count")' @onclick='() => ToggleWorkflowPicker("count")'>@(string.IsNullOrWhiteSpace(workflowInputCountFilter) ? "Choose input count" : workflowInputCountFilter)<i>⌄</i></button>@if (openWorkflowPicker == "count") { <div class="workflow-picker-menu">@foreach (var count in AvailableInputCounts) { <button type="button" @onclick="() => ChangeWorkflowInputCount(count.ToString())">@count</button> }</div> }</div></div>
+      }
+      @if (SelectedInputCount is { } inputCount)
+      {
+        <div class="workflow-input-requirements">
+          @for (var index = 0; index < inputCount; index++)
+          {
+            var inputIndex = index;
+            <fieldset class="workflow-input-requirement" @key="inputIndex"><legend>Input image @(inputIndex + 1)</legend>
+              <div class="workflow-picker-field"><span>Input purpose</span><div class="workflow-picker"><button type="button" class="workflow-picker-trigger" disabled="@(InputPurposeOptions(inputIndex).Count == 1)" aria-expanded='@(openWorkflowPicker == InputPickerId("purpose", inputIndex))' @onclick='() => ToggleWorkflowPicker(InputPickerId("purpose", inputIndex))'>@InputPurposeLabel(InputFilter(inputIndex).Purpose)<i>⌄</i></button>@if (openWorkflowPicker == InputPickerId("purpose", inputIndex)) { <div class="workflow-picker-menu">@foreach (var purpose in InputPurposeOptions(inputIndex)) { <button type="button" @onclick="() => ChangeInputPurpose(inputIndex, purpose)">@InputPurposeLabel(purpose)</button> }</div> }</div></div>
+            </fieldset>
+          }
+        </div>
+      }
+      @if (InputRequirementsComplete)
+      {
+        <div class="generation-field"><span>Image generation model</span><div class="workflow-picker"><button type="button" class="workflow-picker-trigger" disabled="@(AvailableWorkflowModels.Count == 1)" aria-expanded='@(openWorkflowPicker == "model")' @onclick='() => ToggleWorkflowPicker("model")'>@(string.IsNullOrWhiteSpace(workflowModelFilter) ? "Choose a model" : workflowModelFilter)<i>⌄</i></button>@if (openWorkflowPicker == "model") { <div class="workflow-picker-menu">@foreach (var model in AvailableWorkflowModels) { <button type="button" @onclick="() => ChangeWorkflowModel(model)">@model</button> }</div> }</div></div>
+      }
+      @if (!string.IsNullOrWhiteSpace(workflowModelFilter) && WorkflowCandidates.Count > 0)
+      {
+        <div class="workflow-candidates" role="list" aria-label="Matching workflows">
+          <span>@(WorkflowCandidates.Count == 1 ? "Selected workflow" : "Matching workflows")</span>
+          @foreach (var workflow in WorkflowCandidates)
+          {
+            <button type="button" role="listitem" class="@(workflow.Id == Pane.WorkflowId ? "is-selected" : "")" @key="workflow.Id" @onclick="() => ChooseGenerationWorkflow(workflow.Id)">@workflow.DisplayName</button>
+          }
+        </div>
+      }
+      else if (InputRequirementsComplete && !string.IsNullOrWhiteSpace(workflowModelFilter))
+      {
+        <p class="generation-status" role="alert">No workflow matches those requirements.</p>
+      }
+    </section>
     @if (SelectedGenerationWorkflow is not null)
     {
       <p class="generation-workflow-description">@SelectedGenerationWorkflow.Description</p>
@@ -339,7 +357,14 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   [Parameter] public EventCallback<PanelPaneSelection> OnPanelSelectionChanged { get; set; }
   [Parameter] public EventCallback<PanelDraftChange> OnPanelDraftChanged { get; set; }
   private string? loadedGenerationWorkflowId;
-  private bool workflowMenuOpen;
+  private const string OrdinaryImagePurpose = "__ordinary-image__";
+  private const string MaskedImagePurpose = "__masked-image__";
+  private string workflowModelFilter = string.Empty;
+  private string workflowOutputPurposeFilter = string.Empty;
+  private string workflowInputCountFilter = string.Empty;
+  private string? openWorkflowPicker;
+  private string? criteriaWorkflowId;
+  private List<WorkflowInputRequirement> workflowInputRequirements = [];
   private List<WorkflowPlaceholder> generationInputs = [];
   private string? generationProject;
   private string outputFolderDraft = "generated";
@@ -355,26 +380,70 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   private GenerationRunState? GenerationState => ComfyGenerationService.GetState(Pane.Id);
   private WorkflowDefinition? SelectedGenerationWorkflow => WorkflowLibrary.GetAll()
       .FirstOrDefault(workflow => workflow.Id == Pane.WorkflowId && !string.IsNullOrWhiteSpace(workflow.GraphFile));
-  private IReadOnlyList<(string Name, IReadOnlyList<WorkflowDefinition> Workflows)> GenerationWorkflowGroups => WorkflowLibrary.GetAll()
-      .Where(workflow => !string.IsNullOrWhiteSpace(workflow.GraphFile))
-      .GroupBy(WorkflowInputGroup)
-      .OrderBy(group => WorkflowInputGroupOrder(group.Key))
-      .Select(group => (Name: group.Key, Workflows: (IReadOnlyList<WorkflowDefinition>)group.OrderBy(workflow => workflow.DisplayName, StringComparer.OrdinalIgnoreCase).ToList()))
-      .ToList();
-  private static string WorkflowInputGroup(WorkflowDefinition workflow) => workflow.Capabilities switch
+  private sealed class WorkflowInputRequirement
   {
-      { RequiresMask: true } => "Masked image",
-      { MaxImages: <= 0 } => "Text to image",
-      { MaxImages: 1 } => "Single reference image",
-      _ => "Multiple reference images"
-  };
-  private static int WorkflowInputGroupOrder(string group) => group switch
+      public string Purpose { get; set; } = string.Empty;
+  }
+  private IReadOnlyList<WorkflowDefinition> GenerationWorkflows => WorkflowLibrary.GetAll()
+      .Where(workflow => !string.IsNullOrWhiteSpace(workflow.GraphFile)).ToList();
+  private IReadOnlyList<string> AvailableOutputPurposes => GenerationWorkflows
+      .Select(workflow => workflow.Capabilities.OutputImagePurpose).Where(purpose => !string.IsNullOrWhiteSpace(purpose))
+      .Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(purpose => purpose, StringComparer.OrdinalIgnoreCase).ToList();
+  private IReadOnlyList<string> OutputPurposeOptions => GenerationWorkflows.Any(workflow => string.IsNullOrWhiteSpace(workflow.Capabilities.OutputImagePurpose))
+      ? [OrdinaryImagePurpose, .. AvailableOutputPurposes] : AvailableOutputPurposes;
+  private IReadOnlyList<int> AvailableInputCounts => FilterByOutput()
+      .Select(workflow => ImageInputsFor(workflow).Count).Distinct().OrderBy(count => count).ToList();
+  private IReadOnlyList<string> AvailableWorkflowModels => FilterByRequirements(includeModel: false)
+      .Select(WorkflowModel).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(model => model, StringComparer.OrdinalIgnoreCase).ToList();
+  private int? SelectedInputCount => int.TryParse(workflowInputCountFilter, out var count) ? count : null;
+  private bool InputRequirementsComplete => SelectedInputCount is not null && workflowInputRequirements.All(requirement => !string.IsNullOrWhiteSpace(requirement.Purpose));
+  private IReadOnlyList<WorkflowDefinition> WorkflowCandidates => FilterByRequirements().OrderBy(workflow => workflow.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
+  private static string WorkflowModel(WorkflowDefinition workflow) => workflow.Capabilities.ImageGenerationModel ?? "Unspecified model";
+  private static IReadOnlyList<WorkflowImageInput> ImageInputsFor(WorkflowDefinition workflow) => workflow.Capabilities.ImageInputs
+      ?? Enumerable.Range(0, workflow.Capabilities.MaxImages).Select(index => new WorkflowImageInput(workflow.Capabilities.RequiresMask && index == 0)).ToList();
+  private IEnumerable<WorkflowDefinition> FilterByOutput() => GenerationWorkflows.Where(workflow => MatchesPurpose(workflow.Capabilities.OutputImagePurpose, workflowOutputPurposeFilter));
+  private IEnumerable<WorkflowDefinition> FilterByRequirements(int? throughInput = null, bool includeModel = true) => FilterByOutput()
+      .Where(workflow => SelectedInputCount is not { } count || ImageInputsFor(workflow).Count == count)
+      .Where(workflow => MatchesInputRequirements(workflow, throughInput))
+      .Where(workflow => !includeModel || string.IsNullOrWhiteSpace(workflowModelFilter) || string.Equals(WorkflowModel(workflow), workflowModelFilter, StringComparison.OrdinalIgnoreCase));
+  private static bool MatchesPurpose(string? actual, string requested)
   {
-      "Text to image" => 0,
-      "Single reference image" => 1,
-      "Multiple reference images" => 2,
-      _ => 3
+      if (string.IsNullOrWhiteSpace(requested)) return true;
+      return requested == OrdinaryImagePurpose
+          ? string.IsNullOrWhiteSpace(actual)
+          : string.Equals(actual, requested, StringComparison.OrdinalIgnoreCase);
+  }
+  private static string PurposeLabel(string purpose, string placeholder) => string.IsNullOrWhiteSpace(purpose)
+      ? placeholder : purpose == OrdinaryImagePurpose ? "Ordinary image" : purpose;
+  private static string InputPurposeLabel(string purpose) => purpose switch
+  {
+      MaskedImagePurpose => "Masked image",
+      OrdinaryImagePurpose => "Ordinary image",
+      "" => "Choose input purpose",
+      _ => purpose
   };
+  private static string InputPickerId(string kind, int index) => $"{kind}-{index}";
+  private void ToggleWorkflowPicker(string picker) => openWorkflowPicker = openWorkflowPicker == picker ? null : picker;
+  private bool MatchesInputRequirements(WorkflowDefinition workflow, int? throughInput)
+  {
+      var inputs = ImageInputsFor(workflow);
+      var lastIndex = throughInput ?? workflowInputRequirements.Count - 1;
+      for (var index = 0; index <= lastIndex && index < workflowInputRequirements.Count; index++)
+      {
+          if (index >= inputs.Count) return false;
+          var requested = workflowInputRequirements[index];
+          if (!string.IsNullOrWhiteSpace(requested.Purpose)
+              && !string.Equals(InputPurpose(inputs[index]), requested.Purpose, StringComparison.OrdinalIgnoreCase)) return false;
+      }
+      return true;
+  }
+  private WorkflowInputRequirement InputFilter(int index) => workflowInputRequirements[index];
+  private IReadOnlyList<string> InputPurposeOptions(int index) => FilterByRequirements(index - 1)
+      .Where(workflow => ImageInputsFor(workflow).Count > index)
+      .Select(workflow => InputPurpose(ImageInputsFor(workflow)[index]))
+      .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(InputPurposeLabel, StringComparer.OrdinalIgnoreCase).ToList();
+  private static string InputPurpose(WorkflowImageInput input) => input.AcceptsMask
+      ? MaskedImagePurpose : input.Purpose ?? OrdinaryImagePurpose;
   private string GenerationValue(string name) => Pane.InputValues?.GetValueOrDefault(name) ?? string.Empty;
   private bool WorkflowNeedsMask => SelectedGenerationWorkflow?.Capabilities.RequiresMask == true && generationInputs.Any(item => item.IsMaskedImage);
   private string AssetsRoot => string.IsNullOrWhiteSpace(Pane.Context) ? string.Empty : Path.Combine(Pane.Context, "assets");
@@ -393,10 +462,86 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
       catch { return []; }
   }
   private string GenerationMaskValue(string imageName) => GenerationValue(ComfyGenerationService.MaskValueName(imageName));
-  private void ToggleWorkflowMenu() => workflowMenuOpen = !workflowMenuOpen;
+  private async Task ChangeWorkflowOutputPurpose(string purpose)
+  {
+      workflowOutputPurposeFilter = purpose;
+      ResetInputRequirements();
+      workflowModelFilter = string.Empty;
+      openWorkflowPicker = null;
+      await ApplyAutomaticWorkflowCriteriaAsync();
+  }
+  private async Task ChangeWorkflowInputCount(string countValue)
+  {
+      workflowInputCountFilter = countValue;
+      var count = SelectedInputCount ?? 0;
+      workflowInputRequirements = Enumerable.Range(0, count).Select(_ => new WorkflowInputRequirement()).ToList();
+      workflowModelFilter = string.Empty;
+      openWorkflowPicker = null;
+      await ApplyAutomaticWorkflowCriteriaAsync();
+  }
+  private async Task ChangeInputPurpose(int index, string purpose)
+  {
+      InputFilter(index).Purpose = purpose;
+      for (var following = index + 1; following < workflowInputRequirements.Count; following++) workflowInputRequirements[following] = new WorkflowInputRequirement();
+      workflowModelFilter = string.Empty;
+      openWorkflowPicker = null;
+      await ApplyAutomaticWorkflowCriteriaAsync();
+  }
+  private async Task ChangeWorkflowModel(string model)
+  {
+      workflowModelFilter = model;
+      openWorkflowPicker = null;
+      await SelectOnlyWorkflowAsync();
+  }
+  private void ResetInputRequirements()
+  {
+      workflowInputCountFilter = string.Empty;
+      workflowInputRequirements = [];
+  }
+  private async Task ApplyAutomaticWorkflowCriteriaAsync()
+  {
+      var changed = false;
+      if (string.IsNullOrWhiteSpace(workflowOutputPurposeFilter) && OutputPurposeOptions.Count == 1)
+      {
+          workflowOutputPurposeFilter = OutputPurposeOptions[0];
+          changed = true;
+      }
+      if (!string.IsNullOrWhiteSpace(workflowOutputPurposeFilter) && string.IsNullOrWhiteSpace(workflowInputCountFilter) && AvailableInputCounts.Count == 1)
+      {
+          workflowInputCountFilter = AvailableInputCounts[0].ToString();
+          workflowInputRequirements = Enumerable.Range(0, AvailableInputCounts[0]).Select(_ => new WorkflowInputRequirement()).ToList();
+          changed = true;
+      }
+      if (SelectedInputCount is not null)
+      {
+          for (var index = 0; index < workflowInputRequirements.Count; index++)
+          {
+              var requirement = workflowInputRequirements[index];
+              var purposes = InputPurposeOptions(index);
+              if (string.IsNullOrWhiteSpace(requirement.Purpose) && purposes.Count == 1)
+              {
+                  requirement.Purpose = purposes[0];
+                  changed = true;
+              }
+          }
+      }
+      if (InputRequirementsComplete && string.IsNullOrWhiteSpace(workflowModelFilter) && AvailableWorkflowModels.Count == 1)
+      {
+          workflowModelFilter = AvailableWorkflowModels[0];
+          changed = true;
+      }
+      if (changed || !string.IsNullOrWhiteSpace(workflowModelFilter)) await SelectOnlyWorkflowAsync();
+  }
+  private async Task SelectOnlyWorkflowAsync()
+  {
+      var candidates = WorkflowCandidates;
+      if (candidates.Count == 1 && candidates[0].Id != Pane.WorkflowId)
+          await ChooseGenerationWorkflow(candidates[0].Id);
+      else if (candidates.All(workflow => workflow.Id != Pane.WorkflowId) && !string.IsNullOrEmpty(Pane.WorkflowId))
+          await ChooseGenerationWorkflow(string.Empty);
+  }
   private async Task ChooseGenerationWorkflow(string workflowId)
   {
-      workflowMenuOpen = false;
       await OnGenerationWorkflowChanged.InvokeAsync(new GenerationWorkflowSelection(Pane.Id, workflowId));
   }
   private Task ChangeGenerationInput(string name, ChangeEventArgs args) =>
@@ -544,6 +689,20 @@ else { <div class="insights"><i>✦</i><h2>Customer signal</h2><p>13 people aske
   }
   protected override async Task OnParametersSetAsync()
   {
+      if (Pane.Kind == "generation" && SelectedGenerationWorkflow is { } selectedWorkflow
+          && !string.Equals(criteriaWorkflowId, selectedWorkflow.Id, StringComparison.Ordinal))
+      {
+          criteriaWorkflowId = selectedWorkflow.Id;
+          workflowModelFilter = WorkflowModel(selectedWorkflow);
+          workflowOutputPurposeFilter = selectedWorkflow.Capabilities.OutputImagePurpose ?? OrdinaryImagePurpose;
+          workflowInputCountFilter = ImageInputsFor(selectedWorkflow).Count.ToString();
+          workflowInputRequirements = ImageInputsFor(selectedWorkflow)
+              .Select(input => new WorkflowInputRequirement
+              {
+                  Purpose = InputPurpose(input)
+              }).ToList();
+      }
+      if (Pane.Kind == "generation") await ApplyAutomaticWorkflowCriteriaAsync();
       if (Pane.Kind != "generation" || string.Equals(loadedGenerationWorkflowId, Pane.WorkflowId, StringComparison.Ordinal)) return;
       loadedGenerationWorkflowId = Pane.WorkflowId;
       generationInputs = [];

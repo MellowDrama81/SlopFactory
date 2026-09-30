@@ -1,0 +1,31 @@
+{
+  "2": {
+    "inputs": {
+      "model": "microsoft/mai-image-2.6-flash",
+      "model.prompt": "{{PROMPT:string}}",
+      "model.aspect_ratio": "1:1",
+      "model.resolution": "1K",
+      "model.seed": 258116394
+    },
+    "class_type": "OpenRouterImageNode",
+    "_meta": {
+      "title": "OpenRouter Image"
+    }
+  },
+  "3": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  }
+}

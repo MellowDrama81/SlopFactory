@@ -1,0 +1,19 @@
+{
+  "id": "api-luma-uni-1-image-edit",
+  "displayName": "Comfy Cloud — Luma UNI 1 Image Edit",
+  "description": "Imported from Comfy Cloud's official api_luma_uni_1_image_edit template using its embedded API prompt.",
+  "graphFile": "api-luma-uni-1-image-edit.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "uni-1-max"
+  }
+}

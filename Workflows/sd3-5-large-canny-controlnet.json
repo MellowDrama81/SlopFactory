@@ -1,0 +1,14 @@
+{
+  "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME:image}}" } },
+  "2": { "class_type": "ImageScale", "inputs": { "image": ["1", 0], "upscale_method": "bilinear", "width": 1024, "height": 1024, "crop": "center" } },
+  "3": { "class_type": "Canny", "inputs": { "image": ["2", 0], "low_threshold": 0.3, "high_threshold": 0.6 } },
+  "4": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "sd3.5_large_fp8_scaled.safetensors" } },
+  "5": { "class_type": "ControlNetLoader", "inputs": { "control_net_name": "sd3.5_large_controlnet_canny.safetensors" } },
+  "6": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{PROMPT:string}}", "clip": ["4", 1] } },
+  "7": { "class_type": "ConditioningZeroOut", "inputs": { "conditioning": ["6", 0] } },
+  "8": { "class_type": "ControlNetApplyAdvanced", "inputs": { "positive": ["6", 0], "negative": ["7", 0], "control_net": ["5", 0], "image": ["3", 0], "vae": ["4", 2], "strength": 0.66, "start_percent": 0, "end_percent": 1 } },
+  "9": { "class_type": "EmptySD3LatentImage", "inputs": { "width": 1024, "height": 1024, "batch_size": 1 } },
+  "10": { "class_type": "KSampler", "inputs": { "seed": {{SEED:seed}}, "steps": 32, "cfg": 4.5, "sampler_name": "euler", "scheduler": "simple", "denoise": 1, "model": ["4", 0], "positive": ["8", 0], "negative": ["8", 1], "latent_image": ["9", 0] } },
+  "11": { "class_type": "VAEDecode", "inputs": { "samples": ["10", 0], "vae": ["4", 2] } },
+  "12": { "class_type": "SaveImage", "inputs": { "filename_prefix": "SD35_Canny_ControlNet", "images": ["11", 0] } }
+}

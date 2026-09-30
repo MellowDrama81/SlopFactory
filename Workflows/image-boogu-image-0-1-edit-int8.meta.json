@@ -1,0 +1,19 @@
+{
+  "id": "image-boogu-image-0-1-edit-int8",
+  "displayName": "Comfy Cloud — Boogu Image 0 1 Edit Int8",
+  "description": "Imported from Comfy Cloud's official image_boogu_image_0_1_edit_int8 template using its embedded API prompt.",
+  "graphFile": "image-boogu-image-0-1-edit-int8.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "boogu_image_edit_int8_convrot.safetensors"
+  }
+}

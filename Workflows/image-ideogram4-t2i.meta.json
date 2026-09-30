@@ -1,0 +1,47 @@
+{
+  "id": "image-ideogram4-t2i",
+  "displayName": "Comfy Cloud — Ideogram4 T2I",
+  "description": "Imported from Comfy Cloud's official image_ideogram4_t2i template using its embedded API prompt.",
+  "graphFile": "image-ideogram4-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 8,
+    "maxImages": 8,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": "Image description",
+    "imageGenerationModel": "gemini-3-1-pro"
+  }
+}

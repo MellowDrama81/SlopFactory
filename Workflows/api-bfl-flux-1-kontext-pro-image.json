@@ -1,0 +1,45 @@
+{
+  "83": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "aspect_ratio": "1:1",
+      "guidance": 3.0,
+      "steps": 50,
+      "seed": {{SEED:seed}},
+      "prompt_upsampling": false,
+      "input_image": [
+        "84",
+        0
+      ]
+    },
+    "class_type": "FluxKontextProImageNode",
+    "_meta": {
+      "title": "Flux.1 Kontext [pro] Image"
+    }
+  },
+  "84": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "cf967c517d0618c3a882e964c1289674e14da8c6470f23afc3c203c206154bd0"
+    ]
+  },
+  "85": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "83",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

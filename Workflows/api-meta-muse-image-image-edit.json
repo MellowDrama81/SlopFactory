@@ -1,0 +1,66 @@
+{
+  "2": {
+    "inputs": {
+      "filename_prefix": "muse_image_1.0",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "3": {
+    "inputs": {
+      "model": "muse-image-1.0",
+      "model.prompt": "{{PROMPT:string}}",
+      "model.aspect_ratio": "auto",
+      "model.reasoning_strength": "high",
+      "model.enable_web_search": true,
+      "model.enable_image_search": true,
+      "model.enable_shell": true,
+      "model.seed": 42,
+      "model.images.image_1": [
+        "4",
+        0
+      ],
+      "model.images.image_2": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "MetaMuseImageEditApi",
+    "_meta": {
+      "title": "Meta Muse Image Edit"
+    }
+  },
+  "4": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "27ac4958c9356f3b0b1fedda6323a5c6f99549cc8dc77e8c45a1fe24dd8ae002"
+    ]
+  },
+  "5": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "b6aa1b8bae330c7c6af99eb7662eaceb60b631fbeb29d131114da19bb9789555"
+    ]
+  }
+}

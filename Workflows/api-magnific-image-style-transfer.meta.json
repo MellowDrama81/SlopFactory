@@ -1,0 +1,23 @@
+{
+  "id": "api-magnific-image-style-transfer",
+  "displayName": "Comfy Cloud — Magnific Image Style Transfer",
+  "description": "Imported from Comfy Cloud's official api_magnific_image_style_transfer template using its embedded API prompt.",
+  "graphFile": "api-magnific-image-style-transfer.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Magnific Style Transfer"
+  }
+}

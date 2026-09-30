@@ -1,0 +1,23 @@
+{
+  "description": "Imported from Comfy Cloud's official image_flux2_fp8 template.",
+  "graphFile": "image-flux2-fp8.json",
+  "displayName": "Comfy Cloud — image flux2 fp8",
+  "id": "image-flux2-fp8",
+  "capabilities": {
+    "maxImages": 2,
+    "imageGenerationModel": "flux2_dev_fp8mixed.safetensors",
+    "minImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official api_magnific_skin_enhancer template.",
+  "graphFile": "api-magnific-skin-enhancer.json",
+  "displayName": "Comfy Cloud — api magnific skin enhancer",
+  "id": "api-magnific-skin-enhancer",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "Magnific Skin Enhancer",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

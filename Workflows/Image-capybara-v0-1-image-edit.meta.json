@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official Image_capybara_v0_1_image_edit template.",
+  "graphFile": "Image-capybara-v0-1-image-edit.json",
+  "displayName": "Comfy Cloud — Image capybara v0 1 image edit",
+  "id": "Image-capybara-v0-1-image-edit",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "capybara_v0.1.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

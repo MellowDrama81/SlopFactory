@@ -1,0 +1,48 @@
+{
+  "1": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "27fc89bd3cbd33645e722076f2c24195ac89b3b5f9db8c6fb1393b2481e04184"
+    ]
+  },
+  "5": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "7": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "prompt_upsampling": false,
+      "top": 640,
+      "bottom": 0,
+      "left": 0,
+      "right": 0,
+      "guidance": 60.0,
+      "steps": 50,
+      "seed": {{SEED:seed}},
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "FluxProExpandNode",
+    "_meta": {
+      "title": "Flux.1 Expand Image"
+    }
+  }
+}

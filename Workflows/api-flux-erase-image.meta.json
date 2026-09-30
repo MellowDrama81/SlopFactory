@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official api_flux_erase_image template.",
+  "graphFile": "api-flux-erase-image.json",
+  "displayName": "Comfy Cloud — api flux erase image",
+  "id": "api-flux-erase-image",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "Flux Erase",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

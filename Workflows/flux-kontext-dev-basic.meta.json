@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official flux_kontext_dev_basic template.",
+  "graphFile": "flux-kontext-dev-basic.json",
+  "displayName": "Comfy Cloud — flux kontext dev basic",
+  "id": "flux-kontext-dev-basic",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "flux1-dev-kontext_fp8_scaled.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

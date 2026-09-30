@@ -1,11 +1,19 @@
 {
   "id": "qwen-diffsynth-canny-controlnet",
-  "displayName": "Qwen Image \u2014 DiffSynth canny model-patch",
-  "description": "Extracts a Canny edge map from one supplied photo, then generates a new image under that edge structure using DiffSynth-Studio's Qwen-Image Blockwise Canny ControlNet \u2014 a model-patch mechanism rather than a classic ControlNet, baked directly into the diffusion model instead of conditioning it externally.",
+  "displayName": "Qwen Image — DiffSynth canny model-patch",
+  "description": "Extracts a Canny edge map from one supplied photo, then generates a new image under that edge structure using DiffSynth-Studio's Qwen-Image Blockwise Canny ControlNet — a model-patch mechanism rather than a classic ControlNet, baked directly into the diffusion model instead of conditioning it externally.",
   "graphFile": "qwen-diffsynth-canny-controlnet.json",
   "capabilities": {
     "requiresMask": false,
     "minImages": 1,
-    "maxImages": 1
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": "Canny"
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "qwen_image_fp8_e4m3fn.safetensors"
   }
 }

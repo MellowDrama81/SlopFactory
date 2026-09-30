@@ -1,0 +1,24 @@
+{
+  "description": "Imported from Comfy Cloud's official image_flux2_klein_9b_kv_image_edit template.",
+  "graphFile": "image-flux2-klein-9b-kv-image-edit.json",
+  "displayName": "Comfy Cloud — image flux2 klein 9b kv image edit",
+  "id": "image-flux2-klein-9b-kv-image-edit",
+  "cloudCompatible": false,
+  "capabilities": {
+    "maxImages": 2,
+    "imageGenerationModel": "flux-2-klein-9b-kv-fp8.safetensors",
+    "minImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

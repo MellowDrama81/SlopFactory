@@ -1,0 +1,29 @@
+{
+  "11": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "prompt_upsampling": false,
+      "seed": {{SEED:seed}},
+      "aspect_ratio": "1:1",
+      "raw": false,
+      "image_prompt_strength": 0.1
+    },
+    "class_type": "FluxProUltraImageNode",
+    "_meta": {
+      "title": "Flux 1.1 [pro] Ultra Image"
+    }
+  },
+  "12": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

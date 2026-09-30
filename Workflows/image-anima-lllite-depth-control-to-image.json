@@ -1,0 +1,410 @@
+{
+  "46": {
+    "inputs": {
+      "filename_prefix": "Anima",
+      "images": [
+        "88:105",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "76": {
+    "inputs": {
+      "image": [
+        "92",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "Get Image Size"
+    }
+  },
+  "77": {
+    "inputs": {
+      "compare_view": {
+        "beforeImages": [
+          "/api/view?filename=comfy.compare.a_temp_qjmrg_00001_.png&subfolder=&type=temp&rand=0.7800602436369903"
+        ],
+        "afterImages": [
+          "/api/view?filename=comfy.compare.b_temp_qjmrg_00001_.png&subfolder=&type=temp&rand=0.7800602436369903"
+        ]
+      },
+      "image_a": [
+        "92",
+        0
+      ],
+      "image_b": [
+        "46",
+        0
+      ]
+    },
+    "class_type": "ImageCompare",
+    "_meta": {
+      "title": "Compare Images"
+    }
+  },
+  "91": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "637bdd47bbff1bd93b1c4d096236054f9e001d4d7536cf422ab77e28572c3f9b"
+    ]
+  },
+  "92": {
+    "inputs": {
+      "images": [
+        "690:687",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "693": {
+    "inputs": {
+      "resize_type": "scale total pixels",
+      "resize_type.megapixels": 1.0,
+      "scale_method": "lanczos",
+      "input": [
+        "91",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "Resize Image/Mask"
+    }
+  },
+  "690:687": {
+    "inputs": {
+      "output": "depth",
+      "output.normalization": "v2_style",
+      "output.apply_sky_clip": false,
+      "da3_geometry": [
+        "690:688",
+        0
+      ]
+    },
+    "class_type": "DA3Render",
+    "_meta": {
+      "title": "Render Depth Anything 3"
+    }
+  },
+  "690:688": {
+    "inputs": {
+      "resolution": 504,
+      "resize_method": "upper_bound_resize",
+      "mode": "mono",
+      "da3_model": [
+        "690:689",
+        0
+      ],
+      "image": [
+        "693",
+        0
+      ]
+    },
+    "class_type": "DA3Inference",
+    "_meta": {
+      "title": "Run Depth Anything 3"
+    }
+  },
+  "690:689": {
+    "inputs": {
+      "model_name": "depth_anything_3_mono_large.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "LoadDA3Model",
+    "_meta": {
+      "title": "Load Depth Anything 3"
+    }
+  },
+  "88:78": {
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "88:79": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "88:81": {
+    "inputs": {
+      "width": [
+        "76",
+        0
+      ],
+      "height": [
+        "76",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "88:82": {
+    "inputs": {
+      "text": "worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia",
+      "clip": [
+        "88:78",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "88:84": {
+    "inputs": {
+      "text": "front view perspective, cozy sunlit living room, a young girl sits on the central sofa reading a book, abundant lush green houseplants everywhere, large window beside the sofa, soft warm daylight pouring through window, vintage furniture, books, tableware and home decorations, obvious layered indoor spatial depth, rich interior details, warm gentle color palette, clean smooth line art, soft cel shading, japanese slice of life anime illustration, tranquil healing atmosphere, decorative sticker art, neat composition",
+      "clip": [
+        "88:78",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "88:85": {
+    "inputs": {
+      "unet_name": "anima-base-v1.0.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "88:86": {
+    "inputs": {
+      "name": "anima-lllite-depth-1.safetensors"
+    },
+    "class_type": "ModelPatchLoader",
+    "_meta": {
+      "title": "ModelPatchLoader"
+    }
+  },
+  "88:87": {
+    "inputs": {
+      "strength": 1.3,
+      "start_percent": 0.0,
+      "end_percent": 1.0,
+      "model": [
+        "88:85",
+        0
+      ],
+      "model_patch": [
+        "88:86",
+        0
+      ],
+      "image": [
+        "92",
+        0
+      ]
+    },
+    "class_type": "AnimaLLLiteApply",
+    "_meta": {
+      "title": "Apply Anima LLLite"
+    }
+  },
+  "88:105": {
+    "inputs": {
+      "samples": [
+        "88:106",
+        0
+      ],
+      "vae": [
+        "88:79",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "88:106": {
+    "inputs": {
+      "seed": {{SEED:seed}},
+      "steps": [
+        "88:111",
+        0
+      ],
+      "cfg": [
+        "88:113",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": [
+        "88:110",
+        0
+      ],
+      "positive": [
+        "88:84",
+        0
+      ],
+      "negative": [
+        "88:82",
+        0
+      ],
+      "latent_image": [
+        "88:81",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "88:107": {
+    "inputs": {
+      "value": 30
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Steps)"
+    }
+  },
+  "88:108": {
+    "inputs": {
+      "value": 8
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Steps)"
+    }
+  },
+  "88:109": {
+    "inputs": {
+      "lora_name": "anima-turbo-lora-v0.2.safetensors",
+      "strength_model": 1.0,
+      "model": [
+        "88:87",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "88:110": {
+    "inputs": {
+      "switch": [
+        "88:115",
+        0
+      ],
+      "on_false": [
+        "88:87",
+        0
+      ],
+      "on_true": [
+        "88:109",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch"
+    }
+  },
+  "88:111": {
+    "inputs": {
+      "switch": [
+        "88:115",
+        0
+      ],
+      "on_false": [
+        "88:107",
+        0
+      ],
+      "on_true": [
+        "88:108",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch"
+    }
+  },
+  "88:112": {
+    "inputs": {
+      "value": 4.0
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (CFG)"
+    }
+  },
+  "88:113": {
+    "inputs": {
+      "switch": [
+        "88:115",
+        0
+      ],
+      "on_false": [
+        "88:112",
+        0
+      ],
+      "on_true": [
+        "88:114",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch"
+    }
+  },
+  "88:114": {
+    "inputs": {
+      "value": 1.0
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (CFG)"
+    }
+  },
+  "88:115": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Boolean (Enable Turbo LoRA)"
+    }
+  }
+}

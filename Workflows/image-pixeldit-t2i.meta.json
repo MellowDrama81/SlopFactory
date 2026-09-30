@@ -1,0 +1,19 @@
+{
+  "id": "image-pixeldit-t2i",
+  "displayName": "Comfy Cloud — Pixeldit T2I",
+  "description": "Imported from Comfy Cloud's official image_pixeldit_t2i template using its embedded API prompt.",
+  "graphFile": "image-pixeldit-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "pixeldit_1300m_1024px_bf16.safetensors"
+  }
+}

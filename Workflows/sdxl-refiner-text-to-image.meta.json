@@ -1,0 +1,14 @@
+{
+  "id": "sdxl-refiner-text-to-image",
+  "displayName": "SDXL 1.0 + Refiner — text to image",
+  "description": "Official Comfy SDXL base-and-refiner template, converted for the Comfy API. Requires sd_xl_base_1.0.safetensors and sd_xl_refiner_1.0.safetensors.",
+  "graphFile": "sdxl-refiner-text-to-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "sd_xl_base_1.0.safetensors"
+  }
+}

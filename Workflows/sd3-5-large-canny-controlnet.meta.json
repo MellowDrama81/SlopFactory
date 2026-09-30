@@ -1,0 +1,19 @@
+{
+  "id": "sd3-5-large-canny-controlnet",
+  "displayName": "SD 3.5 Large — Canny ControlNet",
+  "description": "Official SD 3.5 Large Canny ControlNet template converted for the Comfy API. Derives edges from one reference image to guide composition.",
+  "graphFile": "sd3-5-large-canny-controlnet.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": "Canny"
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "sd3.5_large_fp8_scaled.safetensors"
+  }
+}

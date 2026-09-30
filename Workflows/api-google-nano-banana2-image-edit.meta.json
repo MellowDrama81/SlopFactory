@@ -1,0 +1,23 @@
+{
+  "id": "api-google-nano-banana2-image-edit",
+  "displayName": "Comfy Cloud — Google Nano Banana2 Image Edit",
+  "description": "Imported from Comfy Cloud's official api_google_nano_banana2_image_edit template using its embedded API prompt.",
+  "graphFile": "api-google-nano-banana2-image-edit.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Nano Banana 2 (Gemini 3.1 Flash Image)"
+  }
+}

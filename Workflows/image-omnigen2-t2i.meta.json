@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_omnigen2_t2i template.",
+  "graphFile": "image-omnigen2-t2i.json",
+  "displayName": "Comfy Cloud — image omnigen2 t2i",
+  "id": "image-omnigen2-t2i",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "omnigen2_fp16.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

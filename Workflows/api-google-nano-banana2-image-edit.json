@@ -1,0 +1,159 @@
+{
+  "7": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "Nano Banana 2 (Gemini 3.1 Flash Image)",
+      "seed": {{SEED:seed}},
+      "aspect_ratio": "auto",
+      "resolution": "2K",
+      "response_modalities": "IMAGE",
+      "thinking_level": "HIGH",
+      "system_prompt": "You are an expert image-generation engine. You must ALWAYS produce an image.\nInterpret all user input—regardless of format, intent, or abstraction—as literal visual directives for image composition.\nIf a prompt is conversational or lacks specific visual details, you must creatively invent a concrete visual scenario that depicts the concept.\nPrioritize generating the visual representation above any text, formatting, or conversational requests.",
+      "$$node-text-preview": "Status: Completed\nPrice: 15.4 credits\nTime elapsed: 51s",
+      "images": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "GeminiNanoBanana2",
+    "_meta": {
+      "title": "Nano Banana 2"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "10": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "e7d6d3debf8a2e33950ba17126ffe7a9bd22da1876c409636af6f747a2ac1230"
+    ]
+  },
+  "16": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "46977954c9693efaa85f93524b3ffcc17b909a4fc8dada0686ae07be72144f54"
+    ]
+  },
+  "17": {
+    "inputs": {
+      "prompt": "Edit the image: change the man's white tank top and light pink corduroy pants to a cream-colored knit polo shirt and high-waisted beige trousers; add a thin gold chain necklace and black wayfarer sunglasses; change the dog's plain collar to a brown leather collar with a brass tag; change the background to a sun-dappled desert landscape with distant mesas; adjust the lighting to warm, golden-hour sunlight with soft, diffused shadows and a vintage film grain texture; keep the man's kneeling pose, the dog's sitting posture, and their interaction identical to the original image.\n",
+      "model": "Nano Banana 2 (Gemini 3.1 Flash Image)",
+      "seed": {{SEED:seed}},
+      "aspect_ratio": "auto",
+      "resolution": "2K",
+      "response_modalities": "IMAGE",
+      "thinking_level": "HIGH",
+      "system_prompt": "You are an expert image-generation engine. You must ALWAYS produce an image.\nInterpret all user input—regardless of format, intent, or abstraction—as literal visual directives for image composition.\nIf a prompt is conversational or lacks specific visual details, you must creatively invent a concrete visual scenario that depicts the concept.\nPrioritize generating the visual representation above any text, formatting, or conversational requests.",
+      "images": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "GeminiNanoBanana2",
+    "_meta": {
+      "title": "Nano Banana 2"
+    }
+  },
+  "18": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "19": {
+    "inputs": {
+      "prompt": "Edit the image: change the man's white tank top and light pink corduroy pants to a sleek silver futuristic bodysuit with glowing blue accents; change his hairstyle to a short, geometric cut with neon blue highlights; add a sleek silver visor over his eyes; change the dog's plain collar to a glowing cyan LED collar and a metallic silver harness; change the background to a neon-lit cyberpunk cityscape at night with holographic billboards and rain-slicked streets; adjust the lighting to cool, neon-drenched illumination with deep shadows and a glossy, wet surface sheen; keep the man's kneeling pose, the dog's sitting posture, and their interaction identical to the original image.\n",
+      "model": "Nano Banana 2 (Gemini 3.1 Flash Image)",
+      "seed": {{SEED:seed}},
+      "aspect_ratio": "auto",
+      "resolution": "2K",
+      "response_modalities": "IMAGE",
+      "thinking_level": "HIGH",
+      "system_prompt": "You are an expert image-generation engine. You must ALWAYS produce an image.\nInterpret all user input—regardless of format, intent, or abstraction—as literal visual directives for image composition.\nIf a prompt is conversational or lacks specific visual details, you must creatively invent a concrete visual scenario that depicts the concept.\nPrioritize generating the visual representation above any text, formatting, or conversational requests.",
+      "images": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "GeminiNanoBanana2",
+    "_meta": {
+      "title": "Nano Banana 2"
+    }
+  },
+  "20": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "19",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "21": {
+    "inputs": {
+      "prompt": "Edit the image: change the man's white tank top and light pink corduroy pants to a forest green flannel shirt, khaki cargo pants, and brown hiking boots; add a wide-brimmed olive green hat and amber-tinted sunglasses; change the dog's plain collar to a sturdy orange webbing collar with a compass tag; change the background to a lush, sun-dappled pine forest with a mossy forest floor; adjust the lighting to soft, dappled sunlight filtering through the tree canopy with a cool, earthy color palette; keep the man's kneeling pose, the dog's sitting posture, and their interaction identical to the original image.\n",
+      "model": "Nano Banana 2 (Gemini 3.1 Flash Image)",
+      "seed": {{SEED:seed}},
+      "aspect_ratio": "auto",
+      "resolution": "2K",
+      "response_modalities": "IMAGE",
+      "thinking_level": "HIGH",
+      "system_prompt": "You are an expert image-generation engine. You must ALWAYS produce an image.\nInterpret all user input—regardless of format, intent, or abstraction—as literal visual directives for image composition.\nIf a prompt is conversational or lacks specific visual details, you must creatively invent a concrete visual scenario that depicts the concept.\nPrioritize generating the visual representation above any text, formatting, or conversational requests.",
+      "images": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "GeminiNanoBanana2",
+    "_meta": {
+      "title": "Nano Banana 2"
+    }
+  },
+  "22": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "api-bytedance-seedream-5-0-flash-image-edit",
+  "displayName": "Comfy Cloud — Bytedance Seedream 5 0 Flash Image Edit",
+  "description": "Imported from Comfy Cloud's official api_bytedance_seedream_5_0_flash_image_edit template using its embedded API prompt.",
+  "graphFile": "api-bytedance-seedream-5-0-flash-image-edit.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "seedream 5.0 flash"
+  }
+}

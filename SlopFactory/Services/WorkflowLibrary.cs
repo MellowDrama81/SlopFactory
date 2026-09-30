@@ -29,7 +29,14 @@ public sealed class WorkflowLibrary
             throw new InvalidOperationException($"“{id}” is a built-in workflow and cannot be overwritten.");
 
         var definition = new WorkflowDefinition(id, displayName, description, string.Empty,
-            new WorkflowCapabilities(requiresMask, minImages, maxImages), IsBuiltIn: false);
+            new WorkflowCapabilities(
+                requiresMask,
+                minImages,
+                maxImages,
+                Enumerable.Range(0, maxImages)
+                    .Select(index => new WorkflowImageInput(AcceptsMask: requiresMask && index == 0))
+                    .ToList()),
+            IsBuiltIn: false);
 
         custom = custom.Where(workflow => workflow.Id != id).Append(definition).ToList();
         await PersistCustomAsync();

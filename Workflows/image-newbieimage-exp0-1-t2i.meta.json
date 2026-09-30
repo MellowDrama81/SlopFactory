@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_newbieimage_exp0_1-t2i template.",
+  "graphFile": "image-newbieimage-exp0-1-t2i.json",
+  "displayName": "Comfy Cloud — image newbieimage exp0 1-t2i",
+  "id": "image-newbieimage-exp0-1-t2i",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "NewBie-Image-Exp0.1-bf16.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "api-openai-gpt-image-2-t2i",
+  "displayName": "Comfy Cloud — Openai GPT Image 2 T2I",
+  "description": "Imported from Comfy Cloud's official api_openai_gpt_image_2_t2i template using its embedded API prompt.",
+  "graphFile": "api-openai-gpt-image-2-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "gpt-image-2"
+  }
+}

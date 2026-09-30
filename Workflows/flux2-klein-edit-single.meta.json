@@ -1,11 +1,19 @@
 {
   "id": "flux2-klein-edit-single",
-  "displayName": "FLUX.2 Klein 9B \u2014 single-image edit",
+  "displayName": "FLUX.2 Klein 9B — single-image edit",
   "description": "Edits one reference image per the prompt using FLUX.2 Klein's base 9B model.",
   "graphFile": "flux2-klein-edit-single.json",
   "capabilities": {
     "requiresMask": false,
     "minImages": 1,
-    "maxImages": 1
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": null
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "flux-2-klein-base-9b-fp8.safetensors"
   }
 }

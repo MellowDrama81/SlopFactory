@@ -1,0 +1,33 @@
+{
+  "1": {
+    "inputs": {
+      "model": "grok-imagine-image-2.0",
+      "prompt": "{{PROMPT:string}}",
+      "aspect_ratio": "1:1",
+      "number_of_images": 1,
+      "seed": {{SEED:seed}},
+      "resolution": "1K",
+      "quality": "medium"
+    },
+    "class_type": "GrokImageNode",
+    "_meta": {
+      "title": "Grok Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "filename_prefix": "Grok_imagine_image_2.0",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  }
+}

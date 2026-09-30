@@ -1,0 +1,23 @@
+{
+  "description": "Imported from Comfy Cloud's official image_krea2_turbo_int8_image_style_reference template.",
+  "graphFile": "image-krea2-turbo-int8-image-style-reference.json",
+  "displayName": "Comfy Cloud — image krea2 turbo int8 image style reference",
+  "id": "image-krea2-turbo-int8-image-style-reference",
+  "capabilities": {
+    "maxImages": 2,
+    "imageGenerationModel": "krea2_turbo_int8_convrot.safetensors",
+    "minImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

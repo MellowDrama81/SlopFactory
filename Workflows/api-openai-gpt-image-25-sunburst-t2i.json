@@ -1,0 +1,32 @@
+{
+  "269": {
+    "inputs": {
+      "filename_prefix": "GPT_image_2.5_flare_t2i",
+      "images": [
+        "271",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "271": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "gpt-image-2.5-sunburst",
+      "model.size": "auto",
+      "model.custom_width": 1024,
+      "model.custom_height": 1024,
+      "model.background": "auto",
+      "model.quality": "low",
+      "n": 1,
+      "seed": {{SEED:seed}}
+    },
+    "class_type": "OpenAIGPTImageNodeV2",
+    "_meta": {
+      "title": "OpenAI GPT Image 2.5"
+    }
+  }
+}

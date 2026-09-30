@@ -1,0 +1,62 @@
+{
+  "10": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "style_strength": 75,
+      "structure_strength": 41,
+      "flavor": "faithful",
+      "engine": "colorful_anime",
+      "portrait_mode": "disabled",
+      "fixed_generation": true,
+      "image": [
+        "11",
+        0
+      ],
+      "reference_image": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "MagnificImageStyleTransferNode",
+    "_meta": {
+      "title": "Magnific Image Style Transfer"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "548ee052ea8e5be1c6a7318bc4bd00b657336da399f38a80184fea03c8317368"
+    ]
+  },
+  "13": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "23274def4c39964893c7045a3ce21282048fb0c058b5408f2e328e8708e717ac"
+    ]
+  },
+  "14": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_marigold_v2_depth_estimation template.",
+  "graphFile": "image-marigold-v2-depth-estimation.json",
+  "displayName": "Comfy Cloud — image marigold v2 depth estimation",
+  "id": "image-marigold-v2-depth-estimation",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "Marigold V2",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": "Depth",
+    "requiresMask": false
+  }
+}

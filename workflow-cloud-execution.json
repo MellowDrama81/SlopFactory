@@ -1,0 +1,2652 @@
+[
+  {
+    "Id": "api-bfl-flux-1-kontext-pro-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "2b10c02e-70d3-4c72-99f2-0e4b54ddf46e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bfl-flux-pro-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "200d492f-6cbb-4c27-a2e8-f05475d45caa",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bria-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "8feb462d-b769-427a-a8f7-90cb02ffa879",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream-5-0-flash-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "68c1fbc5-e371-4cfb-aaaf-35a716fdc2cc",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 2,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream4-2img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "af525ff4-9380-4405-983e-35b4ee9c307b",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream4",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "869f7537-861a-4055-a0dd-c3090bebce0e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-google-nano-banana2-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "4fb3ff9e-2d49-475b-a82f-798f2b0e6691",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-grok-imagine-image-2-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "7151f166-73b5-4dce-a56d-abe0a96769b5",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-grok-imagine-image-2-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1f9131c6-49ed-4c57-94b3-14f0c99f2c1d",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-grok-imagine-image-quality-image-generation",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d9fafb1c-4b19-442c-bdc4-a4d788d89bd0",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-kling-omni-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "78aa7106-9426-4428-83cb-f29edb50d755",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-kling-v3-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5dad47b9-2192-46a0-918d-1f74a75043ae",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-krea2-style-reference-1img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "34f494ff-4748-4e46-907c-9363db314431",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-krea2-style-reference-2img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "f319cc93-9b72-4ef8-9f6a-5d861fa660a2",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-krea2-style-reference",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "89a763d1-f013-4d23-9693-f0902f21fca3",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-krea2-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "6b2a6785-3824-40de-b6e9-5c03fa9fe03e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-luma-photon-style-ref",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "7ad39532-94ac-41f1-bd66-589ddc94d484",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-luma-uni-1-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "ed163850-ae5b-4e36-92f2-5295eae19915",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-magnific-image-relight",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "8fca16a0-3c23-4375-a6a7-14c7e3f6306f",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-magnific-image-style-transfer",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "13662573-12b7-4185-9f4d-238510d22528",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-magnific-image-upscale-precise",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "ac2fcc21-607f-4012-a834-b724227c635e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-magnific-skin-enhancer",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5d70adf9-2d14-46b1-85fb-09163ec4a61d",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-meta-muse-image-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "e9b5eaf6-43f9-49f4-bcfd-d8cdcdfed18b",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-2-lite-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "01a6b724-7e4d-4e45-8525-e8ace28f0987",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-2-lite-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "83306008-502e-4434-a5c0-07220daa9b23",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-pro-0img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "569c17de-8d35-410c-bb02-381d966eb11f",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-pro-1img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "c4f70777-2901-49a3-8445-7f3dc1b49468",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-pro-6img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "93146b81-3606-44ae-8d4a-3f4530437072",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-pro-7img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference",
+      "UPLOADED_IMAGE_FILENAME_7=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "b37cf46c-d2bc-4228-a047-d4cc717e63af",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-pro-8img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference",
+      "UPLOADED_IMAGE_FILENAME_7=reference",
+      "UPLOADED_IMAGE_FILENAME_8=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "124927f2-b043-4cfd-bc29-f2677f576df3",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-pro",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "c1fecd25-1536-4854-9f66-149e37cfd81b",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-openai-gpt-image-2-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "a6273de5-c5a0-4672-9bd5-673ea2deafc5",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-openai-gpt-image-2-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "f093eae9-68fb-4c43-b0a2-2b8485ced178",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-openai-gpt-image-25-flare-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d2bc13e4-b85c-476f-9db0-c62ea6728a25",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 2,
+    "Error": null
+  },
+  {
+    "Id": "api-openai-gpt-image-25-sunburst-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "75cb3f5f-f827-4280-9906-39e8deeaabb7",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-openai-image-1-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "e7524ad4-adaa-4e32-bae5-1cb29a722c1c",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-openrouter-mai-image-26-flash-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1f5155c1-dc84-4ffe-80cd-a49c9366bab9",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-openrouter-mai-image-26-flash",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "f32c1d38-a037-4a2b-b2cf-e8224d691e74",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-openrouter-mai-image-26-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "f4dc609e-d7c0-477f-b3a6-fd0b01bc4532",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-qwen3-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "9975677d-0eb6-46e2-ae88-da3a6cd7754f",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-recraft-style-reference",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "dfff473c-c408-472f-b049-c395122a3c95",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-recraft-v4-1-flash-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "9aea902e-14eb-4b1b-a426-d97c23980b3e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-recraft-v4-1-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "a0f18e42-25db-4709-afda-32bee4b13666",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-recraft-v4-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "7ed3519b-7c22-4d34-8f3d-78f94ae665ad",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-tencent-hy-image-3-5-preview-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5b39dce6-972a-4b09-ada1-084dfe48121e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-topaz-image-enhance-wonder3-5",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1a836a6c-70fc-47ef-b62c-f1119f801775",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "canny-extract-control-guide",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "c6fdf59e-7418-4cf2-9c6d-9fe4df57c690",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "depth-extract-control-guide",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "90f75e55-21a4-4bb8-9dd1-c5c247268007",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "dwpose-extract-pose-guide",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "059a7b8a-e813-48b8-ab69-89c93f6fe750",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux-dev-checkpoint-example",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "0ad1861f-813b-486f-9e2a-7a199c821925",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux-dev-full-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d1de1ce4-c2f2-43b6-a602-ad7f16cf9b3b",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux-fill-inpaint-example",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "0df4be40-7bd5-4847-9054-00fd1c8b31fb",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux-kontext-dev-basic",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "2a592dea-2fad-40ea-92f9-d3c37996d381",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux-schnell-full-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "75bf7f5d-722e-446d-be80-0e1fd175d85a",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux1-dev-uso-reference-image-gen",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "12fa5c50-8a00-48af-b04c-d912c45e8c09",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux1-krea-dev",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "40e75276-30a6-44e4-b8e6-6e2b0aa275e4",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux1-schnell-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "45ffa6ed-00b2-4ee3-9f17-856b88cf6aef",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-0img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "9adc3b7b-1fc2-4266-b497-8e02cacf4298",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-2img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "e28a9ca1-1314-40ff-9cc7-e79b3af62017",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-3img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "c1de0af1-3be4-4af9-9da9-8c37f72af242",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-4img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "dab53dc9-9337-42d1-a1ea-a16d8ed4609d",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-5img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "9012346e-0090-4294-ad8f-c1bbb1ee1f67",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-6img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "8de3789f-51c5-4e58-84a5-b7ef27177531",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-0img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "fd2d3f3a-638c-4a10-a2da-15938f82e902",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-3img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d56813dd-401c-425a-bb6a-d3c9cae28d42",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-4img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "7826fcc7-c59d-446e-80de-9ca32589c9ba",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-5img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "4fdaf92c-f838-4886-ba9d-680006e48b8d",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-6img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "c903cebd-2ab8-4fb5-8bfa-34c7d63b4360",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-7img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference",
+      "UPLOADED_IMAGE_FILENAME_7=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "cdb1df93-520a-49c5-a545-0c1cc9c5a478",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-8img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference",
+      "UPLOADED_IMAGE_FILENAME_7=reference",
+      "UPLOADED_IMAGE_FILENAME_8=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "80a374cc-e12d-4f00-80d3-7ffb5f8a3b62",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-edit-double",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "78a9238a-41b2-41fc-8360-bbc13812ab00",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-edit-single",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "4fc5d561-fc92-4189-bb7a-800c2411180a",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-klein-inpaint-reference",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_MASKED_IMAGE_FILENAME=mask"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "437c26c5-9d6a-4897-be3d-71ba874ef28c",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1a67feea-a076-4eda-9560-8faee12d4769",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-anima-base-v1",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "e3f085f8-d30c-4037-b651-2de04e8befae",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-anima-lllite-any-control-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "fa8977cc-7143-4afc-8e72-365c7f31abd6",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 2,
+    "Error": null
+  },
+  {
+    "Id": "image-anima-lllite-depth-control-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "e2320f62-1561-47de-a454-f1a8166bbb5b",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 2,
+    "Error": null
+  },
+  {
+    "Id": "image-boogu-image-0-1-edit-int8",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "912b1cfd-4ab2-4d87-b8cf-ed77a76d61a7",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "Image-capybara-v0-1-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "9b5833ec-9308-482d-9720-b57db01aa5dc",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "Image-capybara-v0-1-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "6a85ab30-41df-47bb-869f-cc612e5de306",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-chroma-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d2ea3435-ce78-432a-8fb6-a10976638d40",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-chrono-edit-14B",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "dde68f3b-fad9-4355-a616-d1ea7a2ca637",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-ernie-image-turbo",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "c76869a1-5f90-4ec9-8db8-483fc421d4fc",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-ernie-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1e032b61-be26-4da8-82ab-6300091e4f0f",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bfl-flux1-expand-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "3214fe61-af93-4a34-a89d-68d1047e3c1c",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream-5-0-flash-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "9721c32a-11af-4eaa-a17e-aba62b8f9f96",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream-5-0-lite-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5644502d-7568-4f32-b44f-6d25ee3c0d74",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream-5-0-lite-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "2a924508-a27d-4a63-9935-133a71626497",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-flux-erase-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "75d1e7c2-cd44-406f-9504-d699036a475e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-google-nano-banana2-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5b42cb2f-d8de-4465-b45d-ad6a6902365f",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 4,
+    "Error": null
+  },
+  {
+    "Id": "api-grok-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "f563200e-8540-44a5-be47-1b14a30d0c2b",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-grok-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5cbe4af5-38bb-4cb2-a959-15bb789c314c",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-anima-lllite-image-inpainting",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_MASKED_IMAGE_FILENAME=mask"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "7af15ec6-93d6-468c-ac11-7ec2aefdcd2f",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 3,
+    "Error": null
+  },
+  {
+    "Id": "image-chroma1-radiance-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "04ae27f7-ece3-48b6-a796-cfdc91257541",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-flux2-fp8",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "f16d770d-7df0-423c-8ce8-f3775a0ed400",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-flux2-klein-9b-kv-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "b4c7ce04-ac0d-45a3-adfd-c3426185141d",
+    "ExecutionStatus": "error",
+    "ExecutionSucceeded": false,
+    "OutputCount": 0,
+    "Error": "Failed to send prompt request: request returned error status 400: {\u0022error\u0022:{\u0022details\u0022:\u0022\u0022,\u0022extra_info\u0022:{},\u0022message\u0022:\u0022Prompt outputs failed validation\u0022,\u0022type\u0022:\u0022prompt_outputs_failed_validation\u0022},\u0022node_errors\u0022:{\u0022126\u0022:{\u0022class_type\u0022:\u0022UNETLoader\u0022,\u0022dependent_outputs\u0022:[\u002294\u0022],\u0022errors\u0022:[{\u0022details\u0022:\u0022unet_name: \u0027flux-2-klein-9b-kv-fp8.safetensors\u0027 is not a valid value\u0022,\u0022extra_info\u0022:{\u0022input_config\u0022:null,\u0022input_name\u0022:\u0022unet_name\u0022,\u0022received_value\u0022:\u0022flux-2-klein-9b-kv-fp8.safetensors\u0022},\u0022message\u0022:\u0022Value not in list\u0022,\u0022type\u0022:\u0022value_not_in_list\u0022}]}}}"
+  },
+  {
+    "Id": "image-flux2-klein-image-edit-4b-distilled",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "0d1e0e3d-89a0-4885-ab70-e88c5adfdccd",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-flux2-klein-image-edit-9b-distilled",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5da1f910-76c9-4f1f-97b5-747e9bf3da68",
+    "ExecutionStatus": "error",
+    "ExecutionSucceeded": false,
+    "OutputCount": 0,
+    "Error": "Failed to send prompt request: request returned error status 400: {\u0022error\u0022:{\u0022details\u0022:\u0022\u0022,\u0022extra_info\u0022:{},\u0022message\u0022:\u0022Prompt outputs failed validation\u0022,\u0022type\u0022:\u0022prompt_outputs_failed_validation\u0022},\u0022node_errors\u0022:{\u002275:70\u0022:{\u0022class_type\u0022:\u0022UNETLoader\u0022,\u0022dependent_outputs\u0022:[\u00229\u0022],\u0022errors\u0022:[{\u0022details\u0022:\u0022unet_name: \u0027flux-2-klein-9b-fp8.safetensors\u0027 is not a valid value\u0022,\u0022extra_info\u0022:{\u0022input_config\u0022:null,\u0022input_name\u0022:\u0022unet_name\u0022,\u0022received_value\u0022:\u0022flux-2-klein-9b-fp8.safetensors\u0022},\u0022message\u0022:\u0022Value not in list\u0022,\u0022type\u0022:\u0022value_not_in_list\u0022}]}}}"
+  },
+  {
+    "Id": "image-flux2-klein-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "407ad0f8-70ae-4f56-ba9f-072bc2c76925",
+    "ExecutionStatus": "error",
+    "ExecutionSucceeded": false,
+    "OutputCount": 0,
+    "Error": "Failed to send prompt request: request returned error status 400: {\u0022error\u0022:{\u0022details\u0022:\u0022\u0022,\u0022extra_info\u0022:{},\u0022message\u0022:\u0022Prompt outputs failed validation\u0022,\u0022type\u0022:\u0022prompt_outputs_failed_validation\u0022},\u0022node_errors\u0022:{\u002275:70\u0022:{\u0022class_type\u0022:\u0022UNETLoader\u0022,\u0022dependent_outputs\u0022:[\u00229\u0022],\u0022errors\u0022:[{\u0022details\u0022:\u0022unet_name: \u0027flux2-klein-base-4b.safetensors\u0027 is not a valid value\u0022,\u0022extra_info\u0022:{\u0022input_config\u0022:null,\u0022input_name\u0022:\u0022unet_name\u0022,\u0022received_value\u0022:\u0022flux2-klein-base-4b.safetensors\u0022},\u0022message\u0022:\u0022Value not in list\u0022,\u0022type\u0022:\u0022value_not_in_list\u0022}]}}}"
+  },
+  {
+    "Id": "image-flux2-text-to-image-9b",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5af2cd12-7a20-4fb3-96ba-2fa8e6172946",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-flux2-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "7e077f3c-f3c9-4436-8a4c-fc19f1daced5",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-flux2",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "fc0b3a59-75ee-4584-8257-7303a8af1e33",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-hidream-o1-dev",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "3f9cf578-e2f2-43d8-aae2-3bee71c06c75",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-hidream-o1",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "4f2bb702-87a1-4437-9a9c-f6d83fddeb38",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-ideogram4-t2i-int8",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "6a659c1a-2253-4650-ac86-1c99d9dcc312",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-ideogram4-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference",
+      "UPLOADED_IMAGE_FILENAME_7=reference",
+      "UPLOADED_IMAGE_FILENAME_8=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d5d10658-7f48-45e5-b4fd-17482486c997",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 0,
+    "Error": null
+  },
+  {
+    "Id": "image-krea2-turbo-int8-image-style-reference",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "33330ce2-ea9e-4901-bf91-fd3a528a6e08",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-krea2-turbo-t2i-int8",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "75d0359c-f903-4685-8435-a83a3af28b15",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-krea2-turbo-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "8aa57cc2-50a2-4489-a355-987ad155325d",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 0,
+    "Error": null
+  },
+  {
+    "Id": "image-longcat-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "86af9171-7db8-4ab2-a2e5-608527eb8e32",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-lotus-depth-v1-1",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5f8e0360-6613-4fe2-ac36-ac64cb869922",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-marigold-v2-albedo-estimation",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "0cef2be4-152a-4151-ad14-81965e3d5973",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-marigold-v2-depth-estimation",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1e3eafda-7c42-431b-948c-82316b5be5e5",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-marigold-v2-surface-normal-estimation",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "de39b6c4-80cc-466e-9938-fca87600ea81",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-ming-image-01-design-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "0ed2f3d7-bdc4-48f8-9c9a-aaa5db294026",
+    "ExecutionStatus": "error",
+    "ExecutionSucceeded": false,
+    "OutputCount": 0,
+    "Error": "Failed to send prompt request: request returned error status 400: {\u0022error\u0022:{\u0022details\u0022:\u0022\u0022,\u0022extra_info\u0022:{},\u0022message\u0022:\u0022Prompt outputs failed validation\u0022,\u0022type\u0022:\u0022prompt_outputs_failed_validation\u0022},\u0022node_errors\u0022:{\u002280:1\u0022:{\u0022class_type\u0022:\u0022UNETLoader\u0022,\u0022dependent_outputs\u0022:[\u002284\u0022],\u0022errors\u0022:[{\u0022details\u0022:\u0022unet_name: \u0027ming_image_0.1_design_int8_convrot.safetensors\u0027 is not a valid value\u0022,\u0022extra_info\u0022:{\u0022input_config\u0022:null,\u0022input_name\u0022:\u0022unet_name\u0022,\u0022received_value\u0022:\u0022ming_image_0.1_design_int8_convrot.safetensors\u0022},\u0022message\u0022:\u0022Value not in list\u0022,\u0022type\u0022:\u0022value_not_in_list\u0022}]},\u002280:14\u0022:{\u0022class_type\u0022:\u0022VAELoader\u0022,\u0022dependent_outputs\u0022:[\u002284\u0022],\u0022errors\u0022:[{\u0022details\u0022:\u0022vae_name: \u0027ming_image_vae_bf16.safetensors\u0027 is not a valid value\u0022,\u0022extra_info\u0022:{\u0022input_config\u0022:null,\u0022input_name\u0022:\u0022vae_name\u0022,\u0022received_value\u0022:\u0022ming_image_vae_bf16.safetensors\u0022},\u0022message\u0022:\u0022Value not in list\u0022,\u0022type\u0022:\u0022value_not_in_list\u0022}]},\u002280:23\u0022:{\u0022class_type\u0022:\u0022CLIPLoader\u0022,\u0022dependent_outputs\u0022:[\u002284\u0022],\u0022errors\u0022:[{\u0022details\u0022:\u0022clip_name: \u0027ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors\u0027 is not a valid value\u0022,\u0022extra_info\u0022:{\u0022input_config\u0022:null,\u0022input_name\u0022:\u0022clip_name\u0022,\u0022received_value\u0022:\u0022ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors\u0022},\u0022message\u0022:\u0022Value not in list\u0022,\u0022type\u0022:\u0022value_not_in_list\u0022}]},\u002280:46\u0022:{\u0022class_type\u0022:\u0022CLIPLoader\u0022,\u0022dependent_outputs\u0022:[\u002280:79\u0022,\u002284\u0022],\u0022errors\u0022:[{\u0022details\u0022:\u0022clip_name: \u0027qwen3.8_27b_w4a8.safetensors\u0027 is not a valid value\u0022,\u0022extra_info\u0022:{\u0022input_config\u0022:null,\u0022input_name\u0022:\u0022clip_name\u0022,\u0022received_value\u0022:\u0022qwen3.8_27b_w4a8.safetensors\u0022},\u0022message\u0022:\u0022Value not in list\u0022,\u0022type\u0022:\u0022value_not_in_list\u0022}]}}}"
+  },
+  {
+    "Id": "image-netayume-lumina-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "b4b7aa08-951b-4c2d-a9bb-7e9d602fc712",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-newbieimage-exp0-1-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "4c3ee897-026a-413c-a4bf-389e6c34f4e6",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-omnigen2-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "dabd3150-4a3f-4371-bc1c-71450e1d4057",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-pixeldit-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "796164fe-dde2-48c8-b6ca-7caa04ae109c",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 0,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-image-2-1-image-edit",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d0bf6d46-d2b1-4808-9756-3f666bea6bc9",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-image-2-1-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "a46eaec8-ed75-47e5-8a0b-73aea23c8916",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-Image-2512-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "85ac528b-c886-4cae-bee0-0913e346a4a1",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 2,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-image-2512-with-2steps-lora",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "570f1fa3-098f-4ccb-9c5b-a8d465a93b6b",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-Image-2512",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "6c29bd83-1952-4cd0-9166-60108f821f21",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-image-edit-2509",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "baf813fb-2aab-44ac-8140-8ad71ed38792",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-image-edit-2511-int8",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "45de862f-0c0d-4651-8939-42d4cf5c3289",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-image-edit-2511",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "57261afa-6739-4df3-b778-4e9486c5c1d0",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-image-union-control-lora",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "587721df-5396-4961-bb8c-357e46db4113",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 2,
+    "Error": null
+  },
+  {
+    "Id": "image-qwen-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "6a8bcddf-d875-48bc-b4bd-42c2fc9cb1bf",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-sdxl-simple",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "50ea74f9-0006-485f-9038-301ec4a51bed",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-z-image-int8",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "8b749677-dc44-496d-ad72-8f05d1113e40",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-z-image-turbo-int8",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1175ac03-8bf0-4ffc-8b8a-2b8a75a6f745",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-z-image-turbo",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d26df999-9827-4496-bd57-cc22698ad2c6",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-z-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "df4b7a8f-0617-440b-9259-feff137fd4af",
+    "ExecutionStatus": "error",
+    "ExecutionSucceeded": false,
+    "OutputCount": 0,
+    "Error": "Failed to send prompt request: request returned error status 400: {\u0022error\u0022:{\u0022details\u0022:\u0022\u0022,\u0022extra_info\u0022:{},\u0022message\u0022:\u0022Prompt outputs failed validation\u0022,\u0022type\u0022:\u0022prompt_outputs_failed_validation\u0022},\u0022node_errors\u0022:{\u002266\u0022:{\u0022class_type\u0022:\u0022UNETLoader\u0022,\u0022dependent_outputs\u0022:[\u00229\u0022],\u0022errors\u0022:[{\u0022details\u0022:\u0022unet_name: \u0027z-image-private/z_image_old_bf16.safetensors\u0027 is not a valid value\u0022,\u0022extra_info\u0022:{\u0022input_config\u0022:null,\u0022input_name\u0022:\u0022unet_name\u0022,\u0022received_value\u0022:\u0022z-image-private/z_image_old_bf16.safetensors\u0022},\u0022message\u0022:\u0022Value not in list\u0022,\u0022type\u0022:\u0022value_not_in_list\u0022}]}}}"
+  },
+  {
+    "Id": "krea2-style-reference-2img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "3388dd91-072e-406d-a46d-373c34ca4576",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "krea2-style-reference-3img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "05159d61-97e4-489a-bd4b-75b2ec627139",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "krea2-style-reference",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "74246ad7-9dcd-4bc9-a768-a6d74f9f7a3a",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "lineart-extract-control-guide",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "5ed3b2e5-22d6-4b3a-9286-8bf6cb9d3d16",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "normal-extract-control-guide",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "b67fdaaf-7fd9-4c46-bc8d-500a93e8801e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-canny-union-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "219e6220-95bd-4153-a3b9-d4ac0adab6f8",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-depth-union-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "2ea31bbc-d618-4910-a2e7-df3671b16393",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-diffsynth-canny-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "947ae3da-0e8c-4093-a445-6f287aa2a253",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-diffsynth-depth-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "aa1841fa-e90d-4723-8709-ea3542161148",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-diffsynth-inpaint",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "8a931129-da15-425f-8604-3620908bafde",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-dwpose-union-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d7a44b18-5a39-4e6c-ae8e-26fbd8a63a24",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-fun-union-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d33507da-6fcc-4241-b8ec-e84ccc47c9c9",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-image-edit-2511-1img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "12f5a12c-32c3-47fa-8466-106dffe33eeb",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-image-edit-2511-3img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "07ca76d1-7fd9-4c37-94f8-401621f8523d",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-image-edit-2511-character-pose",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "f509a673-7426-454b-9809-c9e3290f9e9a",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-image-edit-2511-character-prepared-pose",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1bce0e3b-6c4f-4007-8b79-5e179509feb2",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-image-edit-2511-inpainting",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_MASKED_IMAGE_FILENAME=mask"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "14db3513-940d-48ec-a74e-68ccb622c98b",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-image-edit-2511",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "9437f3f6-31aa-49f7-8205-1be4afb330ed",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-image-instantx-inpainting",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "89f47060-2bf5-4801-8073-b03312cdbe47",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 2,
+    "Error": null
+  },
+  {
+    "Id": "qwen-instantx-union-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "ca27df40-b939-4a75-b269-1f95db79e0e5",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-lineart-union-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "df7d12ce-9ae2-4b9e-aa0c-1db3b2fa412d",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "qwen-normal-union-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "dca0927a-348a-4442-a217-d4666d76c82f",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "remove-background",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "7e61d9de-50e5-4b25-aafe-3ca66c91b578",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "sd3-5-large-blur-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "581b1d73-c409-4d56-ad5a-5b35d6eedf00",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "sd3-5-large-canny-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "c2de3ca2-1473-4df7-a19f-accd1bdbe2c7",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "sd3-5-large-depth-controlnet",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d22778bd-9ef4-4776-bd91-5bf3df5b0922",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "sd3-5-large-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "e391fe9b-38c6-4e3f-a834-62b75eb37150",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "sdxl-refiner-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "cce845fb-cfa7-43b1-aa9c-77da404f3c37",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "sdxl-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "a9eee60b-b9bc-4505-91a5-27611f8265dc",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "sdxl-turbo-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d33f7c63-a6f4-41e8-a753-197b93cff424",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "upscale-with-model",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "0ece8d04-0236-4cc9-a469-ccb9ded17213",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "z-image-turbo",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "0403c481-572d-4265-bec3-bddcfadb7945",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-lens-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "830f322a-0cd0-46d1-8ea6-633763ed161f",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-lens-turbo-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "b0aad303-80e0-4c9a-b4cd-240c502f8695",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-longcat-text-to-image",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "8036ecec-87e7-44f5-a6a8-892bd9fdc4d5",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-7img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference",
+      "UPLOADED_IMAGE_FILENAME_7=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "af44e734-0ff1-454d-87ba-850cef59095e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-8img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference",
+      "UPLOADED_IMAGE_FILENAME_2=reference",
+      "UPLOADED_IMAGE_FILENAME_3=reference",
+      "UPLOADED_IMAGE_FILENAME_4=reference",
+      "UPLOADED_IMAGE_FILENAME_5=reference",
+      "UPLOADED_IMAGE_FILENAME_6=reference",
+      "UPLOADED_IMAGE_FILENAME_7=reference",
+      "UPLOADED_IMAGE_FILENAME_8=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "8a82ffa7-107c-47d4-aa85-61014532bd28",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "flux2-inpaint",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "66aa8422-f957-4999-b6ae-45aabbff629c",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-firered-image-edit1-1",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "d7446077-2ddf-40da-bd31-96e354675009",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "image-flux.1-fill-dev-OneReward",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "3e2a2848-9b4a-458e-8454-a0695bb6fb8e",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 2,
+    "Error": null
+  },
+  {
+    "Id": "api-bfl-flux2-max-sofa-swap",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "e944bcbe-8c79-489b-b3cc-cd11bfff48b7",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream4-3img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "6d3f18d1-8ef8-4b9e-840c-3983edf7a3e3",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream4-4img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3",
+      "UPLOADED_IMAGE_FILENAME_4=reference-4"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "e25bfd59-6f93-46e0-99e9-b5a0a931c974",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream4-5img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3",
+      "UPLOADED_IMAGE_FILENAME_4=reference-4",
+      "UPLOADED_IMAGE_FILENAME_5=reference-5"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "598c05a5-8f37-4ca6-9f66-a29d505be758",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream4-6img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3",
+      "UPLOADED_IMAGE_FILENAME_4=reference-4",
+      "UPLOADED_IMAGE_FILENAME_5=reference-5",
+      "UPLOADED_IMAGE_FILENAME_6=reference-6"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "6dc85dde-5f8d-4861-8c61-1d6ec3357cc6",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream4-7img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3",
+      "UPLOADED_IMAGE_FILENAME_4=reference-4",
+      "UPLOADED_IMAGE_FILENAME_5=reference-5",
+      "UPLOADED_IMAGE_FILENAME_6=reference-6",
+      "UPLOADED_IMAGE_FILENAME_7=reference-7"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "64d03cdb-241c-44fe-ae54-7dac54934c14",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-bytedance-seedream4-8img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3",
+      "UPLOADED_IMAGE_FILENAME_4=reference-4",
+      "UPLOADED_IMAGE_FILENAME_5=reference-5",
+      "UPLOADED_IMAGE_FILENAME_6=reference-6",
+      "UPLOADED_IMAGE_FILENAME_7=reference-7",
+      "UPLOADED_IMAGE_FILENAME_8=reference-8"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "62de5cbc-49fc-41e9-b94c-538a11553e07",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-ideogram-v4-t2i",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3",
+      "UPLOADED_IMAGE_FILENAME_4=reference-4",
+      "UPLOADED_IMAGE_FILENAME_5=reference-5",
+      "UPLOADED_IMAGE_FILENAME_6=reference-6",
+      "UPLOADED_IMAGE_FILENAME_7=reference-7",
+      "UPLOADED_IMAGE_FILENAME_8=reference-8",
+      "UPLOADED_IMAGE_FILENAME_9=reference-9",
+      "UPLOADED_IMAGE_FILENAME_10=reference-10"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "c3f28fa6-8f58-4ae5-8bd8-5c6cc7224541",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 0,
+    "Error": null
+  },
+  {
+    "Id": "api-krea2-style-reference-3img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "44c8acb9-158b-45db-aa82-fa1f9d282e95",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-pro-3img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "24e57c07-ba53-47d6-bcbe-3d7fccb7be79",
+    "ExecutionStatus": "success",
+    "ExecutionSucceeded": true,
+    "OutputCount": 1,
+    "Error": null
+  },
+  {
+    "Id": "api-nano-banana-pro-4img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3",
+      "UPLOADED_IMAGE_FILENAME_4=reference-4"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "b87843c2-27b1-4b76-9251-90524c9a099e",
+    "ExecutionStatus": "error",
+    "ExecutionSucceeded": false,
+    "OutputCount": 0,
+    "Error": "Gemini did not generate an image. Try rephrasing your prompt or changing the response modality to \u0027IMAGE\u002BTEXT\u0027 to see the model\u0027s reasoning.\n"
+  },
+  {
+    "Id": "api-nano-banana-pro-5img",
+    "ReferenceImagesUploaded": true,
+    "ReferenceBindings": [
+      "UPLOADED_IMAGE_FILENAME=reference-1",
+      "UPLOADED_IMAGE_FILENAME_2=reference-2",
+      "UPLOADED_IMAGE_FILENAME_3=reference-3",
+      "UPLOADED_IMAGE_FILENAME_4=reference-4",
+      "UPLOADED_IMAGE_FILENAME_5=reference-5"
+    ],
+    "SubmissionAccepted": true,
+    "SubmissionStatus": 200,
+    "PromptId": "1f08c242-116a-4823-bb26-7a8afc8b8afa",
+    "ExecutionStatus": null,
+    "ExecutionSucceeded": false,
+    "OutputCount": 0,
+    "Error": null
+  }
+]

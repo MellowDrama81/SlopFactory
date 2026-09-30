@@ -1,0 +1,31 @@
+{
+  "27": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "negative_prompt": "",
+      "image_type": "subject",
+      "image_fidelity": 0.5,
+      "human_fidelity": 0.45,
+      "model_name": "kling-v3",
+      "aspect_ratio": "16:9",
+      "n": 1
+    },
+    "class_type": "KlingImageGenerationNode",
+    "_meta": {
+      "title": "Kling Image Generation"
+    }
+  },
+  "29": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "27",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

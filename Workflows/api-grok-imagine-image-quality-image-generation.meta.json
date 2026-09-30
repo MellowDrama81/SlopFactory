@@ -1,0 +1,14 @@
+{
+  "id": "api-grok-imagine-image-quality-image-generation",
+  "displayName": "Comfy Cloud — Grok Imagine Image Quality Image Generation",
+  "description": "Imported from Comfy Cloud's official api_grok_imagine_image_quality_image_generation template using its embedded API prompt.",
+  "graphFile": "api-grok-imagine-image-quality-image-generation.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "grok-imagine-image-quality"
+  }
+}

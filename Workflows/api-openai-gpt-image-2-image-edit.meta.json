@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official api_openai_gpt_image_2_image_edit template.",
+  "graphFile": "api-openai-gpt-image-2-image-edit.json",
+  "displayName": "Comfy Cloud — api openai gpt image 2 image edit",
+  "id": "api-openai-gpt-image-2-image-edit",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "gpt-image-2",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

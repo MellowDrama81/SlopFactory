@@ -1,0 +1,19 @@
+{
+  "displayName": "Comfy Cloud — api bytedance seedream 5 0 flash t2i",
+  "id": "api-bytedance-seedream-5-0-flash-t2i",
+  "graphFile": "api-bytedance-seedream-5-0-flash-t2i.json",
+  "capabilities": {
+    "minImages": 1,
+    "requiresMask": false,
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": null
+      }
+    ],
+    "outputImagePurpose": null,
+    "maxImages": 1,
+    "imageGenerationModel": "seedream 5.0 flash"
+  },
+  "description": "Imported from Comfy Cloud's official api_bytedance_seedream_5_0_flash_t2i template."
+}

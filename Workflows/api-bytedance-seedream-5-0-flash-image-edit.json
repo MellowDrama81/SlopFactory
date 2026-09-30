@@ -1,0 +1,84 @@
+{
+  "14": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "seedream 5.0 flash",
+      "model.size_preset": "(1K) 1024x1024 (1:1)",
+      "model.width": 2048,
+      "model.height": 2048,
+      "model.seed": 851425762,
+      "model.watermark": false,
+      "model.images.image_1": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "ByteDanceSeedreamNodeV3",
+    "_meta": {
+      "title": "ByteDance Seedream 4.5 & 5.0"
+    }
+  },
+  "15": {
+    "inputs": {
+      "filename_prefix": "Seedream5.0_flash",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "16": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "cc9ca6dad4c676b2ed4306093a14cf187ecc94a256ed182d186d15cb01434969"
+    ]
+  },
+  "17": {
+    "inputs": {
+      "filename_prefix": "Seedream5.0_flash",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "18",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "18": {
+    "inputs": {
+      "prompt": "Photorealistic premium wine packaging system mockup, full product range based on the reference image. Open rigid wine gift box standing next to the original wine bottle, matching inner foam tray, additional bottle sleeve, branded envelope, thank you card, wine glass, wooden cork and grape branch. Every printed surface uses the same signature brand illustration: two women, stylized geometric flowers, grainy flat graphic art, lavender purple, royal blue, pink and orange color palette. Front 3/4 view, soft studio light, subtle paper texture, elegant shadows, luxury wine gift set, commercial product photography, highly detailed.",
+      "model": "seedream 5.0 flash",
+      "model.size_preset": "(1K) 1024x1024 (1:1)",
+      "model.width": 2048,
+      "model.height": 2048,
+      "model.seed": 132582568,
+      "model.watermark": false,
+      "model.images.image_1": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "ByteDanceSeedreamNodeV3",
+    "_meta": {
+      "title": "ByteDance Seedream 4.5 & 5.0"
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "4": {
+    "inputs": {
+      "filename_prefix": "Mai_image_2.6",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "5": {
+    "inputs": {
+      "model": "microsoft/mai-image-2.6-flash",
+      "model.prompt": "{{PROMPT:string}}",
+      "model.aspect_ratio": "1:1",
+      "model.resolution": "1K",
+      "model.seed": 1612812331,
+      "model.images.image_1": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "OpenRouterImageNode",
+    "_meta": {
+      "title": "OpenRouter Image"
+    }
+  },
+  "6": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "8d3b5f2b4a82b475aa5013e2b29b24e4bbd99ba6894c84cc213bd67dc8acd0d3"
+    ]
+  }
+}

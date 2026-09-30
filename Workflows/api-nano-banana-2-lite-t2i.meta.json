@@ -1,0 +1,14 @@
+{
+  "id": "api-nano-banana-2-lite-t2i",
+  "displayName": "Comfy Cloud — Nano Banana 2 Lite T2I",
+  "description": "Imported from Comfy Cloud's official api_nano_banana_2_lite_t2i template using its embedded API prompt.",
+  "graphFile": "api-nano-banana-2-lite-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Nano Banana 2 Lite"
+  }
+}

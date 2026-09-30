@@ -1,0 +1,23 @@
+{
+  "id": "api-magnific-image-relight",
+  "displayName": "Comfy Cloud — Magnific Image Relight",
+  "description": "Imported from Comfy Cloud's official api_magnific_image_relight template using its embedded API prompt.",
+  "graphFile": "api-magnific-image-relight.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Magnific Relight"
+  }
+}

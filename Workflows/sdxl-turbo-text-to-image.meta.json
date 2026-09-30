@@ -1,0 +1,14 @@
+{
+  "id": "sdxl-turbo-text-to-image",
+  "displayName": "SDXL Turbo — text to image",
+  "description": "Official SDXL Turbo template converted for the Comfy API. Generates a 512px image in one denoising step.",
+  "graphFile": "sdxl-turbo-text-to-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "sd_xl_turbo_1.0_fp16.safetensors"
+  }
+}

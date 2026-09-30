@@ -1,0 +1,14 @@
+{
+  "id": "api-kling-omni-image",
+  "displayName": "Comfy Cloud — Kling Omni Image",
+  "description": "Imported from Comfy Cloud's official api_kling_omni_image template using its embedded API prompt.",
+  "graphFile": "api-kling-omni-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "kling-image-o1"
+  }
+}

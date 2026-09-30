@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_qwen_Image_2512_controlnet template.",
+  "graphFile": "image-qwen-Image-2512-controlnet.json",
+  "displayName": "Comfy Cloud — image qwen Image 2512 controlnet",
+  "id": "image-qwen-Image-2512-controlnet",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "qwen_image_2512_fp8_e4m3fn.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": "Control guide",
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

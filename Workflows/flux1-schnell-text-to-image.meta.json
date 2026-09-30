@@ -1,0 +1,14 @@
+{
+  "id": "flux1-schnell-text-to-image",
+  "displayName": "FLUX.1 Schnell — text to image",
+  "description": "Official FLUX.1 Schnell template converted for the Comfy API. The distilled model uses four Euler steps and CFG 1.",
+  "graphFile": "flux1-schnell-text-to-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "flux1-schnell-fp8.safetensors"
+  }
+}

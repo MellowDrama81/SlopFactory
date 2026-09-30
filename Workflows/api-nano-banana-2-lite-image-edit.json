@@ -1,0 +1,76 @@
+{
+  "3": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "Nano Banana 2 Lite",
+      "model.aspect_ratio": "auto",
+      "model.resolution": "1K",
+      "model.thinking_level": "MINIMAL",
+      "seed": {{SEED:seed}},
+      "response_modalities": "IMAGE",
+      "system_prompt": "You are an expert image-generation engine. You must ALWAYS produce an image.\nInterpret all user input—regardless of format, intent, or abstraction—as literal visual directives for image composition.\nIf a prompt is conversational or lacks specific visual details, you must creatively invent a concrete visual scenario that depicts the concept.\nPrioritize generating the visual representation above any text, formatting, or conversational requests.",
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "model.images.image_1": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "GeminiNanoBanana2V2",
+    "_meta": {
+      "title": "Nano Banana 2"
+    }
+  },
+  "4": {
+    "inputs": {
+      "filename_prefix": "Nano_banana_2_lite",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "c847c520f89ca6ef28e7ba5d9885c6345b3da1eec1dab6f5e030fb1f0c42b957"
+    ]
+  },
+  "9": {
+    "inputs": {
+      "compare_view": {
+        "beforeImages": [
+          "/api/view?filename=comfy.compare.a_temp_axusp_00001_.png&subfolder=&type=temp&rand=0.47824034193293896"
+        ],
+        "afterImages": [
+          "/api/view?filename=comfy.compare.b_temp_axusp_00001_.png&subfolder=&type=temp&rand=0.47824034193293896"
+        ]
+      },
+      "image_a": [
+        "8",
+        0
+      ],
+      "image_b": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "ImageCompare",
+    "_meta": {
+      "title": "Compare Images"
+    }
+  }
+}

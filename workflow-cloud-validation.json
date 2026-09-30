@@ -1,0 +1,1124 @@
+[
+  {
+    "id": "api-bfl-flux-1-kontext-pro-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022e85ee3a6-b4d3-4652-ac52-711db5144664\u0022}\n"
+  },
+  {
+    "id": "api-bfl-flux-pro-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00220d49caef-c9b3-4b8e-8cc7-3b1b53194310\u0022}\n"
+  },
+  {
+    "id": "api-bfl-flux1-expand-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022bd075777-8393-484b-9570-f77c758e3269\u0022}\n"
+  },
+  {
+    "id": "api-bfl-flux2-max-sofa-swap",
+    "accepted": false,
+    "status": 400,
+    "detail": "{\u0022error\u0022:{\u0022message\u0022:\u0022Invalid workflow: unsupported node type \u0027Image Comparer (rgthree)\u0027\u0022,\u0022type\u0022:\u0022VALIDATION_ERROR\u0022}}\n"
+  },
+  {
+    "id": "api-bria-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022f25802d4-94bb-4eb7-a822-40903961f4d3\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream-5-0-flash-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228701b598-d72f-413a-863e-f33ec9b3a9e9\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream-5-0-flash-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00223c10fa70-0d67-49d1-826a-38df050f1f4a\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream-5-0-lite-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227f9269e9-b0c9-4275-8c5d-53280f09d30b\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream-5-0-lite-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002296d82169-6c46-4873-8f85-05535b448c38\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream4-2img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022deb13a5a-00cf-409f-aa75-f49cdd91023d\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream4-3img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002288881748-74fe-41df-b008-1b83ed8fc3a4\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream4-4img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002210fac669-aa26-459c-850f-041b07b458f5\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream4-5img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228949e6a2-6a3a-453d-afc1-cfda74eebd51\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream4-6img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002225eaa444-52a5-4b12-acf3-8e0043157b3a\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream4-7img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002239e1ddfb-5f59-4c0e-a0a7-a9823667fbe0\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream4-8img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227e36abf2-4edb-474c-941d-a4d82e653db0\u0022}\n"
+  },
+  {
+    "id": "api-bytedance-seedream4",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022abb2d4ca-d8f3-4149-b0d6-24aaab9adbb1\u0022}\n"
+  },
+  {
+    "id": "api-flux-erase-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022e6e7fcf5-5cfd-47d4-ac42-cbdca2fb4d50\u0022}\n"
+  },
+  {
+    "id": "api-google-nano-banana2-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022f9cffb56-4274-4a02-88a9-5054e7fd2f67\u0022}\n"
+  },
+  {
+    "id": "api-google-nano-banana2-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022c16e9cde-a19d-4715-b09e-b6ed13b0379f\u0022}\n"
+  },
+  {
+    "id": "api-grok-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002283d34ddb-6d90-4353-9482-ab27c1ecdd6d\u0022}\n"
+  },
+  {
+    "id": "api-grok-imagine-image-2-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00229dccea9b-d79b-4ac2-92ce-18bc9129577b\u0022}\n"
+  },
+  {
+    "id": "api-grok-imagine-image-2-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022f61c1f85-256a-4c0c-9561-b7d11a344c90\u0022}\n"
+  },
+  {
+    "id": "api-grok-imagine-image-quality-image-generation",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022b72aaf86-3aa9-4555-92bf-ea369aa3f4ed\u0022}\n"
+  },
+  {
+    "id": "api-grok-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022e2b0d493-d19f-4593-8dc6-afb01c96058a\u0022}\n"
+  },
+  {
+    "id": "api-ideogram-v4-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00223f4ecf7a-28e8-4353-bbc8-481c6cfe5511\u0022}\n"
+  },
+  {
+    "id": "api-kling-omni-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002217e5e4cc-d136-4a02-97b5-d017b60d9afa\u0022}\n"
+  },
+  {
+    "id": "api-kling-v3-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022aabe9b31-2d7f-4650-bad7-d98300a25d64\u0022}\n"
+  },
+  {
+    "id": "api-krea2-style-reference-1img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002281667b90-7f9f-4052-8596-dd8785ff6a21\u0022}\n"
+  },
+  {
+    "id": "api-krea2-style-reference-2img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022e1588303-bc30-4e78-ae19-a29091838c6e\u0022}\n"
+  },
+  {
+    "id": "api-krea2-style-reference-3img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228aa2e1a2-0ff7-43d1-b02e-b7c6f46ca4d7\u0022}\n"
+  },
+  {
+    "id": "api-krea2-style-reference",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022d53a1633-a08f-4524-8213-efe825a56d55\u0022}\n"
+  },
+  {
+    "id": "api-krea2-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00223604937d-8c6e-47fd-95a5-9f2a6ed475fb\u0022}\n"
+  },
+  {
+    "id": "api-luma-photon-style-ref",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022a7545326-9b9f-434a-9e31-0ff9de326c64\u0022}\n"
+  },
+  {
+    "id": "api-luma-uni-1-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227438029f-d8bc-4f09-a128-eb285feed502\u0022}\n"
+  },
+  {
+    "id": "api-magnific-image-relight",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002251a83856-00d3-4f05-af96-b9c3db2de4df\u0022}\n"
+  },
+  {
+    "id": "api-magnific-image-style-transfer",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227d1cbbcf-1965-4f64-91fc-01e33ff3ad2f\u0022}\n"
+  },
+  {
+    "id": "api-magnific-image-upscale-precise",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022326ee1a4-c239-42cd-96ea-c2d54b1224ec\u0022}\n"
+  },
+  {
+    "id": "api-magnific-skin-enhancer",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002214383aa2-c383-4388-9009-6fa66934a409\u0022}\n"
+  },
+  {
+    "id": "api-meta-muse-image-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002230221348-4a1d-49d6-8f46-621763956d02\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-2-lite-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ca3aaea3-4c67-416c-b1a8-1aa5eeff062c\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-2-lite-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00221ee94a37-5710-416e-8e9d-10bf552fa480\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro-0img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022d0a99a25-301e-4baa-958a-5fd5432d79f9\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro-1img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00226b88a378-4425-4f41-9e44-98263599d526\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro-3img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022249e7b62-81bc-491e-a2f0-0433b2167576\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro-4img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00226c7c1ad6-a671-4a36-9591-6e8af4e9f0e1\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro-5img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022e4b277d0-ff7d-435c-baf2-312c7869d1e8\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro-6img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ad161c92-7a6c-4287-9645-ce566ef44cc3\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro-7img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022abed9069-a87e-4bc7-85bb-7b102614f41b\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro-8img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00221ab0f1de-d2d6-4e96-a63d-099775801bcb\u0022}\n"
+  },
+  {
+    "id": "api-nano-banana-pro",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022bf42198a-3c4f-4761-a8ea-ced12d999248\u0022}\n"
+  },
+  {
+    "id": "api-openai-gpt-image-2-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022b7188fb5-5817-4dd5-9c90-05f61a03a3d4\u0022}\n"
+  },
+  {
+    "id": "api-openai-gpt-image-2-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00220b35e86b-967a-452e-9b64-ee1a31c5d58e\u0022}\n"
+  },
+  {
+    "id": "api-openai-gpt-image-25-flare-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022fc0c571f-6d70-42d8-aa97-83203a334a91\u0022}\n"
+  },
+  {
+    "id": "api-openai-gpt-image-25-sunburst-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ae9e7262-778e-4e15-8f55-79ea384c7b2b\u0022}\n"
+  },
+  {
+    "id": "api-openai-image-1-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00223349922a-e171-48a8-bc5e-b68ca0f7377d\u0022}\n"
+  },
+  {
+    "id": "api-openrouter-mai-image-26-flash-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00226b3e8342-443f-41ba-a256-81155bbb1a40\u0022}\n"
+  },
+  {
+    "id": "api-openrouter-mai-image-26-flash",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022cdca2878-95f7-48ad-91d1-a16992b307b7\u0022}\n"
+  },
+  {
+    "id": "api-openrouter-mai-image-26-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00221e63ea2f-8de1-44e7-83b8-23d429825a85\u0022}\n"
+  },
+  {
+    "id": "api-qwen3-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00225a9682d9-fb79-4038-bfc0-b44722712522\u0022}\n"
+  },
+  {
+    "id": "api-recraft-style-reference",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227adc2510-93d0-4287-af5a-84948ad6febb\u0022}\n"
+  },
+  {
+    "id": "api-recraft-v4-1-flash-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022855d08a1-36ba-4e5a-a92a-5b581e370002\u0022}\n"
+  },
+  {
+    "id": "api-recraft-v4-1-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022fd6e4dcb-a193-4f6a-a81d-9e957d779ae8\u0022}\n"
+  },
+  {
+    "id": "api-recraft-v4-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022e1c6bba4-a649-46e0-94dc-b8448c6ac313\u0022}\n"
+  },
+  {
+    "id": "api-tencent-hy-image-3-5-preview-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002271cc43c2-c7a6-4fc2-9404-1effa80e8a8b\u0022}\n"
+  },
+  {
+    "id": "api-topaz-image-enhance-wonder3-5",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022100a8308-d4c2-4307-9aa4-e707b0ec8c95\u0022}\n"
+  },
+  {
+    "id": "canny-extract-control-guide",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00224100b1d7-c0f8-43af-b351-8e8c9d5edcb3\u0022}\n"
+  },
+  {
+    "id": "depth-extract-control-guide",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00229d007c39-d80a-401c-81cb-821f59c93cd1\u0022}\n"
+  },
+  {
+    "id": "dwpose-extract-pose-guide",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022a5310b1e-7430-439b-abd4-6daef2298e00\u0022}\n"
+  },
+  {
+    "id": "flux-dev-checkpoint-example",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228c237210-3f78-4a1b-a1f9-1aa3109abf53\u0022}\n"
+  },
+  {
+    "id": "flux-dev-full-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022698ca668-f2a4-474d-8d85-aac6131d2643\u0022}\n"
+  },
+  {
+    "id": "flux-fill-inpaint-example",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022892e981d-eb8b-41a7-aea1-409411267cbd\u0022}\n"
+  },
+  {
+    "id": "flux-kontext-dev-basic",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00226a981f70-2525-49ea-a6af-4825104f8792\u0022}\n"
+  },
+  {
+    "id": "flux-schnell-full-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022fa7827d6-b4b6-4c9e-ae63-f9b1028f2579\u0022}\n"
+  },
+  {
+    "id": "flux1-dev-uso-reference-image-gen",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022b2b466e1-34f1-424b-8623-744bbbbb1b29\u0022}\n"
+  },
+  {
+    "id": "flux1-krea-dev",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ce537200-9844-491f-b85d-51f0f167a3d4\u0022}\n"
+  },
+  {
+    "id": "flux1-schnell-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022f1207058-14de-421d-9cc0-7e849b7b091e\u0022}\n"
+  },
+  {
+    "id": "flux2-0img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022381a41b2-eb4b-46a2-a09e-b30dc8645e85\u0022}\n"
+  },
+  {
+    "id": "flux2-2img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002248fbc464-f204-47a9-aa3c-80090e7eb4e4\u0022}\n"
+  },
+  {
+    "id": "flux2-3img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ef175415-f397-4df1-b0f2-60f7c0582824\u0022}\n"
+  },
+  {
+    "id": "flux2-4img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002278b1f73e-f86c-47bb-8482-197d9f9c4a40\u0022}\n"
+  },
+  {
+    "id": "flux2-5img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022921030ed-c4f1-4074-be88-bd8333c55e03\u0022}\n"
+  },
+  {
+    "id": "flux2-6img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00222bdc48ff-ed89-4ec0-a92b-9cbcbb6b2ba2\u0022}\n"
+  },
+  {
+    "id": "flux2-7img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022bb2efc1c-2dac-46d9-b5d7-f36e1af74876\u0022}\n"
+  },
+  {
+    "id": "flux2-8img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00221e39a57d-9981-4af8-b76d-d7bf4724a63b\u0022}\n"
+  },
+  {
+    "id": "flux2-inpaint",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002207f62c0c-a02a-46f5-9a31-b5ba865708c5\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-0img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00223b0a0c46-5cbe-4616-a69d-56529ec06d80\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-3img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022b39dae85-c378-496a-9e2e-5f5594403977\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-4img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00223ce0f5c7-97e9-4e5c-9665-4d80cfa1a700\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-5img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227951f959-6a5b-4eb2-961c-488b692397fd\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-6img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002272882739-41c7-4746-b400-6af1608556cd\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-7img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002265c98567-c852-4ebc-8881-c9f4385e2b76\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-8img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00225ddff559-d639-43b7-ad71-b36fa6091a44\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-edit-double",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00224a3b040b-d39e-49ce-8765-22d93c2fee4b\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-edit-single",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00229aba6deb-7c72-4f40-895d-68044fafb4a5\u0022}\n"
+  },
+  {
+    "id": "flux2-klein-inpaint-reference",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002218c989dc-d048-41af-a26f-59055c12188a\u0022}\n"
+  },
+  {
+    "id": "flux2",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022a1e8c99e-9aa2-4738-baaf-97bb0ed6ed4b\u0022}\n"
+  },
+  {
+    "id": "image-anima-base-v1",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022e9703256-6dec-4e3b-8e76-79d9d7248615\u0022}\n"
+  },
+  {
+    "id": "image-anima-lllite-any-control-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022c7b683e6-d662-4b8f-bea9-2c7d16549746\u0022}\n"
+  },
+  {
+    "id": "image-anima-lllite-depth-control-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022fb12ac3a-23da-438a-9240-217a817b44e4\u0022}\n"
+  },
+  {
+    "id": "image-anima-lllite-image-inpainting",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022dbd09f69-d567-467e-b64c-2168d2800db7\u0022}\n"
+  },
+  {
+    "id": "image-boogu-image-0-1-edit-int8",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00224c9f8027-cc2e-4890-85e5-ca1f421615f4\u0022}\n"
+  },
+  {
+    "id": "Image-capybara-v0-1-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00229c5f887f-c2a1-47d5-8ff2-6a6d5ccb6c3b\u0022}\n"
+  },
+  {
+    "id": "Image-capybara-v0-1-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022d338166f-d4b0-4010-9185-2fb79cd5530f\u0022}\n"
+  },
+  {
+    "id": "image-chroma-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022042fb7a2-1f73-4e05-9334-ab2b18547bce\u0022}\n"
+  },
+  {
+    "id": "image-chroma1-radiance-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227d85a091-9462-4eb0-bda5-c78aab64f369\u0022}\n"
+  },
+  {
+    "id": "image-chrono-edit-14B",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022c4645216-907c-4364-b565-c3642d2b7b36\u0022}\n"
+  },
+  {
+    "id": "image-ernie-image-turbo",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228fcd6046-9f41-4d1d-b8a4-e7e0091226b1\u0022}\n"
+  },
+  {
+    "id": "image-ernie-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022b81cf01a-fbc5-4fca-8693-a4e47afad11c\u0022}\n"
+  },
+  {
+    "id": "image-firered-image-edit1-1",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ccbfe807-230b-44c1-b9bb-3ad9db9ddc01\u0022}\n"
+  },
+  {
+    "id": "image-flux.1-fill-dev-OneReward",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022c7f4b44f-4fd7-4864-a656-bc4ed0dc80da\u0022}\n"
+  },
+  {
+    "id": "image-flux2-fp8",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022c469daf2-da35-4ddb-b3b3-b2eed7c5efef\u0022}\n"
+  },
+  {
+    "id": "image-flux2-klein-9b-kv-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022f9237cb6-2b30-405b-9ba1-0130ccb558c0\u0022}\n"
+  },
+  {
+    "id": "image-flux2-klein-image-edit-4b-distilled",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227a1cceaa-c7a3-43f4-819a-30894d081bc3\u0022}\n"
+  },
+  {
+    "id": "image-flux2-klein-image-edit-9b-distilled",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002220892087-39cd-4ec9-b49b-520d8476f00a\u0022}\n"
+  },
+  {
+    "id": "image-flux2-klein-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022016cc1c4-46b5-4664-95f9-424d3999d657\u0022}\n"
+  },
+  {
+    "id": "image-flux2-text-to-image-9b",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ceca139d-0a16-466d-9898-92d3f0d537bf\u0022}\n"
+  },
+  {
+    "id": "image-flux2-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ff9944a9-c32e-4e48-89ae-f11bcf6c5cee\u0022}\n"
+  },
+  {
+    "id": "image-flux2",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002275f469e1-e34f-4878-beab-eef2852f9b63\u0022}\n"
+  },
+  {
+    "id": "image-hidream-o1-dev",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00226a96926e-76cb-4dae-939b-9b58796b9332\u0022}\n"
+  },
+  {
+    "id": "image-hidream-o1",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022bd60272d-e7c1-4bc4-83be-1cc4ed06ca42\u0022}\n"
+  },
+  {
+    "id": "image-ideogram4-t2i-int8",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022e6c9be70-1983-4315-a851-d2de0781d818\u0022}\n"
+  },
+  {
+    "id": "image-ideogram4-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00221bc143b6-eeb5-4051-92ec-6f103ca45755\u0022}\n"
+  },
+  {
+    "id": "image-krea2-turbo-int8-image-style-reference",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00223ec23ba7-9a77-428b-9f7c-c8c165466e5e\u0022}\n"
+  },
+  {
+    "id": "image-krea2-turbo-t2i-int8",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022382634a2-46e3-4855-8d3a-f8851a46fa0d\u0022}\n"
+  },
+  {
+    "id": "image-krea2-turbo-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228d5cca8d-b7af-43c1-8aa5-37c1c16b674e\u0022}\n"
+  },
+  {
+    "id": "image-lens-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00229fb1ab10-9764-4d99-a0f1-e1c8f36a37b5\u0022}\n"
+  },
+  {
+    "id": "image-lens-turbo-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228b0367ea-8eee-48b7-a49f-83ef7162a7ea\u0022}\n"
+  },
+  {
+    "id": "image-longcat-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00221fc012b3-df6a-4a33-833a-a30c79c27023\u0022}\n"
+  },
+  {
+    "id": "image-longcat-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022280e7f37-8e7f-4756-a9ff-23b20eadd5f9\u0022}\n"
+  },
+  {
+    "id": "image-lotus-depth-v1-1",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022df0e355e-e2b5-4687-81f5-bec33d107437\u0022}\n"
+  },
+  {
+    "id": "image-marigold-v2-albedo-estimation",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022d420beb8-f919-4b8d-83a0-b5e1e4dfc62e\u0022}\n"
+  },
+  {
+    "id": "image-marigold-v2-depth-estimation",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002249e99bed-f145-458f-8e37-37ad171dd7f8\u0022}\n"
+  },
+  {
+    "id": "image-marigold-v2-surface-normal-estimation",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00225864b8f8-0272-4dd5-b617-986d663e19e5\u0022}\n"
+  },
+  {
+    "id": "image-ming-image-01-design-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022273f35e9-468b-412e-b0ff-1498c9152475\u0022}\n"
+  },
+  {
+    "id": "image-netayume-lumina-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002288ac590b-ad04-40ff-ae18-bfe8eb5a25b8\u0022}\n"
+  },
+  {
+    "id": "image-newbieimage-exp0-1-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022fec98020-d9fc-4f05-8b2d-96ccd1a92bcf\u0022}\n"
+  },
+  {
+    "id": "image-omnigen2-image-edit",
+    "accepted": false,
+    "status": 400,
+    "detail": "{\u0022error\u0022:{\u0022message\u0022:\u0022Invalid workflow: unsupported node type \u0027LoadSinglePromptFromFile //Inspire\u0027\u0022,\u0022type\u0022:\u0022VALIDATION_ERROR\u0022}}\n"
+  },
+  {
+    "id": "image-omnigen2-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022523ea37c-2aa3-474a-925b-d8157ca96fa6\u0022}\n"
+  },
+  {
+    "id": "image-pixeldit-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022471c9b0c-f604-4603-83e4-5082a09aa8b9\u0022}\n"
+  },
+  {
+    "id": "image-qwen-image-2-1-image-edit",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022c532b4d9-f226-407a-a1af-8dab1d2680f5\u0022}\n"
+  },
+  {
+    "id": "image-qwen-image-2-1-t2i",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022a6334886-79e3-4e68-9b59-c44470d2b9de\u0022}\n"
+  },
+  {
+    "id": "image-qwen-Image-2512-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022375f9149-8fad-4216-9054-bf8002f104ee\u0022}\n"
+  },
+  {
+    "id": "image-qwen-image-2512-with-2steps-lora",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022b3977e2b-bffc-4352-acd4-62fd86e9f4fc\u0022}\n"
+  },
+  {
+    "id": "image-qwen-Image-2512",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022dd05c592-d43e-46ba-bb49-dfd450681abe\u0022}\n"
+  },
+  {
+    "id": "image-qwen-image-edit-2509",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227d32893e-a87f-4951-89de-dfb5538ee673\u0022}\n"
+  },
+  {
+    "id": "image-qwen-image-edit-2511-int8",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002239f70b98-0eb3-40d7-89d9-b6de063b54ea\u0022}\n"
+  },
+  {
+    "id": "image-qwen-image-edit-2511",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002285cfd150-f90f-48ca-a7c6-fe283b42375b\u0022}\n"
+  },
+  {
+    "id": "image-qwen-image-union-control-lora",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022bfab9974-c777-4d9e-ad5e-75e6f6ab0a80\u0022}\n"
+  },
+  {
+    "id": "image-qwen-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022b53239eb-3e0a-4d9d-a2ef-8d93c1c0b3c2\u0022}\n"
+  },
+  {
+    "id": "image-sdxl-simple",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00220f9b6cc3-e0ce-4631-8337-acb775477c5e\u0022}\n"
+  },
+  {
+    "id": "image-z-image-int8",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227627c3b9-4fb8-4532-a173-21b4aa4b307d\u0022}\n"
+  },
+  {
+    "id": "image-z-image-turbo-int8",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228f2f9b8c-af98-4b9e-a202-0eceaae3baeb\u0022}\n"
+  },
+  {
+    "id": "image-z-image-turbo",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00221abfb33f-00c4-4c28-91de-652cc2c7fa7b\u0022}\n"
+  },
+  {
+    "id": "image-z-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00226b36156f-33a7-4a0a-9a81-2d09e46f162e\u0022}\n"
+  },
+  {
+    "id": "krea2-style-reference-2img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022bdada799-9b8c-4bdc-9a81-72f7110dc535\u0022}\n"
+  },
+  {
+    "id": "krea2-style-reference-3img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00224af55222-1406-428d-8e87-0ed3d7afea7a\u0022}\n"
+  },
+  {
+    "id": "krea2-style-reference",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00229da5bed5-00bf-4636-8886-73ddb70443c1\u0022}\n"
+  },
+  {
+    "id": "lineart-extract-control-guide",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002285e1fff2-ffb1-4511-bce3-1df7f3c08cff\u0022}\n"
+  },
+  {
+    "id": "normal-extract-control-guide",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002266f60c76-0e6f-4a54-928b-daa544c194c6\u0022}\n"
+  },
+  {
+    "id": "qwen-canny-union-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002248644497-3baa-4d06-92d6-b673be6dc513\u0022}\n"
+  },
+  {
+    "id": "qwen-depth-union-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002284bfa4c8-75fd-4109-adcd-c1cc34b5bec0\u0022}\n"
+  },
+  {
+    "id": "qwen-diffsynth-canny-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00223752c144-3f13-417b-9d76-f5393f144e67\u0022}\n"
+  },
+  {
+    "id": "qwen-diffsynth-depth-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002279bb17a4-98b0-4b01-84ad-352a233508f2\u0022}\n"
+  },
+  {
+    "id": "qwen-diffsynth-inpaint",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002275714adf-a396-4a87-ad1c-3f3948d655c2\u0022}\n"
+  },
+  {
+    "id": "qwen-dwpose-union-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ba4b8fd0-3f54-48e0-90d4-c5b75ccb6fd7\u0022}\n"
+  },
+  {
+    "id": "qwen-fun-union-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022a6ac21d0-2d09-48dd-ae5b-87311b66066f\u0022}\n"
+  },
+  {
+    "id": "qwen-image-edit-2511-1img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022021c5b78-3758-45dc-81fd-eaedf03630c4\u0022}\n"
+  },
+  {
+    "id": "qwen-image-edit-2511-3img",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002294be0e51-b7f3-4345-98c3-c8983b97547d\u0022}\n"
+  },
+  {
+    "id": "qwen-image-edit-2511-character-pose",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022fbcc15ee-d426-4441-9c17-19e57f76b3c3\u0022}\n"
+  },
+  {
+    "id": "qwen-image-edit-2511-character-prepared-pose",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002205986798-e1f8-4467-a979-37e3cc8e6dd1\u0022}\n"
+  },
+  {
+    "id": "qwen-image-edit-2511-inpainting",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022192071da-c4d2-401f-bfd2-2f92c73498f5\u0022}\n"
+  },
+  {
+    "id": "qwen-image-edit-2511",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00222434cd5d-8508-4f9e-b550-5a7d32f33044\u0022}\n"
+  },
+  {
+    "id": "qwen-image-instantx-inpainting",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002294a41857-95b2-427c-add8-1b90bab3b84c\u0022}\n"
+  },
+  {
+    "id": "qwen-instantx-union-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002251b1472a-12c7-4d56-a214-5fad5907abc8\u0022}\n"
+  },
+  {
+    "id": "qwen-lineart-union-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002201d26bca-01c7-40d0-aa32-980d86d528d6\u0022}\n"
+  },
+  {
+    "id": "qwen-normal-union-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022b9b938ba-b871-443d-85cd-ab3acfeb7b9f\u0022}\n"
+  },
+  {
+    "id": "remove-background",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228ba543b2-21dd-458a-ab70-867ec56a1964\u0022}\n"
+  },
+  {
+    "id": "sd3-5-large-blur-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002259bf1320-5d74-4162-84e0-e713d1dd26f0\u0022}\n"
+  },
+  {
+    "id": "sd3-5-large-canny-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00227b83b525-eeee-45d2-a53f-45f69ecc3220\u0022}\n"
+  },
+  {
+    "id": "sd3-5-large-depth-controlnet",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022fd8217c3-02a8-405b-8b1f-4da5bfb6537a\u0022}\n"
+  },
+  {
+    "id": "sd3-5-large-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022ba283377-657f-4638-b775-f2e9992173db\u0022}\n"
+  },
+  {
+    "id": "sdxl-refiner-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022be309f43-9c18-4915-9e71-c05d4abcd4ed\u0022}\n"
+  },
+  {
+    "id": "sdxl-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u002281b26a49-3592-4a29-b4f9-870627414326\u0022}\n"
+  },
+  {
+    "id": "sdxl-turbo-text-to-image",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u00228f6e7ce1-44a3-48d7-8c3e-ef4b46c42601\u0022}\n"
+  },
+  {
+    "id": "upscale-with-model",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022da58682c-f7b2-46ad-9992-deb15b93701d\u0022}\n"
+  },
+  {
+    "id": "z-image-turbo",
+    "accepted": true,
+    "status": 200,
+    "detail": "{\u0022node_errors\u0022:{},\u0022prompt_id\u0022:\u0022d6a4cf04-6a62-4a00-97b2-09c6ad6c2116\u0022}\n"
+  }
+]

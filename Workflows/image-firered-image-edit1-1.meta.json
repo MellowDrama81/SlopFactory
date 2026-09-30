@@ -1,0 +1,19 @@
+{
+  "id": "image-firered-image-edit1-1",
+  "displayName": "Comfy Cloud — Firered Image Edit1 1",
+  "description": "Imported from Comfy Cloud's official image_firered_image_edit1_1 template using its embedded API prompt.",
+  "graphFile": "image-firered-image-edit1-1.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "FireRed-Image-Edit-1.1-transformer.safetensors"
+  }
+}

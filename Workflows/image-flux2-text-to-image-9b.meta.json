@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_flux2_text_to_image_9b template.",
+  "graphFile": "image-flux2-text-to-image-9b.json",
+  "displayName": "Comfy Cloud — image flux2 text to image 9b",
+  "id": "image-flux2-text-to-image-9b",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "flux-2-klein-base-9b.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

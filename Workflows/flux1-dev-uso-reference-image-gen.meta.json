@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official flux1_dev_uso_reference_image_gen template.",
+  "graphFile": "flux1-dev-uso-reference-image-gen.json",
+  "displayName": "Comfy Cloud — flux1 dev uso reference image gen",
+  "id": "flux1-dev-uso-reference-image-gen",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "flux1-dev-fp8.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

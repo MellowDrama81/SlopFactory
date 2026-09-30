@@ -1,11 +1,39 @@
 {
   "id": "api-bytedance-seedream4-6img",
-  "displayName": "ByteDance Seedream 4.5/5.0 (API Node) \u2014 6-image edit",
+  "displayName": "ByteDance Seedream 4.5/5.0 (API Node) — 6-image edit",
   "description": "Combines 6 reference images per the prompt using ByteDance's hosted Seedream model via ComfyUI's API Nodes integration. Requires Seedream access separately authorized/credited on your Comfy account.",
   "graphFile": "api-bytedance-seedream4-6img.json",
   "capabilities": {
     "requiresMask": false,
     "minImages": 6,
-    "maxImages": 6
+    "maxImages": 6,
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "seedream-4-5-251128"
   }
 }

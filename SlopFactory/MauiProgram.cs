@@ -15,6 +15,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<Services.AssetExporter>();
         builder.Services.AddSingleton<Services.WorkspaceLayoutStore>();
         builder.Services.AddSingleton<Services.WorkflowTemplateService>();
+        builder.Services.AddSingleton<Services.WorkflowValidationHarness>();
         builder.Services.AddSingleton<Services.ComfyGenerationService>();
         builder.Services.AddSingleton<Services.ComfyAssetReferenceStore>();
         builder.Services.AddSingleton<Services.AssetMaskStore>();

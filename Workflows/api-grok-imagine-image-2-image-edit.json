@@ -1,0 +1,62 @@
+{
+  "10": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "grok-imagine-image-2.0",
+      "model.resolution": "1K",
+      "model.number_of_images": 1,
+      "model.quality": "medium",
+      "model.aspect_ratio": "auto",
+      "seed": {{SEED:seed}},
+      "model.images.image_1": [
+        "11",
+        0
+      ],
+      "model.images.image_2": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "GrokImageEditNodeV2",
+    "_meta": {
+      "title": "Grok Image Edit"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "4937cb5ff7549f5ca8623de1626f0b6ba93646b230870a044e68844ae54417da"
+    ]
+  },
+  "12": {
+    "inputs": {
+      "filename_prefix": "Grok_imagine_image_2.0",
+      "images": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "13": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "dcfb0faa149a16688dae0c2ec9db4fc0abcca6cd8d395611a9b7cbb0a1dd7894"
+    ]
+  }
+}

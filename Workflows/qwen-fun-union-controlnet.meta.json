@@ -6,6 +6,14 @@
   "capabilities": {
     "requiresMask": false,
     "minImages": 1,
-    "maxImages": 1
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": "Control guide"
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "qwen_image_fp8_e4m3fn.safetensors"
   }
 }

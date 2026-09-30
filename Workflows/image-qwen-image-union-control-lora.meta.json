@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_qwen_image_union_control_lora template.",
+  "graphFile": "image-qwen-image-union-control-lora.json",
+  "displayName": "Comfy Cloud — image qwen image union control lora",
+  "id": "image-qwen-image-union-control-lora",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "qwen_image_fp8_e4m3fn.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": "Control guide",
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

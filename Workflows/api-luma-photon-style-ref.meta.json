@@ -1,0 +1,23 @@
+{
+  "id": "api-luma-photon-style-ref",
+  "displayName": "Comfy Cloud — Luma Photon Style REF",
+  "description": "Imported from Comfy Cloud's official api_luma_photon_style_ref template using its embedded API prompt.",
+  "graphFile": "api-luma-photon-style-ref.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "photon-1"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "5": {
+    "inputs": {
+      "filename_prefix": "Recraft_v4_t2i",
+      "images": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "12": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "negative_prompt": "",
+      "model": "recraftv4",
+      "model.size": "1024x1024",
+      "n": 1,
+      "seed": {{SEED:seed}},
+      "$$node-text-preview": "Status: Completed\nTime elapsed: 14s"
+    },
+    "class_type": "RecraftV4TextToImageNode",
+    "_meta": {
+      "title": "Recraft V4 Text to Image"
+    }
+  }
+}

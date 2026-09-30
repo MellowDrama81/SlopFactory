@@ -1,0 +1,15 @@
+{
+  "description": "Imported from Comfy Cloud's official image_flux2_klein_text_to_image template.",
+  "graphFile": "image-flux2-klein-text-to-image.json",
+  "displayName": "Comfy Cloud — image flux2 klein text to image",
+  "id": "image-flux2-klein-text-to-image",
+  "cloudCompatible": false,
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "flux2-klein-base-4b.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

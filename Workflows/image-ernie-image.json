@@ -1,0 +1,293 @@
+{
+  "73": {
+    "inputs": {
+      "filename_prefix": "Ernie-Image",
+      "images": [
+        "88:65",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "88:71": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "Empty Flux 2 Latent"
+    }
+  },
+  "88:66": {
+    "inputs": {
+      "unet_name": "ernie-image.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "88:65": {
+    "inputs": {
+      "samples": [
+        "88:70",
+        0
+      ],
+      "vae": [
+        "88:63",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "88:70": {
+    "inputs": {
+      "seed": {{SEED:seed}},
+      "steps": 20,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": [
+        "88:66",
+        0
+      ],
+      "positive": [
+        "88:67",
+        0
+      ],
+      "negative": [
+        "88:72",
+        0
+      ],
+      "latent_image": [
+        "88:71",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "88:67": {
+    "inputs": {
+      "text": [
+        "88:75",
+        0
+      ],
+      "clip": [
+        "88:62",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "88:72": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "88:62",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "88:83": {
+    "inputs": {
+      "string": "<s>[SYSTEM_PROMPT]你是一个专业的文生图 Prompt 增强助手。你将收到用户的简短图片描述及目标生成分辨率，请据此扩写为一段内容丰富、细节充分的视觉描述，以帮助文生图模型生成高质量的图片。仅输出增强后的描述，不要包含任何解释或前缀。[/SYSTEM_PROMPT][INST]{\"prompt\": \"{prompt}\", \"width\": {width}, \"height\": {height}}[/INST]",
+      "find": "{prompt}",
+      "replace": [
+        "88:78",
+        0
+      ]
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Replace"
+    }
+  },
+  "88:78": {
+    "inputs": {
+      "value": "High-fashion style summer outfit infographic featuring color-coordinated floating elements arranged in an elegant expanded circular composition. It includes a breathable straw hat, a sleeveless organic cotton top, a flowing pleated skirt, handcrafted leather sandals, and a woven palm leaf handbag. Exquisite annotations highlight fabric breathability, refreshing texture, moisture-wicking properties, and seasonal comfort. The color palette adopts warm neutral tones—ivory white, terracotta, sand, and soft tan. Subtle dynamic trajectories and flowing fabric swirls suggest a gentle summer breeze, while bright natural sunlight creates soft shadows and sun-kissed sheen, in a Mediterranean style."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "String (Multiline - Prompt)"
+    }
+  },
+  "88:74": {
+    "inputs": {
+      "prompt": [
+        "88:95",
+        0
+      ],
+      "max_length": 2048,
+      "sampling_mode": "on",
+      "sampling_mode.temperature": 0.6,
+      "sampling_mode.top_k": 64,
+      "sampling_mode.top_p": 0.8,
+      "sampling_mode.min_p": 0.05,
+      "sampling_mode.repetition_penalty": 1.05,
+      "sampling_mode.seed": 0,
+      "sampling_mode.presence_penalty": 0.0,
+      "thinking": false,
+      "clip": [
+        "88:91",
+        0
+      ]
+    },
+    "class_type": "TextGenerate",
+    "_meta": {
+      "title": "TextGenerate"
+    }
+  },
+  "88:76": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Enable prompt enhancement?"
+    }
+  },
+  "88:75": {
+    "inputs": {
+      "switch": [
+        "88:76",
+        0
+      ],
+      "on_false": [
+        "88:78",
+        0
+      ],
+      "on_true": [
+        "88:74",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch"
+    }
+  },
+  "88:62": {
+    "inputs": {
+      "clip_name": "ministral-3-3b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "88:63": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "88:91": {
+    "inputs": {
+      "clip_name": "ernie-image-prompt-enhancer.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP (PE)"
+    }
+  },
+  "88:92": {
+    "inputs": {
+      "preview_markdown": "1024",
+      "preview_text": "1024",
+      "previewMode": null,
+      "source": 1024
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text (Int to String)"
+    }
+  },
+  "88:93": {
+    "inputs": {
+      "preview_markdown": "1024",
+      "preview_text": "1024",
+      "previewMode": null,
+      "source": 1024
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text (Int to String)"
+    }
+  },
+  "88:94": {
+    "inputs": {
+      "string": [
+        "88:83",
+        0
+      ],
+      "find": "{width}",
+      "replace": [
+        "88:92",
+        0
+      ]
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Replace"
+    }
+  },
+  "88:95": {
+    "inputs": {
+      "string": [
+        "88:94",
+        0
+      ],
+      "find": "{height}",
+      "replace": [
+        "88:93",
+        0
+      ]
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Replace"
+    }
+  },
+  "88:97": {
+    "inputs": {
+      "preview_markdown": "一张高级时装风格的夏季穿搭信息图，采用优雅的展开式圆形构图。画面中心是一个由多个悬浮元素组成的环形排列，背景为纯净的浅米色，营造出地中海风格的清新氛围。在圆形的轨迹上，从左上角开始顺时针依次悬浮着：一顶米白色的宽檐草帽，帽檐边缘带有自然的编织纹理；一件象牙白色的无袖有机棉上衣，面料呈现出细腻的亚麻质感；一条赤陶色的百褶裙，裙摆随着动态轨迹轻盈飘动，褶皱清晰且富有层次感；一双手工皮革凉鞋，配有细窄的棕褐色皮革带和简约的金属扣；以及一只精致的编织棕榈叶手提包，包身由深浅交替的棕榈叶片编织而成，配有棕褐色的皮革提手。画面中分布着几处精致的标注文字，通过纤细的引线指向对应的单品，文字内容包括：'透气性'、'清爽质感'、'吸湿排汗'、'季节舒适度'。整体色调以温暖的中性色系为主，包括象牙白、赤陶色、沙色和柔和的棕褐色。明亮的自然阳光从侧上方洒下，在物体下方投射出柔和的阴影，并赋予了面料一种阳光亲吻般的光泽感。微妙的动态旋涡线条环绕着这些单品，暗示着轻柔的夏日微风。",
+      "preview_text": "一张高级时装风格的夏季穿搭信息图，采用优雅的展开式圆形构图。画面中心是一个由多个悬浮元素组成的环形排列，背景为纯净的浅米色，营造出地中海风格的清新氛围。在圆形的轨迹上，从左上角开始顺时针依次悬浮着：一顶米白色的宽檐草帽，帽檐边缘带有自然的编织纹理；一件象牙白色的无袖有机棉上衣，面料呈现出细腻的亚麻质感；一条赤陶色的百褶裙，裙摆随着动态轨迹轻盈飘动，褶皱清晰且富有层次感；一双手工皮革凉鞋，配有细窄的棕褐色皮革带和简约的金属扣；以及一只精致的编织棕榈叶手提包，包身由深浅交替的棕榈叶片编织而成，配有棕褐色的皮革提手。画面中分布着几处精致的标注文字，通过纤细的引线指向对应的单品，文字内容包括：'透气性'、'清爽质感'、'吸湿排汗'、'季节舒适度'。整体色调以温暖的中性色系为主，包括象牙白、赤陶色、沙色和柔和的棕褐色。明亮的自然阳光从侧上方洒下，在物体下方投射出柔和的阴影，并赋予了面料一种阳光亲吻般的光泽感。微妙的动态旋涡线条环绕着这些单品，暗示着轻柔的夏日微风。",
+      "previewMode": null,
+      "source": [
+        "88:74",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text (Int to String)"
+    }
+  }
+}

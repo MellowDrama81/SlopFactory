@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_lens_turbo_t2i template.",
+  "graphFile": "image-lens-turbo-t2i.json",
+  "displayName": "Comfy Cloud — image lens turbo t2i",
+  "id": "image-lens-turbo-t2i",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "lens_turbo_bf16.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

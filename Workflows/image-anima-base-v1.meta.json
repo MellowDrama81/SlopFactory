@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_anima_base_v1 template.",
+  "graphFile": "image-anima-base-v1.json",
+  "displayName": "Comfy Cloud — image anima base v1",
+  "id": "image-anima-base-v1",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "anima-base-v1.0.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

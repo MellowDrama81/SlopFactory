@@ -1,0 +1,79 @@
+{
+  "35": {
+    "inputs": {
+      "prompt": [
+        "36",
+        0
+      ],
+      "model": "seedream 5.0 flash",
+      "model.size_preset": "(1K) 1024x1024 (1:1)",
+      "model.width": 2048,
+      "model.height": 2048,
+      "model.seed": 205908995,
+      "model.watermark": false
+    },
+    "class_type": "ByteDanceSeedreamNodeV3",
+    "_meta": {
+      "title": "ByteDance Seedream 4.5 & 5.0"
+    }
+  },
+  "36": {
+    "inputs": {
+      "source": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text"
+    }
+  },
+  "37": {
+    "inputs": {
+      "filename_prefix": "Seedream5.0_flash",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "35",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "38": {
+    "inputs": {
+      "model": "Gemini 3.8 Flash",
+      "model.prompt": "{{PROMPT:string}}",
+      "model.video_processing": "static",
+      "model.thinking_level": "MEDIUM",
+      "model.max_output_tokens": 32768,
+      "model.seed": 1558096987,
+      "model.system_prompt": "",
+      "model.images.image_1": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "GeminiNodeV3",
+    "_meta": {
+      "title": "Google Gemini"
+    }
+  },
+  "39": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "d0422f95479e551d933780b2667a8497297a2768cfbea35f940ef5a8b6ce8bde"
+    ]
+  }
+}

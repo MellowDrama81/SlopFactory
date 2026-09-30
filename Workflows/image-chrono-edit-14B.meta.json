@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_chrono_edit_14B template.",
+  "graphFile": "image-chrono-edit-14B.json",
+  "displayName": "Comfy Cloud — image chrono edit 14B",
+  "id": "image-chrono-edit-14B",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "chrono_edit_14B_fp16.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

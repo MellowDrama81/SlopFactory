@@ -1,0 +1,60 @@
+{
+  "10": {
+    "_meta": {
+      "title": "Load Image"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "is_changed": [
+      "d1efd0f9323ae0ddc73528defad5f0a48d21167102b2904ab00b67daa45cb27a"
+    ]
+  },
+  "3": {
+    "_meta": {
+      "title": "Save Image"
+    },
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "Flux_erase_image",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  },
+  "4": {
+    "_meta": {
+      "title": "Compare Images"
+    },
+    "class_type": "ImageCompare",
+    "inputs": {
+      "compare_view": [
+        "",
+        ""
+      ],
+      "image_b": [
+        "8",
+        0
+      ]
+    }
+  },
+  "8": {
+    "_meta": {
+      "title": "Flux Erase Image"
+    },
+    "class_type": "FluxEraseNode",
+    "inputs": {
+      "dilate_pixels": 10,
+      "image": [
+        "10",
+        0
+      ],
+      "mask": [
+        "10",
+        1
+      ]
+    }
+  }
+}

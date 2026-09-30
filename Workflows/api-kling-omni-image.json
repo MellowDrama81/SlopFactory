@@ -1,0 +1,29 @@
+{
+  "5": {
+    "inputs": {
+      "filename_prefix": "Kling_image_o1",
+      "images": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "7": {
+    "inputs": {
+      "model_name": "kling-image-o1",
+      "prompt": "{{PROMPT:string}}",
+      "resolution": "1K",
+      "aspect_ratio": "1:1",
+      "series_amount": "disabled",
+      "seed": {{SEED:seed}}
+    },
+    "class_type": "KlingOmniProImageNode",
+    "_meta": {
+      "title": "Kling 3.0 Omni Image"
+    }
+  }
+}

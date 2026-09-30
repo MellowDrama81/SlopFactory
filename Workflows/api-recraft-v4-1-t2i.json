@@ -1,0 +1,135 @@
+{
+  "4": {
+    "inputs": {
+      "colors": [
+        "7",
+        0
+      ],
+      "background_color": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "RecraftControls",
+    "_meta": {
+      "title": "Recraft Controls"
+    }
+  },
+  "5": {
+    "inputs": {
+      "filename_prefix": "Recraft_v4.1_t2i",
+      "images": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "6": {
+    "inputs": {
+      "r": 0,
+      "g": 0,
+      "b": 0
+    },
+    "class_type": "RecraftColorRGB",
+    "_meta": {
+      "title": "Recraft Color RGB"
+    }
+  },
+  "7": {
+    "inputs": {
+      "r": 0,
+      "g": 0,
+      "b": 0
+    },
+    "class_type": "RecraftColorRGB",
+    "_meta": {
+      "title": "Recraft Color RGB"
+    }
+  },
+  "12": {
+    "inputs": {
+      "prompt": [
+        "15",
+        0
+      ],
+      "negative_prompt": "",
+      "model": "recraftv4_1",
+      "model.size": "1024x1024",
+      "n": 1,
+      "seed": {{SEED:seed}}
+    },
+    "class_type": "RecraftV4TextToImageNode",
+    "_meta": {
+      "title": "Recraft V4 Text to Image"
+    }
+  },
+  "14": {
+    "inputs": {
+      "value": "Analyze all visual features of the image, generate standard AI art positive prompt.\nExtract subject, character pose, composition, camera angle, lighting, color palette, texture, art style, rendering type, background and details.\nArrange content in order: subject, composition & camera, lighting & color, texture & style, image quality. Separate words with commas.\nOnly output positive prompt, no extra explanations, no negative prompts.\n\n不要出现logo ，不要太油腻了，真实感，衣服不要太夸张保持，提示词可以短一些"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text (User Prompt)"
+    }
+  },
+  "15": {
+    "inputs": {
+      "source": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text"
+    }
+  },
+  "16": {
+    "inputs": {
+      "prompt": [
+        "14",
+        0
+      ],
+      "model": "anthropic/claude-opus-5",
+      "model.reasoning_effort": "off",
+      "seed": {{SEED:seed}},
+      "system_prompt": "",
+      "model.images.image_1": [
+        "23",
+        0
+      ]
+    },
+    "class_type": "OpenRouterLLMNode",
+    "_meta": {
+      "title": "OpenRouter LLM"
+    }
+  },
+  "22": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "9326345e7dcfb7dd2183dc70fc9000b79deaf304cf000376a466121174ee9b00"
+    ]
+  },
+  "23": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "c62d4a8cc7a5abacd81f23c8f4682fb415cf3ffcdd7ccc527333364e2fe3dd15"
+    ]
+  }
+}

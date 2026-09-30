@@ -1,0 +1,31 @@
+{
+  "id": "api-recraft-style-reference",
+  "displayName": "Comfy Cloud — Recraft Style Reference",
+  "description": "Imported from Comfy Cloud's official api_recraft_style_reference template using its embedded API prompt.",
+  "graphFile": "api-recraft-style-reference.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 4,
+    "maxImages": 4,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Recraft V3"
+  }
+}

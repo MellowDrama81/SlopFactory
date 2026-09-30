@@ -1,0 +1,14 @@
+{
+  "id": "api-qwen3-t2i",
+  "description": "Imported from Comfy Cloud's official api_qwen3_t2i template.",
+  "displayName": "Comfy Cloud — api qwen3 t2i",
+  "capabilities": {
+    "requiresMask": false,
+    "imageInputs": [],
+    "imageGenerationModel": "qwen-image-3.0-pro",
+    "minImages": 0,
+    "maxImages": 0,
+    "outputImagePurpose": null
+  },
+  "graphFile": "api-qwen3-t2i.json"
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_chroma1_radiance_text_to_image template.",
+  "graphFile": "image-chroma1-radiance-text-to-image.json",
+  "displayName": "Comfy Cloud — image chroma1 radiance text to image",
+  "id": "image-chroma1-radiance-text-to-image",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "chroma-radiance-x0.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "description": "Imported from Comfy Cloud's official image_z_image template.",
+  "graphFile": "image-z-image.json",
+  "displayName": "Comfy Cloud — image z image",
+  "id": "image-z-image",
+  "cloudCompatible": false,
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "z-image-private/z_image_old_bf16.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

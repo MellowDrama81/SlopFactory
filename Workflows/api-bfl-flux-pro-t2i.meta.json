@@ -1,0 +1,14 @@
+{
+  "id": "api-bfl-flux-pro-t2i",
+  "displayName": "Comfy Cloud — BFL Flux PRO T2I",
+  "description": "Imported from Comfy Cloud's official api_bfl_flux_pro_t2i template using its embedded API prompt.",
+  "graphFile": "api-bfl-flux-pro-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Flux.1 Pro Ultra"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official api_magnific_image_upscale_precise template.",
+  "graphFile": "api-magnific-image-upscale-precise.json",
+  "displayName": "Comfy Cloud — api magnific image upscale precise",
+  "id": "api-magnific-image-upscale-precise",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "Magnific Upscale Precise V2",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

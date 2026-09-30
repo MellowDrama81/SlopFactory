@@ -1,0 +1,23 @@
+{
+  "description": "Imported from Comfy Cloud's official image_flux2_klein_image_edit_4b_distilled template.",
+  "graphFile": "image-flux2-klein-image-edit-4b-distilled.json",
+  "displayName": "Comfy Cloud — image flux2 klein image edit 4b distilled",
+  "id": "image-flux2-klein-image-edit-4b-distilled",
+  "capabilities": {
+    "maxImages": 2,
+    "imageGenerationModel": "flux-2-klein-4b-fp8.safetensors",
+    "minImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

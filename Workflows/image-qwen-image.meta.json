@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_qwen_image template.",
+  "graphFile": "image-qwen-image.json",
+  "displayName": "Comfy Cloud — image qwen image",
+  "id": "image-qwen-image",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "qwen_image_fp8_e4m3fn.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

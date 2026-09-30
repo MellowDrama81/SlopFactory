@@ -1,0 +1,14 @@
+{
+  "graphFile": "api-openrouter-mai-image-26-flash.json",
+  "description": "Imported from Comfy Cloud's official api_openrouter_mai_image_26_flash template.",
+  "id": "api-openrouter-mai-image-26-flash",
+  "capabilities": {
+    "requiresMask": false,
+    "maxImages": 0,
+    "imageGenerationModel": "microsoft/mai-image-2.6-flash",
+    "imageInputs": [],
+    "minImages": 0,
+    "outputImagePurpose": null
+  },
+  "displayName": "Comfy Cloud — api openrouter mai image 26 flash"
+}

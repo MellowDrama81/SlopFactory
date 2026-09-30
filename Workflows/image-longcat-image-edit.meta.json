@@ -1,0 +1,19 @@
+{
+  "id": "image-longcat-image-edit",
+  "displayName": "Comfy Cloud — Longcat Image Edit",
+  "description": "Imported from Comfy Cloud's official image_longcat_image_edit template using its embedded API prompt.",
+  "graphFile": "image-longcat-image-edit.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "longcat_image_edit_bf16.safetensors"
+  }
+}

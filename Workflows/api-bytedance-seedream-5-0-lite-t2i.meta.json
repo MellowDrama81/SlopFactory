@@ -1,0 +1,14 @@
+{
+  "id": "api-bytedance-seedream-5-0-lite-t2i",
+  "displayName": "Comfy Cloud — Bytedance Seedream 5 0 Lite T2I",
+  "description": "Imported from Comfy Cloud's official api_bytedance_seedream_5_0_lite_t2i template using its embedded API prompt.",
+  "graphFile": "api-bytedance-seedream-5-0-lite-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "seedream 5.0 lite"
+  }
+}

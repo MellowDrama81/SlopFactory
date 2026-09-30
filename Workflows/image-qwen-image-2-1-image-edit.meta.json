@@ -1,0 +1,23 @@
+{
+  "id": "image-qwen-image-2-1-image-edit",
+  "displayName": "Comfy Cloud — Qwen Image 2 1 Image Edit",
+  "description": "Imported from Comfy Cloud's official image_qwen_image_2_1_image_edit template using its embedded API prompt.",
+  "graphFile": "image-qwen-image-2-1-image-edit.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "qwen_image_2.1_int8_convrot.safetensors"
+  }
+}

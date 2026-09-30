@@ -1,0 +1,84 @@
+{
+  "3": {
+    "inputs": {
+      "model": "FIBO",
+      "prompt": "{{PROMPT:string}}",
+      "negative_prompt": "",
+      "structured_prompt": "",
+      "seed": {{SEED:seed}},
+      "guidance_scale": 3.0,
+      "steps": 50,
+      "moderation": "true",
+      "moderation.prompt_content_moderation": false,
+      "moderation.visual_input_moderation": false,
+      "moderation.visual_output_moderation": false,
+      "image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "BriaImageEditNode",
+    "_meta": {
+      "title": "Bria Image Edit"
+    }
+  },
+  "5": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "3884852112ae5983fd916452c25e5434e1179c55f886fdcb2e45f6e990fe096a"
+    ]
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "Bria",
+      "images": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "9": {
+    "inputs": {
+      "preview": "{\"aesthetics\": {\"aesthetic_score\": \"very high\", \"color_scheme\": \"Cool blues and deep navy of the sky contrasting with warm yellows and oranges from the internal and spotlight illumination. High contrast between light and shadow.\", \"composition\": \"Architectural composition, emphasizing the building's structure and lines. The wide-angle lens captures a broad view, making the building a prominent feature within its environment.\", \"mood_atmosphere\": \"Sophisticated, dramatic, serene, and modern. The blue hour creates a tranquil yet striking ambiance.\", \"preference_score\": \"very high\"}, \"artistic_style\": \"realistic, high-contrast, cinematic\", \"background_setting\": \"The background features a deep navy twilight sky, characteristic of the blue hour. There are subtle hints of city lights in the distance, contributing to reflections on the building's glass surfaces. The overall environment is urban, with a sense of depth and expanse.\", \"context\": \"This is a concept for a professional real estate photography image, showcasing modern architecture at night for a luxury property listing or architectural magazine.\", \"edit_instruction\": \"Render the modern architectural building at nighttime during the blue hour, with a deep navy twilight sky. Illuminate the building with warm internal lights glowing through the windows and exterior spotlights highlighting the facade. Include long exposure photography effects, smooth light trails, and reflections of city lights on glass surfaces. Emphasize high contrast and sharp architectural details, creating a cinematic night lighting effect in a professional real estate photography style, captured with a 16mm wide-angle lens, ensuring a clean and sophisticated aesthetic.\", \"lighting\": {\"conditions\": \"Blue hour atmosphere with cinematic night lighting. Warm internal lights glow from the building's windows, contrasting with the cool ambient light of the twilight sky. Exterior spotlights highlight the facade.\", \"direction\": \"Mixed lighting: internal lights from within, spotlights from below/sides, and ambient twilight from above.\", \"shadows\": \"Sharp, defined shadows cast by the architectural elements due to the spotlights, creating high contrast. Long, smooth light trails from passing city lights are visible.\"}, \"objects\": [{\"appearance_details\": \"The building's facade is highlighted by exterior spotlights, creating sharp contrasts and emphasizing its architectural details. Reflections of city lights are visible on the glass surfaces.\", \"description\": \"The modern architectural building, characterized by its clean lines and white, textured facade. It features multiple levels with large windows and open balcony areas. The internal spaces are visible through the windows, glowing with warm light.\", \"location\": \"center-right, extending to the top and left of the frame\", \"orientation\": \"Vertical, with horizontal and vertical elements creating a strong geometric presence.\", \"relationship\": \"The primary subject of the image, dominating the composition.\", \"relative_size\": \"large within frame\", \"shape_and_color\": \"Rectangular and angular forms, predominantly white with dark window frames.\", \"texture\": \"Rough, stucco-like texture on the exterior walls, smooth glass on windows.\"}, {\"appearance_details\": \"The warm glow from inside contrasts with the cool blue hour light outside, creating visual interest.\", \"description\": \"The large, open window on the ground floor, revealing an interior space with warm lighting. This window acts as a transition point between the exterior and interior.\", \"location\": \"bottom-center to mid-right\", \"orientation\": \"Horizontal opening.\", \"relationship\": \"Part of the building, providing a glimpse into the interior and contributing to the warm illumination.\", \"relative_size\": \"medium\", \"shape_and_color\": \"Large rectangular opening, dark frame, glowing with warm yellow light from within.\", \"texture\": \"Smooth glass, dark metal frame.\"}, {\"appearance_details\": \"Its verticality adds to the modern aesthetic of the building.\", \"description\": \"The upper-level window, a tall, narrow vertical opening, also showing internal warm light.\", \"location\": \"top-left\", \"orientation\": \"Vertical.\", \"relationship\": \"Part of the building, contributing to the overall illumination and architectural design.\", \"relative_size\": \"small\", \"shape_and_color\": \"Tall, narrow rectangle, dark frame, glowing with warm yellow light.\", \"texture\": \"Smooth glass, dark metal frame.\"}, {\"appearance_details\": \"Its dark color contrasts with the white facade.\", \"description\": \"The balcony railing on the upper level, a dark, minimalist structure.\", \"location\": \"top-center\", \"orientation\": \"Horizontal.\", \"relationship\": \"Part of the building's exterior, providing a safety barrier and contributing to the modern design.\", \"relative_size\": \"small\", \"shape_and_color\": \"Thin, dark horizontal and vertical lines.\", \"texture\": \"Smooth metal.\"}], \"photographic_characteristics\": {\"camera_angle\": \"Eye-level, providing a direct and immersive view of the architecture.\", \"depth_of_field\": \"Deep, with sharp focus on the architectural details of the building and a clear background.\", \"focus\": \"Sharp focus on the building and its facade, with clear details on the illuminated windows and textured walls.\", \"lens_focal_length\": \"wide-angle (16mm)\"}, \"short_description\": \"A modern architectural building at nighttime during the blue hour, featuring a deep navy twilight sky. The building is illuminated by warm internal lights glowing through its windows and exterior spotlights highlighting its facade. The scene captures long exposure photography effects, including smooth light trails and reflections of city lights on glass surfaces, emphasizing high contrast and sharp architectural details. The overall impression is one of cinematic night lighting and professional real estate photography.\", \"style_medium\": \"photograph\"}",
+      "previewMode": false,
+      "source": [
+        "3",
+        1
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text"
+    }
+  },
+  "10": {
+    "inputs": {
+      "compare_view": {
+        "before": "/api/view?filename=comfy.compare.a_temp_sxfeh_00001_.png&subfolder=&type=temp&rand=0.14989671808296157",
+        "after": "/api/view?filename=comfy.compare.b_temp_sxfeh_00001_.png&subfolder=&type=temp&rand=0.14989671808296157"
+      },
+      "image_a": [
+        "5",
+        0
+      ],
+      "image_b": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "ImageCompare",
+    "_meta": {
+      "title": "Image Compare"
+    }
+  }
+}

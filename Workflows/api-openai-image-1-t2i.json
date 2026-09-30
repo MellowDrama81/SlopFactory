@@ -1,0 +1,29 @@
+{
+  "10": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "seed": {{SEED:seed}},
+      "quality": "high",
+      "background": "opaque",
+      "size": "1024x1024",
+      "n": 1
+    },
+    "class_type": "OpenAIGPTImage1",
+    "_meta": {
+      "title": "OpenAI GPT Image 1"
+    }
+  },
+  "14": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

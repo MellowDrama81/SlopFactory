@@ -1,0 +1,14 @@
+{
+  "id": "sdxl-text-to-image",
+  "displayName": "SDXL 1.0 — text to image",
+  "description": "Official Comfy SDXL text-to-image template, converted for the Comfy API. Requires sd_xl_base_1.0.safetensors.",
+  "graphFile": "sdxl-text-to-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "sd_xl_base_1.0.safetensors"
+  }
+}

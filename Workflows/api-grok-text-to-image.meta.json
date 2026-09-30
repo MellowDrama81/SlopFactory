@@ -1,0 +1,14 @@
+{
+  "id": "api-grok-text-to-image",
+  "displayName": "Comfy Cloud — Grok Text TO Image",
+  "description": "Imported from Comfy Cloud's official api_grok_text_to_image template using its embedded API prompt.",
+  "graphFile": "api-grok-text-to-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "grok-imagine-image"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "graphFile": "api-meta-muse-image-image-edit.json",
+  "description": "Imported from Comfy Cloud's official api_meta_muse_image_image_edit template.",
+  "id": "api-meta-muse-image-image-edit",
+  "capabilities": {
+    "requiresMask": false,
+    "maxImages": 2,
+    "imageGenerationModel": "muse-image-1.0",
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      }
+    ],
+    "minImages": 2,
+    "outputImagePurpose": null
+  },
+  "displayName": "Comfy Cloud — api meta muse image image edit"
+}

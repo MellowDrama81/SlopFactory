@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_flux.1_fill_dev_OneReward template.",
+  "graphFile": "image-flux.1-fill-dev-OneReward.json",
+  "displayName": "Comfy Cloud — image flux.1 fill dev OneReward",
+  "id": "image-flux.1-fill-dev-OneReward",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "flux.1-fill-dev-OneReward-transformer_fp8.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "graphFile": "api-openrouter-mai-image-26-image-edit.json",
+  "description": "Imported from Comfy Cloud's official api_openrouter_mai_image_26_image_edit template.",
+  "id": "api-openrouter-mai-image-26-image-edit",
+  "capabilities": {
+    "requiresMask": false,
+    "maxImages": 2,
+    "imageGenerationModel": "microsoft/mai-image-2.6",
+    "imageInputs": [
+      {
+        "acceptsMask": false,
+        "purpose": null
+      },
+      {
+        "acceptsMask": false,
+        "purpose": null
+      }
+    ],
+    "minImages": 2,
+    "outputImagePurpose": null
+  },
+  "displayName": "Comfy Cloud — api openrouter mai image 26 image edit"
+}

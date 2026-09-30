@@ -1,0 +1,19 @@
+{
+  "id": "api-bfl-flux1-expand-image",
+  "displayName": "Comfy Cloud — BFL Flux1 Expand Image",
+  "description": "Imported from Comfy Cloud's official api_bfl_flux1_expand_image template using its embedded API prompt.",
+  "graphFile": "api-bfl-flux1-expand-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Flux.1 Pro Expand"
+  }
+}

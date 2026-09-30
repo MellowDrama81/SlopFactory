@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official flux_dev_checkpoint_example template.",
+  "graphFile": "flux-dev-checkpoint-example.json",
+  "displayName": "Comfy Cloud — flux dev checkpoint example",
+  "id": "flux-dev-checkpoint-example",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "flux1-dev.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

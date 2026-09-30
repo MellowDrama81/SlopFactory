@@ -1,0 +1,14 @@
+{
+  "id": "sd3-5-large-text-to-image",
+  "displayName": "SD 3.5 Large — text to image",
+  "description": "Official Comfy template imported from the SD 3.5 Large example. Requires sd3.5_large_fp8_scaled.safetensors.",
+  "graphFile": "sd3-5-large-text-to-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "sd3.5_large_fp8_scaled.safetensors"
+  }
+}

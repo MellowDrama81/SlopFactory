@@ -1,0 +1,72 @@
+{
+  "24": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "photon-1",
+      "aspect_ratio": "3:4",
+      "seed": {{SEED:seed}},
+      "style_image_weight": 1.0,
+      "image_luma_ref": [
+        "30",
+        0
+      ],
+      "style_image": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "LumaImageNode",
+    "_meta": {
+      "title": "Luma Text to Image"
+    }
+  },
+  "26": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "d45c188831194e0275722d3efd02d899b68e37a70eddb3dfe6eab6d32762d823"
+    ]
+  },
+  "29": {
+    "inputs": {
+      "images": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "30": {
+    "inputs": {
+      "weight": 0.5000000000000001,
+      "image": [
+        "26",
+        0
+      ]
+    },
+    "class_type": "LumaReferenceNode",
+    "_meta": {
+      "title": "Luma Reference"
+    }
+  },
+  "31": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "sytleref"
+    },
+    "is_changed": [
+      "de7ac4183759dde28096194b28460bb0e8fe2474cc164f09653d972fda0e5915"
+    ]
+  }
+}

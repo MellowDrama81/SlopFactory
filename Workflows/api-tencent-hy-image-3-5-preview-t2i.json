@@ -1,0 +1,34 @@
+{
+  "1": {
+    "inputs": {
+      "model": "hy-image-3.5-preview",
+      "model.prompt": "{{PROMPT:string}}",
+      "model.aspect_ratio": "1:1",
+      "model.resolution": "2K",
+      "model.width": 2048,
+      "model.height": 2048,
+      "model.seed": 432816159,
+      "model.watermark": false
+    },
+    "class_type": "HunyuanImageTextToImageApi",
+    "_meta": {
+      "title": "Tencent HY Image: Text to Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "filename_prefix": "HY_image_3.5_preview",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  }
+}

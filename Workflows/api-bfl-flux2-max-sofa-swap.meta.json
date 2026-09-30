@@ -1,0 +1,27 @@
+{
+  "id": "api-bfl-flux2-max-sofa-swap",
+  "displayName": "Comfy Cloud — BFL Flux2 MAX Sofa Swap",
+  "description": "Imported from Comfy Cloud's official api_bfl_flux2_max_sofa_swap template using its embedded API prompt.",
+  "graphFile": "api-bfl-flux2-max-sofa-swap.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 3,
+    "maxImages": 3,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Flux.2 Max"
+  }
+}

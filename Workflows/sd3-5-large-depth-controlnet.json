@@ -1,0 +1,12 @@
+{
+  "1": { "class_type": "LoadImage", "inputs": { "image": "{{UPLOADED_IMAGE_FILENAME:image}}" } },
+  "2": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "sd3.5_large_fp8_scaled.safetensors" } },
+  "3": { "class_type": "ControlNetLoader", "inputs": { "control_net_name": "sd3.5_large_controlnet_depth.safetensors" } },
+  "4": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{PROMPT:string}}", "clip": ["2", 1] } },
+  "5": { "class_type": "ConditioningZeroOut", "inputs": { "conditioning": ["4", 0] } },
+  "6": { "class_type": "ControlNetApplyAdvanced", "inputs": { "positive": ["4", 0], "negative": ["5", 0], "control_net": ["3", 0], "image": ["1", 0], "vae": ["2", 2], "strength": 0.7, "start_percent": 0, "end_percent": 1 } },
+  "7": { "class_type": "EmptySD3LatentImage", "inputs": { "width": 1024, "height": 1024, "batch_size": 1 } },
+  "8": { "class_type": "KSampler", "inputs": { "seed": {{SEED:seed}}, "steps": 20, "cfg": 8, "sampler_name": "euler", "scheduler": "normal", "denoise": 1, "model": ["2", 0], "positive": ["6", 0], "negative": ["6", 1], "latent_image": ["7", 0] } },
+  "9": { "class_type": "VAEDecode", "inputs": { "samples": ["8", 0], "vae": ["2", 2] } },
+  "10": { "class_type": "SaveImage", "inputs": { "filename_prefix": "SD35_Depth_ControlNet", "images": ["9", 0] } }
+}

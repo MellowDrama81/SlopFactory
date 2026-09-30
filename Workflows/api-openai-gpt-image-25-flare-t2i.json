@@ -1,0 +1,62 @@
+{
+  "269": {
+    "inputs": {
+      "filename_prefix": "gpt-image-2",
+      "images": [
+        "271",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "271": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "gpt-image-2.5-flare",
+      "model.size": "auto",
+      "model.custom_width": 1024,
+      "model.custom_height": 1024,
+      "model.background": "auto",
+      "model.quality": "low",
+      "n": 1,
+      "seed": {{SEED:seed}}
+    },
+    "class_type": "OpenAIGPTImageNodeV2",
+    "_meta": {
+      "title": "OpenAI GPT Image 2.5"
+    }
+  },
+  "272": {
+    "inputs": {
+      "prompt": "1:1 square poster, extreme close-up of a rocket boosters firing against deep blue space, bright white-hot engine flames and delicate smoke contours, clean futuristic aerospace aesthetic. The text “GPT IMAGE 2.5” is projected onto the rocket hull in pale cyan light, following the curve of the fuselage. Color palette: deep blue, white, silver, cyan. Minimal graphic composition, dramatic backlighting, sharp technical details, realistic but artistic, no extra sidebar, no redundant text",
+      "model": "gpt-image-2.5-flare",
+      "model.size": "auto",
+      "model.custom_width": 1024,
+      "model.custom_height": 1024,
+      "model.background": "auto",
+      "model.quality": "low",
+      "n": 1,
+      "seed": {{SEED:seed}}
+    },
+    "class_type": "OpenAIGPTImageNodeV2",
+    "_meta": {
+      "title": "OpenAI GPT Image 2.5"
+    }
+  },
+  "273": {
+    "inputs": {
+      "filename_prefix": "gpt-image-2",
+      "images": [
+        "272",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "description": "Imported from Comfy Cloud's official api_recraft_v4_1_t2i template.",
+  "graphFile": "api-recraft-v4-1-t2i.json",
+  "displayName": "Comfy Cloud — api recraft v4 1 t2i",
+  "id": "api-recraft-v4-1-t2i",
+  "capabilities": {
+    "maxImages": 2,
+    "imageGenerationModel": "recraftv4_1",
+    "minImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

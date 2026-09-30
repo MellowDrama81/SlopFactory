@@ -1,0 +1,451 @@
+{
+  "9": {
+    "inputs": {
+      "filename_prefix": "Flux2-Klein",
+      "images": [
+        "75:65",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "76": {
+    "inputs": {
+      "value": [
+        "81",
+        0
+      ]
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Prompt"
+    }
+  },
+  "78": {
+    "inputs": {
+      "filename_prefix": "Flux2-Klein",
+      "images": [
+        "77:65",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "81": {
+    "inputs": {
+      "prepend_text": "",
+      "prompts": "A vintage typewriter on a wooden desk by a rain-streaked window, soft morning light filtering through, steam rising from a coffee cup, shot on Fujifilm X-T5 with 35mm f/1.4, shallow depth of field, nostalgic atmosphere\nA neon-lit cyberpunk street at night, holographic advertisements floating above, a lone figure walking through neon reflections on wet pavement, shot on Sony A7IV with 24-70mm at 50mm, cinematic lighting, high dynamic range\nA minimalist Japanese tea ceremony setup, matcha bowl and bamboo whisk on tatami mat, soft diffused light from paper screens, professional lifestyle photography, shot on Hasselblad X2D, 80mm lens, f/2.8\nA vintage motorcycle parked in front of a retro diner at sunset, warm orange and pink sky, neon signs glowing, 80s vintage photo style, film grain, warm color cast\nA futuristic greenhouse with hanging plants and geometric glass panels, sunlight creating prismatic effects, modern architectural photography, shot on Canon 5D Mark IV, 24-70mm at 35mm, golden hour\nA cozy reading nook with floor-to-ceiling bookshelves, a plush armchair with a knitted blanket, warm lamp light, soft natural window light, editorial lifestyle photography, shot on Sony A7IV with 85mm f/1.4\nA macro shot of dewdrops on a spider web at sunrise, each drop refracting rainbow colors, extreme close-up, professional nature photography, shot on Canon 5D Mark IV with 100mm macro lens, f/2.8\nA street art mural covering an entire building wall, vibrant colors and geometric patterns, urban photography, shot on Fujifilm X-T5, 35mm f/1.4, natural daylight\nA floating breakfast tray in an infinity pool overlooking mountains, tropical fruits and fresh flowers, luxury resort photography, shot on Sony A7IV, 24-70mm at 50mm, soft morning light\nA steampunk laboratory with brass instruments and copper pipes, warm amber lighting, Victorian era aesthetic, professional product photography, shot on Hasselblad X2D, 80mm lens, f/4\nA minimalist Scandinavian bedroom, white walls, natural wood furniture, plants in geometric pots, soft natural lighting, interior design photography, shot on Canon 5D Mark IV, 24-70mm at 35mm\nA vintage record player spinning a vinyl record, warm lamp light, dust particles visible in the air, nostalgic atmosphere, shot on Kodak Portra 400, natural grain, warm tones\nA rooftop garden at sunset in a modern city, string lights and potted plants, city skyline in background, lifestyle photography, shot on Sony A7IV with 85mm f/1.4, golden hour lighting\nA close-up of hands kneading dough on a flour-dusted wooden table, rustic kitchen setting, soft natural window light, food photography, shot on Canon 5D Mark IV, 50mm lens, f/2.8\nA neon-lit arcade with retro gaming machines, colorful lights reflecting on polished floors, nostalgic 80s atmosphere, shot on Fujifilm X-T5, 35mm f/1.4, vibrant colors\nA minimalist workspace with a MacBook, a ceramic mug, and a succulent plant, clean white background, professional product photography, shot on Sony A7IV, 85mm f/1.4, soft diffused lighting\nA misty forest path at dawn, sunlight filtering through trees, ethereal atmosphere, nature photography, shot on Canon 5D Mark IV, 24-70mm at 50mm, shallow depth of field\nA vintage camera collection displayed on a wooden shelf, leather straps and brass details, warm ambient lighting, still life photography, shot on Hasselblad X2D, 80mm lens, f/4\nA modern art gallery with white walls and minimalist sculptures, natural light from large windows, architectural photography, shot on Sony A7IV, 24-70mm at 35mm, clean sharp focus\nA coffee shop interior with exposed brick walls and industrial lighting, people working on laptops, cozy atmosphere, lifestyle photography, shot on Fujifilm X-T5, 35mm f/1.4, warm tones",
+      "append_text": "",
+      "index": [
+        "82",
+        0
+      ]
+    },
+    "class_type": "FL_PromptSelector",
+    "_meta": {
+      "title": "FL Prompt Selector"
+    }
+  },
+  "82": {
+    "inputs": {
+      "value": 3
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "75:61": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "75:62": {
+    "inputs": {
+      "steps": 20,
+      "width": [
+        "75:68",
+        0
+      ],
+      "height": [
+        "75:69",
+        0
+      ]
+    },
+    "class_type": "Flux2Scheduler",
+    "_meta": {
+      "title": "Flux2Scheduler"
+    }
+  },
+  "75:63": {
+    "inputs": {
+      "cfg": 5.0,
+      "model": [
+        "75:70",
+        0
+      ],
+      "positive": [
+        "75:74",
+        0
+      ],
+      "negative": [
+        "75:67",
+        0
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGGuider"
+    }
+  },
+  "75:64": {
+    "inputs": {
+      "noise": [
+        "75:73",
+        0
+      ],
+      "guider": [
+        "75:63",
+        0
+      ],
+      "sampler": [
+        "75:61",
+        0
+      ],
+      "sigmas": [
+        "75:62",
+        0
+      ],
+      "latent_image": [
+        "75:66",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "75:65": {
+    "inputs": {
+      "samples": [
+        "75:64",
+        0
+      ],
+      "vae": [
+        "75:72",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "75:66": {
+    "inputs": {
+      "width": [
+        "75:68",
+        0
+      ],
+      "height": [
+        "75:69",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "Empty Flux 2 Latent"
+    }
+  },
+  "75:67": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "75:71",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "75:68": {
+    "inputs": {
+      "value": 1024
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Width"
+    }
+  },
+  "75:69": {
+    "inputs": {
+      "value": 1024
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Height"
+    }
+  },
+  "75:73": {
+    "inputs": {
+      "noise_seed": {{SEED:seed}}
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "75:70": {
+    "inputs": {
+      "unet_name": "flux-2-klein-base-9b.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "75:71": {
+    "inputs": {
+      "clip_name": "qwen_3_8b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "75:72": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "75:74": {
+    "inputs": {
+      "text": [
+        "76",
+        0
+      ],
+      "clip": [
+        "75:71",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "77:61": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "77:64": {
+    "inputs": {
+      "noise": [
+        "77:73",
+        0
+      ],
+      "guider": [
+        "77:63",
+        0
+      ],
+      "sampler": [
+        "77:61",
+        0
+      ],
+      "sigmas": [
+        "77:62",
+        0
+      ],
+      "latent_image": [
+        "77:66",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "77:65": {
+    "inputs": {
+      "samples": [
+        "77:64",
+        0
+      ],
+      "vae": [
+        "77:72",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "77:66": {
+    "inputs": {
+      "width": [
+        "77:68",
+        0
+      ],
+      "height": [
+        "77:69",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "Empty Flux 2 Latent"
+    }
+  },
+  "77:68": {
+    "inputs": {
+      "value": 1024
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Width"
+    }
+  },
+  "77:69": {
+    "inputs": {
+      "value": 1024
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Height"
+    }
+  },
+  "77:73": {
+    "inputs": {
+      "noise_seed": {{SEED:seed}}
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "77:70": {
+    "inputs": {
+      "unet_name": "flux-2-klein-9b.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "77:71": {
+    "inputs": {
+      "clip_name": "qwen_3_8b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "77:72": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "77:63": {
+    "inputs": {
+      "cfg": 1.0,
+      "model": [
+        "77:70",
+        0
+      ],
+      "positive": [
+        "77:74",
+        0
+      ],
+      "negative": [
+        "77:76",
+        0
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGGuider"
+    }
+  },
+  "77:76": {
+    "inputs": {
+      "conditioning": [
+        "77:74",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "77:74": {
+    "inputs": {
+      "text": [
+        "76",
+        0
+      ],
+      "clip": [
+        "77:71",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "77:62": {
+    "inputs": {
+      "steps": 4,
+      "width": [
+        "77:68",
+        0
+      ],
+      "height": [
+        "77:69",
+        0
+      ]
+    },
+    "class_type": "Flux2Scheduler",
+    "_meta": {
+      "title": "Flux2Scheduler"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "1": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "flux1-schnell-fp8.safetensors" } },
+  "2": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{PROMPT:string}}", "clip": ["1", 1] } },
+  "3": { "class_type": "ConditioningZeroOut", "inputs": { "conditioning": ["2", 0] } },
+  "4": { "class_type": "EmptySD3LatentImage", "inputs": { "width": 1024, "height": 1024, "batch_size": 1 } },
+  "5": { "class_type": "KSampler", "inputs": { "seed": {{SEED:seed}}, "steps": 4, "cfg": 1, "sampler_name": "euler", "scheduler": "simple", "denoise": 1, "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0] } },
+  "6": { "class_type": "VAEDecode", "inputs": { "samples": ["5", 0], "vae": ["1", 2] } },
+  "7": { "class_type": "SaveImage", "inputs": { "filename_prefix": "FLUX1_Schnell", "images": ["6", 0] } }
+}

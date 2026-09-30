@@ -1,0 +1,75 @@
+{
+  "2": {
+    "inputs": {
+      "model": "Wonder 3.5",
+      "model.enhancement_strength": "high",
+      "model.grain": false,
+      "model.grain_model": "silver",
+      "model.grain_strength": 0.5,
+      "model.grain_size": 1.0,
+      "model.grain_density": 0.5,
+      "output_width": 0,
+      "output_height": 0,
+      "image": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "TopazImageEnhanceV2",
+    "_meta": {
+      "title": "Topaz Image Enhance"
+    }
+  },
+  "3": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "56370f940988a845e2e1dc99d42e73ebd90d2db90bf59d930331cd1f85df3e0d"
+    ]
+  },
+  "4": {
+    "inputs": {
+      "filename_prefix": "Upscaled_topaz_bloom2",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "5": {
+    "inputs": {
+      "compare_view": {
+        "beforeImages": [
+          "/api/view?filename=comfy.compare.a_temp_bmlma_00001_.png&subfolder=&type=temp&rand=0.9168763760253159"
+        ],
+        "afterImages": [
+          "/api/view?filename=comfy.compare.b_temp_bmlma_00001_.png&subfolder=&type=temp&rand=0.9168763760253159"
+        ]
+      },
+      "image_a": [
+        "3",
+        0
+      ],
+      "image_b": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "ImageCompare",
+    "_meta": {
+      "title": "Compare Images"
+    }
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "28": {
+    "_meta": {
+      "title": "Recraft Create Style"
+    },
+    "class_type": "RecraftCreateStyleNode",
+    "inputs": {
+      "images.image0": [
+        "29",
+        0
+      ],
+      "images.image1": [
+        "36",
+        0
+      ],
+      "images.image2": [
+        "38",
+        0
+      ],
+      "images.image3": [
+        "39",
+        0
+      ],
+      "style": "realistic_image"
+    }
+  },
+  "29": {
+    "_meta": {
+      "title": "Load Image"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "is_changed": [
+      "c2c9148914d4c22e6ce682a6881dfb7de44ca60ccd06b2f0b438685dc6ff6934"
+    ]
+  },
+  "33": {
+    "_meta": {
+      "title": "Recraft Style - Infinite Style Library"
+    },
+    "class_type": "RecraftStyleV3InfiniteStyleLibrary",
+    "inputs": {
+      "style_id": [
+        "28",
+        0
+      ]
+    }
+  },
+  "34": {
+    "_meta": {
+      "title": "Save Image"
+    },
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "Recraft-style",
+      "images": [
+        "47",
+        0
+      ]
+    }
+  },
+  "36": {
+    "_meta": {
+      "title": "Load Image"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "is_changed": [
+      "bc21d443a90aeb4708d036d97ecc9d56c95195983c560ac8f57499202734253e"
+    ]
+  },
+  "38": {
+    "_meta": {
+      "title": "Load Image"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_3:image}}"
+    },
+    "is_changed": [
+      "189e33261e9d2c04a97b9d5ab6dd84119deb021fcaa9224288f10c1662f91e19"
+    ]
+  },
+  "39": {
+    "_meta": {
+      "title": "Load Image"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_4:image}}"
+    },
+    "is_changed": [
+      "c7d5aba07e0a0a029b5c67e6a13d11f9685b309989519d117487411f319f6a17"
+    ]
+  },
+  "47": {
+    "_meta": {
+      "title": "Recraft Text to Image"
+    },
+    "class_type": "RecraftTextToImageNode",
+    "inputs": {
+      "n": 1,
+      "prompt": "{{PROMPT:string}}",
+      "recraft_style": [
+        "33",
+        0
+      ],
+      "seed": {{SEED:seed}},
+      "size": "1434x1024"
+    }
+  }
+}

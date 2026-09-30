@@ -1,0 +1,15 @@
+{
+  "description": "Imported from Comfy Cloud's official image_ming_image_01_design_t2i template.",
+  "graphFile": "image-ming-image-01-design-t2i.json",
+  "displayName": "Comfy Cloud — image ming image 01 design t2i",
+  "id": "image-ming-image-01-design-t2i",
+  "cloudCompatible": false,
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "ming_image_0.1_design_int8_convrot.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

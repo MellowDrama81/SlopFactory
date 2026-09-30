@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_marigold_v2_albedo_estimation template.",
+  "graphFile": "image-marigold-v2-albedo-estimation.json",
+  "displayName": "Comfy Cloud — image marigold v2 albedo estimation",
+  "id": "image-marigold-v2-albedo-estimation",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "qwen_image_edit_2509_int8_convrot.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_longcat_text_to_image template.",
+  "graphFile": "image-longcat-text-to-image.json",
+  "displayName": "Comfy Cloud — image longcat text to image",
+  "id": "image-longcat-text-to-image",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "longcat_image_bf16.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

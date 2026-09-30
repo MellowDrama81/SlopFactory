@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_ernie_image_turbo template.",
+  "graphFile": "image-ernie-image-turbo.json",
+  "displayName": "Comfy Cloud — image ernie image turbo",
+  "id": "image-ernie-image-turbo",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "ernie-image-turbo.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

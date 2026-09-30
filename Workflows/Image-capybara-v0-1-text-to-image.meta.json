@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official Image_capybara_v0_1_text_to_image template.",
+  "graphFile": "Image-capybara-v0-1-text-to-image.json",
+  "displayName": "Comfy Cloud — Image capybara v0 1 text to image",
+  "id": "Image-capybara-v0-1-text-to-image",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "capybara_v0.1.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

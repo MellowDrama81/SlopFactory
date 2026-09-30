@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official image_sdxl_simple template.",
+  "graphFile": "image-sdxl-simple.json",
+  "displayName": "Comfy Cloud — image sdxl simple",
+  "id": "image-sdxl-simple",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "sd_xl_base_1.0.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "api-recraft-v4-1-flash-t2i",
+  "displayName": "Comfy Cloud — Recraft V4 1 Flash T2I",
+  "description": "Imported from Comfy Cloud's official api_recraft_v4_1_flash_t2i template using its embedded API prompt.",
+  "graphFile": "api-recraft-v4-1-flash-t2i.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 0,
+    "maxImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "recraftv4_1_flash"
+  }
+}

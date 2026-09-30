@@ -1,0 +1,49 @@
+{
+  "1": {
+    "inputs": {
+      "model": "qwen-image-3.0-pro",
+      "model.prompt": "{{PROMPT:string}}",
+      "model.negative_prompt": "",
+      "model.width": [
+        "8",
+        0
+      ],
+      "model.height": [
+        "8",
+        1
+      ],
+      "n": 1,
+      "seed": {{SEED:seed}},
+      "prompt_extend": true,
+      "watermark": false
+    },
+    "class_type": "QwenImageTextToImageApi",
+    "_meta": {
+      "title": "Qwen Image 3 Text to Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "filename_prefix": "Qwen-image-3.0-pro",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "8": {
+    "inputs": {
+      "aspect_ratio": "1:1 (Square)",
+      "megapixels": 1.0,
+      "multiple": 8
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "Resolution Selector"
+    }
+  }
+}

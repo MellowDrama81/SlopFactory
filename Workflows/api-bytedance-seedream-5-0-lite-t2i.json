@@ -1,0 +1,34 @@
+{
+  "25": {
+    "inputs": {
+      "model": "seedream 5.0 lite",
+      "prompt": "{{PROMPT:string}}",
+      "size_preset": "2048x2048 (1:1)",
+      "width": 2048,
+      "height": 2048,
+      "sequential_image_generation": "disabled",
+      "max_images": 1,
+      "seed": {{SEED:seed}},
+      "watermark": false,
+      "fail_on_partial": true,
+      "$$node-text-preview": "Status: Completed\nTime elapsed: 77s"
+    },
+    "class_type": "ByteDanceSeedreamNode",
+    "_meta": {
+      "title": "ByteDance Seedream 4.5"
+    }
+  },
+  "26": {
+    "inputs": {
+      "filename_prefix": "Seedream5.0_lite",
+      "images": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

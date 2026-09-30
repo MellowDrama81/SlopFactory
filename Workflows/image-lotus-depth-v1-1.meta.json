@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_lotus_depth_v1_1 template.",
+  "graphFile": "image-lotus-depth-v1-1.json",
+  "displayName": "Comfy Cloud — image lotus depth v1 1",
+  "id": "image-lotus-depth-v1-1",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "lotus-depth-d-v1-1.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": "Depth",
+    "requiresMask": false
+  }
+}

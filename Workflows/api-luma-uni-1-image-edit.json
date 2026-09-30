@@ -1,0 +1,44 @@
+{
+  "33": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "e86b63cc731801b328895bc8b74fc3fb53361093d1c5ea6e08a337ab7eb2ffeb"
+    ]
+  },
+  "34": {
+    "inputs": {
+      "filename_prefix": "UNI-1",
+      "images": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "37": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "uni-1-max",
+      "model.style": "auto",
+      "model.web_search": false,
+      "seed": {{SEED:seed}},
+      "source": [
+        "33",
+        0
+      ]
+    },
+    "class_type": "LumaImageEditNode2",
+    "_meta": {
+      "title": "Luma UNI-1 Image Edit"
+    }
+  }
+}

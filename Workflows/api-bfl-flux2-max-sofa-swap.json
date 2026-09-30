@@ -1,0 +1,112 @@
+{
+  "1": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "width": 2048,
+      "height": 2048,
+      "seed": {{SEED:seed}},
+      "prompt_upsampling": true,
+      "images": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "Flux2MaxImageNode",
+    "_meta": {
+      "title": "Flux.2 [max] Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "cfd000c7a3d60ff2b906709ffa84e517408f46e9cb305fe1a5dab4a7905f4e99"
+    ]
+  },
+  "3": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_2:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "5a3a4c50fc4926c1ab7a5d33e2e5dc536cd9bdf33a3b769a233561cc35280f4e"
+    ]
+  },
+  "4": {
+    "inputs": {
+      "image1": [
+        "2",
+        0
+      ],
+      "image2": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ImageBatch",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  },
+  "6": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "10": {
+    "inputs": {
+      "image": "{{UPLOADED_IMAGE_FILENAME_3:image}}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "is_changed": [
+      "ab83fc012d3c969394b5ef5ffb7b089f27798ba5e45944dadbfbd2ee9f4f348d"
+    ]
+  },
+  "11": {
+    "inputs": {
+      "image1": [
+        "3",
+        0
+      ],
+      "image2": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "ImageBatch",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  },
+  "13": {
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "Get Image Size"
+    }
+  }
+}

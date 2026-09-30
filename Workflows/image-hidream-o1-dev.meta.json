@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_hidream_o1_dev template.",
+  "graphFile": "image-hidream-o1-dev.json",
+  "displayName": "Comfy Cloud — image hidream o1 dev",
+  "id": "image-hidream-o1-dev",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "hidream_o1_image_dev_bf16.safetensors",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

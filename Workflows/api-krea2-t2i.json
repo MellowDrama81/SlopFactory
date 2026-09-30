@@ -1,0 +1,31 @@
+{
+  "1": {
+    "inputs": {
+      "prompt": "{{PROMPT:string}}",
+      "model": "Krea 2 Medium",
+      "model.aspect_ratio": "1:1",
+      "model.resolution": "1K",
+      "model.creativity": "medium",
+      "model.moodboard_id": "",
+      "model.moodboard_strength": 0.35,
+      "seed": {{SEED:seed}}
+    },
+    "class_type": "Krea2ImageNode",
+    "_meta": {
+      "title": "Krea 2 Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "filename_prefix": "Krea2",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

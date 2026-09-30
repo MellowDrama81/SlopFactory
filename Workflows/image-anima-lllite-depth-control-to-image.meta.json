@@ -1,0 +1,19 @@
+{
+  "description": "Imported from Comfy Cloud's official image_anima_lllite_depth_control_to_image template.",
+  "graphFile": "image-anima-lllite-depth-control-to-image.json",
+  "displayName": "Comfy Cloud — image anima lllite depth control to image",
+  "id": "image-anima-lllite-depth-control-to-image",
+  "capabilities": {
+    "maxImages": 1,
+    "imageGenerationModel": "Anima Base v1.0",
+    "minImages": 1,
+    "imageInputs": [
+      {
+        "purpose": "Depth",
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

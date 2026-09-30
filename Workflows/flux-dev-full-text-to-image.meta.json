@@ -1,0 +1,14 @@
+{
+  "description": "Imported from Comfy Cloud's official flux_dev_full_text_to_image template.",
+  "graphFile": "flux-dev-full-text-to-image.json",
+  "displayName": "Comfy Cloud — flux dev full text to image",
+  "id": "flux-dev-full-text-to-image",
+  "capabilities": {
+    "maxImages": 0,
+    "imageGenerationModel": "flux1-dev.safetensors",
+    "minImages": 0,
+    "imageInputs": [],
+    "outputImagePurpose": null,
+    "requiresMask": false
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "api-bfl-flux-1-kontext-pro-image",
+  "displayName": "Comfy Cloud — BFL Flux 1 Kontext PRO Image",
+  "description": "Imported from Comfy Cloud's official api_bfl_flux_1_kontext_pro_image template using its embedded API prompt.",
+  "graphFile": "api-bfl-flux-1-kontext-pro-image.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 1,
+    "maxImages": 1,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "Flux.1 Kontext Pro"
+  }
+}

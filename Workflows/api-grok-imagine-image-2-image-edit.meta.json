@@ -1,0 +1,23 @@
+{
+  "id": "api-grok-imagine-image-2-image-edit",
+  "displayName": "Comfy Cloud — Grok Imagine Image 2 Image Edit",
+  "description": "Imported from Comfy Cloud's official api_grok_imagine_image_2_image_edit template using its embedded API prompt.",
+  "graphFile": "api-grok-imagine-image-2-image-edit.json",
+  "capabilities": {
+    "requiresMask": false,
+    "minImages": 2,
+    "maxImages": 2,
+    "imageInputs": [
+      {
+        "purpose": null,
+        "acceptsMask": false
+      },
+      {
+        "purpose": null,
+        "acceptsMask": false
+      }
+    ],
+    "outputImagePurpose": null,
+    "imageGenerationModel": "grok-imagine-image-2.0"
+  }
+}
